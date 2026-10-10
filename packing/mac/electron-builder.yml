@@ -1,0 +1,67 @@
+# =============================================================================
+# packing/mac/electron-builder.yml —— macOS 打包（DMG + ZIP）
+#
+# 【用法】npm run pack:mac        （= electron-builder --mac --config packing/mac/electron-builder.yml）
+#         产物落在 **packing/mac/out/**
+#
+# 🔴 【硬约束】mac 产物**只能在 macOS 上构建** —— electron-builder 无法在 Windows 上
+#    产出 .app / .dmg（需要 macOS 的 codesign / hdiutil / sips）。本仓库当前在 Windows 上，
+#    所以这个文件是**待 mac 机器执行**的配置，不是现在就能跑的东西。
+#
+# 【前置】npm i -D electron-builder（一次性）· macOS 上先 npm run build（产物 dist/）
+# 【入口】根 package.json 的 "main": "electron/main.js"
+# =============================================================================
+
+appId: com.doubaocanvas.app
+productName: 豆包画布
+copyright: Copyright © 2026 豆包画布
+
+directories:
+  output: packing/mac/out
+  buildResources: packing/assets
+
+# ── 打进包的文件（白名单；与 win 侧保持一致）──────────────────────────────
+files:
+  - dist/**
+  - electron/**
+  - package.json
+  - '!electron/**/*.bak'
+  - '!electron/node_modules/.bin'
+  - '!**/*.map'
+  # 渲染层依赖已由 vite 全量打进 dist/ ⇒ 运行期不需要根 node_modules。
+  # 精准排除最大的一块（@mediapipe/tasks-vision = 38.68 MB，实测）：
+  #   wasm/tflite 走 public/mediapipe → dist/mediapipe，JS 由 vite 打包。
+  # ⚠️ electron/** 自己的 electron/node_modules/ws **不受影响**。
+  - '!node_modules/@mediapipe/**'
+
+asar: true
+npmRebuild: false
+
+# 只留中文/英文语言包（Electron 默认 55 个 locale = 48.3 MB，实测）
+electronLanguages:
+  - zh-CN
+  - en-US
+
+mac:
+  icon: packing/assets/icon.icns # 由 packing/icon.ps1 生成（ic07~ic14 八档）
+  category: public.app-category.graphics-design
+  # ⚠️ 本地/未签名构建：关掉签名（否则无证书时直接失败）。
+  #    将来要分发时：删掉 identity: null，改配 Developer ID + 公证（notarize）。
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+
+dmg:
+  artifactName: '${productName}-${version}-${arch}.${ext}'
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

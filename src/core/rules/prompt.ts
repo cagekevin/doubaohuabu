@@ -17,6 +17,8 @@
  */
 
 import { DEFAULT_VIDEO_MODEL, VIDEO_MODEL_LABELS } from '@/constants/models';
+// ★ SSOT 收口：`@[id|label]` 正则与 `参考图N` token **只有一份**（`refs.ts` 是 `@图N` 协议的归属模块）
+import { createRefChipRe, formatReferenceLabel } from './refs';
 
 /** 模型 id → 展示名（原 `io`；未知 id 原样返回，空则回落默认） */
 export function normalizeModelLabel(model: unknown): string {
@@ -212,15 +214,17 @@ export function composeVideoPrompt(opts: {
 /**
  * 引用替换（原 `Qc`）—— `@[id|label]` → `参考图N`
  *
+ * ⚠️ 正则与 token 都复用 `refs.ts`（原 `U0` / `参考图N`）—— 协议只有一份定义（SSOT）。
+ *    `refs.ts` 的头部有**协议全景表**（5 个操作各在哪），改协议请先看那里。
+ *
  * @param text 含 `@[nodeId|显示名]` 的文本
  * @param refMap `nodeId → 序号`（1 起）
  */
 export function resolveReferences(text: string, refMap: Record<string, number> | null | undefined): string {
   if (!text) return '';
-  return text.replace(/@\[([^\]|]+)\|([^\]]+)\]/g, (whole, id: string, label: string) => {
-    if (refMap && Object.prototype.hasOwnProperty.call(refMap, id) && refMap[id] != null) {
-      return `参考图${refMap[id]}`;
-    }
+  return text.replace(createRefChipRe(), (whole, id: string, label: string) => {
+    const n = refMap && Object.prototype.hasOwnProperty.call(refMap, id) ? refMap[id] : null;
+    if (n != null) return formatReferenceLabel(n);
     return label || whole;
   });
 }

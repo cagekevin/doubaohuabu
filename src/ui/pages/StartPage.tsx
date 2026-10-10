@@ -11,14 +11,14 @@ import { EmptyState } from '@/ui/common/EmptyState';
 
 export function StartPage() {
   const projects = useStore((s) => s.projects);
-  const setActiveId = useStore((s) => s.setActiveId);
-  const setStarted = useStore((s) => s.setStarted);
+  /**
+   * ★ **必须用 `openProject`（而不是 `setActiveId` + `setStarted`）**
+   *
+   * 只切 `activeId` 不换画布 ⇒ `store.ts` 的镜像会把**旧画布**写进**新工程**
+   * （`docs/14` §2 的 ⭐⭐ 数据损坏 bug）。`openProject` 会原子地把新工程的画布数据带进来。
+   */
+  const openProject = useStore((s) => s.openProject);
   const createProject = useStore((s) => s.createProject);
-
-  const openProject = (id: string): void => {
-    setActiveId(id);
-    setStarted(true);
-  };
 
   /** ★ 「＋ 新建项目」= **真的建一个**工程并进入（不是"打开第一个"） */
   const onNewProject = (): void => {

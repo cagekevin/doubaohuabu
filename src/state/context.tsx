@@ -56,3 +56,18 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 export function usePorts(): Ports {
   return useAppStore().ports;
 }
+
+/**
+ * 取 store 的**非订阅式读取入口**（`getState`）—— 原版里那个 `t()` 的对应物
+ *
+ * ⚠️ **用途**：事件回调里要读「**当前**值」时（如 ReactFlow 的 `onNodesChange` / `onEdgesChange`）。
+ *    用 `useStore(selector)` 拿到的是**上次渲染的快照**；一次渲染周期内若回调被调用多次
+ *    （ReactFlow 会批量派发变更），后一次就会用旧值**覆盖**前一次的结果。
+ *    实测后果：删节点后紧接着的「边变更」会把刚删的节点**复活**，撤销栈被压入坏快照。
+ *
+ * ⚠️ 与 `useStore` 的区别：**不订阅** ⇒ 读取不会引起重渲。
+ *    ⇒ **不要**在渲染里用它取「要显示的值」（那样界面不会更新）。
+ */
+export function useStoreApi(): AppStore['useStore'] {
+  return useAppStore().useStore;
+}

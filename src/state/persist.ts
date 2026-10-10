@@ -12,15 +12,28 @@
 import type { ClockPort } from '@/core/ports/clock.port';
 import type { Cancel } from '@/core/ports/clock.port';
 import type { Project } from '@/stable/model/project';
+import type { Account, AccountGroup, PoolStrategy } from '@/stable/model/account';
 import { persistProject, type PersistDeps } from '@/core/usecases/persistProject';
+import { persistAccounts } from '@/core/usecases/persistAccounts';
 import { PERSIST_DEBOUNCE_MS } from '@/constants';
+
+/** 本控制器负责落盘的全部数据（工程 + 账号族） */
+export interface PersistSnapshot {
+  projects: Project[];
+  activeId: string | null;
+  /** ★ 账号族 —— 原实现**只读不写**（`docs/14` §2 ⭐：账号增删改刷新即丢） */
+  accounts: Account[];
+  groups: AccountGroup[];
+  proxyPool: string[];
+  poolStrategy: PoolStrategy;
+}
 
 export interface PersistControllerDeps {
   clock: ClockPort;
   /** 落盘依赖（由 container 组装；含 storage + migrationCtx + 备份/快照） */
   persist: PersistDeps;
   /** 取当前要存的数据（**读取**由 state 提供，本模块不 import store） */
-  readState: () => { projects: Project[]; activeId: string | null };
+  readState: () => PersistSnapshot;
   /** 保存失败回调（state 层写入 `saveError`） */
   onError: (message: string) => void;
   /** 保存成功回调（清 `saveError`） */
@@ -44,14 +57,33 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
 
   const doWrite = (r: string): void => {
     timer = null;
-    const { projects, activeId } = deps.readState();
-    const res = persistProject({ projects, activeId, reason: r }, deps.persist);
-    if (res.ok) {
-      deps.onOk?.();
-    } else {
+    const s = deps.readState();
+
+    // ① 工程（原实现只做这一步）
+    const res = persistProject({ projects: s.projects, activeId: s.activeId, reason: r }, deps.persist);
+    if (!res.ok) {
       // ★ 原样透传（原则 6）
       deps.onError(res.message);
+      return;
     }
+
+    // ② ★ 账号族（`docs/14` §2 ⭐ 缺口：原实现只读不写 ⇒ 账号增删改刷新即丢）
+    const acc = persistAccounts(
+      {
+        accounts: s.accounts,
+        groups: s.groups,
+        proxyPool: s.proxyPool,
+        poolStrategy: s.poolStrategy,
+      },
+      { storage: deps.persist.storage },
+    );
+    if (!acc.ok) {
+      // ★ 同样原样透传（原则 6）
+      deps.onError(acc.message);
+      return;
+    }
+
+    deps.onOk?.();
   };
 
   const schedule = (r = 'persist'): void => {

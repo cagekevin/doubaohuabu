@@ -1,0 +1,14 @@
+2026/10/10-10:11:25.842 4a60 Creating DB C:\Users\xinye\AppData\Roaming\doubao-canvas\Partitions\doubao_d_mv1rd0r0_bte93\Local Storage\leveldb since it was missing.
+2026/10/10-10:11:25.853 4a60 Reusing MANIFEST C:\Users\xinye\AppData\Roaming\doubao-canvas\Partitions\doubao_d_mv1rd0r0_bte93\Local Storage\leveldb/MANIFEST-000001
+2026/10/10-10:12:25.860 4a60 Level-0 table #5: started
+2026/10/10-10:12:25.868 4a60 Level-0 table #5: 638017 bytes OK
+2026/10/10-10:12:25.870 4a60 Delete type=0 #3
+2026/10/10-10:14:27.250 4a60 Level-0 table #7: started
+2026/10/10-10:14:27.252 4a60 Level-0 table #7: 43553 bytes OK
+2026/10/10-10:14:27.254 4a60 Delete type=0 #4
+2026/10/10-10:15:27.260 4a60 Level-0 table #9: started
+2026/10/10-10:15:27.262 4a60 Level-0 table #9: 41637 bytes OK
+2026/10/10-10:15:27.265 4a60 Delete type=0 #6
+2026/10/10-10:27:49.906 4a60 Level-0 table #11: started
+2026/10/10-10:27:49.908 4a60 Level-0 table #11: 42259 bytes OK
+2026/10/10-10:27:49.911 4a60 Delete type=0 #8

@@ -63,6 +63,13 @@ export const GEN_TIMEOUT_MS = 25000;
 export const SEND_MAX_RETRIES = 1;
 /** 分类驱动的重试上限（原 `g3` maxRetry） */
 export const FAILURE_MAX_RETRY = 2;
+/** 发送防重窗口（ms，原 `N3` 41835 = 90000）—— 90 秒内内容相同则跳过入队（`$S`） */
+export const SEND_DEDUP_MS = 90000;
+/**
+ * 生成尝试记录窗口的前置偏移（ms，原 `B0` **42513** 的 `- 1500`）
+ * ⚠️ 作用：只认「本轮」的尝试记录，避免把**上一轮**的失败/成功误当本轮结果
+ */
+export const GEN_ATTEMPT_WINDOW_MS = 1500;
 
 // ─────────────────────────── 页面 / 抓取 ───────────────────────────
 
@@ -72,6 +79,27 @@ export const PAGE_TIMEOUT_SHORT_MS = 12000;
 export const PAGE_TIMEOUT_LONG_MS = 25000;
 /** 抓取并发（原 `wR` 35946） */
 export const SCAN_CONCURRENCY = 3;
+/**
+ * 发送任务的有效时效（ms，原 `qk` 35734 = 3000000 = 50 分钟）
+ * ⚠️ 用途：视频回填匹配时，只认「最近 50 分钟内发过」的任务（原 `Kk` 的第三个过滤条件）
+ */
+export const MAX_JOB_AGE_MS = 3000000;
+
+// ── Tapnow 站点（原 `cP` 33271 · `Yl` 内联 · `r0` 33523 · `Kl` 33107）──
+
+/** Tapnow 接口调用超时（ms，原 `cP` = 20000） */
+export const TAPNOW_API_TIMEOUT_MS = 20000;
+/** Tapnow 读页面地址超时（ms，原 `Yl` 内联 `8000`） */
+export const TAPNOW_HREF_TIMEOUT_MS = 8000;
+/** Tapnow 页面扫描超时（ms，原 `r0` = 12000） */
+export const TAPNOW_SCAN_TIMEOUT_MS = 12000;
+/** Tapnow 抓图最小边长（px，原 `Kl` = 96） */
+export const TAPNOW_MIN_SIDE = 96;
+
+// ── GPT 站点（原 `nO` 42975）──
+
+/** GPT 页内发送超时（ms，原 `nO` = 30000）—— 原 `oO` 调 `gn(..., nO, 'GPT 发送')` */
+export const GPT_SEND_TIMEOUT_MS = 30000;
 /** webview 多帧扫描上限 */
 export const SCAN_MAX_FRAMES = 12;
 /** 单 frame 扫描超时（ms） */

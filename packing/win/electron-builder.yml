@@ -1,0 +1,68 @@
+# =============================================================================
+# packing/win/electron-builder.yml —— Windows 打包（NSIS 安装包 + 免安装版）
+#
+# 【用法】npm run pack:win        （= electron-builder --win --config packing/win/electron-builder.yml）
+#         产物落在 **packing/win/out/** —— 不污染根目录，也不与 mac 产物混。
+#
+# 【前置】npm i -D electron-builder（一次性）
+# 【入口】根 package.json 的 "main": "electron/main.js"
+#   electron/main.js:878 生产环境 loadFile('../dist/index.html') ⇒ 打包前必须先 npm run build
+#
+# 【为什么 win / mac 分两个文件】产物格式、图标格式、签名机制都不同（见 ../README.md）。
+#   公共部分（appId / files / asar）在两个文件里各写一份 —— 刻意不抽 base，
+#   避免 electron-builder 的 `extends` 在多平台产物路径上引入隐式行为。
+# =============================================================================
+
+appId: com.doubaocanvas.app
+productName: 豆包画布
+copyright: Copyright © 2026 豆包画布
+
+directories:
+  output: packing/win/out
+  buildResources: packing/assets
+
+# ── 打进包的文件（白名单；未列出的一律不进）──────────────────────────────
+files:
+  - dist/** # Vite 产物（Electron 加载 dist/index.html）
+  - electron/** # 宿主壳（main.js / preload.js / api/* / *-preload.js）
+  - package.json
+  - '!electron/**/*.bak' # 后端备份件（license.js.bak）
+  - '!electron/node_modules/.bin'
+  - '!**/*.map' # sourcemap 只在开发用
+  # 渲染层依赖已由 vite 全量打进 dist/ ⇒ 运行期不需要根 node_modules。
+  # 这里只精准排除最大的一块（@mediapipe/tasks-vision = 38.68 MB，实测）：
+  #   它的 wasm/tflite 走 public/mediapipe → dist/mediapipe，JS 由 vite 打包，
+  #   源码里 0 处 require 它 ⇒ 排除安全。
+  # ⚠️ electron/** 自己的 electron/node_modules/ws **不受影响**（那是另一条路径）。
+  - '!node_modules/@mediapipe/**'
+
+asar: true
+
+# 本项目无**根**级原生依赖（classic-level 是 devDependency，只给审计脚本用）
+npmRebuild: false
+
+# 只留中文/英文语言包 —— Electron 默认塞 **55 个 locale = 48.3 MB**（实测）
+# 本应用是中文工具，其余 53 个语言包纯属浪费 ⇒ 砍到 ~2 MB。
+electronLanguages:
+  - zh-CN
+  - en-US
+
+win:
+  icon: packing/assets/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 豆包画布
+  artifactName: '${productName}-${version}-setup.${ext}'
+
+portable:
+  artifactName: '${productName}-${version}-portable.${ext}'

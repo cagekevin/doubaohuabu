@@ -25,3 +25,14 @@ export * from './accountPool';
 export * from './fingerprint';
 export * from './scanChain';
 export * from './project';
+// ── M9 新增（回源抄录的纯规则）──
+export * from './replyKind';
+export * from './license';
+export * from './sendGuard';
+export * from './genProgress';
+export * from './refs';
+export * from './recipe';
+export * from './proxy';
+export * from './media';
+export * from './faceDetect';
+export * from './accountPick';

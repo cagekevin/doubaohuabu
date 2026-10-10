@@ -91,6 +91,30 @@ export const ACCOUNT_STATUS = {
 export const isAccountUsable = (a: Account): boolean =>
   (a.status || ACCOUNT_STATUS.loggedIn) === ACCOUNT_STATUS.loggedIn;
 
+/** 站点类型白名单（`Set` 查表：免 `as`、语义直白） */
+const SITE_TYPE_SET: ReadonlySet<string> = new Set(SITE_TYPES);
+
+/**
+ * 是不是合法站点类型（**类型谓词** —— 收窄由类型系统完成，不用 `as`）
+ * ⚠️ 与 `SITE_TYPES` 同源（同文件），是「类型白名单」的唯一判定入口。
+ */
+export const isSiteType = (v: unknown): v is SiteType =>
+  typeof v === 'string' && SITE_TYPE_SET.has(v);
+
+/**
+ * 账号类型归一化（原 `Ps` 26441-26447）
+ *
+ * 规则：**在 `SITE_TYPES` 里就原样返回，否则一律回落 `'doubao'`**
+ * ⚠️ 为什么放 `stable/model`：它与 `isAccountUsable` / `isFingerprintStale` 同类
+ *    —— 都是「对**账号形状**的纯判定」，且 `SITE_TYPES` 的真源就在本文件（SSOT 就近）。
+ *    （原版 `Ps` 被 7 处跨模块复用 ⇒ 需要一个共享宿主，`stable/model` 正合适。）
+ * ⚠️ 与源一致：**没有**「未知类型保留原文」的分支，未知一律变 `doubao`。
+ */
+export const normalizeAccountType = (type: unknown): SiteType => {
+  const t = String(type ?? '');
+  return isSiteType(t) ? t : 'doubao';
+};
+
 /** 指纹版本是否过期（过期需 M6 重算） */
 export const isFingerprintStale = (f: Fingerprint | undefined): boolean =>
   !!f && f.ver !== FINGERPRINT_VERSION;

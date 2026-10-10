@@ -18,6 +18,7 @@ export default tseslint.config(
       'coverage/**',
       // ── 以下**不是**重写范围，排除出 lint ──
       'electron/**', // 冻结的后端（与 逆向工程/electron 同一份，MD5 一致）
+      'public/**', // ★ 第三方静态资源（mediapipe：wasm 加载器 + .tflite 模型），非重写范围
       'docs/**', // 设计文档（Markdown + 少量脚本）
       '.codebuddy/**', // 工作区命令/技能
       '*.log',

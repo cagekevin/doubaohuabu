@@ -50,6 +50,18 @@ export interface CanvasSlice {
 
   // ── actions ──
   setGraph: (nodes: CanvasNode[], edges: CanvasEdge[]) => void;
+  /**
+   * ★ **只改节点**（不动 `edges`）
+   *
+   * ⚠️ 为什么要它（既有缺陷，2026-10-10 修）：`CanvasHost` 的 `onNodesChange` / `onEdgesChange`
+   *   原本都调 `setGraph(新的那一半, **闭包里的另一半**)` ⇒ 两个回调会**互相用旧值覆盖对方**。
+   *   实测后果：删节点后 ReactFlow 报「边变更」，`onEdgesChange` 拿**旧的 `nodes`** 把刚删的
+   *   节点**复活**，随后再次删除 ⇒ 撤销栈被压入 `{2 节点, 0 边}` 的坏快照（Ctrl+Z 后**边回不来**）。
+   * ⇒ 拆成两个只改自己那一半的 action，**结构上不可能**再互相覆盖（与 `setLibrary` 对称）。
+   */
+  setNodes: (nodes: CanvasNode[]) => void;
+  /** ★ **只改边**（不动 `nodes`）—— 理由同上 */
+  setEdges: (edges: CanvasEdge[]) => void;
   setLibrary: (library: LibraryItem[]) => void;
   setSnap: (snap: boolean) => void;
 
@@ -106,6 +118,8 @@ export function createCanvasSlice(
     undo: initialUndoStack<CanvasSnapshot>(),
 
     setGraph: (nodes, edges) => set({ nodes, edges }),
+    setNodes: (nodes) => set({ nodes }),
+    setEdges: (edges) => set({ edges }),
     setLibrary: (library) => set({ library }),
     setSnap: (snap) => set({ snap }),
 

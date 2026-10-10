@@ -18,10 +18,9 @@
  * ⚠️ 原则 6：过程中的错误**原样上报**，不吞
  */
 
-import type { Account } from '@/stable/model/account';
 import type { Project } from '@/stable/model/project';
 import type { Ports } from '@/core/ports';
-import type { AppStore } from '@/state';
+import { PERSIST, type AppStore } from '@/state';
 import { resetStaleJobs } from '@/stable/migrations';
 import { LS_ACCOUNTS, LS_PROJECTS, LS_STYLES } from '@/stable/contracts/keys';
 import { DEFAULT_STYLE_PRESETS } from '@/constants/stylePresets';
@@ -40,8 +39,9 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   const notes: string[] = [];
 
   // ── 1. 读原始值（缺失即空数组 —— 「本来就没有」是正常态）──
-  const projects = storage.read<Project[]>(LS_PROJECTS) ?? [];
-  const accounts = storage.read<Account[]>(LS_ACCOUNTS) ?? [];
+  //    ⚠️ 一律走 `state/persistKeys` 的 `PERSIST`（**键的唯一落点**；用 `LS_*` 常量下标 ⇒ 类型精确）
+  const projects = PERSIST[LS_PROJECTS].read(storage) ?? [];
+  const accounts = PERSIST[LS_ACCOUNTS].read(storage) ?? [];
 
   // ── 2. 启动归位：清在途任务状态（每次启动都要；不是迁移）──
   const reset = resetStaleJobs<Project>(projects);
@@ -74,6 +74,6 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
 
 /** 风格预设的兜底（供 UI 使用；`doubao-styles` 缺失时用内置） */
 export function loadStylePresets(ports: Ports): typeof DEFAULT_STYLE_PRESETS {
-  const stored = ports.storage.read<typeof DEFAULT_STYLE_PRESETS>(LS_STYLES);
+  const stored = PERSIST[LS_STYLES].read(ports.storage);
   return stored && stored.length > 0 ? stored : DEFAULT_STYLE_PRESETS;
 }

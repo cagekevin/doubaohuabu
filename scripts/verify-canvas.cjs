@@ -11,7 +11,10 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PW = process.env.PW_PATH || 'G:/01画布项目/豆包画布/逆向专用/node_modules/playwright';
+// playwright 已是本工程 devDependency ⇒ 用**裸模块名**解析。
+// ⚠️ 原先指向兄弟目录 `逆向专用/node_modules/playwright` —— 那个目录**会话中途消失过一次**，
+//    导致全部验证脚本当场瘫痪（`MODULE_NOT_FOUND`）⇒ 不再依赖工程外路径。
+const PW = process.env.PW_PATH || 'playwright';
 const { chromium } = require(PW);
 
 const ROOT = path.resolve(__dirname, '..');

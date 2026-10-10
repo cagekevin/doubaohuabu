@@ -1,0 +1,151 @@
+/**
+ * 人脸检测的**纯计算**（★ 纯函数，必测 —— §6.5 原则 7）
+ *
+ * 依据（**逐条回源抄录**）：
+ *   - `UD` shared.js:39516-39531 —— **IoU**（交并比，含两个守卫）
+ *   - `zD` shared.js:39532-39545 —— **NMS**（按 score 降序，IoU > 阈值即丢）
+ *   - `T0` shared.js:39545 —— 缩放基准 `1600`
+ *   - `wS` shared.js:39546-39632 —— **缩放计划**（2 模型 × 2 缩放）+ 过滤 + 夹取
+ *   - `kl` shared.js:39638-39648 —— 夹到 `[0,1]`
+ *   - `HD` shared.js:39637 —— 检测时的**加载宽度** `1024`
+ *   - `VD` shared.js:39669-39704 —— 像素框 → **归一化 `FaceBox`**（`kl` 夹取）
+ *
+ * ⚠️ **为什么纯计算要单独成文件**（而不是全塞 `adapters/media/faceDetect.ts`）：
+ *    项目规约「原则 7：测试只在 `core` 各层下的 `tests/` 目录」⇒ 塞进 `adapters/` 的算法**无法单测**。
+ *    ⇒ 按判据 C3「按关注点拆」：**可测的纯计算** 留在这里，**mediapipe/DOM 编排** 进 `adapters/`。
+ *
+ * ⚠️ 本模块**不接触** `window`/`document`/`Date`/随机（原则 4）。
+ */
+
+import type { FaceBox } from './facemask';
+
+/** 像素坐标的人脸框（原 `{x, y, w, h, score}`） */
+export interface PixelFaceBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  score: number;
+}
+
+/** 缩放基准（原 `T0` 39545）—— ⚠️ **不是超时**，是「最长边目标」 */
+export const FACE_DETECT_BASE = 1600;
+/** 缩放上限倍数（原 `wS` 的 `T0 * 2.2`） */
+export const FACE_DETECT_MAX_FACTOR = 2.2;
+/** 第二次尝试的额外放大（原 `wS` 的 `* 1.8`） */
+export const FACE_DETECT_ALT_SCALE = 1.8;
+/** 最小置信度（原 `minDetectionConfidence: 0.35` **与**过滤阈值同为 0.35） */
+export const FACE_MIN_SCORE = 0.35;
+/** 最小边长（px，原 `f.w > 2 && f.h > 2`） */
+export const FACE_MIN_SIZE = 2;
+/** NMS 的 IoU 阈值（原 `zD` 第二参默认值 `0.45`） */
+export const FACE_NMS_IOU = 0.45;
+/** 检测时的图片加载宽度（原 `HD` = 1024） */
+export const FACE_LOAD_WIDTH = 1024;
+
+/** 交并比（原 `UD` 39516） */
+export function iou(a: PixelFaceBox, b: PixelFaceBox): number {
+  const ix = Math.max(a.x, b.x);
+  const iy = Math.max(a.y, b.y);
+  const ix2 = Math.min(a.x + a.w, b.x + b.w);
+  const iy2 = Math.min(a.y + a.h, b.y + b.h);
+  const inter = Math.max(0, ix2 - ix) * Math.max(0, iy2 - iy);
+  if (inter <= 0) return 0;
+  const union = a.w * a.h + b.w * b.h - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+/**
+ * 非极大值抑制（原 `zD` 39532）
+ *
+ * ⚠️ 语义：按 `score` **降序**遍历，若与任一**已保留**框的 IoU `> iouThreshold` 则丢弃。
+ *    注意是 `>`（不是 `>=`）—— 恰好等于阈值时**保留**。
+ */
+export function nmsBoxes<T extends PixelFaceBox>(
+  boxes: readonly T[],
+  iouThreshold: number = FACE_NMS_IOU,
+): T[] {
+  const sorted = [...boxes].sort((a, b) => b.score - a.score);
+  const kept: T[] = [];
+  for (const box of sorted) {
+    if (!kept.some((k) => iou(k, box) > iouThreshold)) kept.push(box);
+  }
+  return kept;
+}
+
+/** 一次检测尝试（原 `wS` 的 plan 项） */
+export interface DetectAttempt {
+  detector: 'full' | 'short';
+  scale: number;
+}
+
+/**
+ * 构造检测尝试计划（原 `wS` 39546 的 `a` 数组 + 跳过判据）
+ *
+ * 原计划恒为 4 项：`[full, short] × [base, base*1.8]`；跳过条件 = `scale > 0.01 && maxSide*scale > 3520`。
+ *
+ * ★ **回源发现：该跳过条件实际是死代码** ——
+ *    `base = min(1, 1600/maxSide)` ⇒ `maxSide*base <= 1600`、`maxSide*base*1.8 <= 2880`，
+ *    两者都 `< 3520` ⇒ **永不跳过**。本实现**按源保留**该判据（万一将来改基准就会生效）。
+ *
+ * @returns **可执行**的尝试列表（已滤掉会被跳过的项 —— 被跳过的项在源码里也不产生任何可观测影响）
+ */
+export function buildDetectPlan(width: number, height: number): DetectAttempt[] {
+  // ⚠️ **任一维为 0 就无意义**（原 `wS` 在算计划前就 `if (!W || !H) return []`）
+  if (!width || !height) return [];
+  const maxSide = Math.max(width, height);
+  const base = Math.min(1, FACE_DETECT_BASE / maxSide);
+  const plan: DetectAttempt[] = [
+    { detector: 'full', scale: base },
+    { detector: 'short', scale: base },
+    { detector: 'full', scale: base * FACE_DETECT_ALT_SCALE },
+    { detector: 'short', scale: base * FACE_DETECT_ALT_SCALE },
+  ];
+  const cap = FACE_DETECT_BASE * FACE_DETECT_MAX_FACTOR;
+  return plan.filter((a) => !(a.scale > 0.01 && maxSide * a.scale > cap));
+}
+
+/** 夹到图内（原 `wS` 尾部 39624-39631）—— `x/y` 夹到 `[0, side-1]`，`w/h` 至少 1 且不越界 */
+export function clampBoxToImage(box: PixelFaceBox, width: number, height: number): PixelFaceBox {
+  const x = Math.max(0, Math.min(box.x, width - 1));
+  const y = Math.max(0, Math.min(box.y, height - 1));
+  return {
+    x,
+    y,
+    w: Math.max(1, Math.min(box.w, width - x)),
+    h: Math.max(1, Math.min(box.h, height - y)),
+    score: box.score,
+  };
+}
+
+/** 置信度 + 最小边长过滤（原 `wS` 39620-39622） */
+export function isUsableFaceBox(box: PixelFaceBox): boolean {
+  return box.score >= FACE_MIN_SCORE && box.w > FACE_MIN_SIZE && box.h > FACE_MIN_SIZE;
+}
+
+/** 夹到 `[0,1]`（原 `kl` 39638） */
+export function clamp01(v: number): number {
+  if (v < 0) return 0;
+  return v > 1 ? 1 : v;
+}
+
+/**
+ * 像素框 → 归一化 `FaceBox`（原 `VD` 39669 + `kl`）
+ *
+ * ⚠️ **有意偏离**：原版归一化结果里还带 `score`，而项目 SSOT 的 `FaceBox` 只有 `{nx,ny,nw,nh}`
+ *    ⇒ 这里**丢掉 `score`**（遮脸流程不需要它）。若将来需要按置信度排序，再扩 `FaceBox`。
+ */
+export function toNormalizedFaceBoxes(
+  boxes: readonly PixelFaceBox[],
+  width: number,
+  height: number,
+): FaceBox[] {
+  const w = width || 1;
+  const h = height || 1;
+  return boxes.map((b) => ({
+    nx: clamp01(b.x / w),
+    ny: clamp01(b.y / h),
+    nw: clamp01(b.w / w),
+    nh: clamp01(b.h / h),
+  }));
+}

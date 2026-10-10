@@ -14,8 +14,9 @@ import { EDGE_MARKER, EDGE_STYLE } from '@/constants';
 import { createCanvasSlice, type CanvasSlice } from './slices/canvas';
 import { createGlobalSlice, type GlobalSlice } from './slices/global';
 import { createUiSlice, type UiSlice } from './slices/ui';
+import { createSettingsSlice, type SettingsSlice } from './slices/settings';
 
-export type AppState = GlobalSlice & CanvasSlice & UiSlice;
+export type AppState = GlobalSlice & CanvasSlice & UiSlice & SettingsSlice;
 
 /** zustand 的 store hook 类型 */
 export type AppStoreHook = UseBoundStore<StoreApi<AppState>>;
@@ -47,7 +48,16 @@ export function createAppStore(ports: Ports): AppStore {
     const setPartial = (partial: Partial<AppState>) =>
       set((s) => {
         const touchesCanvas = 'nodes' in partial || 'edges' in partial || 'library' in partial;
-        if (!touchesCanvas || !s.activeId) return partial as AppState;
+        /**
+         * ★ **同一批里换了 `activeId` ⇒ 绝不镜像**（`docs/14` §2 的 ⭐⭐ 数据损坏 bug）
+         *
+         * 不设这道闸的话：`setActiveId(newId)` 之后任何画布改动都会把**旧画布**
+         * 写进**新工程** ⇒ 切项目即串数据。
+         * 正解在 `slices/global.ts` 的 `openProject`（它**原子地**把新工程的画布数据带进来）；
+         * 这里只是**兜底**，让"忘了带数据"也**不会**造成损坏。
+         */
+        const switchesProject = 'activeId' in partial && partial.activeId !== s.activeId;
+        if (!touchesCanvas || !s.activeId || switchesProject) return partial as AppState;
 
         const nodes = partial.nodes ?? s.nodes;
         const edges = partial.edges ?? s.edges;
@@ -75,6 +85,8 @@ export function createAppStore(ports: Ports): AppStore {
         }),
       }),
       ...createUiSlice(() => ports.clock.now())(setPartial, getState),
+      // ★ settings：API 配置族（判据 C2 —— `global` 超 25 字段即按共享范围再分）
+      ...createSettingsSlice(setPartial, getState),
     };
   });
 

@@ -22,14 +22,25 @@ export const BRAND = {
   untitledProject: '未命名项目',
 } as const;
 
-/** 授权 / 加载 */
+/**
+ * 授权 / 加载
+ *
+ * ★ 2026-10-10 修正（按原版 `H3` 42609-42623 **逐字对齐**）：
+ *   · `永久授权` → **`永久`** —— `永久授权` 在**原版全仓 0 命中**（已 `grep` 核实）
+ *   · `剩余 N 天/小时` → **`剩余约 N 天/小时`**（原版有「约」字）
+ *   ⇒ 这是**行为不等价**（用户可见文案），不是风格差异。
+ */
 export const LICENSE_TEXT = {
   checking: '正在校验授权…',
   fetchFailed: '授权状态获取失败',
-  permanent: '永久授权',
+  /** 原 `H3` 42616 */
+  permanent: '永久',
+  /** 原 `H3` 42612 */
   expired: '已过期',
-  remainingDays: (d: number) => `剩余 ${d} 天`,
-  remainingHours: (h: number) => `剩余 ${h} 小时`,
+  /** 原 `H3` 42619 */
+  remainingDays: (d: number) => `剩余约 ${d} 天`,
+  /** 原 `H3` 42622（`Math.max(h, 1)` ⇒ 剩 5 分钟也显示 1 小时） */
+  remainingHours: (h: number) => `剩余约 ${h} 小时`,
 } as const;
 
 /** 画布空态 / 提示 */
@@ -170,4 +181,156 @@ export const FACEMASK_TEXT = {
   strength: '强度',
   expand: '范围外扩',
   hint: (n: number) => `单击角标即按此参数遮脸（当前 ${n} 张脸）`,
+} as const;
+
+/**
+ * GPT 站点 —— 页内发送脚本的失败文案（原 `sO` 42998-43133）
+ *
+ * ⚠️ 这些字符串**由页内脚本返回给用户看** ⇒ 按原则 5 归 SSOT。
+ */
+export const GPT_TEXT = {
+  /** 原 `sO`：12×500ms 仍找不到输入框 */
+  noComposer: 'GPT 页面没有找到聊天输入框（可能未登录或页面未加载完成）',
+  /**
+   * 原 `sO` 的 `'写入提示词失败：' + msg` —— **前缀单独导出**，
+   * 因为页内脚本要在**页面里**拼（不能把整个函数塞进去）。
+   */
+  insertFailPrefix: '写入提示词失败：',
+  /** 原 `sO`：10×400ms 找不到可用发送按钮，且回车兜底也失败 */
+  noSend: '找不到可用的发送按钮，且回车兜底未生效',
+  /** 原 `sO`：点了发送但 16×500ms 内没确认到新消息 */
+  notConfirmed: '已点击发送，但没有检测到新消息（请检查 GPT 页面状态：是否未登录/额度用尽/弹了验证）',
+  /** 原 `oO`：找不到该账号的 webview */
+  pageNotOpen: '没有找到该 GPT 账号的页面：请先在左侧选中该账号，等 ChatGPT 加载完成',
+  /** 原 `oO`：页内脚本执行超时（`nO` = 30000） */
+  sendTimeout: 'GPT 页面发送超时（页面可能卡住，请刷新该账号页面重试）',
+  /** 原 `oO`：页内脚本抛错（前缀，后接原始错误） */
+  sendErrorPrefix: 'GPT 页面执行失败：',
+  /** 原 `oO` 的兜底文案 */
+  sendFailed: '发送未成功',
+  /** 原 `aO`：页面拿不到 webContentsId 或宿主没有 attachImagesToWebview */
+  attachUnsupported: '该 GPT 页面暂无法附加参考图：请先打开该 GPT 账号后台，或移除引用后重试',
+  /** 原 `aO`：3 次重试后仍附加失败（前缀 + 原因 + 后缀） */
+  attachFailedPrefix: '参考图发送失败：',
+  attachFailedSuffix: '（可移除引用后重试）',
+  /** 原 `aO`：附加失败但拿不到具体原因 */
+  attachUnknownReason: '未知原因',
+} as const;
+
+/**
+ * 站点显示名（原 `eO` 42819）
+ *
+ * ⚠️ 只收 `string`（不引 `stable` 的 `SiteType`）—— `constants` 是 L0，
+ *    引 `stable` 会与 `stable → constants` 形成**环**。
+ */
+const SITE_DISPLAY_NAME: Readonly<Record<string, string>> = {
+  dola: 'Dola',
+  gpt: 'GPT',
+  doubao: '豆包',
+};
+
+/** 站点显示名（原 `eO` 42819）—— 未知类型取**大写**（与源一致：`String(e || 'doubao').toUpperCase()`） */
+export function siteDisplayName(type: unknown): string {
+  const t = String(type ?? '') || 'doubao';
+  return SITE_DISPLAY_NAME[t] ?? t.toUpperCase();
+}
+
+/**
+ * 发送账号解析（原 `FS` 42830-42890）
+ *
+ * ⚠️ 这些字符串**会出现在用户看到的错误里** ⇒ 按原则 5 归 SSOT。
+ */
+export const ACCOUNT_PICK_TEXT = {
+  /** 原 `FS`：显式指定但账号不存在 / 未登录 */
+  missing: '所选账号不存在或未登录',
+  /** 原 `FS`：显式指定但站点类型不符 */
+  typeMismatch: '所选账号与当前出图通道不匹配',
+  /** 原 `FS`：显式指定但该号正在生成 */
+  busy: '所选账号正在生成中，请稍后再试',
+  /** 原 `FS`：池里没有可用账号 */
+  noneConfigured: (site: string) => `未配置已登录的${site}账号`,
+  /** 原 `FS`：★ 与源一致 —— **除 `no-account` 外一律用这句**（含 `all-busy`） */
+  allBusy: (site: string) => `${site}账号都在忙，请稍后再试`,
+} as const;
+
+/**
+ * Tapnow 站点（原 `Ok` 33272-33327 · `Uk` 33328-33353 · `Yl` 33401-33420）
+ *
+ * ⚠️ 这些字符串**会出现在用户看到的错误/提示里** ⇒ 按原则 5 归 SSOT，规则层不得硬编码。
+ */
+export const TAPNOW_TEXT = {
+  /** 原 `Uk` 的 `l.name || l.title || '未命名画布'` */
+  unnamedCanvas: '未命名画布',
+  /** 原 `Ok` 的 `'缺少账号'` */
+  missingAccount: '缺少账号',
+  /** 原 `Ok`/`fP` 的 `'没有找到该账号的 Tapnow 页面'` */
+  pageNotFound: '没有找到该账号的 Tapnow 页面',
+  /** 原 `Ok` 的 `'webview 未就绪'` */
+  webviewNotReady: 'webview 未就绪',
+  /** 原 `Ok` 的 `'接口调用超时'` */
+  apiTimeout: '接口调用超时',
+  /** 原 `Ok` 的 `'接口调用异常'` */
+  apiAbnormal: '接口调用异常',
+  /** 原 `Ok` 的 `'接口返回不是 JSON'` */
+  badJson: '接口返回不是 JSON',
+  /** 原 `Ok` 调 `gn` 时的 label（超时文案前缀） */
+  apiLabel: '接口调用',
+  /** 原 `Yl` 调 `gn` 时的 label */
+  hrefLabel: '读取页面地址',
+} as const;
+
+/**
+ * 生成配方（原 `oR` 35525 / `uR` 35611 / `dR` 35641）
+ * ⚠️ 分隔符也是 SSOT：`uR` 用 ` · `、`dR` 用换行 —— 别在规则里硬编码
+ */
+export const RECIPE_TEXT = {
+  /** `uR` 的分隔符 */
+  inlineSep: ' · ',
+  /** `uR`：`参考图×N` */
+  imagesCount: (n: number) => `参考图×${n}`,
+  /** `uR`：`引用文本×N` */
+  textRefsCount: (n: number) => `引用文本×${n}`,
+  /** `dR`：`提示词：…` */
+  prompt: (p: string) => `提示词：${p}`,
+  /** `dR` 参数项：`模型 X` / `时长 Ns` / `比例 R` */
+  model: (label: string) => `模型 ${label}`,
+  duration: (s: number) => `时长 ${s}s`,
+  ratio: (r: string) => `比例 ${r}`,
+  /**
+   * ★ `uR` 的时长**不带「时长」前缀**（原 `uR` 是 `` `${e.duration}s` ``）
+   * ⚠️ 与 `dR` 的 `时长 Ns` **格式不同** —— 别合并成一个 formatter（曾因此写错，被单测抓出）
+   */
+  durationShort: (s: number) => `${s}s`,
+  /** `dR`：`参数：A / B / C` */
+  params: (joined: string) => `参数：${joined}`,
+  /** `dR` 参数项分隔符 */
+  paramSep: ' / ',
+  /** `dR`：`风格：X` */
+  style: (name: string) => `风格：${name}`,
+  /** `dR`：`参考图：A、B` */
+  refImages: (labels: string) => `参考图：${labels}`,
+  /** `dR` 参考图名分隔符 */
+  labelSep: '、',
+  /** `dR`：`出片账号：X` */
+  account: (name: string) => `出片账号：${name}`,
+} as const;
+
+/**
+ * 生成进度回显（原 `B0` 42493-42567）
+ *
+ * ⚠️ 这些是**进度状态**文案，**不是**失败 label（失败 label 的真源是 `./failure` 的 `FAIL_LABEL`）。
+ */
+export const GEN_PROGRESS_TEXT = {
+  notStarted: '生成未开始',
+  dash: '—',
+  unknown: '状态未知',
+  nodeMissing: '节点不存在',
+  failed: '失败',
+  done: '已完成',
+  queued: '排队中',
+  idle: '未在生成',
+  generating: '生成中',
+  noProgress: '未能获取进度',
+  waitingStart: '等待豆包开始生成',
+  noRecord: '后台暂无该任务的生成记录',
 } as const;

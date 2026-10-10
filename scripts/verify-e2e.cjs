@@ -14,7 +14,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PW = process.env.PW_PATH || 'G:/01画布项目/豆包画布/逆向专用/node_modules/playwright';
+// playwright 已是本工程 devDependency ⇒ 用**裸模块名**解析（不再依赖工程外路径，见 verify-canvas 注释）
+const PW = process.env.PW_PATH || 'playwright';
 const { chromium } = require(PW);
 
 const ROOT = path.resolve(__dirname, '..');

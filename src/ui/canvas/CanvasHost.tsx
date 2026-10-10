@@ -29,7 +29,7 @@ import {
 } from '@xyflow/react';
 import type { CanvasEdge } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
-import { useStore } from '@/state';
+import { useStore, useStoreApi } from '@/state';
 import { nodeTypes } from '@/ui/nodes';
 import type { RFCanvasNode } from '@/ui/nodes/types';
 import { InteractiveEdge } from '@/ui/edges/InteractiveEdge';
@@ -48,7 +48,11 @@ const MINIMAP_COLOR: Record<string, string> = {
 function Inner() {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
-  const setGraph = useStore((s) => s.setGraph);
+  /** ★ 只改自己那一半（`setGraph` 会连另一半一起覆盖 ⇒ 见 `canvas.ts` 的 `setNodes` 注释） */
+  const setNodes = useStore((s) => s.setNodes);
+  const setEdges = useStore((s) => s.setEdges);
+  /** ★ 非订阅式读取（事件回调里要读「当前值」时用 —— 原版 `t()` 的对应物） */
+  const storeApi = useStoreApi();
   const commit = useStore((s) => s.commit);
   const connect = useStore((s) => s.connect);
   const undoAction = useStore((s) => s.undoAction);
@@ -58,26 +62,72 @@ function Inner() {
   const library = useStore((s) => s.library);
   const addTextNode = useStore((s) => s.addTextNode);
   const addMaterialNode = useStore((s) => s.addMaterialNode);
+  /** ★ 删除必须走它（见 `onNodesChange` 的注释） */
+  const removeNodes = useStore((s) => s.removeNodes);
 
   const { fitView, screenToFlowPosition } = useReactFlow();
 
   // 节点/边变更：位置变化**不在此 commit**（拖拽开始才 commit，见 onNodeDragStart）
   const onNodesChange = useCallback(
     (changes: NodeChange<RFCanvasNode>[]) => {
-      const next = applyNodeChanges(changes, nodes as unknown as RFCanvasNode[]);
-      setGraph(next as unknown as CanvasNode[], edges);
+      /**
+       * ★★ **从 store 读「当前」值，不用 React 闭包**（与源 `shared.js:26826` 的 `t().nodes` 一致）
+       *
+       * 闭包里的 `nodes` 是**上次渲染的快照**：连续变更（如"删节点"紧接"选中变化"）时，
+       * 后一次会用旧值把前一次的结果**覆盖回去** ⇒ 实测表现为"删掉的节点又冒出来"、
+       * 撤销栈被压入坏快照（Ctrl+Z 后边回不来）。
+       */
+      const current = storeApi.getState().nodes;
+
+      /**
+       * ★★ **删除必须走 `removeNodes`，不能交给 `applyNodeChanges`**
+       *
+       * 依据 `docs/14` §2 的 ★ 缺口（原实现里 `removeNodes` **零调用**）：
+       *   `applyNodeChanges` 只把节点从数组里丢掉、**完全不动 `edges`**
+       *   ⇒ ① 留下**悬空边**；且它**不 `commit` 快照** ⇒ ② 删除**不可撤销**。
+       * `removeNodes` 三件事都做：**commit 快照** + **清相关边** + **清幸存节点的 `referenceOrder` 引用**。
+       *
+       * ⚠️ **顺序：先应用其余变更、再删除**。反过来的话会拿**闭包里的旧 `nodes`**
+       *    去 `applyNodeChanges` ⇒ 把刚删掉的节点又"复活"回来。
+       *    （`zustand` 的 `set` 是同步的 ⇒ `removeNodes` 读到的已是 `setGraph` 之后的状态。）
+       */
+      const removed: string[] = [];
+      const rest: NodeChange<RFCanvasNode>[] = [];
+      for (const c of changes) {
+        if (c.type === 'remove') removed.push(c.id);
+        else rest.push(c);
+      }
+
+      if (rest.length > 0) {
+        // ⚠️ 用**刚读到的 `current`**（不是 React 闭包）—— 见本回调开头的注释
+        const next = applyNodeChanges(rest, current as unknown as RFCanvasNode[]);
+        // ★ 只改节点（**不再带 `edges`**）—— 否则会拿旧边覆盖掉刚发生的边变更
+        setNodes(next as unknown as CanvasNode[]);
+      }
+      if (removed.length > 0) {
+        // remove 的 commit 由 `removeNodes` 内部完成（key 同为 `'delete'`）⇒ 此处**不重复 commit**
+        removeNodes(removed);
+      }
     },
-    [setGraph, nodes, edges],
+    [setNodes, removeNodes, storeApi],
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange<CanvasEdge>[]) => {
+      /**
+       * ★ 与源一致（`shared.js:26880-26889`）：
+       *   ① **删边也要 `commit('delete')`** —— 否则删边**不可撤销**（原实现漏了）
+       *   ② 从 **store 读当前 `edges`**，不用 React 闭包（闭包是上次渲染的快照）
+       *   ③ 只写 `edges`（**不动 `nodes`**）
+       */
+      if (changes.some((c) => c.type === 'remove')) commit('delete');
+      const current = storeApi.getState().edges;
       // ⚠️ xyflow 的 applyEdgeChanges 返回 `Edge[]`（type 是 `string|undefined`），
       //    而我们的 `CanvasEdge.type` 收窄为 `'interactive'` ⇒ 边界处做一次断言
       //    （结构等价，只是字面量宽度不同）
-      setGraph(nodes, applyEdgeChanges(changes, edges) as CanvasEdge[]);
+      setEdges(applyEdgeChanges(changes, current) as CanvasEdge[]);
     },
-    [setGraph, nodes, edges],
+    [commit, setEdges, storeApi],
   );
 
   /** ★ 拖拽开始即 commit（快照 = 变更前）—— 与源码 29001 一致，满足 W5 */
@@ -172,6 +222,9 @@ function Inner() {
         onEdgesChange={onEdgesChange}
         onNodeDragStart={onNodeDragStart}
         onConnect={onConnect}
+        // ★ 与源一致（`_Component42.jsx:1444`）：原版**显式设了两个删除键**。
+        //   不设的话 xyflow 默认只有 `Backspace` ⇒ `Delete` 键删不掉节点（实测差距）
+        deleteKeyCode={['Backspace', 'Delete']}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         onlyRenderVisibleElements
