@@ -1,0 +1,81 @@
+/**
+ * 设计 token（★ SSOT：颜色/间距/圆角/字体的唯一真源）
+ *
+ * 依据：docs/11-架构与契约定稿.md §2.1「CSS 必须标准 + SSOT」
+ * 铁律：**字面量色值只允许出现在本文件**（由 scripts/check-invariants.cjs 强制）
+ */
+
+:root {
+  /* ── 色板 ── */
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f2f3f5;
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+
+  --color-text: #1f2329;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9ca3af;
+
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  /* ── 画布专属 ── */
+  --color-canvas-bg: #fbfbfc;
+  --color-grid: rgba(226, 230, 236, 0.4);
+  --color-edge: #6366f1;
+
+  /* ── 节点类型色（对齐原实现 MiniMap 配色）── */
+  --color-node-material: #a5b4fc;
+  --color-node-account: #34d399;
+  --color-node-other: #fcd34d;
+
+  /* ── 间距 ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* ── 圆角 ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* ── 字体 ── */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  /* ── 阴影 / 蒙层 / 选区（供 theme.css 与组件引用，避免字面量色值外泄）── */
+  --color-shadow: rgba(0, 0, 0, 0.08);
+  --color-shadow-strong: rgba(0, 0, 0, 0.16);
+  --color-mask: rgba(240, 240, 240, 0.6);
+  --color-mask-strong: rgba(0, 0, 0, 0.32);
+  --color-selection-bg: rgba(99, 102, 241, 0.08);
+
+  /* ── 危险态（错误横幅）── */
+  --color-danger-bg: rgba(239, 68, 68, 0.08);
+  --color-danger-border: rgba(239, 68, 68, 0.24);
+
+  /* ── 层级 ── */
+  --z-canvas: 1;
+  --z-panel: 100;
+  --z-overlay: 500;
+  --z-modal: 900;
+  --z-toast: 1000;
+
+  /* ── 动效 ── */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}

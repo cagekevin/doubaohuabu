@@ -1,0 +1,9 @@
+{
+  "name": "doubao-canvas-backend",
+  "private": true,
+  "//": "★ 两个作用：① 声明本目录是 CommonJS（前端根 package.json 有 \"type\":\"module\"，Electron 会据此把 main.js 当 ESM —— 实测报错 `require is not defined`）；② 承载后端的运行时依赖（`ws`），与前端依赖隔离。Node 按「最近的 package.json」解析模块类型与依赖 ⇒ 不必改后端任何一行。",
+  "type": "commonjs",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

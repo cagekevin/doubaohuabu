@@ -1,0 +1,95 @@
+/**
+ * 节点通用样式（原则 5：只用 var(--...) 引用 tokens.css）
+ */
+
+.node {
+  min-width: 120px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+}
+
+.selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.body {
+  padding: var(--space-2);
+}
+
+.text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  background: var(--color-surface-alt);
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+  padding: var(--space-3);
+  color: var(--color-text-faint);
+  background: var(--color-surface-alt);
+}
+
+/* 组节点 */
+.group {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-selection-bg);
+}
+.groupLabel {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* 账号节点 */
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+}
+.dotInvalid {
+  background: var(--color-text-faint);
+}
+
+/* 生成中 */
+.spinner {
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+}

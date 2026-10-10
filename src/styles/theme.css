@@ -1,0 +1,48 @@
+/**
+ * ReactFlow 主题（★ 只用官方 `--xy-*` CSS 变量，不写 .react-flow__* 类名覆写）
+ *
+ * 依据：docs/11 §2.1「CSS 必须标准」
+ * 实测：@xyflow/react@12.12.0 的 dist/style.css 含 **85 个唯一 `--xy-*` 变量**
+ *
+ * 用法（见 bootstrap/main.tsx）：
+ *   import '@xyflow/react/dist/style.css';   // ① 官方样式
+ *   import '@/styles/tokens.css';            // ② SSOT
+ *   import '@/styles/theme.css';             // ③ 本文件
+ */
+
+.xy-theme {
+  /* ── 画布背景与网格 ── */
+  --xy-background-color: var(--color-canvas-bg);
+  --xy-background-pattern-color: var(--color-grid);
+
+  /* ── 连线 ── */
+  --xy-edge-stroke: var(--color-edge);
+  --xy-edge-stroke-width: 2;
+  --xy-edge-stroke-selected: var(--color-primary-hover);
+
+  /* ── 节点 ── */
+  --xy-node-border-radius: var(--radius-md);
+  --xy-node-background-color: var(--color-surface);
+  --xy-node-border: 1px solid var(--color-border);
+  --xy-node-boxshadow-hover: 0 2px 8px var(--color-shadow);
+  --xy-node-boxshadow-selected: 0 0 0 2px var(--color-primary);
+
+  /* ── 连接点 ── */
+  --xy-handle-background-color: var(--color-primary);
+  --xy-handle-border-color: var(--color-surface);
+
+  /* ── 控件（缩放/适配按钮）── */
+  --xy-controls-button-background-color: var(--color-surface);
+  --xy-controls-button-background-color-hover: var(--color-surface-alt);
+  --xy-controls-button-color: var(--color-text);
+  --xy-controls-button-border-color: var(--color-border);
+  --xy-controls-box-shadow: 0 1px 4px var(--color-shadow);
+
+  /* ── MiniMap ── */
+  --xy-minimap-background-color: var(--color-surface);
+  --xy-minimap-mask-background-color: var(--color-mask);
+
+  /* ── 选择框 ── */
+  --xy-selection-background-color: var(--color-selection-bg);
+  --xy-selection-border: 1px dashed var(--color-primary);
+}

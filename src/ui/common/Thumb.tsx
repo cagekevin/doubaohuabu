@@ -1,0 +1,51 @@
+/**
+ * Thumb —— 缩略图（★ 原则 8「三振出局」的落点）
+ *
+ * 抽出的重复模式：**加载失败降级**（`?w=` 拼接已下沉到协议层）
+ * 出现处：画布节点 / 资源库 / 生成结果 / 新图面板
+ *
+ * ⚠️ docs/10 #7：**缩略图一律走 `?w=`，不加载原图**（原图 2~20MB）
+ * ⚠️ `withThumb`（协议规则）**已下沉到 `stable/protocols/img.ts`**（TD-01-1）——
+ *    它是冻结协议，不该住 UI 层（否则非 UI 消费者要反向依赖 ui）。本文件**只转发**。
+ */
+
+import { useState } from 'react';
+// ★ 协议规则的真源（冻结契约）；此处 re-export 只为不破坏既有 import 路径
+import { withThumb } from '@/stable/protocols/img';
+import styles from './shared.module.css';
+
+export { withThumb };
+
+export interface ThumbProps {
+  src: string;
+  alt?: string;
+  className?: string;
+  /** 覆盖默认宽度 */
+  width?: number;
+}
+
+export function Thumb({ src, alt = '', className, width }: ThumbProps) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src) return <div className={`${styles.thumbPlaceholder} ${className ?? ''}`}>无图</div>;
+
+  if (failed) {
+    // 降级：显示占位（**不隐藏错误**，用 title 暴露原始 src）
+    return (
+      <div className={`${styles.thumbPlaceholder} ${className ?? ''}`} title={src}>
+        加载失败
+      </div>
+    );
+  }
+
+  return (
+    <img
+      className={className ?? styles.thumbImg}
+      src={withThumb(src, width)}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
+}

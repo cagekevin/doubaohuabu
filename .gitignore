@@ -1,0 +1,24 @@
+# ── 依赖 ──
+node_modules/
+
+# ── 构建产物 ──
+dist/
+
+# ── 探针 / 临时产物（不变量检查的 journal）──
+.probe/
+
+# ── 环境变量 ──
+.env
+.env.*
+!.env.example
+
+# ── 日志（仅 npm 侧；勿用 *.log —— leveldb fixture 有 000014.log / LOG.old）──
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── 编辑器 / 系统 ──
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

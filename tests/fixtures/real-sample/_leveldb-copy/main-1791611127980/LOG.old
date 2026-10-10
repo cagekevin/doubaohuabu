@@ -1,0 +1,6 @@
+2026/10/10-10:54:54.392 33b0 Reusing MANIFEST C:\Users\xinye\AppData\Roaming\doubao-canvas\Local Storage\leveldb/MANIFEST-000001
+2026/10/10-10:54:54.413 33b0 Recovering log #6
+2026/10/10-10:54:54.414 33b0 Reusing old log C:\Users\xinye\AppData\Roaming\doubao-canvas\Local Storage\leveldb/000006.log 
+2026/10/10-10:55:21.374 33b0 Level-0 table #10: started
+2026/10/10-10:55:21.376 33b0 Level-0 table #10: 29211 bytes OK
+2026/10/10-10:55:21.378 33b0 Delete type=0 #6
