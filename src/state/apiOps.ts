@@ -9,7 +9,7 @@
  * | 保存 provider 配置 / 密钥 / Secret | `saveProviderConfig` / `saveProviderKey` / `saveProviderSecret` | `_Component46.jsx:100/109/118/175` **直调 `window.api`** |
  * | 测试连接 | `testProvider` | `_Component46.jsx:149` **直调 `window.api`** |
  *
- * ★ **为什么需要它**：`_Component46.jsx` 原先**直调 `window.api.apiConfigSet*` / `apiConfigTest`**
+ * ★ **为什么需要它**：`ui` **不得直调 `window.api.apiConfig*` / `apiConfigTest`**
  *   —— 那是铁律② 违规（视图直调宿主）。本控制器就是把这些调用**纳入
  *   `ui → state → usecases → ports`** 的那道口子；没有它，面板只能继续碰 `window.api`。
  *   ⇒ 与 `hostOps` / `projectOps` 同法：**端口只在这里取一次**，`ui` 拿不到 `Ports`。

@@ -27,6 +27,28 @@ export interface SendQueueState {
   paused: boolean;
 }
 
+/**
+ * 一条「排队追问」进度（原 `queueProgress[itemId] = {...r, at}`）—— ★ `TD-16-103`
+ *
+ * `kind` / `text` 正是 `core/rules/genProgress.resolveGenProgress` 第三参要的两个字段
+ * （`GenReplyLite`），面板直接把它喂进「成片行」。
+ */
+export interface QueueProgressEntry {
+  /** 助手回复分类（`core/rules/replyKind.classifyReply` 的 `kind`） */
+  kind?: string;
+  /** 给用户看的一句话（源 `st[kind]` 的映射文案；`kind === 'other'` 时是回复原文截断） */
+  text?: string;
+  /** 已追问次数（源 `pings`）—— 追问循环用它过节奏闸 */
+  pings?: number;
+  /** 上次追问时刻（源 `askedAt`）—— 追问循环用它算间隔 */
+  askedAt?: number;
+  /** 写入时刻（**由 store 盖**，源 `Date.now()` ⇒ 本仓注入时钟） */
+  at: number;
+}
+
+/** 写入参数（`at` 不允许外部给 —— 恒由 `setQueueProgress` 盖） */
+export type QueueProgressPatch = Omit<QueueProgressEntry, 'at'>;
+
 export interface QueueSlice {
   sendQueue: SendQueueState;
   /**
@@ -42,11 +64,29 @@ export interface QueueSlice {
   updateQueueItem: (id: string, patch: QueueItemPatch) => void;
   /** 设并发上限（原 `setAccountConcurrency`） */
   setAccountConcurrency: (n: unknown) => void;
+
+  // ── 排队追问进度（原 `queueProgress` 30436 附近的 `31240` 段）★ `TD-16-103` 的生产者坑位 ──
+  /**
+   * 后台进度回显（原 `A.queueProgress`）—— 键 = **队列项 id**，值 = 该次追问的产物
+   *
+   * ★ **谁写**：队列泵的**「排队追问」轮询**（源 `_Component43.jsx:2200-2266`）——
+   *   追问页面 → 用 `classifyReply`（源 `WR`）分类助手回复 → `setQueueProgress(itemId, {kind, text, …})`。
+   * ★ **谁读**：`ui/panels/SendQueuePanel` 的「成片行」第三参（源 `z3.jsx:13`）。
+   */
+  queueProgress: Record<string, QueueProgressEntry>;
+  /**
+   * 合并写一条（原 `setQueueProgress(n, r)`）—— 键为空 ⇒ **原样不动**（不抛）；
+   * 写入时**盖 `at` 时间戳**（源 `Date.now()` ⇒ 本仓注入时钟，原则 4）。
+   */
+  setQueueProgress: (key: string, patch: QueueProgressPatch) => void;
+  /** 删一条（原 `clearQueueProgress(n)`）—— 键为空或**不在表里** ⇒ 原样不动 */
+  clearQueueProgress: (key: string) => void;
 }
 
 /**
- * @param now 时钟（**本片暂时没用它**，留着与其它 slice 的签名一致；
- *   ⚠️ 队列的时间戳一律由 `core/rules` 的规划函数算出后**作为 patch 传进来** —— 那是原则 4 的落点）
+ * @param now 时钟 —— ★ 2026-10-11（`TD-16-103`）**它终于有消费者了**：`setQueueProgress` 写入时
+ *   盖 `at`（源写 `Date.now()` ⇒ 本仓注入，原则 4）。
+ *   ⚠️ 其余队列时间戳仍一律由 `core/rules` 的规划函数算出后**作为 patch 传进来**。
  */
 export const createQueueSlice =
   (_now: () => number) =>
@@ -79,5 +119,25 @@ export const createQueueSlice =
       // 原 30452-30455：`Number.isFinite(r) && r >= 1 ? Math.floor(r) : 1`
       const r = Number(n);
       set({ accountConcurrency: Number.isFinite(r) && r >= 1 ? Math.floor(r) : 1 });
+    },
+
+    // ── 排队追问进度（原 `31240` / `31241-31254` / `31255-31267`）★ `TD-16-103` ──
+    queueProgress: {},
+
+    setQueueProgress: (key, patch) => {
+      // 原 31242-31244：`if (!n) return;`
+      if (!key) return;
+      const s = { ...get().queueProgress };
+      // 原 31247-31250：`s[n] = { ...(r || {}), at: Date.now() }` —— `at` 由**注入的时钟**给（原则 4）
+      s[key] = { ...(patch || {}), at: _now() };
+      set({ queueProgress: s });
+    },
+
+    clearQueueProgress: (key) => {
+      // 原 31257-31259：`if (!n || !(n in t().queueProgress)) return;` —— 不在表里**不动**（不新建对象）
+      if (!key || !(key in get().queueProgress)) return;
+      const s = { ...get().queueProgress };
+      delete s[key];
+      set({ queueProgress: s });
     },
   });

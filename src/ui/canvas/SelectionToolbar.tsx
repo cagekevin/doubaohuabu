@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/state';
 import { SELECT_TOOLBAR_TEXT } from '@/constants/text';
-import { selectedGroupIdOf, type GroupNodeLike } from '@/core/rules/group';
+import { selectedGroupIdOf } from '@/core/rules/group';
 import type { ArrangeMode } from '@/core/rules/arrange';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import styles from './SelectionToolbar.module.css';
@@ -38,7 +38,7 @@ export function SelectionToolbar() {
   // 源版判据：`selected && type !== 'group'`（组不参与成组 / 排列）
   const selected = nodes.filter((n) => n.selected);
   const nonGroupCount = selected.filter((n) => n.type !== 'group').length;
-  const groupId = selectedGroupIdOf(nodes as unknown as GroupNodeLike[]);
+  const groupId = selectedGroupIdOf(nodes);
   const visible = nonGroupCount >= 2 || !!groupId;
 
   const closeMenu = () => setMenuOpen(false);

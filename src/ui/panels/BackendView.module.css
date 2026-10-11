@@ -35,3 +35,84 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
+
+/* ───────────────── 头部工具栏（原 `.dv-head-wrap` / `.dv-head-clip` / `.doubao-view-head` / `.dv-head-toggle`）─────────────────
+   ⚠️ 与源版的一处**有意差异**：源是整页级容器（`dv-head-clip` 用 JS 量高度做折叠动画），
+      本工程只在账号栏里占位 ⇒ 折叠用 **CSS `height: 0`**（无需量高度、无需 ref）。
+   ⚠️ 原则 5：色值/间距/圆角只走 `styles/tokens.css` 的 token。 */
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.headClip {
+  flex: 1;
+  min-width: 0;
+  /* 折叠动画（源 `.dv-head-clip` 的 `transition: height`，源用 JS 给 height；这里给固定行高更简单） */
+  height: 28px;
+  overflow: hidden;
+  transition: height 0.15s ease;
+}
+
+.headCollapsed .headClip {
+  height: 0;
+}
+
+.headInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+.btn {
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.headToggle {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.headToggle:hover {
+  background: var(--color-surface-hover);
+}

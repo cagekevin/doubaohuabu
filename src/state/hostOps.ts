@@ -14,6 +14,8 @@
  *   | `importFiles` | `host.file.importFiles` | `LibraryPanel`（从文件添加素材） |
  *   | `selectFolder` | `host.file.selectFolder` | `DownloadNode`（选目录） |
  *   | `downloadFile` | `host.file.downloadFile` | `DownloadNode`（批量下载） |
+ *   | `downloadFileAs` | `host.file.downloadFileAs` | `GenVideoNode`（`gv-dl` 另存为，2026-10-11） |
+ *   | `revealPath` | `host.file.revealPath` | `GenVideoNode`（下载 toast 的「在文件夹中显示」，2026-10-11） |
  *   | `openExternal` | `host.file.openExternal` | `GalleryLightbox`（打开原图） |
  *
  * ⚠️ 与 `licenseOps` / `sendQueue.readPanelPos` 同法：**只转发 + 归一**，不写第二份业务判据
@@ -28,7 +30,9 @@
  */
 
 import type { Ports, PickedFile } from '@/core/ports';
+import type { ClipboardImage } from '@/core/ports/host.port';
 import type { Result } from '@/core/model/result';
+import type { FaceBox, FaceMaskOpts, FaceMaskResult } from '@/core/rules/facemask';
 
 export interface HostOpsController {
   /**
@@ -49,6 +53,19 @@ export interface HostOpsController {
    */
   copyText(text: string): Promise<Result<void>>;
 
+  /**
+   * ★ **系统剪贴板变化订阅**（原 `window.api.onClipboardImageChanged`，`_Component42.jsx:1200`）
+   *
+   * 用途（**与源一致**）：只把「剪贴板变过」这件事记成**时间戳** —— `Ctrl+V` 靠它判断
+   * 「用户是刚复制的节点、还是在别处复制了图」（源 `V.current < ke.current`）。
+   * ⚠️ **回调本身不读图片**（读图是 `readImage` 的事，那条路**未落** —— 见 `docs/13` §3）。
+   *
+   * @returns 取消订阅（W1：`on*` 必须取取消函数）
+   */
+  onClipboardImageChanged(cb: () => void): () => void;
+  /** 读**系统剪贴板里的图**（原 `window.api.readClipboardImage`，`_Component42.jsx:1252`）—— `Ctrl+V` 的**图片回落**用 */
+  readClipboardImage(): Promise<Result<ClipboardImage | null>>;
+
   /** 系统「另存为」对话框写文本文件（原 `TopBar` 导出工程 —— `host.file.saveFile`） */
   saveTextFile(content: string): Promise<Result<{ path?: string }>>;
 
@@ -61,8 +78,52 @@ export interface HostOpsController {
   /** 下载到指定路径（`DownloadNode` —— `host.file.downloadFile`） */
   downloadFile(url: string, fileName: string): Promise<Result<{ path?: string; size?: number }>>;
 
+  /**
+   * 「另存为」对话框下载（`GenVideoNode` 的 `gv-dl` —— `host.file.downloadFileAs`）
+   *
+   * ⚠️ 返回的 `canceled: true` = 用户**主动取消**（源 `YL.jsx:366` 判它并静默返回）——
+   *    **不是失败**，调用方不得据此报错。
+   */
+  downloadFileAs(
+    url: string,
+    defaultName: string,
+    filters?: Array<{ name: string; extensions: string[] }>,
+  ): Promise<Result<{ path?: string; size?: number; canceled?: boolean }>>;
+
+  /** 在系统文件管理器里定位文件（`GenVideoNode` 的 toast 操作按钮 —— `host.file.revealPath`） */
+  revealPath(p: string): Promise<Result<void>>;
+
+  /**
+   * ★ **按 `img://` 引用在文件管理器里定位**（原 `_Component42.jsx:1132-1134` 的 `window.api.showInFolder(ue)`）
+   *
+   * ⚠️ **它与 `revealPath` 不是重复，是"收的东西不同"**：
+   *   · `revealPath(p)` → 主进程 `reveal-path`（`main.js:1904`）→ **`shell.showItemInFolder(p)`**
+   *     ⇒ **只认真实路径**（`img://` 传进去不解析）；
+   *   · `showInFolder(ref)` → 主进程 `show-in-folder`（`main.js:1273`）→ **先 `resolveImageRef(ref)`**
+   *     ⇒ **收 `img://` 引用**。
+   * ★ **2026-10-11 修（`TD-16-…`）**：`NodeContextMenu` 的「打开文件所在位置」原先调的是
+   *   `revealPath(dataUrl)`，而那里的 `dataUrl` **只可能是 `img://`**（见其 `canReveal` 判据）
+   *   ⇒ 传进去主进程不解析 ⇒ **该功能实际打不开**。
+   *   （`MediaPort.showInFolder` 此前**零消费**，根因正是"**该用它的地方用错了方法**"。）
+   */
+  showInFolder(ref: string): Promise<Result<void>>;
+
   /** 用系统默认程序打开外链（`GalleryLightbox` 打开原图 —— `host.file.openExternal`） */
   openExternal(url: string): Promise<Result<void>>;
+
+  // ── 人脸检测 / 遮脸（`FaceMarksLayer` —— `host.media.*`）★ **渲染层本地能力** ──
+  /**
+   * 人脸检测（原 `qD`）
+   *
+   * ⚠️ 与上面各方法**不同源**：底层**不走 IPC** —— MediaPipe WASM ＋ DOM 都在**渲染层**跑。
+   * ★ **`TD-16-107`**：此前 `ui/nodes/FaceMarksLayer` **直 import `adapters/media`**
+   *   （违反铁律②，闸实红 2 条）⇒ 收进本控制器（它的落点约定原文：
+   *   「`ui` 若还需要别的 `ports.host.*` 能力，**在本控制器上扩展方法**」）。
+   * ⚠️ 底层会抛 ⇒ 端口已包成 `Result`，**错误原文照带**（原则 6）。
+   */
+  detectFaces(src: string): Promise<Result<FaceBox[]>>;
+  /** 对人脸框应用遮罩（原 `nL`）—— 同 `detectFaces`，渲染层本地能力（Canvas） */
+  applyFaceMask(src: string, face: FaceBox, opts: FaceMaskOpts): Promise<Result<FaceMaskResult>>;
 }
 
 export function createHostOps(ports: Ports): HostOpsController {
@@ -70,10 +131,19 @@ export function createHostOps(ports: Ports): HostOpsController {
   return {
     dragFileOut: (input) => ports.host.media.startFileDrag(input),
     copyText: (text) => ports.host.clipboard.writeText(text),
+    onClipboardImageChanged: (cb) => ports.host.clipboard.onChanged(cb),
+    readClipboardImage: () => ports.host.clipboard.readImage(),
     saveTextFile: (content) => ports.host.file.saveFile(content),
     importFiles: () => ports.host.file.importFiles(),
     selectFolder: () => ports.host.file.selectFolder(),
     downloadFile: (url, fileName) => ports.host.file.downloadFile(url, fileName),
+    downloadFileAs: (url, defaultName, filters) => ports.host.file.downloadFileAs(url, defaultName, filters),
+    revealPath: (p) => ports.host.file.revealPath(p),
+    // ★ 收 `img://` 引用的那个（主进程会先 resolve；与 `revealPath` 收的**不是**同一种东西）
+    showInFolder: (ref) => ports.host.media.showInFolder(ref),
     openExternal: (url) => ports.host.file.openExternal(url),
+    // ★ 人脸（`TD-16-107`）：**只转发**（无编排、无第二份判据 —— 与上面各方法同法）
+    detectFaces: (src) => ports.host.media.detectFaces(src),
+    applyFaceMask: (src, face, opts) => ports.host.media.applyFaceMask(src, face, opts),
   };
 }

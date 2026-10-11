@@ -3,6 +3,11 @@
 // ------------------------------------------------------------
 // 独立模块，便于脱离 Electron 做语法/行为测试（与 fingerprint-preload.js 同一套思路）。
 //
+// ⚠️ ★ **TD-16-37 豁免（21 处静默 catch 中的 7 处）**：本文件生成的脚本**跑在页面里**
+//    ⇒ 其中所有空 catch（`catch` + 空体）**一律刻意静默** —— 页内日志会泄漏到页面 console（站点可读），
+//    与「环境不被判定为被篡改」的目标冲突（反检测红线）。
+//    ⇒ **不得**按主进程口径给它们加 `console.warn`。
+//
 // 为什么需要它：UA 字符串可以靠 session.setUserAgent 改，但 navigator.userAgentData
 // 是引擎按**真实** Chromium 版本生成的，改不动 —— 于是声明版本必须与引擎版本一致（见 main.js
 // 的 CHROME_COMPAT_MAJOR，直接取 process.versions.chrome），否则 UA ↔ TLS 指纹版本不符会触发

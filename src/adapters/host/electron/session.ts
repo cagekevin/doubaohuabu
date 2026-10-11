@@ -18,10 +18,10 @@ import type {
   PlainSessionPayload,
 } from '@/core/ports/host.port';
 import { isLicenseStatusKind } from '@/core/model/license';
-import { err, ok, toMessage } from '@/core/model/result';
+import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { ACCOUNT_TRANSFER_TEXT, COMMON_TEXT, LICENSE_TEXT } from '@/constants/text';
 import { asRecord } from '@/lib/object';
-import { getHostApi, HOST_MISSING } from './host-api';
+import { getHostApi, checkOk, HOST_MISSING } from './host-api';
 
 export function createElectronClipboard(): ClipboardPort {
   return {
@@ -43,12 +43,11 @@ export function createElectronClipboard(): ClipboardPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.copyImageToClipboard(img, webContentsId)) as
-          | { ok?: boolean; error?: string }
-          | null;
-        if (raw && raw.ok === false) {
-          return err('unknown', typeof raw.error === 'string' && raw.error ? raw.error : COMMON_TEXT.unknownReason);
-        }
+        const raw = await api.copyImageToClipboard(img, webContentsId);
+        // ★ TD-04-5：后端 `copy-image-to-clipboard` 的 **7 条 return 都带 `ok`** ⇒ fail-closed
+        //   （fail-closed：漏 `ok` 与 `raw == null` 都判失败）
+        const c = checkOk(raw, { fallback: COMMON_TEXT.unknownReason });
+        if (!c.ok) return c;
         return ok(undefined);
       } catch (e) {
         return err('unknown', toMessage(e), e);
@@ -87,7 +86,11 @@ export function createElectronClipboard(): ClipboardPort {
         const raw = await api.attachImagesToWebview(webContentsId, imgs);
         const r = asRecord(raw);
         const errors = Array.isArray(r.errors) ? (r.errors as unknown[]).map(String) : [];
-        if (r.ok === false) {
+        // ★ TD-04-5：后端 `attach-images-to-webview` 返**裸 `out`**（不是 `{ok,error}` 形态），
+        //   但 `out` **恒含布尔 `ok`**（初始 `ok:false`，CDP 喂成功才置 `true`）⇒ 用 `!== true`（fail-closed）
+        //   ⚠️ **不能走 `checkOk`**：它的失败明细在 `errors[]`（**没有** `error` 字段），
+        //      `checkOk` 会丢掉逐条原因 ⇒ 这里保留自己的拼装。
+        if (r.ok !== true) {
           return err('unknown', errors.length ? errors.join(' | ') : COMMON_TEXT.unknownReason);
         }
         return ok({
@@ -113,13 +116,21 @@ export function createElectronClipboard(): ClipboardPort {
 }
 
 export function createElectronAccount(): AccountPort {
-  const call = async <T>(fn: (api: NonNullable<ReturnType<typeof getHostApi>>) => Promise<unknown>): Promise<ReturnType<typeof ok<T>>> => {
+  /**
+   * 统一收口账号类宿主调用
+   *
+   * ★ **TD-04-8**：返回按端口契约声明 `Promise<Result<T>>`（`host.port.ts:225-245`）——
+   *   不能声明成 `Ok<T>`（那会让读者以为必成功、不去判 `.ok`）。
+   */
+  const call = async <T>(
+    fn: (api: NonNullable<ReturnType<typeof getHostApi>>) => Promise<unknown>,
+  ): Promise<Result<T>> => {
     const api = getHostApi();
-    if (!api) return err('unknown', HOST_MISSING) as never;
+    if (!api) return err('unknown', HOST_MISSING);
     try {
       return ok((await fn(api)) as T);
     } catch (e) {
-      return err('unknown', toMessage(e), e) as never;
+      return err('unknown', toMessage(e), e);
     }
   };
 
@@ -172,14 +183,14 @@ export function createElectronAccount(): AccountPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.exportAccountCookies(partition)) as
-          | { ok?: boolean; cookies?: unknown[]; error?: string }
-          | null;
+        const raw = await api.exportAccountCookies(partition);
         // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**，原则 6）
-        if (!raw || raw.ok === false) {
-          return err('unknown', raw?.error || ACCOUNT_TRANSFER_TEXT.exportFailed('未知原因'));
-        }
-        return ok({ cookies: Array.isArray(raw.cookies) ? raw.cookies : [] });
+        // ★ TD-04-5：后端 `export-account-cookies` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ cookies?: unknown[] }>(raw, {
+          fallback: ACCOUNT_TRANSFER_TEXT.exportFailed('未知原因'),
+        });
+        if (!c.ok) return c;
+        return ok({ cookies: Array.isArray(c.value.cookies) ? c.value.cookies : [] });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -189,13 +200,13 @@ export function createElectronAccount(): AccountPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.importAccountCookies(partition, cookies)) as
-          | { ok?: boolean; restored?: number; error?: string }
-          | null;
-        if (!raw || raw.ok === false) {
-          return err('unknown', raw?.error || ACCOUNT_TRANSFER_TEXT.importFailed('未知原因'));
-        }
-        return ok({ restored: typeof raw.restored === 'number' ? raw.restored : 0 });
+        const raw = await api.importAccountCookies(partition, cookies);
+        // ★ TD-04-5：后端 `import-account-cookies` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ restored?: number }>(raw, {
+          fallback: ACCOUNT_TRANSFER_TEXT.importFailed('未知原因'),
+        });
+        if (!c.ok) return c;
+        return ok({ restored: typeof c.value.restored === 'number' ? c.value.restored : 0 });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -205,12 +216,12 @@ export function createElectronAccount(): AccountPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.saveAccountsFile(content)) as { ok?: boolean; path?: string; error?: string } | null;
-        if (!raw || raw.ok === false) {
-          // ⚠️ 取消时后端给的 `error` 就是 `'已取消'` —— **原样转发**，不擅自归类
-          return err('unknown', raw?.error || ACCOUNT_TRANSFER_TEXT.saveCanceled);
-        }
-        return ok({ path: raw.path });
+        const raw = await api.saveAccountsFile(content);
+        // ⚠️ 取消时后端给的 `error` 就是 `'已取消'` —— **原样转发**，不擅自归类
+        // ★ TD-04-5：后端 `save-accounts-file` 的 **3 条 return 都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ path?: string }>(raw, { fallback: ACCOUNT_TRANSFER_TEXT.saveCanceled });
+        if (!c.ok) return c;
+        return ok({ path: c.value.path });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -265,11 +276,13 @@ export function createElectronLicense(): LicensePort {
       if (!api) return err('unknown', HOST_MISSING);
       try {
         const raw = await api.getMachineCode();
+        // ⚠️ 裸字符串是**旧形状**（无 `ok`）⇒ 必须先于 `checkOk` 放行
         if (typeof raw === 'string') return ok(raw);
-        const r = asRecord(raw);
         // ★ 修：后端字段名是 `machineCode`（`main.js:2154`），原实现读的是 `code` ⇒ **恒为空串**
-        if (r.ok === false) return err('unknown', typeof r.error === 'string' ? r.error : LICENSE_TEXT.fetchFailed);
-        return ok(typeof r.machineCode === 'string' ? r.machineCode : '');
+        // ★ TD-04-5：后端 `get-machine-code` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ machineCode?: string }>(raw, { fallback: LICENSE_TEXT.fetchFailed });
+        if (!c.ok) return c;
+        return ok(typeof c.value.machineCode === 'string' ? c.value.machineCode : '');
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -280,9 +293,10 @@ export function createElectronLicense(): LicensePort {
       if (!api) return err('unknown', HOST_MISSING);
       try {
         const raw = await api.getLicenseStatus();
-        const r = asRecord(raw);
-        if (r.ok === false) return err('unknown', typeof r.error === 'string' ? r.error : LICENSE_TEXT.fetchFailed);
-        return ok(normalizeLicenseStatus(r));
+        // ★ TD-04-5：后端 `get-license-status` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
+        const c = checkOk<Record<string, unknown>>(raw, { fallback: LICENSE_TEXT.fetchFailed });
+        if (!c.ok) return c;
+        return ok(normalizeLicenseStatus(c.value));
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -309,12 +323,11 @@ export function createElectronLicense(): LicensePort {
       if (!api) return err('unknown', HOST_MISSING);
       try {
         const raw = await api.exportMachineCode(machineCode);
-        const r = asRecord(raw);
-        // ★ 修（原则 6）：原先无视 `ok:false` 直接 `ok({path})` ⇒ 导出失败被吞成成功
-        if (r.ok === false) {
-          return err('unknown', typeof r.error === 'string' && r.error ? r.error : LICENSE_TEXT.exportCanceled);
-        }
-        return ok({ path: typeof r.path === 'string' ? r.path : undefined });
+        // ★ 原则 6：必须判 `ok:false`（无视它 ⇒ 导出失败被吞成成功）
+        // ★ TD-04-5：后端 `export-machine-code` 的 **3 条 return 都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ path?: string }>(raw, { fallback: LICENSE_TEXT.exportCanceled });
+        if (!c.ok) return c;
+        return ok({ path: typeof c.value.path === 'string' ? c.value.path : undefined });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }

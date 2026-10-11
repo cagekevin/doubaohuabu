@@ -111,14 +111,11 @@ export interface LsValueMap {
   'doubao-projects': Project[];
   'doubao-accounts': Account[];
   'doubao-account-groups': AccountGroup[];
-  /** ★ 2026-10-11 更正：**联合**（提示词预设 + 图预设混装）—— 原写 `GraphPreset[]` 会误标真实数据 */
+  /** **联合**：提示词预设（无 `kind`）与图预设（`kind:'graph'`）混装 —— 源里两者 push 进同一键 */
   'doubao-presets': Preset[];
   'doubao-styles': readonly StylePreset[];
   'doubao-canvas-defaults': CanvasDefaults;
-  /**
-   * ★ **2026-10-11 定形**（原 `Pk` 26629 / `ET` 26637 读、`addLovartImages` 29285 写）
-   * —— 此前是 `unknown[]` + `[待确认]`（`docs/15` §1 #7），现按源实现的写侧定形。
-   */
+  /** 形状按源写侧定形：读 `Pk` 26629 / `ET` 26637，写 `addLovartImages` 29285 */
   'doubao-lovart-galleries': LovartGalleriesMap;
   /**
    * ★ **2026-10-11 定形**（原 `jk` 26223 读 / `Fy` 26225 写 / `recordScan` 30362 写侧）

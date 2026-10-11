@@ -23,6 +23,8 @@ import { useMemo, useState } from 'react';
 import { useStore } from '@/state';
 import { Modal } from '@/ui/common/Modal';
 import { SPLIT_TEXT } from '@/constants/text';
+// ★ 图预设判定走**唯一真源**（`core/rules/preset`）—— 不在这里再写一遍 `kind === 'graph'`
+import { isGraphPreset } from '@/core/rules/preset';
 import {
   DEFAULT_SPLIT_KEYWORDS,
   SPLIT_FAIL_REASON_LABEL,
@@ -41,12 +43,23 @@ export interface SplitKeywordModalProps {
 export function SplitKeywordModal({ sourceNodeId, onClose, onSplit }: SplitKeywordModalProps) {
   const splitTextNode = useStore((s) => s.splitTextNode);
   const pushToast = useStore((s) => s.pushToast);
+  const presets = useStore((s) => s.presets);
+  const openSplitPresetPicker = useStore((s) => s.openSplitPresetPicker);
+  /** 有几个**图预设**（源 `ue.presets.filter(p => p.kind === 'graph').length > 0`） */
+  const graphPresetCount = useMemo(() => presets.filter(isGraphPreset).length, [presets]);
   const [text, setText] = useState('');
   /** 输入框里的关键词（原 `Na(ne)`，每次渲染现算） */
   const keywords = useMemo(() => parseKeywords(text), [text]);
 
-  /** 拆分（原 `te(...)` → `splitDirect(sourceNodeId, keywords)`） */
+  /** 拆分（原 `te(...)`） */
   const run = (kws: readonly string[]): void => {
+    // ★ 源 `te`（`_Component42.jsx:191-206`）：**有图预设就不直接拆** —— 先让用户挑预设
+    //   （`presets` 里一个图预设都没有 ⇒ 直接拆，行为与从前一致）
+    if (graphPresetCount > 0) {
+      openSplitPresetPicker(sourceNodeId, kws);
+      onClose(); // 源 `ue.closeSplitKeywordModal()`
+      return;
+    }
     const r = splitTextNode(sourceNodeId, kws);
     if (!r.ok) {
       // ★ 原则 6：失败原因用 core 的 label 真源，不编造

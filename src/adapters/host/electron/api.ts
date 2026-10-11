@@ -161,8 +161,7 @@ export function createElectronApiPort(): ApiPort {
         status: need(r, 'status', isStr) as ApiJobStatus,
       })),
 
-    jobList: async () =>
-      callOk((api) => api.apiJobList(), (r) => need(r, 'jobs', Array.isArray) as ApiJobEvent[]),
+    // ⚠️ `jobList` 已于 2026-10-12 删除（源前端 0 命中、不拉列表 —— 见 `core/ports/host.port.ts` 该处留证）
 
     setupGet: async () =>
       callOk((api) => api.apiSetupGet(), (r) => ({

@@ -26,6 +26,7 @@ import type {
   FingerprintPageProbe,
 } from '@/core/ports/backendPage.port';
 import { err, ok, type Result } from '@/core/model/result';
+import { sleep } from '@/lib/async';
 import { FILE_INPUT_TIMEOUT_MS } from './waits';
 import { FP_DIAG_PROBE } from './fpProbe';
 import { BACKEND_PAGE_TEXT } from '@/constants/text';
@@ -43,7 +44,7 @@ import { inputLockScript, inputLockSetupScript } from './inputLock';
 import { findWebview, type WebviewElement } from './webview';
 import { PAGE_READY_PROBE, navigateAndWait, runProbe, waitForFileInput, waitForPageReady } from './waits';
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 /** 租约 → 记录（原 `Jn` + `Du` 两张表合成一张；值里带 `accountId` 就够） */
 const leases = new Map<string, BackendPageLease>();
@@ -63,9 +64,7 @@ function releaseLease(leaseId: string): void {
 
 export function createBackendPage(): BackendPagePort {
   return {
-    isMounted(account: Account): boolean {
-      return viewOf(account) !== null;
-    },
+    // ⚠️ **不实现 `isMounted`**：本仓 `BackendView` 常驻渲染 ⇒ 它对本仓存在的账号恒 `true` = 假判据
 
     release(leaseId: string): void {
       releaseLease(leaseId);
@@ -105,20 +104,8 @@ export function createBackendPage(): BackendPagePort {
       }
     },
 
-    setMuted(account: Account, muted: boolean): Result<void> {
-      const view = viewOf(account);
-      if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
-      const cmd = view as WebviewElement & { setAudioMuted?: (m: boolean) => void };
-      if (typeof cmd.setAudioMuted !== 'function') {
-        return err('page-error', BACKEND_PAGE_TEXT.webviewNoCommands);
-      }
-      try {
-        cmd.setAudioMuted(muted);
-        return ok(undefined);
-      } catch (e: unknown) {
-        return err('page-error', e instanceof Error ? e.message : String(e), e);
-      }
-    },
+    // ⚠️ **不实现 `setMuted`**：**源里没有 webview 静音能力**（本仓曾造的 `setAudioMuted` 是凭空造物）；
+    //    源的「静默/恢复」是账号级 `autoStart` 开关 ⇒ 落点在既有字段，不在端口
 
     async prepareForSend(
       account: Account,

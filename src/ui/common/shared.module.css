@@ -107,6 +107,24 @@
   color: var(--color-text-strong);
 }
 
+/*
+ * ★ 2026-10-11 补：**操作按钮**（原 `.app-toast-action` + `.has-action`，`_Component42.jsx:1474-1488`）。
+ * ⚠️ 原版 CSS 未入库、mockup 也**没有**收录 `.app-toast-*` ⇒ 按**源语义**补：
+ *    「消息 + 行内小按钮」= 有 action 时把 toast 变 flex 行、消息占满、按钮靠右；全 token。
+ *    ★ **2026-10-11 口径更正**：mockup 是**我们自己写的预演稿**（不是设计真源）⇒
+ *    它缺某个类**不代表**原版没有；补出来的类要**回填 mockup**。⚠️ 推断样式，待原版 CSS 校 —— **TD-16-88**。
+ * ⚠️ `.toastAction` 因要 `composes` 真源按钮类，**必须定义在 `.btn` 之后**（见下方按钮段）——
+ *    这是 CSS Modules 单遍扫描的硬约束（`docs/17` §6），与 `.close` / `.saveErrorClose` 同法。
+ */
+.toastMsg {
+  flex: 1;
+}
+.toastHasAction {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* ── ErrorBanner ── */
 .banner {
   display: flex;
@@ -302,6 +320,15 @@
 /* 危险态悬停（覆盖真源 `.btnGhost:hover` 的底色 —— 同类同优先级，靠书写顺序取胜）*/
 .saveErrorClose:hover:not(:disabled) {
   background: var(--color-danger-border);
+}
+
+/* Toast 操作按钮（原 `.app-toast-action`）—— ★ 必须定义在 `.btn*` 之后（同文件 `composes` 约束）。
+   ⚠️ 颜色随 toast 正文（深底浅字）—— 真源 `.btnGhost` 的 `--btn-ghost-fg` 是**浅色主题的灰**，
+      在深色 toast 底上不可读 ⇒ 覆盖为 `--color-surface-raised`（= `.toast` 的正文色）。 */
+.toastAction {
+  composes: btn btnSm btnGhost;
+  flex: none;
+  color: var(--color-surface-raised);
 }
 
 /* ── 基础控件：表单（输入框 / 多行框）──

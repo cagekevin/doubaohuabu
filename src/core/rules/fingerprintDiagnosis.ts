@@ -12,8 +12,10 @@
  *
  * ⚠️ **原则 4**：不接触 window / document / Date.now —— 探针与网络结果**由调用方注入**。
  * ⚠️ **文案归属**：7 段标签与 4 个伪装状态是**带类型的真源**（`Record<…, string>`，
- *    加一个状态编译器会逼你补）—— 与 `core/rules/fingerprint.ts` 的 `COLLISION_LEVEL_LABEL`
- *    **同一形态、同一理由**（那边是分级 label，这边是段标签 / 状态 label）。
+ *    加一个状态编译器会逼你补）—— 与 `core/rules/splitText.ts` 的 `SPLIT_FAIL_REASON_LABEL`
+ *    **同一形态、同一理由**（那边是失败原因 label，这边是段标签 / 状态 label）。
+ *    ⚠️ **2026-10-11 更正（`TD-02-12`）**：此处原引 `fingerprint.ts` 的 `COLLISION_LEVEL_LABEL`
+ *    作同形例子 —— 但**那个文件 0 生产消费**（改引**活的** `SPLIT_FAIL_REASON_LABEL`，免得读者去追一个死文件）。
  *    自由文案（toast 前缀、段分隔）在 `constants/text.ts` 的 `FP_DIAG_TEXT`。
  */
 

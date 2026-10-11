@@ -5,15 +5,14 @@
  *   标记的**消费侧**（解析成 `参考图N` / 解析成参考图素材）早就落地了
  *   （`rules/refs.ts` · `rules/prompt.ts` 的 `resolveRefMaterial` · `state/batchSend.ts` 的 `prepare`）。
  *
- * ★★ **与源版的一处结构性偏离（有意，留痕）**：源版正文是 **`contentEditable` + `.ref-chip` 药丸**，
- *    输入 `@` 时把 `ref-chip` **换成** `@[id|name]` 文本节点（`kL.jsx` 51 行的归一：chip→标记、
- *    块级元素补 `<br>`、剥 `script/style`、防富文本粘贴污染）。
- *    本实现**先在 `<textarea>` 里做**：检测 `@`+查询词 → 下拉 → **把标记原文插进去**。
- *    理由：contentEditable 的**光标恢复 / 输入法合成 / 粘贴清洗**是本项目里风险最高的一类代码
- *    （没有运行时验证手段时尤其危险），而 `<textarea>` 天然保证**存入的就是纯文本**。
- *    ⚠️ 代价：用户看到的是 `@[lib_1|素材甲]` 原文，**不是药丸**。功能等价、观感不同。
- *    ⚠️ 药丸渲染 + `kL` 归一留下一轮（已登记）；届时本文件的**检测/插入逻辑可整段复用**，
- *    只是把「往 value 里 splice」换成「往 DOM 里替换 range」。
+ * ★★ **2026-10-11 更正（TD-08-3）**：本节此前写「本实现**先在 `<textarea>` 里做** … ⚠️ 代价：
+ *    用户看到的是 `@[lib_1|素材甲]` 原文，**不是药丸**」—— **已不成立**（那是切片 5b 之前的形态）。
+ *    实况：**两个消费者都已是 `contentEditable` + `.ref-chip` 药丸** ——
+ *    · `ui/nodes/TextNode.tsx:4`「正文从 `<textarea>` 换成 **`contentEditable`（药丸渲染）**」（2026-10-10 切片 5b）
+ *    · `ui/panels/GenPanel.tsx:197` `contentEditable` + `:13` 的「`@` 药丸编辑器」
+ *    ⇒ 药丸 HTML 由 `core/rules/richText`（`refChipHtml` / `textToEditorHtml`）提供；
+ *    **本组件只负责「检测 `@`+查询词 → 下拉 → 把标记插进去」**，控件形态由**消费者**决定。
+ *    ⚠️ 下方 `:73` / `:89` 两处提到 `textarea` 的注释同属陈旧 —— **已就地更正**。
  *
  * 依据（**逐行回源**）：
  *   | 件 | 源 | 语义 |
@@ -70,8 +69,9 @@ export function RefAutocomplete({ query, library, onPick, onClose }: RefAutocomp
               <button
                 type="button"
                 className={`${styles.item} ${i === active ? styles.itemActive : ''}`}
-                // ⚠️ 用 `onMouseDown` 而不是 `onClick`：`onClick` 触发前 textarea 会先 blur
-                //    （源版也靠 `tt` 的 150ms 延迟躲这一下；这里直接不让它 blur）
+                // ⚠️ 用 `onMouseDown` 而不是 `onClick`：`onClick` 触发前**正文编辑器会先失焦**
+                //    （现在是 `contentEditable`，切片 5b 前是 `<textarea>` —— 两者都会 blur；
+                //     源版也靠 `tt` 的 150ms 延迟躲这一下；这里直接不让它 blur）
                 onMouseDown={(e) => {
                   e.preventDefault();
                   onPick(it);
@@ -86,7 +86,7 @@ export function RefAutocomplete({ query, library, onPick, onClose }: RefAutocomp
         </ul>
       )}
       <div className={styles.hint}>{REF_TEXT.pickHint}</div>
-      {/* `Esc` 关闭由调用方的 textarea `onKeyDown` 处理（这里只给个鼠标出口） */}
+      {/* `Esc` 关闭由**调用方正文编辑器**的 `onKeyDown` 处理（`contentEditable`；这里只给个鼠标出口） */}
       <button type="button" className={styles.close} title={REF_TEXT.close} onClick={onClose}>
         ×
       </button>

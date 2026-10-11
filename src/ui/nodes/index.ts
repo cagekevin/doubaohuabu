@@ -8,10 +8,9 @@
  *   `NODE_COMPONENT_BY_TYPE` 的类型注解 `Record<NodeType, unknown>` **就是守卫本身** ——
  *   少一个键 / 多一个键 / 拼错键 ⇒ **编译不过**。
  *
- * ⚠️ **2026-10-11 修（TD-16-34）**：此前本文件注释称"映射的 key 与 8 个字面量一一对应，
- *   由 `core/rules/tests/node.test.ts`（W13）保证" —— 但那份测试只覆盖 `core/rules/node.ts`，
- *   **根本没碰本映射**；而 `as unknown as NodeTypes` 把**键**也一并绕过了。
- *   实证（probe）：注入 `texxt: TextNode, missing: VideoNode` 两个垃圾键，`tsc` **退出 0**（零守卫）。
+ * ⚠️ **别改回 `as unknown as NodeTypes`**：那会把**键**一并绕过（实证 probe：注入
+ *   `texxt: TextNode, missing: VideoNode` 两个垃圾键，`tsc` **退出 0** = 零守卫）。
+ *   `core/rules/tests/node.test.ts`（W13）只覆盖 `core/rules/node.ts`，**不碰本映射**。
  */
 
 import type { NodeTypes } from '@xyflow/react';

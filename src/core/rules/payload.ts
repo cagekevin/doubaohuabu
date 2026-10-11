@@ -54,13 +54,20 @@ function accountOf(a: PayloadAccount): { id: string; name: string; partition: st
 /** 图片报文（原 `PL`） */
 export function buildImagePayload(input: {
   account: PayloadAccount;
-  text?: unknown;
-  stylePrefix?: unknown;
-  ratio?: unknown;
-  count?: unknown;
-  model?: unknown;
-  resolution?: unknown;
-  images?: unknown[];
+  /** ★ 必填（`TD-16-104` 收窄：唯一调用方 `core/usecases/generate` 传的是 `ImageGenInput.text: string`） */
+  text: string;
+  stylePrefix: string;
+  ratio?: string;
+  count?: number;
+  model?: string;
+  resolution?: string;
+  /**
+   * ⚠️ **有意宽**（不是偷懒）：`content.images` 是**跨进程黑盒载荷**（`SendPayload.content.images: unknown[]`，
+   *   由后端读）—— 图片通道传 `string[]`、视频通道传 `{label,dataUrl}[]`，"形状不一致"本身是
+   *   `TD-04-10`（IPC 载荷形状母体）家族的问题，**不在本刀收窄**（收窄会掩盖真正的通道分歧）。
+   *   本刀只把它从"可选"改为**必填**（唯一调用方 `core/usecases/generate` 恒传）。
+   */
+  images: readonly unknown[];
   sourceNodeId?: string | null;
   now: number;
 }): SendPayload<{ imageParams: { count: number; model: string | null; resolution: string | null } }> {
@@ -75,10 +82,9 @@ export function buildImagePayload(input: {
 
   // 与 `PL` 一致：把已夹取的参数**再回填**到 imageParams（供后端读，不重新解析正文）
   const count = Math.max(1, Math.min(4, (Number(input.count) | 0) || 1));
-  const model = String(input.model ?? '').trim();
-  const resolution = /^(1K|2K|4K)$/.test(String(input.resolution ?? '').trim())
-    ? String(input.resolution).trim()
-    : '';
+  const model = (input.model ?? '').trim();
+  const resolutionRaw = (input.resolution ?? '').trim();
+  const resolution = /^(1K|2K|4K)$/.test(resolutionRaw) ? resolutionRaw : '';
 
   return {
     apiVersion: '1.0',
@@ -87,7 +93,7 @@ export function buildImagePayload(input: {
     account: accountOf(input.account),
     content: {
       text,
-      images: Array.isArray(input.images) ? input.images : [],
+      images: [...input.images],
       texts: [],
       params: {},
       imageParams: { count, model: model || null, resolution: resolution || null },
@@ -102,13 +108,15 @@ export function buildImagePayload(input: {
 /** 视频报文（原 `TL`） */
 export function buildVideoPayload(input: {
   account: PayloadAccount;
-  text?: unknown;
-  model?: unknown;
-  duration?: unknown;
-  ratio?: unknown;
-  images?: unknown[];
+  /** ★ 必填（`TD-16-104` 收窄，与 `buildImagePayload` 同判据） */
+  text: string;
+  model?: string;
+  duration?: number;
+  ratio?: string;
+  /** ⚠️ **有意宽** —— 同 `buildImagePayload.images`（视频侧调用方形状本就不同：`string[]` ／ `{label,dataUrl}[]`） */
+  images: readonly unknown[];
   sourceNodeId?: string | null;
-  stylePrefix?: unknown;
+  stylePrefix: string;
   now: number;
 }): SendPayload<{ genParams: { duration: number | null; model: string | null } }> {
   const text = composeVideoPrompt({
@@ -120,7 +128,7 @@ export function buildVideoPayload(input: {
   });
 
   const duration = Number(input.duration);
-  const model = String(input.model ?? '');
+  const model = input.model ?? '';
 
   return {
     apiVersion: '1.0',
@@ -129,7 +137,7 @@ export function buildVideoPayload(input: {
     account: accountOf(input.account),
     content: {
       text,
-      images: Array.isArray(input.images) ? input.images : [],
+      images: [...input.images],
       texts: [],
       params: {},
       // 原 `TL`：`Number(r) || null`（0/NaN → null）

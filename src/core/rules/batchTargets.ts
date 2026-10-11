@@ -43,8 +43,26 @@ const NAME_MAX = 18;
  * ⚠️ 归一用的是 `stripHtml`（原 `In` 24036：**解 HTML 实体 + 剥标签**，最多 10 轮）——
  *    因为 `data.text` 里可能带 `@[...]` 引用与富文本残留。
  */
-export function nodeDisplayName(node: { type: string; data: unknown }): string {
-  const data = (node.data ?? {}) as { label?: unknown; name?: unknown; text?: unknown };
+/**
+ * 「能给出显示名」的节点形状（`TD-16-104`）。
+ *
+ * 调用方 `core/usecases/sendQueue` 传的本来就是 `CanvasNode`，却在这一层被擦成 `unknown`
+ * ⇒ 下游只能靠 `as` ＋ `?? ''` 各自兜。现在按**真实可读字段**声明。
+ *
+ * ⚠️ 三字段**各自可选**是**类型层的真相**（`VideoNodeData` 没有 `name`/`text`；
+ *    `AccountNodeData` 三个都没有），**不是**"数据可能缺失" —— 故下面的 `?? ''` 是必要的，
+ *    它兜的是「**这个节点类型没有这个字段**」，不是「字段丢了」。
+ */
+export interface NameableNode {
+  type: string;
+  /** ⚠️ `& Record<string, unknown>` 不是装饰：`NodeDataBase` 带索引签名（`[k: string]: unknown`），
+   *  而 TS 对"所有属性都可选"的目标类型有**弱类型检测**（源须至少有一个共同属性）——
+   *  不加它，`AccountNodeData`（三字段都没有）会被拒。 */
+  data: { label?: string; name?: string; text?: string } & Record<string, unknown>;
+}
+
+export function nodeDisplayName(node: NameableNode): string {
+  const data = node.data;
   const raw = data.label || data.name;
 
   // ①
@@ -84,15 +102,15 @@ export interface BatchTarget {
  *    因为第 ② 步已经排过，所以等价；照抄这个结构以免引入顺序差异。
  */
 export function orderBatchTargets(
-  nodes: readonly { id: string; type: string; position?: { x?: number; y?: number } | null; data: unknown }[],
+  nodes: readonly (NameableNode & { id: string; position: { x: number; y: number } })[],
 ): BatchTarget[] {
   const items: BatchTarget[] = [];
   for (const n of nodes) {
-    if (!n || !BATCH_SENDABLE_TYPES.includes(n.type)) continue;
+    if (!BATCH_SENDABLE_TYPES.includes(n.type)) continue;
     items.push({
       nodeId: n.id,
-      x: (n.position?.x ?? 0) || 0,
-      y: (n.position?.y ?? 0) || 0,
+      x: n.position.x || 0,
+      y: n.position.y || 0,
       name: nodeDisplayName(n),
     });
   }
@@ -110,10 +128,7 @@ export function orderBatchTargets(
   return rows.flatMap((r) => r.items);
 }
 
-/** 便捷：直接从 `CanvasNode[]` 取（省调用方手动投影；形状与 `orderBatchTargets` 兼容） */
-export const orderBatchTargetsOf = (
-  nodes: readonly CanvasNode[],
-): BatchTarget[] =>
-  orderBatchTargets(
-    nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
-  );
+/** 便捷：直接从 `CanvasNode[]` 取 —— `CanvasNode` **本就满足** `orderBatchTargets` 的入参形状
+ *  （`TD-16-104`：原先那层手工投影是为绕开 `data: unknown` 而存在的，收窄后已多余） */
+export const orderBatchTargetsOf = (nodes: readonly CanvasNode[]): BatchTarget[] =>
+  orderBatchTargets(nodes);

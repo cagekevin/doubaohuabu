@@ -766,7 +766,10 @@ function emit() {
 
 function continueRequest(dbg, requestId) {
   if (!dbg) return Promise.resolve();
-  return dbg.sendCommand('Fetch.continueRequest', { requestId }).catch(() => {});
+  // ★ TD-16-37：continueRequest 失败会让被拦截的请求**一直挂着**（页面卡住）⇒ 必须留痕
+  return dbg.sendCommand('Fetch.continueRequest', { requestId }).catch((e) => {
+    console.warn('[dola-media] Fetch.continueRequest 失败（该请求会一直挂起）:', (e && e.message) || e);
+  });
 }
 
 async function onRequestPaused(dbg, params, wcId = null, ses = null) {
@@ -1095,7 +1098,7 @@ function attachGuestDebugger(guest) {
   if (!shouldAttach(guest)) {
     try {
       console.log(`[dola-media] attachGuestDebugger 跳过：非目标域名 url=${guest.getURL() || '(空)'}, id=${guest.id}`);
-    } catch (_) {}
+    } catch (_) { /* ★ TD-16-37：这行**就是**日志 ⇒ 失败只能吞（`getURL()` 在销毁后可能抛） */ }
     return;
   }
   const dbg = guest.debugger;
@@ -1142,9 +1145,11 @@ function attachGuestDebugger(guest) {
   // 浏览器进程 CHECK 失败（EXC_BREAKPOINT / SIGTRAP 闪退），登录弹窗关闭时必现。
   const cleanupGuest = () => {
     attachedGuests.delete(guest);
-    try { if (dbg.isAttached && dbg.isAttached()) dbg.detach(); } catch (_) {}
+    // ★ TD-16-37：detach 失败**留痕** —— 带 debugger 的 guest 被销毁会让浏览器进程 CHECK 失败（闪退）
+    try { if (dbg.isAttached && dbg.isAttached()) dbg.detach(); } catch (e) { console.warn('[dola-media] detach 失败（guest 销毁时可能闪退）:', (e && e.message) || e); }
   };
-  try { guest.once('destroyed', cleanupGuest); } catch (_) {}
+  // ★ TD-16-37：注册失败 = 清理**永远不会跑** ⇒ 上面那条闪退风险直接暴露 ⇒ 必须留痕
+  try { guest.once('destroyed', cleanupGuest); } catch (e) { console.warn('[dola-media] 注册 destroyed 清理失败:', (e && e.message) || e); }
   // 发送任何 CDP 命令前确认 guest 还活着（销毁后 sendCommand 会直接崩浏览器进程）
   const isAlive = () => {
     try { return typeof guest.isDestroyed === 'function' ? !guest.isDestroyed() : false; } catch { return false; }
@@ -1182,7 +1187,7 @@ function initDolaMediaCapture({ getMainWindow }) {
       const tryLater = () => { if (!attachedGuests.has(guest)) attachGuestDebugger(guest); };
       guest.once('did-navigate', tryLater);
       guest.once('did-navigate-in-page', tryLater);
-    } catch (_) {}
+    } catch (e) { console.warn('[dola-media] 注册导航重试监听失败（时序竞态下可能漏挂 debugger）:', (e && e.message) || e); }
   });
   // 兜底：延迟扫描当前已存在的 webview（防 init 时序竞态漏挂）
   setTimeout(() => {

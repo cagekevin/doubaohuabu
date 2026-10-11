@@ -95,7 +95,8 @@ function migrateEngineeringToFile(wrapperPath, wrapperName) {
   try {
     // 先拷贝再删旧文件，最后尝试移除空目录。两步分离，避免拷贝失败时旧文件被误删。
     fs.copyFileSync(oldFile, newFile);
-    try { fs.unlinkSync(oldFile); } catch (_) {}
+    // ★ TD-16-37：删旧快照失败**留痕**（残留会在下次迁移时被跳过、不影响功能，但事后要能看出来）
+    try { fs.unlinkSync(oldFile); } catch (e) { console.warn('[project-migrate] 旧快照文件删除失败:', (e && e.message) || e); }
     // 仅在目录空的时候移除，留着别的残留文件也不影响功能。
     try { fs.rmdirSync(oldDir); } catch (_) { /* 目录非空，保留 */ }
     return true;
@@ -116,7 +117,8 @@ function atomicWriteFile(file, content) {
     fs.renameSync(tmp, file);
   } catch (err) {
     // Windows 上目标文件存在时 rename 可能不覆盖；删除的是同一份快照文件，可安全重试。
-    try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (_) {}
+    // ★ TD-16-37：此处**刻意不吞** —— 删不掉也无妨，紧随的 `renameSync` 会抛并原样上报。
+    try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (_) { /* 失败由下一行 renameSync 抛 */ }
     fs.renameSync(tmp, file);
   }
 }
@@ -541,13 +543,13 @@ console.warn = (...args) => {
 process.on('uncaughtException', (err) => {
   try {
     fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [FATAL uncaughtException] ${(err && err.stack) || err}\n`);
-  } catch (_) {}
+  } catch (_) { /* ★ TD-16-37：写调试日志失败无妨 —— 下一行 _origWarn 仍把原文打到 console，不丢 */ }
   _origWarn('[FATAL uncaughtException]', err);
 });
 process.on('unhandledRejection', (reason) => {
   try {
     fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [WARN unhandledRejection] ${String(reason && (reason.stack || reason))}\n`);
-  } catch (_) {}
+  } catch (_) { /* ★ TD-16-37：同上 —— console 兜底在下一行 */ }
   _origWarn('[WARN unhandledRejection]', reason);
 });
 
@@ -628,7 +630,10 @@ app.on('child-process-gone', (_event, details) => {
       dmDebugLogPath,
       `[${new Date().toISOString()}] [child-process-gone] ${JSON.stringify(details)}\n`
     );
-  } catch (_) {}
+  } catch (e) {
+    // ★ TD-16-37：此处**无 console 兜底** ⇒ 写日志失败必须自己留痕（否则崩溃时序彻底丢失）
+    console.warn('[child-process-gone] 写调试日志失败，事件明细：', (e && e.message) || e, details);
+  }
 });
 
 let mainWindow;
@@ -903,10 +908,10 @@ function createWindow() {
               dmDebugLogPath,
               `[${new Date().toISOString()}] [webview] [${tag}] ${message}\n`
             );
-          } catch (_) {}
+          } catch (e) { console.warn('[webview] 写调试日志失败:', (e && e.message) || e); }
         }
       });
-    } catch (_) {}
+    } catch (_) { /* ★ TD-16-37：接管 guest console 失败 —— 只是少一份调试日志，不影响功能 */ }
   }
 
   mainWindow.webContents.on('did-attach-webview', (event, guest) => {
@@ -916,7 +921,10 @@ function createWindow() {
       guest.on('focus', () => {
         lastFocusedGuest = guest;
       });
-    } catch (_) {}
+    } catch (e) {
+      // ★ TD-16-37：注册失败 = **功能降级**（"打开 DevTools" 会指向非当前 guest）⇒ 必须留痕
+      console.warn('[webview] 注册 focus 监听失败:', (e && e.message) || e);
+    }
   });
 }
 
@@ -966,7 +974,10 @@ app.whenReady().then(() => {
       }
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-  } catch (_) {}
+  } catch (e) {
+    // ★ TD-16-37：菜单构建失败 = **用户可见**（应用菜单整个缺失）⇒ 必须留痕
+    console.warn('[menu] 应用菜单构建失败（菜单将缺失）:', (e && e.message) || e);
+  }
 
   // img:// 协议 → userData/images/ 目录下的图片文件（渲染层 <img src="img://xxx.png"> 直接可用）
   // 给响应补 CORS 头。图片编辑器要读像素（涂抹遮脸 / 导出 / 人脸检测），
@@ -1121,7 +1132,7 @@ app.on('window-all-closed', () => {
 
 // 导入素材文件：主进程直接读取 → 落盘 → 返回 img:// 引用列表
 // （不再把大 base64 送回渲染进程，避免内存与 IPC 膨胀）
-ipcMain.handle('import-files', async () => {
+ipcMain.handle('import-files', ipcGuard(async () => {
   if (!mainWindow) return [];
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '导入素材',
@@ -1139,7 +1150,7 @@ ipcMain.handle('import-files', async () => {
       dataUrl: persistImageDataUrl(`data:${mime};base64,${buf.toString('base64')}`)
     };
   });
-});
+}));
 
 // 同步保存图片：渲染进程持久化时把 dataUrl 批量转成 img:// 引用（sendSync 保证同步返回）
 ipcMain.on('img-save-sync', (e, dataUrl) => {
@@ -1271,7 +1282,7 @@ ipcMain.handle('show-in-folder', async (_e, ref) => {
 });
 
 // 保存画布到文件
-ipcMain.handle('save-file', async (_e, content) => {
+ipcMain.handle('save-file', ipcGuard(async (_e, content) => {
   if (!mainWindow) return false;
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '保存画布',
@@ -1281,10 +1292,10 @@ ipcMain.handle('save-file', async (_e, content) => {
   if (res.canceled || !res.filePath) return false;
   fs.writeFileSync(res.filePath, content, 'utf-8');
   return true;
-});
+}));
 
 // 从文件加载画布
-ipcMain.handle('load-file', async () => {
+ipcMain.handle('load-file', ipcGuard(async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '打开画布',
@@ -1293,13 +1304,13 @@ ipcMain.handle('load-file', async () => {
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return fs.readFileSync(res.filePaths[0], 'utf-8');
-});
+}));
 
 // 打开外部链接（豆包账号等）
-ipcMain.handle('open-external', async (_e, url) => {
+ipcMain.handle('open-external', ipcGuard(async (_e, url) => {
   await shell.openExternal(url);
   return true;
-});
+}));
 
 // ─────────────────────────────────────────────────────────────
 // 写图片到系统剪贴板（「粘贴发送参考图」链路的核心一步）
@@ -1705,7 +1716,7 @@ ipcMain.handle('import-account-cookies', async (_e, partition, cookies) => {
 });
 
 // 保存账号导出文件
-ipcMain.handle('save-accounts-file', async (_e, content) => {
+ipcMain.handle('save-accounts-file', ipcGuard(async (_e, content) => {
   if (!mainWindow) return { ok: false, error: '窗口未就绪' };
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '导出豆包账号',
@@ -1715,10 +1726,10 @@ ipcMain.handle('save-accounts-file', async (_e, content) => {
   if (res.canceled || !res.filePath) return { ok: false, error: '已取消' };
   fs.writeFileSync(res.filePath, content, 'utf-8');
   return { ok: true, path: res.filePath };
-});
+}));
 
 // 打开账号导入文件
-ipcMain.handle('load-accounts-file', async () => {
+ipcMain.handle('load-accounts-file', ipcGuard(async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '导入豆包账号',
@@ -1727,10 +1738,10 @@ ipcMain.handle('load-accounts-file', async () => {
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return fs.readFileSync(res.filePaths[0], 'utf-8');
-});
+}));
 
 // 选择下载目录
-ipcMain.handle('select-folder', async () => {
+ipcMain.handle('select-folder', ipcGuard(async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '选择下载目录',
@@ -1738,7 +1749,7 @@ ipcMain.handle('select-folder', async () => {
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return res.filePaths[0];
-});
+}));
 
 // 下载文件到指定路径（支持重定向跟随）
 function downloadUrl(url, filePath) {
@@ -1821,14 +1832,14 @@ ipcMain.handle('download-file', async (_e, url, filePath) => {
 // 视频本地化：把远端视频直链下载进 userData/videos/，返回 vid:// 引用。
 // 先带豆包 Referer（多数 CDN 防盗链要求）下载；失败再不带 Referer 试一次。
 // 下载失败不影响原直链继续使用（渲染层保留原 URL，行为同旧版）。
-ipcMain.handle('save-video-from-url', async (_e, p) => {
+ipcMain.handle('save-video-from-url', ipcGuard(async (_e, p) => {
   const url = p && p.url;
   if (!url) return { ok: false, error: 'missing_args' };
   const r = await saveVideoFromUrl(url, (p && p.referer) || 'https://www.doubao.com/');
   if (r.ok) return r;
   const r2 = await saveVideoFromUrl(url, '');
   return r2.ok ? r2 : r;
-});
+}));
 
 // 下载并「另存为」：先弹原生保存对话框让用户选路径（默认落在「下载」目录），确认后才下载。
 // 之所以要有这条：download-file 只传文件名时会被解析成**相对路径**，结果静默落在应用工作目录里，
@@ -1913,7 +1924,7 @@ function dolaMediaDownloadPath(url, mediaType) {
       .replace(/[. ]+$/g, '')
       .slice(0, 120);
     if (decoded) basename = decoded;
-  } catch {}
+  } catch { /* ★ TD-16-37：URL 解析失败保持默认扩展名（与上面的 `:775` 同口径） */ }
   const ext = mediaType === 'image' ? '.png' : '.mp4';
   return path.join(dir, basename.endsWith(ext) ? basename : basename + ext);
 }
@@ -2011,10 +2022,10 @@ function downloadUrlWithSession(url, filePath, dlSession) {
 //   导致后续所有 ipcMain.handle 都未生效，渲染进程调用 get-machine-code 等会报
 //   "No handler registered"。）
 
-ipcMain.handle('dola-media-clear', async () => {
+ipcMain.handle('dola-media-clear', ipcGuard(async () => {
   dolaMedia.clearDolaMediaItems();
   return { ok: true };
-});
+}));
 
 // ── 无水印资源：下载路径设置 + 自动命名 ─────────────
 const settingsJsonPath = path.join(app.getPath('userData'), 'settings.json');
@@ -2054,7 +2065,8 @@ function getEffectiveDownloadDir() {
     } catch (_) { /* 落到默认 */ }
   }
   const def = app.getPath('downloads');
-  try { if (!fs.existsSync(def)) fs.mkdirSync(def, { recursive: true }); } catch (_) {}
+  // ★ TD-16-37：默认下载目录建不出来**留痕**（否则后续下载失败时无从判断是"目录不存在"）
+  try { if (!fs.existsSync(def)) fs.mkdirSync(def, { recursive: true }); } catch (e) { console.warn('[download] 默认下载目录创建失败:', (e && e.message) || e); }
   return def;
 }
 
@@ -2087,7 +2099,7 @@ function bumpSessionCounter(n) {
 }
 
 // 查询 / 修改下载路径
-ipcMain.handle('get-download-settings', async () => {
+ipcMain.handle('get-download-settings', ipcGuard(async () => {
   const s = readSettings();
   const eff = getEffectiveDownloadDir();
   return {
@@ -2096,9 +2108,9 @@ ipcMain.handle('get-download-settings', async () => {
     configured: !!(s && typeof s.downloadPath === 'string' && s.downloadPath.trim()),
     configuredPath: (s && s.downloadPath) || ''
   };
-});
+}));
 
-ipcMain.handle('pick-download-path', async () => {
+ipcMain.handle('pick-download-path', ipcGuard(async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'no_window' };
   const cur = getEffectiveDownloadDir();
   const res = await dialog.showOpenDialog(mainWindow, {
@@ -2116,7 +2128,7 @@ ipcMain.handle('pick-download-path', async () => {
   writeSettings(s);
   console.log(`[dola-media] 已设置下载目录：${picked}`);
   return { ok: true, path: picked, configured: true };
-});
+}));
 
 // 改造：现有「下载」也走设置路径 + 自动命名（保持外部签名不变 url/mediaType）
 // 旧的同名 handler 已在文件更上方删除（避免重复注册抛异常），此处直接注册新版即可。
@@ -2500,9 +2512,11 @@ ipcMain.handle('inject-dola-duration-main', async (_e, webContentsId) => {
   }
   try {
     // 先打开 30s 开关（脚本以 localStorage 该键 === '1' 判断是否启用）
+    // ★ TD-16-37：内层 `catch(e){}` 是**注入到页面的串** ⇒ 页内，刻意静默（豁免）；
+    //   外层 `.catch` 是**主进程**的 ⇒ 必须留痕（否则"开关没打开"永远查不出来）
     await wc
       .executeJavaScript("try{localStorage.setItem('intl_doubao_enable_30s_v1','1')}catch(e){}")
-      .catch(() => {});
+      .catch((e) => console.warn('[dola-30s] 打开 30s 开关失败（注入页面前置步骤）:', (e && e.message) || e));
     const script = fs.readFileSync(path.join(__dirname, 'dola-duration-main.js'), 'utf8');
     writeLog(`INJECT-SCRIPT scriptLen=${script.length}`);
     await wc.executeJavaScript(script);
@@ -2558,7 +2572,7 @@ ipcMain.handle('attach-dola-debugger', async (_e, webContentsId) => {
 });
 
 // 导出机器码为文本文件
-ipcMain.handle('export-machine-code', async (_e, machineCode) => {
+ipcMain.handle('export-machine-code', ipcGuard(async (_e, machineCode) => {
   if (!mainWindow) return { ok: false, error: '窗口未就绪' };
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '导出机器码',
@@ -2568,7 +2582,7 @@ ipcMain.handle('export-machine-code', async (_e, machineCode) => {
   if (res.canceled || !res.filePath) return { ok: false, error: '已取消' };
   fs.writeFileSync(res.filePath, String(machineCode || ''), 'utf-8');
   return { ok: true, path: res.filePath };
-});
+}));
 
 // ============================================================
 // 指纹伪装：渲染进程为每个账号请求生成本账号专属的 webview preload 文件
@@ -3066,17 +3080,28 @@ function initApiBridge() {
     });
 
     // ---- 服务商元信息（无密钥）----
-    ipcMain.handle('api-providers:list', async () => {
+    ipcMain.handle('api-providers:list', ipcGuard(async () => {
       return { ok: true, providers: apiRegistry.listProvidersMeta() };
-    });
+    }));
 
     // ---- 配置读取（密钥脱敏）----
     /**
-     * IPC 边界守卫 —— **唯一实现**（三振出局：6 个 handler 各自 try/catch 是同一模式重复）
+     * IPC 边界守卫 —— 把抛转成可传输的 `{ok:false, error}`（**原文**，原则 6）
      *
      * ⚠️ 为什么必须在边界收：配置**损坏/读盘失败**时 `loadRaw` 会抛（且损坏时已备份原文）。
      *    IPC 是**进程边界** —— 异常必须转成可传输的判别联合，否则渲染层只拿到 rejected IPC，
      *    拿不到"为什么"（原则 6：错误要能被展示）。
+     *
+     * ★ **2026-10-11 更正（TD-13-14）**：原注释写「**唯一实现**」—— 那是**声索**，实况是
+     *   **已接线 20 / 明确豁免 47**（67 个 `ipcMain.handle`）：
+     *   · **已接线 20**：`api-config:get/set/test` · `api-setup:get/set` ＋ 本轮补的 **15 个「无 try」handler**
+     *     （`import-files` · `save-file` · `load-file` · `open-external` · `save-accounts-file` ·
+     *      `load-accounts-file` · `select-folder` · `save-video-from-url` · `dola-media-clear` ·
+     *      `get-download-settings` · `pick-download-path` · `export-machine-code` · `api-providers:list` ·
+     *      `api-config:set-key` · `api-config:set-secret`）；
+     *   · **明确豁免 47**：其余 handler **函数体自带 `try/catch`**（与守卫**等价** —— 都把异常转成
+     *     `{ok:false}`）⇒ **不重复包**（判据 C1：同一模式不叠两层）。
+     *   ⚠️ **新增 handler 的规矩**：**要么**函数体自带 `try/catch`，**要么**包 `ipcGuard` —— 二者必居其一。
      */
     const ipcGuard = (fn) => async (...args) => {
       try {
@@ -3105,13 +3130,13 @@ function initApiBridge() {
     }));
 
     // ---- 保存密钥（加密落盘）----
-    ipcMain.handle('api-config:set-key', async (_e, providerId, key) => {
+    ipcMain.handle('api-config:set-key', ipcGuard(async (_e, providerId, key) => {
       const adapter = apiRegistry.getProvider(providerId);
       if (!adapter) return { ok: false, error: `未知服务商 ${providerId}` };
       const r = _apiConfigStore.setApiKey(adapter, key);
       if (!r.ok) return r;
       return { ok: true, keyHint: r.keyHint, maskedBy: maskKey(key) };
-    });
+    }));
 
     // ---- 测试连接 ----
     ipcMain.handle('api-config:test', ipcGuard(async (_e, providerId) => {
@@ -3166,13 +3191,13 @@ function initApiBridge() {
     }));
 
     // ---- 保存二次密钥（secretKey，加密落盘）----
-    ipcMain.handle('api-config:set-secret', async (_e, providerId, key) => {
+    ipcMain.handle('api-config:set-secret', ipcGuard(async (_e, providerId, key) => {
       const adapter = apiRegistry.getProvider(providerId);
       if (!adapter) return { ok: false, error: `未知服务商 ${providerId}` };
       const r = _apiConfigStore.setSecretKey(adapter, key);
       if (!r.ok) return r;
       return { ok: true, hasSecret: true };
-    });
+    }));
 
     console.log('[api-bridge] API 接入桥已初始化：providers =', apiRegistry.listProviderIds().join(', '));
   } catch (err) {

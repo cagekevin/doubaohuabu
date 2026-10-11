@@ -22,15 +22,15 @@
 | M13 | 面板 / 页面（21 个） | ⏳ 进行中 |
 | M14 | 端到端 + 回归（全闸 + W1~W17） | ⏳ 未开始 |
 
-门禁基线：`npm run check` 全绿（**234 模块 / 765 依赖 / 0 违规 · 1200 tests**）。
+门禁基线：`npm run check` 全绿（**305 模块 / 1118 依赖 / 0 违规 · 1583 tests**）。
 进度与落点：`docs/00-进度台账.md`（M0~M7）· `docs/16` §7（里程碑重排）· `docs/18-交接-HANDOFF.md`（最新交接）。
 
 ### 已知缺口（勿当已完成）
 
 - 缺口登记：`docs/13`（UI 层）· `docs/14`（功能层）· `docs/15`（数据与持久化）。
-- 未接线（有实现、无链路）：`core/rules` 的 `dedupe` / `facemask` / `faceDetect` / `replyKind` / `genProgress` / `node`，另 `core/usecases` 的 `apiConfig` / `localizeVideos`（0 生产消费）—— 见 `docs/DATAFLOW.md` §十二（**2026-10-11 全表重测**）。**已接线（勿再当缺口）**：`sendGuard`（`adapters/site/gpt/index.ts:64`）· `license`（`state/licenseOps`）· `importProject` / `projectStorage`（`state/projectOps`）。
+- 未接线（有实现、无链路）：`core/rules` 的 `dedupe`（0 生产消费）—— 见 `docs/DATAFLOW.md` §十二（**2026-10-12 复核**：`node` 已由 `bootstrap/hydrate.ts:26` 接线，已移出本清单）。**已接线（勿再当缺口）**：`sendGuard`（`adapters/site/gpt/index.ts:64`）· `license`（`state/licenseOps`）· `importProject` / `projectStorage`（`state/projectOps`）· `facemask` / `faceDetect`（经 `MediaPort` ← `state/hostOps` ← `ui/nodes/FaceMarksLayer`）· `replyKind` / `genProgress`（`state/sendQueue` 的排队追问链 ← `ui/panels/SendQueuePanel`）· `apiConfig`（`state/apiOps` ← `ui/panels/ApiSettings`）· `localizeVideos`（`state/localizeOps` ← `state/generate` ＋ `container.startVideoBackfill()`）。
 - ⛔ 阻塞：`fetchWatermarkFree`（缺 `SitePort.executeJavaScript` + webview 租约）。
-- 未落：图片编辑器 + 人脸遮罩层 · 出片记录面板 · 账号分组 / 导入导出 UI · 画布对齐 / 分布。
+- 未落（**2026-10-12 复核**）：**图片编辑器**（遮脸 / 涂抹 / 裁剪，`TD-09-4`）· 画廊「从磁盘导入」（`TD-09-5`）· Tapnow「扫描画布取图」（`TD-05-9`）· `oR` 配方构造器（`TD-02-21`）· 预设 UI 读方（`TD-09-6`）。**已落（本轮移出）**：人脸遮罩层（`ui/nodes/FaceMarksLayer` + `ui/panels/FaceMaskPanel`）· 出片记录面板（`ui/nodes/VideoNode`）· 账号分组 / 导入导出（`GroupManagerModal` / `ExportAccountsModal`）· 画布自动排列（`arrangeSelectedNodes`）。
 - 待 Electron 内验证：W3 磁盘侧 · W4 `projects-autobackup.json`；W6 toast 接线。
 - 技术债：`daily/架构日志/债务.md`（走 `node scripts/debt.mjs`，**禁手写、禁全量 Read**）。
 
@@ -169,6 +169,28 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 
 > **读债 / 想引用"仓里一直这么写"之前，先过 `docs/adr/` 索引** —— 既有约定可能正是要消灭的对象。
 
+### 写作口径：**只写当下，不留过程**（2026-10-12 用户裁定）
+
+注释与文档**只回答「现在是什么 / 为什么必须这样」**，不回答「谁改过、原本写什么」。
+
+| | |
+|---|---|
+| ❌ **改动史** | `原写 X` · `此前这里写…` · `已更正` · `本行原文是错的` · `XX 已结` · 日期 + 「收口 / 更正」 |
+| ❌ **过程状态** | 「本轮迁移」「已切到…」「此前 N 处」—— 状态流转归 `债务.md`，改动过程归轮次日志 |
+| ✅ **改了就写新的** | 直接把**当前口径**写上去；**不写"原来是别的"** |
+| ✅ **依据照留** | 源出处（`原 \`Pk\` shared.js:26629`）· 判据 · 不变量 · 边界 · 债号（可追溯）—— 这些是「为什么」，**不是过程** |
+
+**为什么**：改动史对读者**零信息量**（读一眼代码就知道现状），却要跟着代码一起维护，且会把"当前真相"埋进叙述里 ⇒ **弊大于利**。
+
+**归属**：改动过程 → `daily/架构日志/<NN>-*.md`；债的状态流转 → `债务.md`。**都别往注释里搬**。
+
+**判定**：把这句话删掉，会不会让人**误判当前代码**？不会 ⇒ **删**。
+
+```ts
+// ❌ 原写 `raw.ok === false` ⇒ fail-open，已更正（TD-04-5）
+// ✅ 必须用 `ok !== true`：漏 `ok` 不能当成功（后端每条 return 都带 `ok` · TD-04-5）
+```
+
 ---
 
 ## 八、工作流（`.codebuddy/commands/`）
@@ -191,7 +213,13 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 
 **两条纪律**（都是踩出来的）：
 
-1. **能抄就别推** —— 原版可读源码在 `docs/豆包画布原版参考/expanded_components/`；UI handler / props / 字段默认值**先去这里读**再抄，别自己推理。
+1. **能抄就别推 —— ★ 源代码就是真源**（2026-10-11 用户裁定，**适用于一切"不知道"**）：
+   原版可读源码在 `docs/豆包画布原版参考/expanded_components/`。
+   **凡是不确定的**（不只是 UI handler / props / 默认值）—— **行为、节奏、文案、字段、分支、
+   该不该有、该放哪、算不算违规** —— **一律先去这里读，再照抄（逐字对源）**；
+   **别自己推理，也别先问人**。
+   ⚠️ 它**同时压住 M4**：注释与文档会漂移，**原版代码不会**。
+   ⚠️ 只有**读不到**（原版没有这段 / 不可读）时，才轮到"问用户"或"自己设计"。
 2. **先读文档再动手** —— `docs/16` 已对每项写好**落点 / 写法 / 判据 / 验法**。
 
 **完成定义（DoD）**：① 跑 `npm run check` 全绿（**改样式另按 `UI细节8查` 人工跑判据**）；② 给闸留「**先红后绿**」凭证（`scripts/probe.mjs`）；③ 每轮往 `docs/16` 追加一条（落点 / 判据 / 教训）；④ **判据 B5：不留「落了但没人调」**（没调用方就先别落，或同批落调用方）。
@@ -208,6 +236,7 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 - ❌ `stable` import 上层；站点选择器泄进 `core`/`state`/`ui`/`stable`。
 - ❌ 硬编码色值（`tokens.css` 之外）、`doubao-*` 键名字面量（`stable/contracts/` 之外）。
 - ❌ 手写 `债务.md` / `index.md` / ADR 索引（脚本产物）；手写 `mv` 改文件。
+- ❌ 注释 / 文档里写**过程**（`原写…` · `此前…` · `已更正` · `已结`）—— 只写**当下口径**，改了就写新的（详判据见 §七「写作口径」）。
 - ❌ `ui/**` 下写测试文件。
 - ⚠️ 调用不存在的宿主方法 `lovartChromeEval`（死代码，见 `docs/09` C2）。
 - ⚠️ `saveImageSync` / `activateProjectStorage` 是 **`sendSync`**，**不得 `await`**。

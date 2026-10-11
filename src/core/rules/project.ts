@@ -12,42 +12,108 @@ import type { CanvasEdge, LibraryItem, Preset, Project, ProjectData } from '@/st
 import type { CanvasNode } from '@/stable/model/node';
 import { emptyProjectData } from '@/stable/model/project';
 import { BRAND } from '@/constants/text';
-import { LEGACY_PROJECT_NAME, PROJECT_ID_PREFIX } from '@/stable/contracts/schemas';
+import {
+  ACCOUNT_ID_PREFIX,
+  EDGE_ID_PREFIX,
+  LEGACY_PROJECT_NAME,
+  LIBRARY_ID_PREFIX,
+  PRESET_ID_PREFIX,
+  PROJECT_ID_PREFIX,
+} from '@/stable/contracts/schemas';
 
 /** 新工程默认名（SSOT 在 `constants/text.ts` 的 `BRAND`） */
 const DEFAULT_PROJECT_NAME = BRAND.untitledProject;
 
 /**
- * 生成工程 id（原 `Pt('p')` = `p_<base36>_<计数>`）
+ * **全仓唯一 id 前缀表**（★ 2026-10-12 · 越权族收口）
  *
+ * ⚠️ **每一格都对着源**（不按"我觉得该叫什么"起名）：
+ *   · 契约层已有的 5 个（`p`/`lib`/`pre`/`e`/`acc`）**直接取契约常量** —— 不在本表再抄一遍字面量；
+ *   · 其余取自源 `Pt(...)` 的**前缀全集**（`shared.js` 全文实测：`a`/`dl`/`e`/`grp`/`gv`/`ig`/
+ *     `lg`/`lib`/`m`/`p`/`pre`/`sty`/`t`/`vid`）＋本仓新增两类（租约 `rt` · 队列项 `sq`）。
+ * ⚠️ **`account` 与 `accountNode` 是两个东西**：`acc_` 是**账号记录**的 id（源 `addAccount`），
+ *   `a_` 是**账号节点**的 id（源 `Pt('a')`）—— 合并会把两者撞成一个前缀。
+ * ⚠️ 同理 `accountGroup`（源 `grp_<base36>`，**无 seq 段**）与 `groupNode`（画布组节点，走 `Pt` ⇒ 有 seq）。
+ */
+/**
+ * 契约常量**自带尾下划线**（`'p_'` / `'lib_'` / `'pre_'` / `'e_'` / `'acc_'`），而本表统一按**裸名**存
+ * （`ID_PREFIX.project === 'p'`）—— 否则 `makeId` 的模板会再补一个 `_` ⇒ 拼出 `pre__…`。
+ */
+const bare = (p: string): string => p.replace(/_$/, '');
+
+export const ID_PREFIX = {
+  project: bare(PROJECT_ID_PREFIX),
+  library: bare(LIBRARY_ID_PREFIX),
+  preset: bare(PRESET_ID_PREFIX),
+  edge: bare(EDGE_ID_PREFIX),
+  account: bare(ACCOUNT_ID_PREFIX),
+  accountGroup: 'grp',
+  style: 'sty',
+  lovartGallery: 'lg',
+  lease: 'rt',
+  queueItem: 'sq',
+  // ── 节点类（原 `Pt` 的前缀）──
+  text: 't',
+  material: 'm',
+  video: 'vid',
+  genvideo: 'gv',
+  imggen: 'ig',
+  download: 'dl',
+  accountNode: 'a',
+  /** 画布**组节点**（与 `accountGroup` 同前缀、不同物 —— 见上注） */
+  groupNode: 'grp',
+} as const;
+
+export type IdKind = keyof typeof ID_PREFIX;
+
+/**
+ * **全仓唯一 id 工厂**（原 `Pt`，`shared.js:26668-26671` **逐字**）：
+ *
+ * ```js
+ * let Gl = 1;
+ * const Pt = e => `${e}_${Date.now().toString(36)}_${(Gl++).toString(36)}`;
+ * ```
+ * ⇒ 形状 = `<kind>_<base36 时间>_<base36 计数>` —— ⚠️ **两段都是 base36**。
+ *
+ * ★ **为什么要有它（越权族的根治）**：此前本仓 **9 处**各自拼 id（`makeProjectId` · `makeLibraryId` ·
+ *   `makeNodeId` · `preset.ts` · `backendPage.ts` 的租约 · `style.ts` · `sendQueue.ts` · `store.ts` 的 `lg_` · …），
+ *   **且 seq 段有的十进制、有的 base36** —— 而源只有**一条**规范 ⇒ 把规范留在**这里**，下游一律委托。
+ *
+ * ⚠️ `seq` **可省**：源里 `grp_<base36>`（`31938`，账号分组）与 `acc_<base36>`（历史遗留）**没有 seq 段**
+ *   ⇒ 省略时输出 `<kind>_<base36 时间>`（逐字对源，**不强行补一段**）。
+ */
+export function makeId(kind: IdKind, now: number, seq?: number): string {
+  const base = `${ID_PREFIX[kind]}_${now.toString(36)}`;
+  return seq === undefined ? base : `${base}_${seq.toString(36)}`;
+}
+
+/**
+ * 生成工程 id（原 `Pt('p')` = `p_<base36>_<base36>`）
  * @param now 时间戳（ms）
  * @param seq 同一毫秒内的自增计数（从 1 起）
  */
 export function makeProjectId(now: number, seq: number): string {
-  // ⚠️ `PROJECT_ID_PREFIX` 已含下划线（`'p_'`）⇒ 拼出 `p_<base36>_<seq>`（真实样本 `p_mv1raqbo_1` ✅）
-  return `${PROJECT_ID_PREFIX}${now.toString(36)}_${seq}`;
+  return makeId('project', now, seq);
 }
 
 /**
- * 节点 id 前缀（原 `Pt` 的各前缀）
- * ⚠️ 与 `stable/contracts/schemas.ts` 里的 `*_ID_PREFIX` 同源 —— 那边是**冻结契约**，
- *    这里补的是节点专用的几个（源码里节点前缀没有独立常量）
+ * 节点 id 前缀（原 `Pt` 的各前缀）—— ★ **2026-10-12 起由 `ID_PREFIX` 派生**（只此一份真相）
+ *
+ * ⚠️ 保留本常量是为了老的引用面（`NodeIdKind` 与 `makeNodeId` 的键名按**节点类型**命名 ——
+ *   它们与 `ID_PREFIX` 的节点类键**同名**，因为源就是这么叫的）。
+ * ⚠️ `account` / `group` 两个键在这里指**节点**（`a_`/`grp_`），与 `ID_PREFIX` 里的
+ *    `account`（账号记录 `acc_`）/ `accountGroup` 不是一回事 —— 故此处显式映射。
  */
 export const NODE_ID_PREFIX = {
-  text: 't_',
-  material: 'm_',
-  video: 'vid_',
-  genvideo: 'gv_',
-  imggen: 'ig_',
-  account: 'a_',
-  /**
-   * ★ 2026-10-10 补：原先**漏了 `download`** ⇒ `makeNodeId('download', …)` 编译不过
-   *   ⇒ 下载节点**根本建不出来**（与「5 类节点零创建入口」是同一批断链）。
-   *   前缀取自源版 `Pt('dl')`（`shared.js` 全文前缀集合：`a`/`dl`/`e`/`grp`/`gv`/`ig`/
-   *   `lg`/`lib`/`m`/`p`/`sty`/`t`/`vid`）。
-   */
-  download: 'dl_',
-  group: 'grp_',
+  text: `${ID_PREFIX.text}_`,
+  material: `${ID_PREFIX.material}_`,
+  video: `${ID_PREFIX.video}_`,
+  genvideo: `${ID_PREFIX.genvideo}_`,
+  imggen: `${ID_PREFIX.imggen}_`,
+  account: `${ID_PREFIX.accountNode}_`,
+  /** 前缀取自源版 `Pt('dl')`（原注释：漏了它 ⇒ `makeNodeId('download', …)` 编译不过） */
+  download: `${ID_PREFIX.download}_`,
+  group: `${ID_PREFIX.groupNode}_`,
 } as const;
 
 export type NodeIdKind = keyof typeof NODE_ID_PREFIX;
@@ -59,7 +125,9 @@ export type NodeIdKind = keyof typeof NODE_ID_PREFIX;
  * @param seq 自增计数
  */
 export function makeNodeId(kind: NodeIdKind, now: number, seq: number): string {
-  return `${NODE_ID_PREFIX[kind]}${now.toString(36)}_${seq}`;
+  // ★ 委托唯一工厂（键名 → `ID_PREFIX` 的节点类键；`account`/`group` 是**节点**侧的名字）
+  const key: IdKind = kind === 'account' ? 'accountNode' : kind === 'group' ? 'groupNode' : kind;
+  return makeId(key, now, seq);
 }
 
 /**
@@ -67,11 +135,11 @@ export function makeNodeId(kind: NodeIdKind, now: number, seq: number): string {
  *
  * ⚠️ **2026-10-11 收口（判据 C1）**：此前只有 `ui/panels/LibraryPanel.tsx` 里内联过
  *   `` `lib_${Date.now().toString(36)}_${i}` ``；`canvas.addMaterialsBatch` 是第 **2** 处
- *   ⇒ 提到这里（与 `makeNodeId` 同法，前缀固定 `lib_`；`lib` **不是节点类型**，故不进
- *   `NODE_ID_PREFIX`）。
+ *   ⇒ 提到这里（与 `makeNodeId` 同法）。
+ * ⚠️ **2026-10-12**：再收一层 —— 改委托 `makeId('library', …)`（前缀由 `ID_PREFIX` 取契约常量）。
  */
 export function makeLibraryId(now: number, seq: number): string {
-  return `lib_${now.toString(36)}_${seq}`;
+  return makeId('library', now, seq);
 }
 
 /** 新建工程（原「＋ 新建项目」） */

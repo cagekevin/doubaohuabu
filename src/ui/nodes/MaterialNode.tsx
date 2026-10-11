@@ -9,12 +9,13 @@
  *      到 `{w,h}`，供下游按原始宽高比使用）；
  *   ④ **分析提示词浮动按钮**（原 179-192）—— **逐字与生成节点相同** ⇒ 直接复用 `AnalyzePrompt`。
  *
- * ⛔ **两处未落地，按判据 B4 渲染但禁用/不渲染并写明原因**（不假装）：
+ * ⛔ **一处未落地，按判据 B4 渲染但禁用并写明原因**（不假装）：
  *   · **「编辑图片」**（原 163-178）→ 源版调 `openImageEditor({nodeId,imgRef,label})`，
- *     会开一个**遮脸 / 裁剪编辑器** —— 独立大件，尚未落地 ⇒ 按钮**禁用** + `title` 说明 + 可见标注。
- *   · **人脸遮罩层**（原 160 的 `_Component29` = `iL.jsx` **191 行**：识别人脸、单击遮脸、
- *     双击设参数）—— 它甚至**不在 `fL.jsx` 里**，是挂在图片上的独立组件 ⇒ **不渲染**
- *     （渲染一个空的遮罩层等于假装有这功能）。
+ *     会开一个**遮脸 / 裁剪编辑器**（`G3.jsx`，1087 行）—— 独立大件，尚未落地
+ *     ⇒ 按钮**禁用** + `title` 说明 + 可见标注。
+ *   · ✅ **人脸遮罩层**（原 160 的 `_Component29` = `iL.jsx`）—— **2026-10-11 已落**：
+ *     `ui/nodes/FaceMarksLayer.tsx`（识别人脸 → 角标 → 单击遮脸 / 双击设参数）
+ *     + `ui/panels/FaceMaskPanel.tsx`（参数面板，挂在外壳 `CanvasHost`）。
  *
  * ⚠️ **与源版的一处措辞差异（有意）**：源版改名输入框的 `onKeyDown` 里**有 `Escape` 取消**
  *   （原 143-146）。本工程的 `Escape` 处理只允许住 `ui/common/`（`原则8/rule-of-three`）
@@ -28,6 +29,7 @@ import { withThumb } from '@/stable/protocols/img';
 import { MATERIAL_NODE_TEXT } from '@/constants/text';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import { AnalyzePrompt } from './AnalyzePrompt';
+import { FaceMarksLayer } from './FaceMarksLayer';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
 
@@ -37,6 +39,8 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
   /** 名字兜底（原 18-19：空或字面量 `undefined` ⇒ `素材`） */
   const label = data.label && data.label !== 'undefined' ? data.label : MATERIAL_NODE_TEXT.fallbackName;
 
+  /** 图片**自然尺寸**（原 157-160 的 `{w,h}`）—— 脸框落点要按它换算 */
+  const [nat, setNat] = useState({ w: 0, h: 0 });
   const [editingName, setEditingName] = useState(false);
   const [draft, setDraft] = useState(label);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -124,9 +128,22 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
             draggable={false}
             loading="lazy"
             decoding="async"
+            // ★ 原 157-160：`onLoad` 读**自然尺寸**（脸框落点要按图片宽高比换算）
+            onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           />
         ) : (
           <div className={styles.materialPlaceholder}>{MATERIAL_NODE_TEXT.noImage}</div>
+        )}
+
+        {/* ★ 人脸遮罩层（原 160 的 `_Component29` = `iL.jsx`）—— 铺在图上，自量显示框 */}
+        {data.dataUrl && (
+          <FaceMarksLayer
+            nodeId={id}
+            src={data.dataUrl}
+            natW={nat.w || data.natW}
+            natH={nat.h || data.natH}
+            label={label}
+          />
         )}
 
         {data.dataUrl && (

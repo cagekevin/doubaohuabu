@@ -23,6 +23,8 @@ import type { HostPort } from '@/core/ports/host.port';
 import type { ImageQuestionContext, SitePort } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { ANALYZE_TEXT } from '@/constants/text';
+import { sleep } from '@/lib/async';
+import { log } from '@/lib/log';
 import {
   ASK_IMAGE_SETTLE_MS,
   ASK_REPLY_MAX_POLLS,
@@ -44,9 +46,10 @@ import {
   buildClickSendScript,
   buildReplyReadScript,
   buildSetInputScript,
+  type MessageBaselineResult,
 } from './scripts';
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 /** 读输入框状态（原 `Ql`） */
 interface InputState {
@@ -127,8 +130,20 @@ export async function askAndWaitReply(
   if (!filled.ok) return err('unknown', filled.message, filled.cause);
 
   // ② 读「发送前的消息基线」（原 `mS` 39000-39001）
-  const baselineProbe = await runProbe<unknown>(view, MESSAGE_BASELINE_SCRIPT);
-  const baseline = baselineProbe.ok && Array.isArray(baselineProbe.value) ? baselineProbe.value : [];
+  //   ⚠️ 失败**不阻断**（源设计 = best-effort：拿不到基线就当空），但必须**留痕** ——
+  //      否则「脚本崩」与「页面确实没有旧消息」不可分辨（TD-16-106）。
+  const baselineProbe = await runProbe<MessageBaselineResult>(view, MESSAGE_BASELINE_SCRIPT);
+  const baselineResult: MessageBaselineResult = baselineProbe.ok
+    ? baselineProbe.value
+    : { ok: false, error: baselineProbe.error };
+  const baseline = baselineResult.ok ? baselineResult.list : [];
+  if (!baselineResult.ok) {
+    // 读者 = 开发者（走 `lib/log` 唯一入口）
+    log.warn(
+      '[askAndWaitReply] 消息基线读取失败（本轮按空基线继续，旧回复可能被误判为新回复）:',
+      baselineResult.error,
+    );
+  }
 
   // ③ 点发送（重试 3 次，间隔 800ms；原 `mS` 39003-39016）
   let clicked = false;
@@ -192,6 +207,27 @@ export function createDoubaoAskWithImage(
     if (!attached.ok) return err(attached.reason, attached.message, attached.cause);
 
     await sleep(ASK_IMAGE_SETTLE_MS);
+    return askAndWaitReply(host, view, ctx.webContentsId, instruction);
+  };
+}
+
+/**
+ * 构造 `SitePort.pingQueueProgress` 的实现（原 `_Component43.jsx:2200-2266` 的**页面动作半**）
+ *
+ * ★ **为什么直接复用 `askAndWaitReply`**（判据 C1）：源那三步 —— `ae('queue-ping-baseline')`
+ *   → `ze(…,'queue-ping-fill')`（填 `aD`，而 `aD` 写进去的就是哨兵句 `lm`）
+ *   → `ze(…,'queue-ping-send')` → `we()` 读回复 —— 与本仓「记基线 → 填字 → 点发送 → 读回复」
+ *   **逐步同构**。差别只有「不带图」和「源的这一步只读一次」⇒ 那不是新能力，是**同一能力的一次短等待用法**
+ *   ⇒ 不另抄一份页内编排。
+ *
+ * ⚠️ 失败一律原样转发（原则 6）；页面没就绪时报 `page-error`，由调用方决定是否留痕。
+ */
+export function createDoubaoPingQueueProgress(
+  host: HostPort,
+): NonNullable<SitePort['pingQueueProgress']> {
+  return async (ctx, instruction) => {
+    const view = viewOfAccount(ctx);
+    if (!view) return err('page-error', '该账号的 webview 未初始化');
     return askAndWaitReply(host, view, ctx.webContentsId, instruction);
   };
 }

@@ -18,6 +18,7 @@
  */
 
 import type { FaceBox } from './facemask';
+import { clamp } from '@/lib/math';
 
 /** 像素坐标的人脸框（原 `{x, y, w, h, score}`） */
 export interface PixelFaceBox {
@@ -107,8 +108,8 @@ export function buildDetectPlan(width: number, height: number): DetectAttempt[] 
 
 /** 夹到图内（原 `wS` 尾部 39624-39631）—— `x/y` 夹到 `[0, side-1]`，`w/h` 至少 1 且不越界 */
 export function clampBoxToImage(box: PixelFaceBox, width: number, height: number): PixelFaceBox {
-  const x = Math.max(0, Math.min(box.x, width - 1));
-  const y = Math.max(0, Math.min(box.y, height - 1));
+  const x = clamp(box.x, 0, width - 1);
+  const y = clamp(box.y, 0, height - 1);
   return {
     x,
     y,
@@ -147,5 +148,75 @@ export function toNormalizedFaceBoxes(
     ny: clamp01(b.y / h),
     nw: clamp01(b.w / w),
     nh: clamp01(b.h / h),
+  }));
+}
+
+// ─────────────────────── 显示映射（原 `rL` + `sL`）───────────────────────
+
+/** 脸框显示块的**最小边长**（原 `sL` 的 `r = 4`）—— 太小就点不到 */
+export const FACE_RECT_MIN_SIDE = 4;
+
+/** `cover` 适配后的**有效画面区**（原 `rL`） */
+export interface CoverFit {
+  /** 有效宽 */
+  w: number;
+  /** 有效高 */
+  h: number;
+  /** 左右留黑偏移 */
+  offX: number;
+  /** 上下留黑偏移 */
+  offY: number;
+}
+
+/**
+ * 元素框 → **`object-fit: cover` 后的有效画面区**（原 `rL`，`shared.js:39905-39923`）
+ *
+ * 源逐字：`r = boxW/boxH`（**框**的宽高比）；`n` = 图片宽高比；
+ *   · `n > r`（图更宽）⇒ 宽度撑满 `w = boxW`、高度按图裁 `h = boxW / n`
+ *   · 否则 ⇒ 高度撑满 `h = boxH`、宽度按图裁 `w = boxH * n`
+ *   · 两侧/上下**居中**留黑（`offX` / `offY`）
+ * ⚠️ 任一入参为假值 / `ratio <= 0` ⇒ 全 0（源第一句）。
+ */
+export function coverFit(boxW: number, boxH: number, ratio: number): CoverFit {
+  if (!boxW || !boxH || !ratio || ratio <= 0) return { w: 0, h: 0, offX: 0, offY: 0 };
+  const boxRatio = boxW / boxH;
+  const w = ratio > boxRatio ? boxW : boxH * ratio;
+  const h = ratio > boxRatio ? boxW / ratio : boxH;
+  return { w, h, offX: (boxW - w) / 2, offY: (boxH - h) / 2 };
+}
+
+/** 一个脸框**在元素里**的落点（原 `sL` 的元素） */
+export interface DisplayFaceRect {
+  /** 它在 `faces` 里的下标（源就是 `i` —— 点击时按它回查那张脸） */
+  i: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * 归一化脸框 → **元素内的像素落点**（原 `sL`，`shared.js:39924-39940`）
+ *
+ * ⚠️ 与源一致的三点：① 有效区为 0 / 没脸 ⇒ `[]`；② 落点 = `off + 归一化值 × 有效边长`；
+ *    ③ 宽高各取 `max(minSide, …)`（`minSide` 默认 **4**，源是默认参数 `r = 4`）。
+ *
+ * @param box 元素**当前**尺寸（`ResizeObserver` 量的那个，不是图片原始尺寸）
+ * @param ratio 图片原始宽高比（`natW / natH`）
+ */
+export function displayFaceRects(
+  faces: readonly FaceBox[] | null | undefined,
+  box: { w: number; h: number },
+  ratio: number,
+  minSide: number = FACE_RECT_MIN_SIDE,
+): DisplayFaceRect[] {
+  const fit = coverFit(box?.w, box?.h, ratio);
+  if (!fit.w || !fit.h || !faces || !faces.length) return [];
+  return faces.map((f, i) => ({
+    i,
+    left: fit.offX + (f.nx || 0) * fit.w,
+    top: fit.offY + (f.ny || 0) * fit.h,
+    width: Math.max(minSide, (f.nw || 0) * fit.w),
+    height: Math.max(minSide, (f.nh || 0) * fit.h),
   }));
 }

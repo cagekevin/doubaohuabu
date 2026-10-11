@@ -5,7 +5,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatClockTime, formatDateTimeMinute, formatLocalDate, parseSiteTimestamp } from '../time';
+import {
+  formatClockTime,
+  formatDateTimeMinute,
+  formatLocalDate,
+  formatMonthDayMinute,
+  parseSiteTimestamp,
+} from '../time';
 
 describe('parseSiteTimestamp（原 `pR` 35735）', () => {
   it('null / undefined → NaN', () => {
@@ -127,5 +133,29 @@ describe('formatLocalDate（原 `_Component46.jsx:32-38`；后端 `config-store.
 
   it('非法时间 ⇒ 空串（不编一个「今天」）', () => {
     expect(formatLocalDate(NaN)).toBe('');
+  });
+});
+
+describe('formatMonthDayMinute（原 `YL.jsx:460-470` 的 `te`）', () => {
+  // ⚠️ 同 `formatLocalDate`：**本地时区**语义 ⇒ 期望值由本地字段推出，不写死字面量
+  const ms = Date.UTC(2026, 9, 11, 12, 34, 56);
+  const p = (n: number): string => String(n).padStart(2, '0');
+
+  it('形如 `MM-DD HH:mm`，且与本地字段逐位一致（★ **不带年份**）', () => {
+    const d = new Date(ms);
+    expect(formatMonthDayMinute(ms)).toBe(
+      `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`,
+    );
+    expect(formatMonthDayMinute(ms)).toMatch(/^\d{2}-\d{2} \d{2}:\d{2}$/);
+    // ★ 反证：与 `formatDateTimeMinute`（带年份）**不是**同一个串，但**是**它的后缀
+    expect(formatMonthDayMinute(ms)).not.toBe(formatDateTimeMinute(ms));
+    expect(formatDateTimeMinute(ms).endsWith(formatMonthDayMinute(ms))).toBe(true);
+  });
+
+  it('空 / `0` / 非法 ⇒ 空串', () => {
+    expect(formatMonthDayMinute()).toBe('');
+    expect(formatMonthDayMinute(null)).toBe('');
+    expect(formatMonthDayMinute(0)).toBe('');
+    expect(formatMonthDayMinute(NaN)).toBe('');
   });
 });

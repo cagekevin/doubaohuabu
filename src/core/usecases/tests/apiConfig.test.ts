@@ -49,7 +49,6 @@ function makeDeps(over: Partial<ApiPort> = {}) {
       calls.push(['jobCancel', jobId]);
       return ok({ status: 'cancelled' });
     },
-    jobList: async () => ok([]),
     setupGet: async () => ok({ setup: { imageProviderId: null, videoProviderId: null, fallbackProviderId: null, concurrency: 3 }, usage: {} }),
     setupSet: async (patch) => {
       calls.push(['setupSet', patch]);
@@ -117,7 +116,6 @@ describe('apiConfig · 原则 6（失败原样转发，不吞不改）', () => {
       setupSet: async () => fail,
       setupGet: async () => fail,
       configGet: async () => fail,
-      jobList: async () => fail,
     });
 
     expect(await saveProviderConfig(deps, 'x', {})).toEqual(fail);

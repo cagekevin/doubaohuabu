@@ -347,11 +347,19 @@ function createJobManager(deps) {
   async function runJob(job) {
     const adapter = registry.getProvider(job.providerId);
     if (!adapter) { fail(job, 'config', `未知服务商 ${job.providerId}`); return; }
-    const apiKey = configStore.getApiKey(adapter);
+    // ★ TD-13-16：密钥**解密失败**必须如实报（原实现静默返空串 ⇒ 会被当成"未配密钥"）
+    let apiKey;
+    let secretKey = '';
+    try {
+      apiKey = configStore.getApiKey(adapter);
+      secretKey = configStore.getSecretKey ? configStore.getSecretKey(adapter) : '';
+    } catch (err) {
+      fail(job, 'config', (err && err.message) || String(err));
+      return;
+    }
     const cfgRow = configStore.getProviderConfig(adapter);
     if (cfgRow.enabled === false) { fail(job, 'config', `服务商「${adapter.name}」已在设置中停用`); return; }
     if (!apiKey) { fail(job, 'config', '未配置 API 密钥，请先到「API 服务」设置'); return; }
-    const secretKey = configStore.getSecretKey ? configStore.getSecretKey(adapter) : '';
     const config = { baseUrl: cfgRow.baseUrl, model: cfgRow.model, params: cfgRow.params, apiKey, secretKey };
 
     let res = await executeJob(job, adapter, config);
@@ -362,7 +370,16 @@ function createJobManager(deps) {
       if (fbId && fbId !== job.providerId) {
         const fbAdapter = registry.getProvider(fbId);
         if (fbAdapter) {
-          const fbKey = configStore.getApiKey(fbAdapter);
+          // ★ TD-13-16：兜底服务商的密钥解密失败也**如实报**（不静默回落成"没配兜底"）
+          let fbKey;
+          let fbSecret = '';
+          try {
+            fbKey = configStore.getApiKey(fbAdapter);
+            fbSecret = configStore.getSecretKey ? configStore.getSecretKey(fbAdapter) : '';
+          } catch (err) {
+            fail(job, 'config', (err && err.message) || String(err));
+            return;
+          }
           const fbRow = configStore.getProviderConfig(fbAdapter);
           if (fbKey && fbRow.enabled !== false) {
             job._usedFallback = true;
@@ -370,7 +387,6 @@ function createJobManager(deps) {
             job.taskId = null;    // 全新提交，重置轮询上下文
             job.providerId = fbId;
             job.providerName = fbAdapter.name;
-            const fbSecret = configStore.getSecretKey ? configStore.getSecretKey(fbAdapter) : '';
             const fbConfig = { baseUrl: fbRow.baseUrl, model: fbRow.model, params: fbRow.params, apiKey: fbKey, secretKey: fbSecret };
             setStatus(job, 'submitting', {
               error: { kind: 'fallback', message: `主服务商「${adapter.name}」${res.kind === 'quota' ? '额度异常' : '鉴权失败'}，已自动切换兜底：${fbAdapter.name}` }
@@ -404,7 +420,14 @@ function createJobManager(deps) {
     }
     if (!String(prompt || '').trim()) return { ok: false, error: '提示词为空' };
     // 密钥缺失在提交时同步拒绝（而不是入队后才失败），用户当场就能看到提示
-    if (!configStore.getApiKey(adapter)) {
+    // ★ TD-13-16：**解密失败**与"未配密钥"必须分开报（原实现把前者静默成后者）
+    let apiKey;
+    try {
+      apiKey = configStore.getApiKey(adapter);
+    } catch (err) {
+      return { ok: false, error: (err && err.message) || String(err) };
+    }
+    if (!apiKey) {
       return { ok: false, error: '未配置 API 密钥，请先到「API 服务」设置' };
     }
     const job = {

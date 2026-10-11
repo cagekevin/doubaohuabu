@@ -62,3 +62,13 @@ export function withTimeout<T>(
     );
   });
 }
+
+/**
+ * 等待 `ms` 毫秒（原 `fr`）—— 收口 `adapters/site/**` 6 处各自定义的 `const sleep`
+ *（`gpt/index` · `doubao/analyze` · `doubao/index` · `shared/{waits,attachImage,backendPage}`）。
+ *
+ * ⚠️ `setTimeout` 在 `lib` 允许（原则 4 的禁令只覆盖 `core/**`）。
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

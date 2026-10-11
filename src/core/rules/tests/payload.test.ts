@@ -12,13 +12,28 @@ const ACC = { id: 'acc_1', name: '豆包01', partition: 'persist:doubao' };
 const NOW = 1_700_000_000_000;
 const ISO = new Date(NOW).toISOString();
 
+/**
+ * 造参助手 —— `TD-16-104` 收窄后 `stylePrefix` / `images` 变**必填**，而本文件绝大多数用例不关心它们。
+ *
+ * ⚠️ 这**不是**"为测试加的兜底分支"（那是被禁的）：它是**测试文件自己的造参助手**，
+ *    生产代码零感知；要测这两个字段时**照样显式传**（会被下面的 spread 覆盖）。
+ */
+type ImgInput = Parameters<typeof buildImagePayload>[0];
+type VidInput = Parameters<typeof buildVideoPayload>[0];
+const buildImg = (
+  input: Omit<ImgInput, 'stylePrefix' | 'images'> & Partial<Pick<ImgInput, 'stylePrefix' | 'images'>>,
+): ReturnType<typeof buildImagePayload> => buildImagePayload({ stylePrefix: '', images: [], ...input });
+const buildVideo = (
+  input: Omit<VidInput, 'stylePrefix' | 'images'> & Partial<Pick<VidInput, 'stylePrefix' | 'images'>>,
+): ReturnType<typeof buildVideoPayload> => buildVideoPayload({ stylePrefix: '', images: [], ...input });
+
 describe('报文公共形状（跨进程契约）', () => {
   it('★ 三种来源都在白名单里', () => {
     expect(SEND_SOURCES).toEqual(['canvas-image-gen', 'canvas-text-node', 'canvas-account-node']);
   });
 
   it('★ 公共字段：apiVersion / action / timestamp / account / autoSend', () => {
-    const p = buildImagePayload({ account: ACC, text: '猫', now: NOW });
+    const p = buildImg({ account: ACC, text: '猫', now: NOW });
     expect(p.apiVersion).toBe('1.0');
     expect(p.action).toBe('account_node_send');
     expect(p.timestamp).toBe(ISO);
@@ -28,14 +43,14 @@ describe('报文公共形状（跨进程契约）', () => {
   });
 
   it('★ partition 缺省 → `persist:doubao`', () => {
-    const p = buildVideoPayload({ account: { id: 'a', name: 'n' }, text: '猫', now: NOW });
+    const p = buildVideo({ account: { id: 'a', name: 'n' }, text: '猫', now: NOW });
     expect(p.account.partition).toBe('persist:doubao');
     expect(p.content.genParams).toEqual({ duration: null, model: null });
   });
 
   it('★ timestamp 由注入的 now 生成（原则 4：core 不得用 Date.now）', () => {
-    const a = buildImagePayload({ account: ACC, text: '猫', now: NOW });
-    const b = buildImagePayload({ account: ACC, text: '猫', now: NOW + 1000 });
+    const a = buildImg({ account: ACC, text: '猫', now: NOW });
+    const b = buildImg({ account: ACC, text: '猫', now: NOW + 1000 });
     expect(a.timestamp).not.toBe(b.timestamp);
     expect(b.timestamp).toBe(new Date(NOW + 1000).toISOString());
   });
@@ -43,11 +58,11 @@ describe('报文公共形状（跨进程契约）', () => {
 
 describe('buildImagePayload（原 `PL`）', () => {
   it('★ source = `canvas-image-gen`', () => {
-    expect(buildImagePayload({ account: ACC, text: '猫', now: NOW }).source).toBe('canvas-image-gen');
+    expect(buildImg({ account: ACC, text: '猫', now: NOW }).source).toBe('canvas-image-gen');
   });
 
   it('★ imageParams 回填夹取后的值（不是重新解析正文）', () => {
-    const p = buildImagePayload({
+    const p = buildImg({
       account: ACC,
       text: '猫',
       count: 99,
@@ -59,26 +74,24 @@ describe('buildImagePayload（原 `PL`）', () => {
   });
 
   it('★ 非法分辨率 → null（不是空串）', () => {
-    const p = buildImagePayload({ account: ACC, text: '猫', resolution: '8K', now: NOW });
+    const p = buildImg({ account: ACC, text: '猫', resolution: '8K', now: NOW });
     expect(p.content.imageParams.resolution).toBeNull();
   });
 
   it('★ 空 model → null', () => {
-    const p = buildImagePayload({ account: ACC, text: '猫', now: NOW });
+    const p = buildImg({ account: ACC, text: '猫', now: NOW });
     expect(p.content.imageParams.model).toBeNull();
   });
 
-  it('images 非数组 → 空数组', () => {
-    const p = buildImagePayload({ account: ACC, text: '猫', now: NOW, images: undefined });
-    expect(p.content.images).toEqual([]);
-  });
+  // ⚠️ 原「`images` 非数组 → 空数组」用例已**删除**（`TD-16-104`）：`images` 现为**必填
+  //   `readonly string[]`**，生产侧 `Array.isArray` 假守卫已删 ⇒ "非数组"在类型层不可能。
 
   it('sourceNodeId 缺省 → null', () => {
-    expect(buildImagePayload({ account: ACC, text: '猫', now: NOW }).sourceNodeId).toBeNull();
+    expect(buildImg({ account: ACC, text: '猫', now: NOW }).sourceNodeId).toBeNull();
   });
 
   it('★ 正文与 imageParams 一致（幂等剥离后）', () => {
-    const p = buildImagePayload({ account: ACC, text: '画一张：猫，图片分辨率 4K', resolution: '2K', now: NOW });
+    const p = buildImg({ account: ACC, text: '画一张：猫，图片分辨率 4K', resolution: '2K', now: NOW });
     expect(p.content.text.match(/画一张[:：]/g)).toHaveLength(1);
     expect(p.content.text).toContain('图片分辨率 2K');
     expect(p.content.imageParams.resolution).toBe('2K');
@@ -87,20 +100,19 @@ describe('buildImagePayload（原 `PL`）', () => {
 
 describe('buildVideoPayload（原 `TL`）', () => {
   it('★ source = `canvas-text-node`；genParams 用 `Number(x) || null`', () => {
-    const p = buildVideoPayload({ account: ACC, text: '猫', model: 'seedance-2.0', duration: 5, now: NOW });
+    const p = buildVideo({ account: ACC, text: '猫', model: 'seedance-2.0', duration: 5, now: NOW });
     expect(p.source).toBe('canvas-text-node');
     expect(p.content.genParams).toEqual({ duration: 5, model: 'seedance-2.0' });
   });
 
-  it('★ duration = 0 / NaN → null（源码 `Number(r) || null`）', () => {
-    expect(buildVideoPayload({ account: ACC, text: '猫', duration: 0, now: NOW }).content.genParams.duration).toBeNull();
-    expect(
-      buildVideoPayload({ account: ACC, text: '猫', duration: 'abc', now: NOW }).content.genParams.duration,
-    ).toBeNull();
+  it('★ duration = 0 → null（源码 `Number(r) || null`）', () => {
+    expect(buildVideo({ account: ACC, text: '猫', duration: 0, now: NOW }).content.genParams.duration).toBeNull();
+    // ⚠️ 原「`duration = 'abc'`（非数值）→ null」的断言已**删除**（`TD-16-104`：`duration` 现为
+    //   `number`，"传入字符串"在类型层已不可能；`0` 这个真实边界仍由上面覆盖）。
   });
 
   it('★ 正文走视频组装（「视频生成 …」+ 参数后缀）', () => {
-    const p = buildVideoPayload({ account: ACC, text: '猫在跳舞', model: 'seedance-2.0', duration: 5, ratio: '16:9', now: NOW });
+    const p = buildVideo({ account: ACC, text: '猫在跳舞', model: 'seedance-2.0', duration: 5, ratio: '16:9', now: NOW });
     expect(p.content.text).toBe('视频生成 猫在跳舞，画面比例 16:9，duration=5，--模型:Seedance 2.0');
   });
 });

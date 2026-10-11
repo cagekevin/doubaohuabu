@@ -24,7 +24,7 @@ import { createGptSite } from './gpt';
  * | `lovart` | 抓取素材（两档降级）+ 页面类型探测 |
  * | `tapnow` | 抓取素材（两档降级）+ 页面类型探测；**不发消息**（原 `fP` 无发送路径） |
  * | `gpt` | **发送**（附参考图 + 页内脚本）；**不抓素材** |
- * | `other` | **暂未实现**（注册表里缺项 ⇒ 调用方报明确错误） |
+ * | `other` | **有意不提供适配器** —— `other` = 用户自填 URL 的**未知站点**，选择器未知 ⇒ 无从适配；**原版亦无** `other` 适配器（取证：`shared.js` 里 `other` 无任何 send/scan/site 分支）⇒ 注册表缺项，调用方报明确错误、**不静默回落**；**不要为"补全"去造一个** |
  */
 export function createSiteRegistry(host: HostPort): SiteRegistry {
   return {

@@ -17,7 +17,8 @@
  *
  * ⚠️ **用法：用 `LS_*` 常量做下标**（它们是字面量类型 ⇒ 类型精确、**零断言**）：
  * ```ts
- * const projects = PERSIST[LS_PROJECTS].read(storage) ?? [];   // Project[]
+ * const r = PERSIST[LS_PROJECTS].read(storage);            // ★ 三态（TD-06-1）
+ * const projects = r.kind === 'ok' ? r.value : [];         //   missing / corrupt 走默认值
  * PERSIST[LS_PROXY_POOL].write(storage, ['http://127.0.0.1:7890']);
  * ```
  * ⚠️ **不提供 `readKey<K>(key: K)` 这类泛型取值器** —— TS 在「泛型 `K` 索引映射类型」时会退化成
@@ -25,7 +26,7 @@
  *    `TD-08-1` 已登记的反模式。用字面量下标既精确又无需断言。
  */
 
-import type { StoragePort } from '@/core/ports';
+import type { StoragePort, StorageRead } from '@/core/ports/storage.port';
 import type { LsValue } from '@/stable/contracts/lsValues';
 import {
   LS_ACCESS_TOKEN,
@@ -70,9 +71,9 @@ type WritableLsKey = Exclude<LsKey, ReadonlyLsKey>;
  */
 type PersistMap = {
   [K in LsKey]: K extends ReadonlyLsKey
-    ? { read(storage: StoragePort): LsValue<K> | null }
+    ? { read(storage: StoragePort): StorageRead<LsValue<K>> }
     : {
-        read(storage: StoragePort): LsValue<K> | null;
+        read(storage: StoragePort): StorageRead<LsValue<K>>;
         write(storage: StoragePort, value: LsValue<K>): void;
       };
 };

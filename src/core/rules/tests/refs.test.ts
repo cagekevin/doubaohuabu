@@ -13,6 +13,9 @@ import {
   matchRefTrigger,
   toRefMarker,
   parseRefChips,
+  refsToChipMarks,
+  refsToRawNames,
+  replaceRefId,
   refsToReferenceLabels,
   renumberRefs,
   type ParsedRef,
@@ -244,5 +247,78 @@ describe('filterRefCandidates', () => {
 
   it('查不到 ⇒ 空数组（不抛）', () => {
     expect(filterRefCandidates(lib, '不存在的名字')).toEqual([]);
+  });
+});
+
+describe('refsToChipMarks（原 `Zc` 40831）', () => {
+  it('★ 与 `parseRefChips` **互逆**：`@[id|名]` → `@图N` → `@[id|名]`', () => {
+    const src = '画一只@[m_1|小猫]，再画@[m_2|小狗]';
+    const parsed = parseRefChips(src);
+    expect(parsed.text).toBe('画一只@图1，再画@图2');
+    expect(refsToChipMarks(parsed.text, parsed.refs)).toBe(src);
+  });
+
+  it('★ 同 id 复用编号 ⇒ 逆变换把两处都还原成同一个 `@[id|名]`', () => {
+    const parsed = parseRefChips('@[m_1|小猫]和@[m_1|小猫]');
+    expect(parsed.text).toBe('@图1和@图1');
+    expect(refsToChipMarks(parsed.text, parsed.refs)).toBe('@[m_1|小猫]和@[m_1|小猫]');
+  });
+
+  it('★ 命中不到的编号 ⇒ **原样保留**（源同；不编造 id）', () => {
+    expect(refsToChipMarks('前@图7后', [ref(1, 'm_1', '小猫')])).toBe('前@图7后');
+  });
+
+  it('空 refs / 空文本 ⇒ 不炸', () => {
+    expect(refsToChipMarks('@图1', [])).toBe('@图1');
+    expect(refsToChipMarks('', [ref(1, 'm_1', '小猫')])).toBe('');
+    expect(refsToChipMarks(null, null)).toBe('');
+  });
+});
+
+describe('refsToRawNames（原 `Z3_1.jsx:792-801` 的内联替换）', () => {
+  it('★ `@图N` → 引用素材的 `rawName`（API 视频提示词用）', () => {
+    const parsed = parseRefChips('@[m_1|小猫]在跑');
+    expect(refsToRawNames(parsed.text, parsed.refs)).toBe('小猫在跑');
+  });
+
+  it('★ `rawName` 会 `trim()`（源 `String(hit.rawName||\u0027\u0027).trim()`）', () => {
+    expect(refsToRawNames('@图1', [ref(1, 'm_1', ' 小猫 ')])).toBe('小猫');
+  });
+
+  it('★ 命中不到编号 ⇒ **原样保留**（源同）', () => {
+    expect(refsToRawNames('前@图7后', [ref(1, 'm_1', '小猫')])).toBe('前@图7后');
+    expect(refsToRawNames('@图1', [])).toBe('@图1');
+  });
+
+  it('空值 ⇒ 空串', () => {
+    expect(refsToRawNames(null, null)).toBe('');
+  });
+});
+
+describe('replaceRefId（原 Gy 26674-26723）', () => {
+  const textNode = (id: string, text: string, materialIds?: string[]) => ({
+    id,
+    type: 'text',
+    data: { text, ...(materialIds ? { materialIds } : {}) } as Record<string, unknown>,
+  });
+  it('★ 改写正文里的 @[旧id|…]（保留新名）与 materialIds', () => {
+    const nodes = [textNode('t1', '画@[m1|小猫]', ['m1']), { id: 'm2', type: 'material', data: { text: '@[m1|小猫]' } }];
+    const out = replaceRefId(nodes, { prevId: 'm1', nextId: 'm9', nextName: '新猫' });
+    expect((out![0]!.data as Record<string, unknown>).text).toBe('画@[m9|新猫]');
+    expect((out![0]!.data as Record<string, unknown>).materialIds).toEqual(['m9']);
+    // ⚠️ 只认 text 类型节点（源同）—— 素材节点即使含同样文本也不动
+    expect((out![1]!.data as Record<string, unknown>).text).toBe('@[m1|小猫]');
+  });
+  it('★ 一处都没改 ⇒ null（调用方据此跳过写回）', () => {
+    expect(replaceRefId([textNode('t1', '无关')], { prevId: 'm1', nextId: 'm9', nextName: 'X' })).toBeNull();
+  });
+  it('★ 空 id / 同名 ⇒ null', () => {
+    const nodes = [textNode('t1', '@[m1|小猫]')];
+    expect(replaceRefId(nodes, { prevId: '', nextId: 'm9', nextName: 'X' })).toBeNull();
+    expect(replaceRefId(nodes, { prevId: 'm1', nextId: 'm1', nextName: 'X' })).toBeNull();
+  });
+  it('★ 非 text 节点 / 空输入 ⇒ 不抛', () => {
+    expect(replaceRefId([], { prevId: 'm1', nextId: 'm9', nextName: 'X' })).toBeNull();
+    expect(replaceRefId(null, { prevId: 'm1', nextId: 'm9', nextName: 'X' })).toBeNull();
   });
 });

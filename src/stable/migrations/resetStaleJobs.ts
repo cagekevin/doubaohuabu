@@ -19,8 +19,7 @@ import { STALE_JOB_STATUSES } from '../model/gen';
 /**
  * 未完成 API 任务状态的**查表**（重启时清理）
  *
- * ★ **派生自唯一真源** `../model/gen` 的 `STALE_JOB_STATUSES`（TD-01-5）——
- *   原先这里自抄了一份 `new Set(['queued','submitting','running'])`，与那份数组各管各的 ⇒ 会漂。
+ * ★ **派生自唯一真源** `../model/gen` 的 `STALE_JOB_STATUSES`（TD-01-5）—— 自抄一份必与真源各管各的 ⇒ 会漂。
  * ⚠️ 显式 `Set<string>`：真源类型是 `ApiJobStatus[]`，而这里要判的是**老数据里的任意字符串**
  *   （脏值也必须能判），故查表按 `string` 收。
  */

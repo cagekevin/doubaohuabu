@@ -72,7 +72,6 @@ export function createMockApi(): ApiPort {
 
     jobCancel: async () => ok({ status: 'cancelled' }),
 
-    jobList: async () => ok([]),
 
     setupGet: async () => ok({ setup: defaultSetup(), usage: {} }),
 

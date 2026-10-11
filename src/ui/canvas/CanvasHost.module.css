@@ -19,3 +19,22 @@
 .emptyTitle {
   composes: emptyTitle from '../common/shared.module.css';
 }
+
+/* `.drop-hint`（原 `_Component42.jsx:1466`）—— 拖**文件**进画布时的提示层
+   ★ **推断样式**：原版 CSS 未入库、mockup 也未收录 ⇒ 按语义补，全 token（待原版 CSS 校 —— TD-16-87）
+   语义：拖拽悬停时在画布中央提示「松开即加入」，且**不吃指针事件**（否则会挡住 drop）。 */
+.dropHint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: var(--z-overlay);
+  transform: translate(-50%, -50%);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}

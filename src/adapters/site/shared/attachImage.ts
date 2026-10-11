@@ -16,6 +16,7 @@
 
 import type { ClipboardPort } from '@/core/ports/host.port';
 import { err, ok, type Result } from '@/core/model/result';
+import { sleep } from '@/lib/async';
 import { ANALYZE_TEXT } from '@/constants/text';
 import {
   ATTACH_IMAGE_ATTEMPTS,
@@ -39,7 +40,7 @@ export interface AttachImageOutcome {
 /** 参考图的固定标签（源版三处都是 `'参考图'`）—— 也用于后端拼临时文件名 */
 export const REFERENCE_IMAGE_LABEL = '参考图';
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 /**
  * 附一张参考图（原 `hS`）

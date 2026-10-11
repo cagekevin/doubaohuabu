@@ -6,6 +6,9 @@
  *   `formatDateTime`）**早就落地**，但**没有页面把它接起来** ⇒ 授权状态对用户不可见、
  *   也没法激活。
  *
+ * ⚠️ **本页不判门**（`TD-02-18`）：`isLicenseUsable` 由**调用方**（`bootstrap/main.tsx:26` 的 `Root`
+ *   与 `core/usecases/license.ts:35`）使用；本页只**展示**状态 + 激活。
+ *
  * ★ **门的判据是既有的**（`core/rules/license.ts:44`）：**只有 `ok` 放行**，
  *   `none`/`invalid`/`expired`/`tampered` 一律落到本页 —— 那是文件里写明的**有意 fail-close**
  *   （「拿不到授权时宁可不进画布」）。本页不重新定义这个判据。
@@ -24,15 +27,15 @@
  * ⚠️ **原则 1 + 铁律 2**：本组件调 `useLicenseOps()`（state 控制器 → `core/usecases/license`），
  *   **不写 store**，也**不直调端口** —— 授权状态不住 store（它是一次性读取的页面数据，
  *   不是要与画布共享的状态）；而"不落 store"**不能**推出"ui 可直调端口"。
- *   ★ 2026-10-11：原先 6 处 `usePorts().host.license.*` 已收口到控制器（TD-16-8）。
+ *   ★ 授权调用一律经控制器（`ui` 不直持 `Ports`，TD-16-8）。
  * ⚠️ 与源一致：**激活成功要等 600ms 才 `onActivated`** —— 否则那条「激活成功，有效期至…」
  *   会一闪而过（用户看不到自己成功了）。
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useLicenseOps } from '@/state';
+import { useHostOps, useLicenseOps } from '@/state';
 import type { LicenseStatus } from '@/core/model/license';
-import { formatDateTime, formatLicenseRemaining, isLicenseUsable } from '@/core/rules/license';
+import { formatDateTime, formatLicenseRemaining } from '@/core/rules/license';
 import { LICENSE_TEXT } from '@/constants/text';
 import styles from './ActivatePage.module.css';
 
@@ -54,6 +57,8 @@ const UNLOCK_DELAY_MS = 600;
 
 export function ActivatePage({ initialStatus, initialError, onActivated }: ActivatePageProps) {
   const licenseOps = useLicenseOps();
+  /** 剪贴板 canonical（`host.clipboard.writeText` 的唯一转发口 —— 见下方 `copyMachineCode`） */
+  const hostOps = useHostOps();
 
   const [machineCode, setMachineCode] = useState('');
   const [status, setStatus] = useState<LicenseStatus | null>(initialStatus);
@@ -116,15 +121,21 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
   /** 复制机器码（原 `w` 32-44） */
   const copyMachineCode = useCallback(async () => {
     if (!machineCode) return;
-    try {
-      await navigator.clipboard.writeText(machineCode);
+    // ★ **越权修正（2026-10-12）**：原为裸 `navigator.clipboard.writeText(machineCode)` ——
+    //   而 canonical `hostOps.copyText` **早已存在**（`state/hostOps.ts:54`），其端口实现内部
+    //   保证 `docs/10` #8 的 **`clear()` → `writeText()` → `await`** 序列（`host.port.ts:74`）。
+    //   裸调**丢掉 `clear()`** ⇒ 旧剪贴板内容残留。⚠️ 本文件头注自述"**不直调端口**"
+    //   ⇒ 这是同一文件里的**自相矛盾**（越权形态：能调生产者导出的转发口却不调）。
+    //   ⚠️ 失败文案**不自己拼**：`msgMachineCopyFailed` 是源的逐字文案（`W3.jsx:32-44`）。
+    const r = await hostOps.copyText(machineCode);
+    if (r.ok) {
       setMsg(LICENSE_TEXT.msgMachineCopied);
       setMsgKind('ok');
-    } catch {
+    } else {
       setMsg(LICENSE_TEXT.msgMachineCopyFailed);
       setMsgKind('err');
     }
-  }, [machineCode]);
+  }, [machineCode, hostOps]);
 
   /** 导出机器码（原 `v` 45-62） */
   const exportMachineCode = useCallback(async () => {
@@ -196,7 +207,6 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
   const invalid = !!status && status.status === 'invalid';
   const tampered = !!status && status.status === 'tampered';
   const showRecheck = expired || invalid || tampered;
-  void isLicenseUsable; // ⚠️ 门的判据由**调用方**（`main.tsx` 的 Root）用，本页只展示
 
   return (
     <div className={styles.screen} data-testid="activate-page">

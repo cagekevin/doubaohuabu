@@ -40,6 +40,20 @@ export interface NodeShellProps {
    * ⚠️ **素材节点绝不能开** —— 它的通栏缩略图正是靠这层 `hidden` 裁出圆角的。
    */
   overflowVisible?: boolean;
+  /**
+   * ★ **卡片级 `title`（HTML 属性）** —— ⚠️ 与上面的 `title`（头部文本）**同名但语义不同**，
+   *   故另起一名。源各节点的根 `<div>` 都挂了一段说明性 `title`（如文生视频那句长说明）。
+   */
+  cardTitle?: string;
+  /**
+   * ★ **卡片级指针/点击**（源各生成节点根 `<div>` 的 `onPointerDown` / `onClick`）
+   *
+   * 用途 = 「整卡点击 → 打开生成面板」（原 `YL.jsx:112-125` 的 `x`/`k`）。
+   * ⚠️ 本组件是**节点根元素**（ReactFlow 渲染的就是它）⇒ 卡片级事件**只能**从这里透传；
+   *    在 `children` 里包一层会改变节点根的宽高语义。
+   */
+  onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** 正文（功能区） */
   children?: ReactNode;
 }
@@ -52,11 +66,17 @@ export function NodeShell({
   handles = true,
   padded = true,
   overflowVisible = false,
+  cardTitle,
+  onPointerDown,
+  onClick,
   children,
 }: NodeShellProps) {
   return (
     <div
       className={`${styles.node} ${selected ? styles.selected : ''} ${overflowVisible ? styles.overflowVisible : ''}`}
+      title={cardTitle}
+      onPointerDown={onPointerDown}
+      onClick={onClick}
     >
       {handles && <NodeHandles />}
       <div className={styles.header}>

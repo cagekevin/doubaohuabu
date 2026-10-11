@@ -52,7 +52,7 @@ state 变更（slices）
 - 失败**不吞**：写 `saveError`（原则 6 错误透传）。
 - 图片外置（base64 → `img://`）在 `usecases/persistProject` 内调 `HostPort.media.saveImageSync`，**唯一出口**。
 - 画廊（`LS_LOVART_GALLERIES`）· 体检历史（`LS_SCAN_HISTORY`）· **预设（`LS_PRESETS`）** 经 **`usecases/persistLsKey`**（判据 C1：单键落盘第 2 处抽出，不复制第二份）。
-- ★ **预设（2026-10-11 接通）**：`slices/global.presets` ⇄ `doubao-presets`。**写方** = 导入工程并入（`state/projectOps`）；**读方** = 导入时按 `id` 判重（`usecases/importProject` 的 `existingPresets`）。⚠️ UI 侧读方（拆分挑预设 / 提示词预设列表）**未落**（`docs/13`）。
+- ★ **预设（2026-10-11 接通）**：`slices/global.presets` ⇄ `doubao-presets`。**写方** = 导入工程并入（`state/projectOps`）+ 文本节点「保存预设」按钮（`slices/global.addPreset` ← `ui/nodes/TextNode`）；**读方** = 导入时按 `id` 判重（`usecases/importProject` 的 `existingPresets`）。⚠️ UI 侧读方（拆分挑预设 / 提示词预设列表）**未落**（`docs/13`）。
 
 ---
 
@@ -96,8 +96,14 @@ ui/canvas/CanvasHost.tsx        【ReactFlow 宿主；8 类节点经 ui/nodes �
   → state/slices/canvas          【唯一写入点：nodes / edges / library + undo 栈】
        ├─ core/rules/undo        【撤销栈纯逻辑（快照时机 = 变更之前）】
        ├─ core/rules/graph       【连线环检测 applyConnection / detachConnection】
-       └─ core/rules/project     【makeNodeId / makeLibraryId】
+       ├─ core/rules/project     【makeNodeId / makeLibraryId】
+       └─ core/rules/arrange     【选中节点网格排布 planSelectedGrid（右键「自动排列」）】
   → state/store 的 setPartial     【画布 → 工程的镜像：唯一同步点】
+
+复制 / 粘贴：CanvasHost（Ctrl/⌘+C/V）→ canvas: copyNodes / pasteNodes + clipboard   【{nodes,edges} 内存态，源亦不落盘】
+剪贴板图片回落：CanvasHost.pasteClipboardImage → hostOps.readClipboardImage → addMaterialFromDrop   【图仍落 img://；TD-16-95 已结】
+拖放：CanvasHost → lib/readDroppedFile → addMaterialFromDrop
+右键菜单：ui/canvas/NodeContextMenu → canvas.arrangeSelectedNodes / pasteNodes · hostOps.revealPath
 ```
 
 **关键边**：`ui → state`（ui 不得 import `adapters`）；`state/store.setPartial` 是 `projects[activeId].data` 的唯一同步点；纯规则全在 `core/rules`（`state/slices/canvas` 只接线 + 注入时钟）。
@@ -138,8 +144,8 @@ bootstrap/container.ts 的 hasElectronHost()   【真实宿主优先】
 | 图片外置（base64 → `img://`） | `stable/migrations/imageExternalize`（`externalizeProjectImages`）← `core/usecases/persistProject` | ✅ 已接线 |
 | 缩略图（`?w=`） | `stable/protocols/img.ts`（`withThumb`，**只对 `img://` 拼**）← `ui/common/Thumb` · `ui/nodes/MaterialNode` · `ui/panels/{GalleryCard, NewImagesThumb, NewImagesPanel}`（另 `core/rules/richText` 的 chip 也经它） | ✅ 已接线 |
 | 去重（精确哈希 / 感知哈希） | `core/rules/dedupe.ts`（`createDedupe`，唯一上游 `lib/phash.ts`） | ⚠️ **生产 0 消费**（仅 tests）—— TD-16-11 |
-| 遮脸 / 马赛克 | `adapters/media/facemask.ts` + `core/rules/facemask.ts` | ⚠️ **生产 0 消费**（仅 tests）—— TD-16-11 |
-| 人脸检测 | `adapters/media/faceDetect.ts` + `core/rules/faceDetect.ts` | ⚠️ **生产 0 消费**（仅 tests）—— TD-16-38 |
+| 遮脸 / 马赛克 | `adapters/media/facemask.ts` + `core/rules/facemask.ts` | 已接线：`MediaPort.applyFaceMask` ← `state/hostOps` ← `ui/nodes/FaceMarksLayer` |
+| 人脸检测 | `adapters/media/faceDetect.ts` + `core/rules/faceDetect.ts` | 已接线：`MediaPort.detectFaces` ← `state/hostOps` ← `ui/nodes/FaceMarksLayer` |
 
 ---
 
@@ -155,7 +161,7 @@ bootstrap/container.ts 的 hasElectronHost()   【真实宿主优先】
 
 ```
 adapters/host/electron/api.onJobEvent(cb)   【只订阅、只转发（原则 2）】
-  → state/subscriptions.ts（createSubscriptions）  【★ 唯一写入点：全仓宿主订阅只许出现在本文件】
+  → state/subscriptions.ts（createSubscriptions）  【★ 唯一把宿主事件**写进 store** 的订阅点（不写 store 的宿主订阅可住 ui —— 见 §五 CanvasHost 的剪贴板时间戳）】
   → settings.upsertApiJob(job)              【按 jobId 覆盖 / 追加】
   → core/usecases/applyApiJobEvent          【纯决策：事件 + 当前节点 → 「要做哪些事」】
   → state/slices/apiLanding.ts（canvas 片） 【★ 落点，顺序逐条对源】
@@ -166,7 +172,7 @@ adapters/host/electron/api.onJobEvent(cb)   【只订阅、只转发（原则 2�
 **关键边**：`onJobEvent` 是 `ApiPort` 唯一的订阅方法；`createSubscriptions` 由 `container.ts` 装配一次。
 **决策与落点分开**：`applyApiJobEvent` **零 store 依赖**（原则 4）；写入只发生在 `state/`（原则 1）。
 **已接线（2026-10-11）**：`usecases/applyApiJobEvent` 的产物落点 —— 至此「API 出片落画布」闭环。
-**仍待接线**：`host.clipboard.onChanged`（剪贴板图片）· `host.media.onDolaMedia`（无水印资源，**需先扩 `HostPort`**）；
+**仍待接线**：仅 `host.media.onDolaMedia`（无水印资源，**需先扩 `HostPort`**）。★ `host.clipboard.onChanged` + `readImage` 已接但**不写 store**（`state/hostOps` ← `ui/canvas/CanvasHost`：Ctrl+V 图片回落 + 失焦/剪贴板时间戳，TD-16-95 已结）——故本文件仍是唯一 store 写入点；
 ⚠️ 决策的 `feed` 字段**有意不落**（源 `imageGenFeed` 无读者，判据 B5）—— TD-16-84。
 
 ---
@@ -183,6 +189,7 @@ ui/panels/LibraryPanel.tsx      → hostOps.importFiles()               【从�
 缩略图：ui/common/Thumb → stable/protocols/img.withThumb(?w=)         【★ 只对 img:// 拼；不加载原图，docs/10 #7】
 工程存储：ui/shell/TopBar（保存路径 / 打开目录 / 占用统计）→ state/projectOps → usecases/projectStorage → ports.host.project.{pickStorage,revealStorage,getStorageSize,activateStorage}
 导入工程：ui/pages/StartPage → state/projectOps.importProjectFile → usecases/importProject → state/slices/global.addImportedProject
+下载（gv-dl）：ui/nodes/{GenVideoNode,GenImageNode} → hostOps.downloadFileAs → ports.host.file.downloadFileAs   【成功 toast 的「在文件夹中显示」→ hostOps.revealPath；NodeContextMenu 同用】
 ```
 
 **关键边**：前两条**已不再从 `ui` 直调端口** —— 改走 `state/hostOps` 控制器（`usePorts` 已从 `@/state` 删除，`ui` **结构上拿不到 `Ports`**）。素材入库后经 `canvas` slice 正常落库。详见 §十八。
@@ -193,27 +200,26 @@ ui/panels/LibraryPanel.tsx      → hostOps.importFiles()               【从�
 
 > 下列模块**已实现且有单测，但生产代码 0 消费** ⇒ 画不出链（是"缺口"，不是"漏画"）。
 > ⚠️ `find-dead` 抓不到它们：它把**测试引用**也算作引用（另：`index.` 关键字文件直接跳过）。
-> ⚠️ **判"未接线"必须追到链尾**：端口方法**被某个 `core/usecases` 调用 ≠ 已接线** —— 还要看**该用例本身有没有生产消费方**。例：`HostPort.api` 全族被 `usecases/apiConfig.ts` 调用，而 `apiConfig` 0 消费 ⇒ 传递性未接线。
+> ⚠️ **判"未接线"必须追到链尾**：端口方法**被某个 `core/usecases` 调用 ≠ 已接线** —— 还要看**该用例本身有没有生产消费方**。例（**2026-10-11 换例**）：`MediaPort.resolveImageRef` / `showInFolder` **无任何调用方**（连用例层都没有）⇒ 未接线。（**原例已失效**：`saveVideoFromUrl` ← `usecases/localizeVideos` 那条链**已接线**，见本表。）
 
 | 层 | 未接线 | 证据 |
 | --- | --- | --- |
-| `core/rules` | `replyKind`（`classifyReply`） · `genProgress` · `node`（`validateNode` / `validateNodes` / `selfCheckDefaults` / `NODE_TYPES`） | 全仓 0 生产消费（仅 tests） |
-| `core/rules` | `dedupe`（`createDedupe`，及其唯一上游 `lib/phash.ts`） · `facemask` | `dedupe` 0 消费；`facemask` 仅被 `adapters/media/{facemask,faceDetect}` 引用（两者亦未接线）—— TD-16-11 |
+| `core/rules` | `node`（部分） | ★ **已接线（2026-10-11）**：`replyKind`（`classifyReply`）· `genProgress`（`resolveGenProgress`）—— 由 `state/sendQueue` 的**排队追问链**消费（← `ui/panels/SendQueuePanel`）。仍仅 tests：`selfCheckDefaults` / `NODE_TYPES`（`validateNodes` 已接 `bootstrap/hydrate`） |
+| `core/rules` | `dedupe`（`createDedupe`，及其唯一上游 `lib/phash.ts`） | `dedupe` 0 消费 —— TD-16-11 |
 | `core/rules` | `refs` 的 `renumberRefs` | 0 生产消费；`refs` 其余纯规则**已接线**（`parseRefChips` / `refsToReferenceLabels` / `matchRefTrigger` / `toRefMarker` / `filterRefCandidates` —— 消费方 `ui/nodes/TextNode` · `ui/nodes/RefAutocomplete` · `ui/panels/GenPanel` · `state/batchSend` · `core/rules/accountNode`） |
-| `core/rules` | `fingerprint`（整文件，`COLLISION_LEVEL_LABEL` 所在）· `media` · `videoLocalize` · `index`（barrel） | `fingerprint` / `media` / `index` **整文件 0 生产消费**（knip 判死，已核）；`videoLocalize` 仅被**未接线**的 `localizeVideos` 引用 ⇒ 传递性未接线 —— TD-02-5。★ **已接线（2026-10-11）**：`genHistory`（`patchGenHistoryAttempt` / `appendGenHistoryAttempt` ← `usecases/applyApiJobEvent` + `state/slices/apiLanding`） |
-| `adapters/media` | `facemask.ts`（`applyFaceMask`） · `faceDetect.ts`（`detectFaces` / `detectFacesInImage`） | 0 生产消费 —— TD-16-11 / TD-16-38 |
+| `core/rules` | `fingerprint`（整文件，`COLLISION_LEVEL_LABEL` 所在）· `media` · `videoLocalize` · `index`（barrel） | `fingerprint` / `media` / `index` **整文件 0 生产消费**（knip 判死，已核）；`videoLocalize` ★ **已接线（2026-10-11）**（← `state/localizeOps` ← `usecases/localizeVideos`）。★ **已接线（2026-10-11）**：`genHistory`（`patchGenHistoryAttempt` / `appendGenHistoryAttempt` ← `usecases/applyApiJobEvent` + `state/slices/apiLanding`） |
+| `adapters/media` | `facemask.ts`（`applyFaceMask`） · `faceDetect.ts`（`detectFaces` / `detectFacesInImage`） | 已接线（链路见上表）：`MediaPort` ← `state/hostOps` ← `ui/nodes/FaceMarksLayer` |
 | `adapters/site/doubao/scripts.ts` | `READ_INPUT_SCRIPT` · `DEEP_QUERY_SCRIPT` · `DOLA_FORCE_SCRIPT`（后两者含**桩**） | **死导出**（在 `dead-code-baseline.json`） |
 | `adapters/site/tapnow/api.ts` | `tapnowListCanvases` · `tapnowCurrentCanvasId` | 死导出（画布节点 API 抓取未接） |
-| `lib` | `url` · `selection`（**直接 0 消费**） · `hash` · `image` · `phash`（**传递性**：仅被未接线模块引用） | 见 `dead-code-baseline.json` |
-| `core/usecases` | `localizeVideos` | 0 生产消费（仅 tests）⇒ 其下游端口方法**传递性未接线**。★ 已接线：`license` · `scanGallery` · `prepareSession`（`state/accountOps`）· `sendQueue`（`state/sendQueue`）· `importProject` · `projectStorage`（均经 `state/projectOps` ← `ui/pages/StartPage` · `ui/shell/TopBar`）· **`apiConfig`（2026-10-11 ← `state/apiOps` ← `ui/panels/ApiSettings`）** |
+| `lib` | `url` · `selection`（**直接 0 消费**） · `hash` · `phash`（**传递性**：仅被未接线模块 `dedupe` 引用）。⚠️ **`image` 已接线**（2026-10-12 复核：`adapters/media/facemask.ts:28` · `adapters/media/faceDetect.ts:41` · `ui/nodes/GenVideoNode.tsx:82` 消费）—— 原写"传递性"是**表漂移** | 见 `dead-code-baseline.json` |
+| `core/usecases` | （本行原为 `localizeVideos`） | ★ **`localizeVideos` 已接线（2026-10-11）**：`state/localizeOps` ← `state/generate`（写完 `resultUrl` 后）＋ `container.startVideoBackfill()`（启动 5s 全量回填）。其余已接线：`license` · `scanGallery` · `prepareSession`（`state/accountOps`）· `sendQueue`（`state/sendQueue`）· `importProject` · `projectStorage`（均经 `state/projectOps` ← `ui/pages/StartPage` · `ui/shell/TopBar`）· **`apiConfig`（2026-10-11 ← `state/apiOps` ← `ui/panels/ApiSettings`）** |
 | `lib/captureRegistry` | `clearCaptureRegistry` | 0 生产 / 0 测试消费（幽灵导出）—— TD-02-3 余项 |
-| `ui/common` | `ContextMenu.tsx`（**整文件幽灵**：全仓 0 `import`） | 0 生产 / 0 测试消费 |
-| `HostPort.clipboard` | `readImage` · `writeImage` · `onChanged` | 0 生产命中（`writeText` **已接线**：`state/hostOps.copyText`） |
-| `HostPort.file` | `downloadFileAs` · `revealPath` | 0 命中。**已接线**：`loadFile`（`usecases/importProject` ← `state/projectOps`）· `selectFolder` / `downloadFile`（`DownloadNode`）· `openExternal`（`GalleryLightbox`）· `saveFile`（`TopBar`）· `importFiles`（`LibraryPanel`）—— 除 `loadFile` 外均经 `state/hostOps` |
-| `HostPort.media` | `saveVideoFromUrl` · `resolveImageRef` · `showInFolder` | `saveVideoFromUrl` 仅被 `usecases/localizeVideos` 调用（该用例未接线）；其余 0 命中。**已接线**：`captureRect`（`state/capture`）· `clearBrowserCache`（`state/accountOps` ← `AccountPanel`）· `startFileDrag`（`state/hostOps.dragFileOut` ← `NewImagesPanel`） |
+| `ui/common` | `ContextMenu.tsx`（**整文件幽灵**：全仓 0 `import`） | 0 生产 / 0 测试消费（⚠️ 与已接线的 `ui/canvas/NodeContextMenu.tsx` 是**两个文件**） |
+| `HostPort.clipboard` | —（全族已接线） | ★ `writeText`（`hostOps.copyText`）· `readImage` + `onChanged`（`hostOps` ← `ui/canvas/CanvasHost`：Ctrl+V 图片回落 + 时间戳）· `writeImage`（`adapters/site/shared/attachImage` ← `doubao/analyze` 附参考图回落档）· `attachImages`（`doubao` / `gpt` 发送链） |
+| `HostPort.file` | —（全族已接线） | ★ `loadFile` / `selectFolder` / `downloadFile` / `openExternal` / `saveFile` / `importFiles`（原已接线，均经 `state/hostOps` 除 `loadFile`）+ `downloadFileAs` / `revealPath`（`hostOps` ← `GenVideoNode` / `GenImageNode` 的 `gv-dl` + `NodeContextMenu`，2026-10-11） |
+| `HostPort.media` | `resolveImageRef` · `showInFolder` | ★ **`saveVideoFromUrl` 已接线（2026-10-11）**（← `state/localizeOps`）；其余 0 命中。**已接线**：`captureRect`（`state/capture`）· `clearBrowserCache`（`state/accountOps` ← `AccountPanel`）· `startFileDrag`（`state/hostOps.dragFileOut` ← `NewImagesPanel`）。⚠️ 右键菜单把源的 `showInFolder` 改道走 `revealPath`（端口方法本身仍 0 消费） |
 | `HostPort.api` | `jobCancel` · `jobList` | 0 生产消费。★ **已接线（2026-10-11）**：`providersList` / `configGet` / `configSet` / `configSetKey` / `configSetSecret` / `configTest` / `setupGet` / `setupSet`（`state/apiOps` ← `ui/panels/ApiSettings`）+ `jobSubmit` / `jobBatch` / `onJobEvent`（生成链 / 订阅） |
 | `BackendPagePort` | `isMounted` · `runScript` · `reload` · `setMuted` | 0 生产消费（仅实现处 + tests）；已接线：`prepareForSend` / `release` / `probeFingerprint` |
-| `StoragePort` | `readRaw` · `remove` · `has` | 0 生产消费；已接线：`read` / `write` / `writeRaw` |
 
 **已接线（不在本表）**：`core/rules/fingerprintDiagnosis` · `core/rules/fingerprintScan`（`ui/panels/AccountPanel` · `ui/panels/FingerprintScanPanel`）· `core/rules/fingerprintGenerator`（`bootstrap/container` · `state/slices/global`）· `core/rules/sendGuard`（`adapters/site/gpt`）· `core/rules/license`（`bootstrap/main` · `ui/pages/ActivatePage`）· `HostPort.account` 全族（`ui/panels/BackendView` + `usecases/prepareSession` ← `state/accountOps`）· `HostPort.license` 全族（经 `state/licenseOps`）· `HostPort.media.startFileDrag`（`state/hostOps.dragFileOut`）· `HostPort.clipboard.writeText`（`state/hostOps.copyText`）。
 

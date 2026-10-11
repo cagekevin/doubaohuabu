@@ -1,3 +1,4 @@
+import { asRecord } from '@/lib/object';
 /**
  * 节点整齐排列（对齐 / 等间距 / 智能网格）—— **纯函数**（★ 必测）
  *
@@ -184,4 +185,77 @@ export function planArrange(
   });
 
   return { ok: true, nodes: next, count: picked.length };
+}
+
+// ── 选中节点的**网格排布**（原 `arrangeSelectedNodes`，`shared.js:29635-29694`）──────────
+//
+// ⚠️ 与上面那组 9 个对齐/分布模式**不是同一件事**：源里右键菜单的「自动排列（整理所选节点）」
+//    是**另写的一个网格排布**（列数 = `ceil(sqrt(n))`、列距 = 最宽 + gap、行距 = 最高 + gap、
+//    锚在选中节点的**最小 x/y** 上），与本文件的 9 模式**共用不了** ⇒ 逐字另落（不合并）。
+
+/** 一个节点的**量测尺寸**（原 `o`，`29646-29655`：`measured → width/height → style → data.w/h → 兜底`） */
+export interface ArrangeSizeLike {
+  id: string;
+  selected?: boolean;
+  parentId?: string | null;
+  position: { x: number; y: number };
+  width?: number | null;
+  height?: number | null;
+  measured?: { width?: number | null; height?: number | null } | null;
+  style?: { width?: unknown; height?: unknown } | null;
+  /** ⚠️ 各节点自己的 `data` 形状 ⇒ 收敛成 `unknown`，在 `arrangeNodeSize` 里用 `asRecord` 取 */
+  data?: unknown;
+}
+
+/** 量一个节点的尺寸（原 `o`，`29646-29655`，**顺序即兜底链**） */
+export function arrangeNodeSize(w: ArrangeSizeLike): { w: number; h: number } {
+  const d = asRecord(w.data);
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const width =
+    num(w.measured?.width ?? null) ?? num(w.width ?? null) ?? num(w.style?.width ?? null) ?? num(d.w ?? null) ?? 200;
+  const height =
+    num(w.measured?.height ?? null) ?? num(w.height ?? null) ?? num(w.style?.height ?? null) ?? num(d.h ?? null) ?? 160;
+  return { w: width, h: height };
+}
+
+/** 网格排布计划：`节点 id → 新位置` */
+export type SelectedGridPlan = Map<string, { x: number; y: number }>;
+
+/**
+ * 选中节点的**网格排布**计划（原 `arrangeSelectedNodes` 的纯半）
+ *
+ * 源（逐行）：
+ *   `s = nodes.filter(w => w.selected && !w.parentId)`（⚠️ **组内子节点不参与**，跟父走）；
+ *   `if (s.length < 2) return;`（**1 个或 0 个 ⇒ 不排**）；
+ *   锚点 = 选中节点的 **`min(x)` / `min(y)`**；列数 = `ceil(sqrt(n))`；
+ *   列距 = **最宽** + `gap`、行距 = **最高** + `gap`；
+ *   第 `i` 个 ⇒ `x = minX + (i % cols) * 列距`、`y = minY + floor(i / cols) * 行距`。
+ *
+ * @returns `null` = **不排**（选中少于 2 个；源直接 `return`，什么都不做）
+ */
+export function planSelectedGrid(
+  nodes: readonly ArrangeSizeLike[],
+  gap = 16,
+): SelectedGridPlan | null {
+  const picked = nodes.filter((n) => n.selected && !n.parentId);
+  if (picked.length < 2) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxW = 0;
+  let maxH = 0;
+  for (const n of picked) {
+    minX = Math.min(minX, n.position.x);
+    minY = Math.min(minY, n.position.y);
+    const size = arrangeNodeSize(n);
+    maxW = Math.max(maxW, size.w);
+    maxH = Math.max(maxH, size.h);
+  }
+  const cols = Math.ceil(Math.sqrt(picked.length));
+  const pitchX = maxW + gap;
+  const pitchY = maxH + gap;
+  const plan: SelectedGridPlan = new Map();
+  picked.forEach((n, i) => {
+    plan.set(n.id, { x: minX + (i % cols) * pitchX, y: minY + Math.floor(i / cols) * pitchY });
+  });
+  return plan;
 }

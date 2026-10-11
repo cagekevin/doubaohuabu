@@ -1,0 +1,54 @@
+/**
+ * 「拆分并套用节点预设」弹窗（原 `.split-preset-list` / `.split-preset-item` / `.split-preset-name` / `.split-preset-meta`）
+ *
+ * ⚠️ **源样式无真源可对**：`docs/mockup/assets/mockup.css` 里**没有** `.split-preset-*`
+ *   （抽取 mockup 时未收这几个类）⇒ 按 token 自写。若日后补上 mockup 真身，这里要回改。
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 按钮走 `ui/common/shared.module.css` **真源**（`composes`），不自造第二份。
+ */
+
+.sub {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.kw {
+  color: var(--color-text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.item {
+  composes: btn btnBlock from '../common/shared.module.css';
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+/* 「直接拆分（不使用预设）」—— 与预设项区分（源 `split-preset-direct` 也是独立一项） */
+.itemDirect {
+  border-style: dashed;
+}
+
+.itemName {
+  font-size: var(--font-size-sm);
+}
+
+.itemMeta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.btnGhost {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}

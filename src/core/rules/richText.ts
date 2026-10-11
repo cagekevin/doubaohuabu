@@ -16,7 +16,9 @@
 
 /** 一段文本里是否已经有 HTML 标签或实体（原 `bL` 40051 的判定，**逐字**） */
 // ⚠️ `@图N` 协议正则的**唯一真源**在 `refs.ts`（原 `Ks` 40795）—— 不复刻第二份
-import { createRefMarkRe } from './refs';
+// ★ **2026-10-12 越权修正**：本文件原自造两个芯片正则（`split(/(@\[[^\]]+\])/g)` 与
+//   `/^@\[([^\]|]+)\|([^\]]+)\]$/`）—— 现均委托 `refs.ts` 的具名工厂（源头已补齐形态）
+import { createRefChipExactRe, createRefMarkRe, createRefSpanRe } from './refs';
 // ⚠️ `img://` + `?w=` 的**协议真源**在 `stable/protocols/img.ts`（本文件不写第二份）
 import { withThumb } from '@/stable/protocols/img';
 
@@ -88,9 +90,9 @@ export interface TextRefMarker {
 /** 拆出「标记 / 普通文本」交替的片段（原 `bL` 40052 的 `split(/(@\[[^\]]+\])/g)`） */
 export function splitRefMarkers(text: string): Array<{ marker: TextRefMarker | null; raw: string }> {
   return String(text ?? '')
-    .split(/(@\[[^\]]+\])/g)
+    .split(createRefSpanRe())
     .map((piece) => {
-      const m = /^@\[([^\]|]+)\|([^\]]+)\]$/.exec(piece);
+      const m = createRefChipExactRe().exec(piece);
       return m ? { marker: { id: m[1] as string, name: m[2] as string }, raw: piece } : { marker: null, raw: piece };
     });
 }

@@ -8,6 +8,18 @@ export const IMAGE_RESOLUTIONS = ['1K', '2K', '4K'] as const;
 export type ImageResolution = (typeof IMAGE_RESOLUTIONS)[number];
 export const DEFAULT_IMAGE_RESOLUTION: ImageResolution = '2K';
 
+/**
+ * 文生图的**出图张数**：默认值与上下界 —— ★ SSOT（`TD-16-35`）
+ *
+ * 依据（**回源**）：原 `_Component45.jsx:146` / `:189`
+ *   `Math.max(1, Math.min(4, imageCount | 0 || 1))` ⇒ **默认 1、钳到 [1,4]**。
+ * ⚠️ 本仓此前 5 处各写裸 `?? 1` / `|| 1`（`GenPanel` ×2 · `core/model/defaults` · `apiLanding` · `generate`）
+ *   ⇒ 同一真相抄 5 份（M3）；且**都没钳**（见 `TD-16-35` 的回源发现，另立一笔）。
+ */
+export const DEFAULT_IMAGE_COUNT = 1;
+export const IMAGE_COUNT_MIN = 1;
+export const IMAGE_COUNT_MAX = 4;
+
 /** 视频模型（原 `ML` 40230-40235） */
 export const VIDEO_MODELS = ['seedance-2.5', 'seedance-2.0', 'seedance-2.0-fast', 'seedance-2.0-mini'] as const;
 export type VideoModel = (typeof VIDEO_MODELS)[number];
@@ -42,6 +54,14 @@ export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
 /** 批量出片用的三比例（原 Z3_1.jsx） */
 export const BATCH_RATIOS: readonly AspectRatio[] = ['16:9', '9:16', '1:1'];
+
+/**
+ * API 视频提交的**固定参数**（原 `Z3_1.jsx:804-809` 的 `$` —— 逐字）
+ *
+ * ⚠️ 源版把这两项**硬编码**进 `params`（与面板里选的模型无关 —— 模型只进 `attempt.edit`）。
+ */
+export const API_VIDEO_RESOLUTION = '1080p';
+export const API_VIDEO_WATERMARK = 'off';
 
 /** 视频时长范围（秒）—— 站点正则 `(?:[4-9]|1[0-9]|2[0-9]|30)` */
 export const VIDEO_DURATION_MIN = 4;

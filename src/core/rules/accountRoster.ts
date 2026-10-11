@@ -6,9 +6,8 @@
  *   - `removeAccount` shared.js:30218-30247（**只取纯的那半**：写 store / 清会话是 state 与宿主的活）
  *   - `nextAccountName` 30167-30180 见 `./accountName`
  *
- * ★ **为什么要有这一层**：实测本工程**没有 `addAccount`/`removeAccount`**、`state` 里只有
- *   `setAccounts`（批量覆盖）、`ui/` 里没有任何账号界面 ⇒ **加不了账号** ⇒ `generate` 的选号池
- *   永远为空 ⇒ 必然报「未配置已登录的豆包 / Dola 账号」。这是链上第 4 环的断点。
+ * ★ **它在链上的位置**：`state/slices/global.ts:393` 的 `addAccount`（+ `state/accountOps`）的**纯半** ——
+ *   写 store / 清会话归它们，本层只算「新名册」。
  *
  * ⚠️ **两处依赖被显式注入（分层要点）**：
  *   ① **指纹生成器**（原 `zc`）—— `addAccount` 在 `hostOS` 不符/版本过期时要**重新生成**指纹；
@@ -21,7 +20,7 @@
 
 import type { Account, Fingerprint } from '@/stable/model/account';
 import { normalizeAccountType } from '@/stable/model/account';
-import { ACCOUNT_ID_PREFIX } from '@/stable/contracts/schemas';
+import { makeId } from './project';
 import { nextAccountName, renumberAccounts } from './accountName';
 
 /** 新账号的输入（原 `addAccount` 的入参 `n`） */
@@ -90,7 +89,9 @@ export function buildNewAccount(
   const type = normalizeAccountType(input.type);
   const groupId = input.groupId ?? null;
   const fpSalt = input.fpSalt || 0;
-  const id = input.id || `${ACCOUNT_ID_PREFIX}${deps.now.toString(36)}`;
+  // ★ **2026-10-12 越权收口**：原在此自拼 `acc_<base36>`（**无 seq 段**，源即如此）—— 委托唯一工厂
+  //   （`makeId(kind, now)` 省略 seq 时就是这个形状）
+  const id = input.id || makeId('account', deps.now);
 
   // 名字：给了就用，不给 ⇒ **其分组内同类型的下一个编号**
   const name = input.name || nextAccountName(accounts, type, groupId);

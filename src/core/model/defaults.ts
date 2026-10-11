@@ -6,7 +6,7 @@
  */
 
 import type { NodeDataOf, NodeType } from '@/stable/model/node';
-import { DEFAULT_IMAGE_RESOLUTION } from '@/constants/models';
+import { DEFAULT_IMAGE_COUNT, DEFAULT_IMAGE_RESOLUTION } from '@/constants/models';
 import { GROUP_Z_INDEX } from '@/constants';
 
 export const NODE_DEFAULTS = {
@@ -42,7 +42,7 @@ export const NODE_DEFAULTS = {
     aspectRatio: '1:1',
     channel: 'doubao',
     sendAccount: 'auto',
-    imageCount: 1,
+    imageCount: DEFAULT_IMAGE_COUNT,
     igResolution: DEFAULT_IMAGE_RESOLUTION,
     styleIds: [],
     linkOrder: [],

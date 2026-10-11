@@ -1,7 +1,7 @@
 /**
  * 对象工具（★ 无状态，L0）
  *
- * ⚠️ **抽出的理由 = 判据 C1 三振出局**：`isRecord` 原先在
+ * ⚠️ **唯一实现**（判据 C1 三振出局）：`isRecord` 只在本文件 —— 别处再写一份 = 同一真相两份。原先分散在
  *    `adapters/site/gpt/index.ts` · `adapters/site/tapnow/api.ts` · `adapters/site/tapnow/index.ts`
  *    **各写了一遍**（三处实现逐字相同）。第 3 次出现即必须抽出（`AGENTS.md` §四 原则 8）。
  *

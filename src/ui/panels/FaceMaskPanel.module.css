@@ -1,0 +1,101 @@
+/**
+ * 遮脸参数面板样式（原 `.face-mask-panel` / `.fmp-*`）
+ *
+ * ⚠️ **mockup 未收录这一族**（`mockup.css` 里 `face-mark` 命中 0 处）⇒ 全部为**推断样式**
+ *    （只用 token）—— 登记 **`TD-03-19`**。
+ * ⚠️ 定位是**视口坐标**（`left/top` 由组件算好）⇒ 用 `position: fixed`（源亦如此）。
+ */
+
+.panel {
+  position: fixed;
+  z-index: var(--z-modal);
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-xs);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  color: var(--color-text-strong);
+  font-weight: 600;
+}
+
+.close {
+  padding: 0 var(--space-half);
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  padding: var(--space-2);
+}
+
+.label {
+  color: var(--color-text-muted);
+}
+
+.effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-half);
+}
+
+.effect {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.effectActive {
+  border-color: var(--color-action-primary);
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+}
+
+.hint {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.val {
+  color: var(--color-text-strong);
+  font-family: var(--font-mono);
+}
+
+.range {
+  width: 100%;
+}
+
+.foot {
+  margin-top: var(--space-half);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+}

@@ -21,6 +21,9 @@
  */
 
 /** 设备像素矩形（原 `$T` 32338-32343 的四字段 —— 与 `MediaPort.captureRect` 的入参同形） */
+import { clamp } from '@/lib/math';
+import { pad2 } from '@/lib/time';
+
 export interface CaptureRectLike {
   x: number;
   y: number;
@@ -50,8 +53,7 @@ export function formatClipTime(seconds: unknown): string {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const mm = Math.floor(total / 60);
   const ss = total % 60;
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${pad(mm)}-${pad(ss)}`;
+  return `${pad2(mm)}-${pad2(ss)}`;
 }
 
 /**
@@ -110,7 +112,7 @@ export function screenshotNodePlacement(
   existingCount: number,
 ): { x: number; y: number } {
   const colW = anchor.width || FALLBACK_VIDEO_W;
-  const n = Math.min(Math.max(0, Math.floor(existingCount) || 0), SCREENSHOT_STACK_MAX);
+  const n = clamp(Math.floor(existingCount) || 0, 0, SCREENSHOT_STACK_MAX);
   return {
     x: (anchor.position.x || 0) + colW + GAP_RIGHT,
     y: (anchor.position.y || 0) + n * STACK_STEP,

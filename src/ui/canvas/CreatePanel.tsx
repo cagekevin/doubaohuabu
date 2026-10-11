@@ -39,6 +39,19 @@ export type CreatePanelState =
       edgeId: string;
       sourceId: string;
       targetId: string;
+    }
+  | {
+      /** ★ 空白处右键（原 `mode:'context'`，`_Component42.jsx:1039-1045`） */
+      mode: 'context';
+      x: number;
+      y: number;
+      /** 画布坐标（落点中心） */
+      flowPos: { x: number; y: number };
+      /**
+       * 右键时画布上**有没有**选中节点（原 `hasSelection`）
+       * ⚠️ **源只存不用** —— 面板标题/三个选项都没读它（逐字保留，见 `docs/13` §3）
+       */
+      hasSelection: boolean;
     };
 
 export interface CreatePanelProps {
@@ -50,6 +63,9 @@ export function CreatePanel({ state, onClose }: CreatePanelProps) {
   const addNode = useStore((s) => s.addNode);
   const insertNodeOnEdge = useStore((s) => s.insertNodeOnEdge);
   const connect = useStore((s) => s.connect);
+  const openGeneratePanel = useStore((s) => s.openGeneratePanel);
+  const openImageGenPanel = useStore((s) => s.openImageGenPanel);
+  const selectOnly = useStore((s) => s.selectOnly);
 
   /**
    * 建节点（原 `ye` → `be` / `ie` / `$`）
@@ -61,16 +77,37 @@ export function CreatePanel({ state, onClose }: CreatePanelProps) {
    *      那部分逻辑在源版分散在多个 action 里，本切片**只建节点**，绑定留到后续切片。
    */
   const create = (type: NodeType): void => {
+    let created: string | null;
     if (state.mode === 'edge') {
-      insertNodeOnEdge(state.edgeId, type);
+      created = insertNodeOnEdge(state.edgeId, type);
     } else {
       const size = nodeCreateSize(type);
       const id = addNode(type, {
         x: state.flowPos.x - size.w / 2,
         y: state.flowPos.y - size.h / 2,
       });
-      // 源版 `connectManyToTarget(sourceIds, newId)`：把来源连到新节点
-      for (const src of state.sourceIds) connect({ source: src, target: id });
+      if (state.mode === 'node') {
+        // 源版 `connectManyToTarget(sourceIds, newId)`：把来源连到新节点
+        for (const src of state.sourceIds) connect({ source: src, target: id });
+      }
+      // ⚠️ `mode:'context'`（空白右键）：源走**同一个 else 分支** ⇒ `connect({source: 新节点,
+      //    target: Ae.sourceId})`，而 `sourceId` 在这个 mode 下是 **undefined** ⇒
+      //    **源的老 bug**（那步必然失败、连不出边）。本实现**跳过连线**，只建节点 ——
+      //    照抄会造出 `target` 为 `undefined` 的坏边。
+      created = id;
+    }
+    /*
+     * ★ **2026-10-11 落（TD-16-90 结）**：源 `_Component42.jsx:761-771` / `818-828` —— 建完**生成类**节点后
+     *   会**选中它并打开对应的生成面板**（`openGeneratePanel` / `openImageGenPanel`）；
+     *   且**三种 mode 下都**会
+     *   `onNodesChange(nodes.map(n => ({type:'select', id:n.id, selected:n.id === B})))`
+     *   —— 即**建完只选新节点**（`_Component42.jsx:761-771` / `818-828`）。
+     *   此前本仓刻意没做（面板按 `genPanelNodeId` 打开、不依赖选中态）—— 现在补齐。
+     */
+    if (created) selectOnly([created]);
+    if (created) {
+      if (type === 'imggen') openImageGenPanel(created);
+      else if (type === 'genvideo') openGeneratePanel(created);
     }
     onClose();
   };

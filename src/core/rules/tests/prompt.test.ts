@@ -100,7 +100,8 @@ describe('W7 · 图片提示词幂等（原 `PL` 的 5 条剥离）', () => {
     // 回源 shared.js:40361-40410 —— PL 没有对空正文早退，只有内部的 im 会返回 ''
     // ⇒ 结果是 `画一张：，只生成 1 张图片`（正文位置为空）
     expect(composeImagePrompt({ text: '   ' })).toBe('画一张：，只生成 1 张图片');
-    expect(composeImagePrompt({})).toBe('画一张：，只生成 1 张图片');
+    // ⚠️ 原「`text` 完全不传 ⇒ 同空正文」的用例已**删除**（`TD-16-104`：`text` 现为必填 `string`，
+    //   "没传 text" 在类型层已不可能；空正文由上面的 `'   '` 用例覆盖）。
   });
 
   it('对比：`composeBody` 才会早退（原 `im`）', () => {
@@ -321,12 +322,18 @@ describe('mergeLinkedTexts（原 sR 35486-35521）', () => {
     );
   });
 
-  it('★ 无 `label` ⇒ **一律进追加组**（不做就地替换）', () => {
-    expect(mergeLinkedTexts('主', [{ text: '补' }])).toBe('主\n\n补');
+  it('★ 空 `label` ⇒ **一律进追加组**（不做就地替换）', () => {
+    // ⚠️ `label` 现为**必填 string**（`TD-16-104` 收窄）—— "无 label" 用**空串**表达（与缺失等价：`''.trim()` 仍为空）
+    expect(mergeLinkedTexts('主', [{ text: '补', label: '' }])).toBe('主\n\n补');
   });
 
   it('★ 主正文为空 ⇒ 只留追加组（不留前导空行）', () => {
-    expect(mergeLinkedTexts('', [{ text: 'a' }, { text: 'b' }])).toBe('a\n\nb');
+    expect(
+      mergeLinkedTexts('', [
+        { text: 'a', label: '' },
+        { text: 'b', label: '' },
+      ]),
+    ).toBe('a\n\nb');
   });
 
   it('空文本条目被忽略', () => {

@@ -4,7 +4,8 @@
  *
  * ★★ **它是什么**：每个账号一个**图片池**（`{accountId: Item[]}`），存"这个 Lovart 账号
  *   能看到/导入过的图"。它被三处使用：① **素材改名**会同步改池里同名条目（27571-27604）；
- *   ② **删账号**要清掉该账号的池（30248-30285）；③ 画廊 UI（**尚未落地**）。
+ *   ② **删账号**要清掉该账号的池（30248-30285）；③ 画廊 UI —— ★ **2026-10-11 更正（TD-07-5）**：
+ *   **已落地**（`ui/panels/GalleryPanel.tsx` + `GalleryLightbox`）。
  *
  * ★ **为什么这一层必须纯**：三个 action 都在改 `{accountId: Item[]}` 这个映射（去重 / 追加 /
  *   按 id 删 / 清空），而 `set` 与落盘是 state 的事（原则 1）⇒ 这里只**返回新映射**。
@@ -28,7 +29,7 @@ import type { LovartGalleryImage, LovartGalleriesMap } from '@/stable/contracts/
 
 /**
  * 画廊里的一张图 —— ⚠️ **形状真源在 `stable/contracts/lsValues.ts`**（持久化契约那个层），
- *   这里只**转发导出**：曾经本文件自己定义过一份，而那与落盘形状是**同一件事**
+ *   这里只**转发导出**（本文件再定义一份 = 与落盘形状**同一件事的两份**）
  *   ⇒ 两处定义迟早漂（同 `原则5/ssot` 的判据）。命名沿用本模块的短名。
  */
 export type LovartImage = LovartGalleryImage;
@@ -92,6 +93,11 @@ export function captureSource(url: string): string {
  * 解析落盘的画廊 JSON（原 `ET` 26637-26649）
  * ⚠️ 与源一致：**空 / 坏数据 / 不是对象 ⇒ `{}`**（**不抛** —— 画廊丢了不该挡住启动）。
  * ⚠️ 数组也是 `'object'`（源版判据就是 `typeof === 'object'`）⇒ 会被返回；照抄。
+ */
+/**
+ * ★ **`TD-07-3` 结清（2026-10-11，回源）**：本函数**当前 0 生产消费**（`grep` 全仓只有定义处与本文档行）。
+ *   · 「坏数据 ⇒ `{}`」的兜底**逐字对源**（原 `ET` 26637 同形，见本文件 `:17` 的表）⇒ **不在此改**；
+ *   · 它是否**删除 / 接线**归**死代码批**（`docs/14` §1.9 一类），不属"兜底不留痕"。
  */
 export function parseLovartGalleries(json: string | null | undefined): LovartGalleries {
   try {

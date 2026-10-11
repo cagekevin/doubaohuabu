@@ -93,8 +93,11 @@ export async function tapnowApi(
     return err('page-error', `接口返回 ${status}${res.error ? '：' + res.error : ''}`, { status });
   }
 
+  // ⚠️ 显式判「到底有没有返回体」（`TD-16-104`）：原先写 `JSON.parse(res.text ?? '')`
+  //   ⇒ 把「页面没给 text」错报成「返回不是 JSON」（**失败分类说错**）。
+  if (typeof res.text !== 'string') return err('page-error', TAPNOW_TEXT.apiAbnormal);
   try {
-    return ok(JSON.parse(res.text ?? ''));
+    return ok(JSON.parse(res.text));
   } catch (e: unknown) {
     return err('page-error', TAPNOW_TEXT.badJson, e);
   }

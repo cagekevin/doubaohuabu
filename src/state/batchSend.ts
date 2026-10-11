@@ -40,7 +40,7 @@ import {
 import { collectLinkedTexts } from '@/core/rules/graph';
 import { stripHtml } from '@/lib/text';
 import { resolveSendAccountForChain, type SendAccountChoice } from '@/core/usecases/sendToSite';
-import { stylePrefixOf } from './generate';
+import { stylePrefixOf } from '@/core/rules/style';
 import {
   runBatchSend,
   type BatchCallbacks,
@@ -60,37 +60,25 @@ export interface BatchSendController {
 const SENDABLE_TYPES: readonly string[] = ['text', 'genvideo'];
 
 /**
- * 发送管道（`prepare` + `transport` + `clear`）—— ★ **批量发送与发送队列共用同一套**
+ * 发送管道（`prepare` + `transport`）—— ★ **批量发送与发送队列共用同一套**
  *
  * ★★ **为什么必须抽出来**（判据 C1 三振出局）：`prepare`（原 `jS`）与 `transport`（原发送闭包）
  *   是**两个**消费者都要的东西 —— `runBatchSend`（原 `x3`）与队列泵（原 `TS`）。
  *   不抽就会有两份 `prepare`，其中一份迟早漏掉某次修正（例如上一步刚补的
  *   `@` 引用/关联文本/样式前缀三件事）。
  *
- * ⚠️ **`picked` 是每份管道自己的闭包状态**（键是**报文对象本身**，见下方注释）——
- *   两次 `createSendPipeline` 各持一份，互不干扰。
- * ⚠️ `clear()` 供批量发送在开跑前重置（原 `batchSend.run` 里的 `picked.clear()`）；
- *   平时靠 `transport` 里**用完即删**自清理。
+ * ★ **TD-03-18**（2026-10-11）：管道此前还有第三个成员 `clear()` —— 它只为清一张
+ *   **走私账号的 Map**（`picked`，键 ＝ **报文对象引用**）。现 `prepare` 把「账号 ＋ 站点」
+ *   直接放进产物、`transport` 从**入参**取 ⇒ **Map 与 `clear()` 一并删除**（无共享状态可清）。
  */
 export interface SendPipeline {
   prepare: PrepareSendFn;
   transport: TransportFn;
-  clear: () => void;
 }
 
 export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline {
 
-  /**
-   * `prepare` 选中的账号与站点 —— `transport` 只收 `operation`（拿不到账号）
-   * ⇒ 必须在这里记住（源版 `jS` 把 account 直接塞进闭包）。
-   *
-   * ⚠️ **键是报文对象本身（引用相等）**，不是 nodeId —— 用 nodeId 当键的话，
-   *    `transport` 拿到的只是 `operation`，反查会**取到第一个节点的账号**（多节点批量下必错）。
-   *    源版 `jS` 是「一个节点一次闭包」所以没这个问题；注入式 API 必须靠引用对上。
-   */
-  const picked = new Map<unknown, SendAccountChoice>();
-
-  const prepare: PrepareSendFn = (nodeId) => {
+  const prepare: PrepareSendFn = (nodeId, opts) => {
     const s = store.useStore.getState();
     const node = s.nodes.find((n) => n.id === nodeId);
     // 原 `jS` 41237-41243：节点不存在或不是 `text`/`genvideo`（`SendFailKind` 里没有 `not-text`
@@ -98,20 +86,33 @@ export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline 
     if (!node || (node.type !== 'text' && node.type !== 'genvideo')) {
       return err('unknown', '节点不存在或不是文本框');
     }
-    const data = node.data as unknown as Record<string, unknown>;
+    const data = node.data;
 
-    // ① 选号（原 `jS` 41247-41292 的 `sendAccount` 五分支；`auto:*` 与 doubao→dola 退级由该函数覆盖）
-    const resolved = resolveSendAccountForChain({
-      accounts: s.accounts,
-      sites: ports.sites,
-      sendAccount: node.type === 'genvideo' ? node.data.sendAccount : (data.sendAccount as string | undefined),
-      busy: busyIdsOf(s.accountBusy, ports.clock.now()),
-      strategy: s.poolStrategy,
-    });
-    // ⚠️ `resolveSendAccountForChain` 的 `all-busy` 不是 `SendFailKind` 的合法值 ⇒
-    //    落到 `busy`（两者对调用方是同一件事：账号暂时不可用）
-    if (!resolved.ok) return err(resolved.reason === 'no-account' ? 'no-account' : 'busy', resolved.note);
-    const choice = resolved.choice;
+    // ① 选号 —— ★ **`TD-03-18`**：调用方（队列）**已经选好并占住**了 ⇒ **直接用**，不再选第二次。
+    //   ⛔ 不要"队列占一次 + 这里再选一次"：占住的账号在忙表里 ⇒ 第二次选号会**跳过它另选一个**
+    //   ⇒ **面板显示的账号 ≠ 实际发送的账号**（且占的那个白占）。现在只有**一套选号**。
+    let choice: SendAccountChoice;
+    const forced = opts?.forced ?? null;
+    if (forced) {
+      choice = {
+        account: forced.account,
+        site: forced.site,
+        type: forced.site.kind,
+        degraded: forced.degraded ?? false,
+      };
+    } else {
+      const resolved = resolveSendAccountForChain({
+        accounts: s.accounts,
+        sites: ports.sites,
+        sendAccount: node.type === 'genvideo' ? node.data.sendAccount : (data.sendAccount as string | undefined),
+        busy: busyIdsOf(s.accountBusy, ports.clock.now()),
+        strategy: s.poolStrategy,
+      });
+      // ⚠️ `resolveSendAccountForChain` 的 `all-busy` 不是 `SendFailKind` 的合法值 ⇒
+      //    落到 `busy`（两者对调用方是同一件事：账号暂时不可用）
+      if (!resolved.ok) return err(resolved.reason === 'no-account' ? 'no-account' : 'busy', resolved.note);
+      choice = resolved.choice;
+    }
 
     // ② `@` 引用（原 `Ru` 24064 + `jS` 41296-41353 的编号与 `fk` 解析）——
     //    ⚠️ **老工程的 `data.text` 里真的带 `@[id|name]` 标记**（源版 `kL` 把 chip 读成这个),
@@ -121,7 +122,7 @@ export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline 
     const nodeMap: Record<string, RefNodeLike> = Object.fromEntries(
       s.nodes.map((n) => [
         n.id,
-        { id: n.id, type: n.type, data: n.data as unknown as Record<string, unknown> },
+        { id: n.id, type: n.type, data: n.data },
       ]),
     );
     const images = parsed.refs
@@ -149,38 +150,40 @@ export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline 
       ratio: node.type === 'genvideo' ? node.data.aspectRatio : (data.aspectRatio as string | undefined),
       images,
       sourceNodeId: node.id,
+      // ★ 2026-10-11（TD-07-1）：前缀拼接改用**纯层** `core/rules/style.stylePrefixOf`，
+      //   并传**当前风格表**（源 `nu(styleIds, G.styles)` 也是查 store 的表，不是内置表）
       stylePrefix: stylePrefixOf(
         (node.type === 'genvideo' ? node.data.styleIds : (data.styleIds as string[] | undefined)) ?? [],
+        store.useStore.getState().styles,
       ),
       now: ports.clock.now(),
     });
 
-    // ⚠️ 用**报文对象本身**当键（见 `picked` 的注释）
-    picked.set(payload, choice);
-    return ok({ account: choice.account, operation: payload });
+    return ok({ account: choice.account, site: choice.site, operation: payload });
   };
 
-  const transport: TransportFn = async (operation, opts) => {
-    // 从**报文对象**反查账号（引用相等；`prepare` 刚写进去）
-    const choice = picked.get(operation);
-    if (!choice) return err('unknown', '发送上下文丢失（未找到账号）');
-    picked.delete(operation); // 用完即清（避免长批量下攒住所有报文）
-
-    void opts?.onProgress;
-    const res = await choice.site.send(choice.account, operation as SendPayload);
-    if (!res.ok) return ok({ ok: false, reason: res.reason, note: res.message });
+  const transport: TransportFn = async ({ account, site, operation }, opts) => {
+    // ★ **`TD-07-8` 接线（回源 `shared.js:40411-40475` 的 `Bu`）**：传输**必须发进度事件** ——
+    //   否则队列侧 `sendQueue.ts` 的处理器（**逐字对源** `shared.js:41729`，只认 `success`/`error`）
+    //   **永不触发**（此前 `void opts?.onProgress;` 把这个缺口盖住了，见 `TD-02-18`）。
+    //   ⚠️ **如实说明**：源 `Bu` 另发 `start` / `retry` / `transport` —— 本实现**没有重试循环**
+    //      （`Bu` 的 `maxRetries` 默认 1），故 `retry` **不可达**（不假装：这里只发 `start`/`success`/`error`）。
+    opts?.onProgress?.({ type: 'start', attempt: 0, maxRetries: 0 });
+    const res = await site.send(account, operation as SendPayload);
+    if (!res.ok) {
+      // 与源同：失败先发 `error`（带原文），再返回结果 —— 两条路都给到调用方
+      opts?.onProgress?.({ type: 'error', note: res.message });
+      return ok({ ok: false, reason: res.reason, note: res.message });
+    }
+    opts?.onProgress?.({ type: 'success' });
     return ok({ ok: true, sessionId: res.value.sessionId });
   };
-  return {
-    prepare,
-    transport,
-    clear: () => picked.clear(),
-  };
+  return { prepare, transport };
 }
 
 export function createBatchSendController(store: AppStore, ports: Ports): BatchSendController {
   // ★ 管道与发送队列**共用同一套**（见 `createSendPipeline` 的头注释）
-  const { prepare, transport, clear } = createSendPipeline(store, ports);
+  const { prepare, transport } = createSendPipeline(store, ports);
 
 
   return {
@@ -192,7 +195,6 @@ export function createBatchSendController(store: AppStore, ports: Ports): BatchS
 
     run(nodeIds, cb) {
       const s = store.useStore.getState();
-      clear();
       return runBatchSend(
         {
           nodeIds,

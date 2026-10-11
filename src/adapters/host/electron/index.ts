@@ -6,7 +6,7 @@
  *
  * 铁律：
  *   - 原则 6：**所有方法返回 `Result`，不抛异常给上层**（`try/catch` 统一收口）
- *   - W1：**不得调用 `preload.js` 不存在的方法**（原 `check-host-api.cjs` 已于 2026-10-11 退役，现靠 tsc + code review）
+ *   - W1：**不得调用 `preload.js` 不存在的方法**（靠 tsc + code review）
  *   - W1：两个 `sendSync`（`activateProjectStorage` / `saveImageSync`）**必须同步调用**，不得 `await`
  */
 
@@ -20,7 +20,8 @@ import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { createElectronProjectPort } from './project';
 import { createElectronSessionPorts } from './session';
 import { createElectronApiPort } from './api';
-import { getHostApi, guard, normalize, HOST_MISSING } from './host-api';
+import { getHostApi, guard, normalize, checkOk, HOST_MISSING } from './host-api';
+import { facePortFns } from '@/adapters/media/facePort';
 
 // 转出给上层（bootstrap 判断是否在 Electron 宿主里）
 export { getHostApi, HOST_MISSING } from './host-api';
@@ -70,7 +71,12 @@ const createFile = (): FilePort => ({
 
   revealPath: async (p: string) => {
     const r = await guard((api) => api.revealPath(p));
-    return r.ok ? ok(undefined) : r;
+    if (!r.ok) return r;
+    // ★ TD-16-74：后端 `reveal-path`（`main.js:1893`）**恒返 `{ok, error}`** ⇒ 必须判**内层** `ok`
+    //   （只判外层 `r.ok` ⇒ 后端说失败也报成功）
+    const c = checkOk(r.value);
+    if (!c.ok) return c;
+    return ok(undefined);
   },
 });
 
@@ -111,11 +117,8 @@ export function createElectronHost(): HostPort {
         const r = await guard((a) => a.saveVideoFromUrl(url, referer));
         return r.ok ? normalize<{ ref: string; size: number }>(r.value) : r;
       },
-      resolveImageRef: async (ref: string) => {
-        const r = await guard((a) => a.resolveImageRef(ref));
-        if (!r.ok) return r;
-        return ok(typeof r.value === 'string' ? r.value : null);
-      },
+      // ⚠️ `resolveImageRef` 已于 2026-10-11 删除（源前端 0 消费者；`img://` 解析是主进程内部的事 ——
+      //    见 `core/ports/host.port.ts` 该处的留证）
       imageFetchDataUrl: async (url: string) => {
         const r = await guard((a) => a.imageFetchDataUrl(url));
         if (!r.ok) return r;
@@ -129,16 +132,22 @@ export function createElectronHost(): HostPort {
       scanFrames: async (req) => {
         const r = await guard((a) => a.lovartScanFrames(req));
         if (!r.ok) return r;
-        const v = r.value as { ok?: boolean; error?: string; items?: unknown[]; href?: string } | null;
-        // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**）
-        // ⚠️ 2026-10-11 收口（TD-04-5）：原写 `v.ok === false` ⇒ **fail-open**（后端漏 `ok` 即当成功）。
-        //   已核后端 `electron/lovart-scan.js:83` 的 handler **每条 return 都带 `ok`** ⇒ 改 `!== true`。
-        if (!v || v.ok !== true) return err('page-error', v?.error ?? '多帧扫描返回失败');
-        return ok({ items: Array.isArray(v.items) ? v.items : [], href: v.href });
+        // ★ 后端 `lovart-scan.js` 的 handler **每条 return 都带 `ok`** ⇒ fail-closed 收口（TD-04-5）
+        const c = checkOk<{ items?: unknown[]; href?: string }>(r.value, {
+          reason: 'page-error',
+          fallback: '多帧扫描返回失败',
+        });
+        if (!c.ok) return c;
+        return ok({ items: Array.isArray(c.value.items) ? c.value.items : [], href: c.value.href });
       },
       showInFolder: async (ref: string) => {
         const r = await guard((a) => a.showInFolder(ref));
-        return r.ok ? ok(undefined) : r;
+        if (!r.ok) return r;
+        // ★ TD-16-74：后端 `show-in-folder`（`main.js:1262`）**恒返 `{ok, error}`** ⇒ 判**内层** `ok`
+        //   （只判外层 `r.ok` ⇒ 后端「未找到对应的本地文件」也报成功）
+        const c = checkOk(r.value);
+        if (!c.ok) return c;
+        return ok(undefined);
       },
       startFileDrag: (payload) => {
         const a = getHostApi();
@@ -153,16 +162,20 @@ export function createElectronHost(): HostPort {
       clearBrowserCache: async () => {
         const r = await guard((a) => a.clearBrowserCache());
         if (!r.ok) return r;
-        const v = r.value as { ok?: boolean; error?: string; cleared?: unknown; failed?: unknown } | null;
-        // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**，与 `scanFrames` 同法）
-        // ⚠️ 2026-10-11 收口（TD-04-5）：`ok === false` ⇒ fail-open。已核后端 `electron/main.js:1201,1213`
-        //   两条 return 都带 `ok` ⇒ 改 `!== true`。
-        if (!v || v.ok !== true) return err('unknown', v?.error ?? '清理浏览器缓存返回失败');
+        // ★ 后端 `main.js:1201,1213` 两条 return 都带 `ok` ⇒ fail-closed 收口（TD-04-5）
+        const c = checkOk<{ cleared?: unknown; failed?: unknown }>(r.value, {
+          fallback: '清理浏览器缓存返回失败',
+        });
+        if (!c.ok) return c;
         return ok({
-          cleared: typeof v.cleared === 'number' ? v.cleared : 0,
-          ...(typeof v.failed === 'number' ? { failed: v.failed } : {}),
+          cleared: typeof c.value.cleared === 'number' ? c.value.cleared : 0,
+          ...(typeof c.value.failed === 'number' ? { failed: c.value.failed } : {}),
         });
       },
+
+      // ★ 人脸检测 / 遮脸（**渲染层本地**能力，不走 IPC）—— 与 mock **共用**一份实现
+      //   （`TD-16-107`：此前 `ui` 直 import `adapters/media`，违反铁律②）
+      ...facePortFns,
     },
     account,
     license: licensePort,

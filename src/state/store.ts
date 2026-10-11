@@ -15,13 +15,25 @@ import { createCanvasSlice, type CanvasSlice } from './slices/canvas';
 import { createGlobalSlice, type GlobalSlice, type GlobalSliceDeps } from './slices/global';
 import { createUiSlice, type UiSlice, type UiFlagKey } from './slices/ui';
 import { PERSIST } from './persistKeys';
+import { LS_CANVAS_DEFAULTS } from '@/stable/contracts/keys';
+import { makeId } from '@/core/rules/project';
 import { createQueueSlice, type QueueSlice } from './slices/queue';
 import { createGallerySlice, type GallerySlice } from './slices/gallery';
 import { createScanSlice, type ScanSlice } from './slices/scan';
 import { createSettingsSlice, type SettingsSlice } from './slices/settings';
+import { createStylesSlice, type StylesSlice } from './slices/styles';
+import { createFaceMaskSlice, type FaceMaskSlice } from './slices/faceMask';
 import { isInlineImage } from '@/stable/protocols/img';
 
-export type AppState = GlobalSlice & CanvasSlice & UiSlice & SettingsSlice & QueueSlice & GallerySlice & ScanSlice;
+export type AppState = GlobalSlice &
+  CanvasSlice &
+  UiSlice &
+  SettingsSlice &
+  QueueSlice &
+  GallerySlice &
+  ScanSlice &
+  StylesSlice &
+  FaceMaskSlice;
 
 /**
  * store 的**对外句柄**类型 —— ★ 结构上**不可写**
@@ -138,7 +150,9 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       ...createCanvasSlice(setPartial, getState, {
         now: () => ports.clock.now(),
         makeEdge: (conn) => ({
-          id: `e_${ports.clock.now().toString(36)}_${++edgeSeq}`,
+          // ★ **2026-10-12 越权收口**：改走**唯一工厂** `makeId('edge', …)` —— 此前自拼
+          //   `e_<base36>_<十进制 seq>`（形状也漂：源 `Pt` 的 seq 段是 base36）
+          id: makeId('edge', ports.clock.now(), ++edgeSeq),
           source: conn.source,
           target: conn.target,
           type: 'interactive',
@@ -151,9 +165,35 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       // ★ UI 开关（折叠 / 只留本画布）的读写在 `persistKeys` 的**唯一落点**上（原版直接 `localStorage`）
       ...createUiSlice({
         now: () => ports.clock.now(),
-        readFlag: (key: UiFlagKey) => PERSIST[key].read(ports.storage) === '1',
+        // ★ TD-06-1：`read` 是三态判别联合 —— 只有 `ok` 且值为 `'1'` 才算开
+        readFlag: (key: UiFlagKey) => {
+          const r = PERSIST[key].read(ports.storage);
+          return r.kind === 'ok' && r.value === '1';
+        },
         writeFlag: (key: UiFlagKey, value: boolean) => {
           PERSIST[key].write(ports.storage, value ? '1' : '0');
+        },
+        /**
+         * 画布默认值（原 `NT()`，`shared.js:26491-26503`）—— ★ 2026-10-12
+         *
+         * ⚠️ 源的三处兜底：`getItem` 抛 / `JSON.parse` 抛 / 结果不是对象 ⇒ **一律** `{model,duration,ratio}` 三空。
+         *   本仓 `PERSIST[...].read` **本就是三态**（`TD-06-1`：`ok` / `empty` / `error`）⇒
+         *   只有 `ok` 才取值，其余走同一份兜底 —— **不必自己再包 `try`**。
+         * ⚠️ 源兜底给的是 `null`（`{model:null,…}`），而本仓契约（`lsValues.ts:27` 的 `CanvasDefaults`）
+         *   声明为**非空** `string`/`number` ⇒ 这里兜 `''`/`0`。两者**等价**：消费点都是 `x || 静态默认`
+         *   （源 `29440-29442`），`null` 与 `''`/`0` 同为 falsy。
+         */
+        readCanvasDefaults: () => {
+          const r = PERSIST[LS_CANVAS_DEFAULTS].read(ports.storage);
+          const v = r.kind === 'ok' ? r.value : null;
+          return {
+            model: v?.model ?? '',
+            duration: v?.duration ?? 0,
+            ratio: v?.ratio ?? '',
+          };
+        },
+        writeCanvasDefaults: (value) => {
+          PERSIST[LS_CANVAS_DEFAULTS].write(ports.storage, value);
         },
       })(setPartial, getState),
       ...createQueueSlice(() => ports.clock.now())(setPartial, getState),
@@ -161,13 +201,18 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       //   ⚠️ `normalizeImage` 与 `canvas` 的 `persistImage` 是**同一实现**（原 `Tn`）⇒ 共用上面那个闭包。
       ...createGallerySlice({
         now: () => ports.clock.now(),
-        idFactory: () => `lg_${ports.clock.now().toString(36)}_${++lgSeq}`,
+        // ★ **2026-10-12 越权收口**：原在此自拼 `lg_…` —— 改委托唯一工厂
+        idFactory: () => makeId('lovartGallery', ports.clock.now(), ++lgSeq),
         normalizeImage: persistImage,
       })(setPartial, getState),
       // ★ 指纹体检历史（独立成片，见 slices/scan.ts 头注释）
       ...createScanSlice(() => ports.clock.now())(setPartial, getState),
       // ★ settings：API 配置族（判据 C2 —— `global` 超 25 字段即按共享范围再分）
       ...createSettingsSlice(setPartial, getState),
+      // ★ styles：风格预设族（同为判据 C2 的独立成片，见 slices/styles.ts 头注释）
+      ...createStylesSlice({ now: () => ports.clock.now() })(setPartial, getState),
+      // ★ faceMask：遮脸族（角标层 / 参数面板 / 检测结果，见 slices/faceMask.ts 头注释）
+      ...createFaceMaskSlice()(setPartial, getState),
     };
   });
 

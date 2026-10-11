@@ -7,16 +7,15 @@
  *   - `vo` shared.js:26527-26554 —— 按**分组**给默认名重新编号（`豆包01` / `豆包02`…）
  *   - `addAccount` 30167-30180 —— 新账号在**其分组内**的下一个编号
  *
- * ★ **为什么现在才落**：`core/rules/accountTransfer.ts`（M11 批 1）只管**导入**侧的判重，
- *   而「新增账号」这条链一直没有落点 —— 实测 `addAccount` / `Mk` / `vo` 在本工程**零命中**，
- *   `state` 里也**只有 `setAccounts`（批量覆盖）**、没有任何账号 UI ⇒ **加不了账号**
- *   ⇒ 选号池永远为空 ⇒ 生成必然报「未配置已登录的豆包 / Dola 账号」。
+ * ★ **它在链上的位置**：本文件的 `makeAccountName` / `nextAccountName` 是 `state/slices/global.ts:222`
+ *   的 `addAccount` 的**纯半**（`core/rules/accountTransfer.ts` 只管导入侧判重，不是同一条链）。
  *
  * ⚠️ 原则 4：本模块不碰时间/宿主；`now` 由调用方注入（只在 `buildNewAccount` 里用到，见下批）。
  */
 
 import type { Account, SiteType } from '@/stable/model/account';
 import { normalizeAccountType, SITE_TYPES } from '@/stable/model/account';
+import { pad2 } from '@/lib/time';
 
 /**
  * 类型 → 默认名前缀（原 `Mk` 26504）
@@ -56,12 +55,9 @@ export function isDefaultAccountName(type: SiteType | string, name: string): boo
   return !!re && re.test(name || '');
 }
 
-/** 编号补零位数（原 `String(c).padStart(2, '0')`） */
-const PAD = 2;
-
 /** 拼一个默认名（`豆包01`） */
 export const makeAccountName = (type: SiteType | string, seq: number): string =>
-  `${accountNamePrefix(type)}${String(seq).padStart(PAD, '0')}`;
+  `${accountNamePrefix(type)}${pad2(seq)}`;
 
 /**
  * 按**分组**给默认名重新编号（原 `vo` 26527）

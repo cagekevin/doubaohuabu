@@ -22,6 +22,7 @@ import { ok, err } from '@/core/model/result';
 import { BATCH_TEXT } from '@/constants/text';
 import type { Account } from '@/stable/model/account';
 import type { CanvasNode } from '@/stable/model/node';
+import type { SitePort } from '@/core/ports/site.port';
 
 const acc = (id: string): Account => ({
   id,
@@ -34,6 +35,17 @@ const acc = (id: string): Account => ({
   autoStart: false,
   fpSalt: 0,
 });
+
+/**
+ * 站点 stub —— 本文件**不真发**（`transport` 本身也是 mock）。
+ * ★ 只为满足 `PreparedSend.site`（TD-03-18 后 `prepare` 必须给全「账号 ＋ 站点」）。
+ */
+const siteStub: SitePort = {
+  kind: 'doubao',
+  scan: async () => ok({ items: [], skipped: 0 }),
+  probe: async () => ok({ usable: true, loggedIn: true }),
+  send: async () => ok({ sessionId: 'stub', endReason: 'settled', results: [] }),
+};
 
 const nodes = (ids: string[]): CanvasNode[] =>
   ids.map((id, i) => ({
@@ -57,7 +69,7 @@ function makeInput(
     nodeIds: ['a'],
     nodes: nodes(['a']),
     isSending: () => false,
-    prepare: () => ok({ account: acc('acc1'), operation: {} }),
+    prepare: () => ok({ account: acc('acc1'), site: siteStub, operation: {} }),
     transport: async () => ok({ ok: true }),
     releaseAccount: (id) => taken.released.push(id),
     ...over,
@@ -97,6 +109,21 @@ describe('runBatchSend · 互斥闩', () => {
   });
 });
 
+describe('runBatchSend · 契约把「账号 ＋ 站点」交给 transport（TD-03-18）', () => {
+  it('★ transport 收到的正是 prepare 选的那个账号与站点（不再靠报文对象引用反查）', async () => {
+    const seen: Array<{ accountId: string; siteKind: string }> = [];
+    const { input, taken } = makeInput({
+      transport: async (t) => {
+        seen.push({ accountId: t.account.id, siteKind: t.site.kind });
+        return ok({ ok: true });
+      },
+    });
+    const r = await runBatchSend(input, cbOf(taken));
+    expect(r.ok).toBe(true);
+    expect(seen).toEqual([{ accountId: 'acc1', siteKind: 'doubao' }]);
+  });
+});
+
 describe('runBatchSend · 顺序与缺失节点', () => {
   it('★ 按视觉顺序发；画布上已没有的 nodeIds ⇒ `skipped 节点已不存在`', async () => {
     const order: string[] = [];
@@ -105,7 +132,7 @@ describe('runBatchSend · 顺序与缺失节点', () => {
       nodes: nodes(['b', 'a']), // y: b=0, a=10 ⇒ 先 b 后 a
       prepare: (id) => {
         order.push(id);
-        return ok({ account: acc('acc1'), operation: {} });
+        return ok({ account: acc('acc1'), site: siteStub, operation: {} });
       },
     });
     const r = await runBatchSend(input, cbOf(taken));
@@ -157,7 +184,7 @@ describe('runBatchSend · 中止与跳过', () => {
       isSending: (id) => id === 'a',
       prepare: () => {
         prepared += 1;
-        return ok({ account: acc('acc1'), operation: {} });
+        return ok({ account: acc('acc1'), site: siteStub, operation: {} });
       },
     });
     const r = await runBatchSend(input, cbOf(taken));
@@ -309,7 +336,7 @@ describe('sendOneNode（原 PS）', () => {
     const sent: string[] = [];
     const input = {
       nodeId: 'a',
-      prepare: () => ok({ account: acc('acc1'), operation: {} }),
+      prepare: () => ok({ account: acc('acc1'), site: siteStub, operation: {} }),
       transport: async () => ok({ ok: true }),
       releaseAccount: (id: string) => released.push(id),
       setState: (e: NodeSendState) => states.push(e),
@@ -327,7 +354,7 @@ describe('sendOneNode（原 PS）', () => {
   });
 
   it('★ 成功 ⇒ 写 recipe + onSent + 成功态', async () => {
-    const t = makeOne({ prepare: () => ok({ account: acc('acc1'), operation: {}, recipe: { r: 1 } }) });
+    const t = makeOne({ prepare: () => ok({ account: acc('acc1'), site: siteStub, operation: {}, recipe: { r: 1 } }) });
     const r = await sendOneNode(t.input);
     expect(t.recipes).toEqual([['a', { r: 1 }]]);
     expect(t.sent).toEqual(['acc1']);
@@ -362,18 +389,21 @@ describe('sendOneNode（原 PS）', () => {
     expect(r).toMatchObject({ ok: false, reason: 'exception', note: '炸了' });
   });
 
-  it('★ 强制指定账号 / 排除清单会透传给 prepare', async () => {
+  it('★ 「已定选择」/ 排除清单会透传给 prepare（`TD-03-18`：不再传裸字符串 id）', async () => {
     const seen: unknown[] = [];
     const t = makeOne({
-      forceAccountId: 'acc9',
+      forced: { account: acc('acc9'), site: siteStub },
       excludeAccountIds: ['x'],
       prepare: (_id, opts) => {
         seen.push(opts);
-        return ok({ account: acc('acc9'), operation: {} });
+        return ok({ account: acc('acc9'), site: siteStub, operation: {} });
       },
     });
     await sendOneNode(t.input);
-    expect(seen[0]).toEqual({ excludeAccountIds: ['x'], forceAccountId: 'acc9' });
+    expect(seen[0]).toEqual({
+      excludeAccountIds: ['x'],
+      forced: { account: acc('acc9'), site: siteStub },
+    });
   });
 
   it('没有 `setRecipe` / `recipe` 缺失 ⇒ 不调、不崩', async () => {

@@ -1,0 +1,192 @@
+/**
+ * 「模糊匹配待确认」面板样式（原 `CL.jsx:834-892` 的 `.fuzzy-*`）
+ *
+ * ⚠️ **原版 CSS 未入库、mockup 也完全未收录**（`mockup.css` 里 `fuzzy-` 命中 **0** 处）
+ *    ⇒ 全部为**推断样式**（只用 token）—— 登记 **`TD-03-17`**。
+ * ⚠️ 落点也是推断：源把面板放在节点内容流里；本仓做成挂在节点**下方**的下拉
+ *    （`position: absolute; top: 100%`）—— 文本节点的 `width/height` 是模型字段，
+ *    走文档流会把节点撑变形。
+ */
+
+/**
+ * 正文内高亮层（原 `CL.jsx:819-833` 的 `.fuzzy-overlay`）
+ *
+ * ⚠️ mockup **未收录**（同 `TD-03-17`）⇒ 推断样式。
+ * ⚠️ 它是**零尺寸参照系**：`left/top:0` + `width/height:0` ⇒ 自身 rect 即「含块的原点」，
+ *    组件里靠它把编辑器坐标系换算过来（见 `FuzzyConfirmPanel` 的量算 effect）。
+ */
+.fuzzyOverlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  /* 压住正文（`NodeShell` 根是 `position:relative`）—— 面板自己再高一层（DOM 顺序在后） */
+  z-index: var(--z-overlay);
+}
+
+/** 一处高亮（原 `.fuzzy-mark` / `.is-current`）—— 半透明底 + 描边，别把字盖住 */
+.fuzzyMark {
+  position: absolute;
+  border-radius: var(--radius-xs);
+  background: var(--color-warning-bg, transparent);
+}
+
+.fuzzyMarkCurrent {
+  outline: 1px solid var(--color-warning);
+}
+
+.fuzzyPanel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 220px;
+  margin-top: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-xs);
+}
+
+.fuzzyHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.fuzzyCurrentMatch {
+  color: var(--color-text-strong);
+}
+
+.fuzzyCurrentName {
+  color: var(--color-text-faint);
+}
+
+.fuzzyFindbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+  flex: none;
+}
+
+.fuzzyNav {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.fuzzyNav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.fuzzyCounter {
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.fuzzyGallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 180px;
+  overflow: auto;
+}
+
+.fuzzyCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-half);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-base);
+  cursor: pointer;
+}
+
+.fuzzyCard:hover {
+  background: var(--color-surface-hover);
+}
+
+.fuzzyThumbWrap {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+}
+
+.fuzzyThumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fuzzyThumbPlaceholder {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+}
+
+.fuzzyCardName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fuzzyKw {
+  background: var(--color-warning-bg, transparent);
+  color: var(--color-text-strong);
+}
+
+.fuzzyCardMatch {
+  flex: none;
+  margin-left: auto;
+  color: var(--color-text-faint);
+}
+
+.fuzzyFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.fuzzyTip {
+  color: var(--color-text-faint);
+}
+
+.fuzzyIgnore {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-2xs);
+  cursor: pointer;
+}

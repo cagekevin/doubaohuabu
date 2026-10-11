@@ -10,6 +10,8 @@ import {
   clamp01,
   clampBoxToImage,
   iou,
+  coverFit,
+  displayFaceRects,
   isUsableFaceBox,
   nmsBoxes,
   toNormalizedFaceBoxes,
@@ -157,5 +159,42 @@ describe('toNormalizedFaceBoxes（原 `VD` 39669 + `kl`）', () => {
 
   it('空输入 → 空', () => {
     expect(toNormalizedFaceBoxes([], 100, 100)).toEqual([]);
+  });
+});
+
+describe('coverFit（原 rL 39905-39923）', () => {
+  it('★ 图更宽 ⇒ 宽度撑满、上下留黑；框更宽 ⇒ 高度撑满、左右留黑', () => {
+    // 框 200×100（比 2），图比 4:1（更宽）⇒ w=200, h=200/4=50, offY=25
+    expect(coverFit(200, 100, 4)).toEqual({ w: 200, h: 50, offX: 0, offY: 25 });
+    // 图比 1:1（比框窄）⇒ h=100, w=100, offX=50
+    expect(coverFit(200, 100, 1)).toEqual({ w: 100, h: 100, offX: 50, offY: 0 });
+  });
+  it('★ 入参有假值 / 比例非正 ⇒ 全 0（源第一句）', () => {
+    expect(coverFit(0, 100, 2)).toEqual({ w: 0, h: 0, offX: 0, offY: 0 });
+    expect(coverFit(200, 100, 0)).toEqual({ w: 0, h: 0, offX: 0, offY: 0 });
+    expect(coverFit(200, 100, -1)).toEqual({ w: 0, h: 0, offX: 0, offY: 0 });
+  });
+});
+
+describe('displayFaceRects（原 sL 39924-39940）', () => {
+  const face = (nx: number, ny: number, nw: number, nh: number) => ({ nx, ny, nw, nh });
+  it('★ 落点 = off + 归一化值 × 有效边长；带下标 i', () => {
+    // 框 200×100、图 2:1 ⇒ 有效区=整框（w=200,h=100,off=0）
+    const out = displayFaceRects([face(0.1, 0.2, 0.3, 0.4)], { w: 200, h: 100 }, 2);
+    expect(out).toEqual([{ i: 0, left: 20, top: 20, width: 60, height: 40 }]);
+  });
+  it('★ 留黑偏移要算进去（图上宽下窄时）', () => {
+    // 框 200×100、图 4:1 ⇒ 有效区 w=200,h=50,offY=25
+    const out = displayFaceRects([face(0, 0, 0.5, 0.5)], { w: 200, h: 100 }, 4);
+    expect(out[0]).toMatchObject({ left: 0, top: 25, width: 100, height: 25 });
+  });
+  it('★ 宽高各取 max(4, …)（源默认 minSide=4，太小点不到）', () => {
+    const out = displayFaceRects([face(0, 0, 0.001, 0.001)], { w: 200, h: 100 }, 2);
+    expect(out[0]).toMatchObject({ width: 4, height: 4 });
+  });
+  it('没脸 / 有效区为 0 ⇒ 空数组', () => {
+    expect(displayFaceRects([], { w: 200, h: 100 }, 2)).toEqual([]);
+    expect(displayFaceRects(null, { w: 200, h: 100 }, 2)).toEqual([]);
+    expect(displayFaceRects([face(0,0,1,1)], { w: 0, h: 0 }, 2)).toEqual([]);
   });
 });

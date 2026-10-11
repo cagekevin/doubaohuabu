@@ -15,7 +15,9 @@ import {
   LS_NEWIMAGES_AUTOCAP,
   LS_NEWIMAGES_CURRENT_ONLY,
   LS_NEWIMAGES_FOLDED,
+  LS_VIEW_HEAD_COLLAPSED,
 } from '@/stable/contracts/keys';
+import type { CanvasDefaults } from '@/stable/contracts/lsValues';
 
 /** 默认 toast 时长（ms） */
 const TOAST_DURATION_MS = 3000;
@@ -23,17 +25,15 @@ const TOAST_DURATION_MS = 3000;
 /**
  * 本片负责持久化的**布尔开关**（原 `zd(key,'0') === '1'` / `Fd(key, v?'1':'0')`）
  *
- * ⚠️ 只列**本片真的用**的键（判据 B5：不留没人读的开关）—— 故不在此列的是：
- *    · `doubao-view-head-collapsed` —— 后台视图头部折叠，本工程还没有那个头部控件。
- *
- * ★ **2026-10-11 并入 `doubao-newimages-autocap`**（原 `u` = **自动值守**总开关；`zd(y0,'0')==='1'`）：
- *   它曾被我标成「按裁定不接」，是**误读**（裁定只覆盖 **Lovart** —— `docs/10` #11 / `main.js:2749`
- *   只点名 Lovart；其余站点**要做**）⇒ 随「非 Lovart 值守」落地一并接线。
+ * ⚠️ **只列本片真的用**的键（判据 B5：不留没人读的开关）—— 四处：
+ *   `doubao-newimages-{autocap,current-only,folded}` + `doubao-view-head-collapsed`（后台视图头部折叠）。
+ * ⚠️ `autocap` = **非 Lovart 站点**的自动值守总开关（`docs/10` #11 / `main.js:2749` 的裁定**只覆盖 Lovart**）。
  */
 export type UiFlagKey =
   | typeof LS_NEWIMAGES_FOLDED
   | typeof LS_NEWIMAGES_CURRENT_ONLY
-  | typeof LS_NEWIMAGES_AUTOCAP;
+  | typeof LS_NEWIMAGES_AUTOCAP
+  | typeof LS_VIEW_HEAD_COLLAPSED;
 
 /** 本片的注入（`state` 不碰 `localStorage` —— 键的读写在 `persistKeys` 的唯一落点上） */
 export interface UiSliceDeps {
@@ -42,6 +42,29 @@ export interface UiSliceDeps {
   readFlag: (key: UiFlagKey) => boolean;
   /** 写一个开关（原 `Fd(key, v ? '1' : '0')`） */
   writeFlag: (key: UiFlagKey, value: boolean) => void;
+  /**
+   * 读「画布默认值」（原 `NT()`，`shared.js:26491-26503`：`JSON.parse` 失败 / 非对象 ⇒ 兜底三空）
+   *
+   * ★ **2026-10-12 落（`docs/15` §3 的 `canvasDefaults` 真缺口）**：它是**对象**，不是 `'0'/'1'` 开关
+   * ⇒ 不走 `readFlag`/`writeFlag`（那两个的签名只收 `UiFlagKey` 且值恒字符串）。
+   */
+  readCanvasDefaults: () => CanvasDefaults;
+  /** 写「画布默认值」（原 `ST(r)`，`shared.js:26484`） */
+  writeCanvasDefaults: (value: CanvasDefaults) => void;
+}
+
+/**
+ * Toast 上的**操作按钮**（原 `showToast(msg, type, duration, o)` 的第 4 参 `o`，`shared.js:30542`）
+ *
+ * ⚠️ **形状逐字对源**：源把它存进 toast 对象（`action: o || null`），`_Component42.jsx:1478-1488`
+ *   渲染成 `<button class="app-toast-action">`；点击时 `stopPropagation` → 调 `onClick` → 清 toast。
+ * ⚠️ **为什么允许 store 里存闭包**：源版就是存闭包（`{label, onClick}`），且 toast **不落盘**
+ *   （不在 `PersistSnapshot` 里）⇒ 无序列化要求。改成"动作描述符 + 在 ui 侧分派"会多一层间接，
+ *   却只服务当前唯一消费者（`GenVideoNode` 的「在文件夹中显示」）。
+ */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
 }
 
 /**
@@ -61,6 +84,8 @@ export interface ToastItem {
    * ⚠️ 等级联合的真源在 `constants/text.ts`（core 不得向上依赖 state）。
    */
   level: ToastLevel;
+  /** ★ 2026-10-11 补：操作按钮（原第 4 参 `o`）—— 缺省则无按钮 */
+  action?: ToastAction;
 }
 
 /** 横幅错误（★ 保留原始 message —— 原则 6：错误不可被掩盖） */
@@ -95,6 +120,36 @@ export interface UiSlice {
   splitKeywordModal: { sourceNodeId: string } | null;
   openSplitKeywordModal: (sourceNodeId: string) => void;
   closeSplitKeywordModal: () => void;
+  /**
+   * ★ **「拆分并套用节点预设」弹窗**（原 `splitPresetPicker`，`shared.js:26775` / `28524-28534`）
+   *   —— **2026-10-12 落**
+   *
+   * **何时开**（源 `te`，`_Component42.jsx:191-206`）：拆分弹窗提交时，`presets` 里**有图预设**
+   * ⇒ **不直接拆**，先开本弹窗让用户挑；没有图预设 ⇒ 直接 `splitDirect`。
+   * ⚠️ 同 `splitKeywordModal`：由**外壳**（`CanvasHost`）渲染 —— 拆分会删掉源节点，
+   *   渲染在节点内的浮层会随之卸载；且节点的 `transform` 会把 `position: fixed` 带偏。
+   */
+  splitPresetPicker: { sourceNodeId: string; keywords: string[] } | null;
+  openSplitPresetPicker: (sourceNodeId: string, keywords: readonly string[]) => void;
+  closeSplitPresetPicker: () => void;
+
+  /**
+   * ★ **生成面板打开的节点**（原 `genPanelNodeId` / `imggenPanelNodeId`，
+   *   `shared.js:31467,31482`；开/关 = `openGeneratePanel`/`closeGeneratePanel`/
+   *   `openImageGenPanel`/`closeImageGenPanel`，同文件 31468-31496）
+   *
+   * ⚠️ **与 `splitKeywordModal` 同法**：面板由**节点内**的卡片点击打开，却由**外壳**渲染
+   *    （`AppShell` 里的 `<GenPanel/>`）。
+   * ⚠️ 源是**两个**面板（`Z3_1.jsx` 文生视频 / `_Component45.jsx` 文生图）各带一个 id；
+   *    本仓的 `GenPanel` 是**二者合一**（既有设计）⇒ 消费侧取「先 imggen 后 genvideo」。
+   * ⚠️ **这是唯一真源**：此前 `GenPanel` 用 `selected` 推导（`docs/14` §4 的登记项）。
+   */
+  genPanelNodeId: string | null;
+  imggenPanelNodeId: string | null;
+  openGeneratePanel: (nodeId: string) => void;
+  closeGeneratePanel: () => void;
+  openImageGenPanel: (nodeId: string) => void;
+  closeImageGenPanel: () => void;
 
   // ── 「出新图」面板的持久化开关（原 `_Component26` 的 `f` / `m` 两个 `useState` + `Fd`）──
   /**
@@ -116,13 +171,41 @@ export interface UiSlice {
   setNewImagesCurrentOnly: (value: boolean) => void;
   setNewImagesAutoWatch: (value: boolean) => void;
 
+  // ── 后台视图头部折叠（原 `_Component43.jsx:3225-3271` 的 `se` ＋ 键 `doubao-view-head-collapsed`）──
+  /**
+   * 后台视图**头部工具栏**是否收起（原 `se`）
+   * ⚠️ 与 `newImagesFolded` 同法：**初值读盘**、切换**立即写盘**（源 `Fd`）——
+   *    不经防抖落盘（它不在 `PersistSnapshot` 里）。
+   */
+  viewHeadCollapsed: boolean;
+  setViewHeadCollapsed: (value: boolean) => void;
+
+  // ── 画布默认值（原 `canvasDefaults`，`shared.js:30457`；键 `doubao-canvas-defaults`）──
+  /**
+   * ★ **新建文本节点吃的默认值**（原 `canvasDefaults`，`shared.js:26760` 附近的 store 声明 ⇒
+   *   初值 `NT()` 读盘、setter `30458-30468`）
+   *
+   * **谁读**：建文本框那两条路 —— 源 `29440-29442`（普通建框）与 `29486-29488`（「重跑」）
+   *   ⇒「`aspectRatio: canvasDefaults.ratio || '16:9'`、`duration: … || 7`、`model: … || null`」。
+   * **谁写**：源里 `setCanvasDefaults` **0 调用** ⇒ 值实际上**只从盘上来**（本仓同此：
+   *   以 `hydrate` 读盘 ⇒ 建节点时消费为主路径；setter 保留以对源，将来有设置 UI 直接可用）。
+   */
+  canvasDefaults: CanvasDefaults;
+  /**
+   * 合并写（原 `setCanvasDefaults`，`shared.js:30458-30468`）
+   * ⚠️ 与源逐字一致：**非对象 ⇒ 直接 `return`（不抛）**；否则 `om({...old, ...patch})` 合并 ＋ **显式落盘**。
+   */
+  setCanvasDefaults: (patch: Partial<CanvasDefaults>) => void;
+
   // ── actions（只做编排，不做业务）──
   /**
    * 推一条 toast
    * @param level 语气（默认 `'info'`）—— **加在第三位**，保证既有 `pushToast(msg)` /
    *   `pushToast(msg, 5000)` 调用**零改动**（向后兼容）
+   * @param action ★ 2026-10-11 补：操作按钮（原 `showToast` 第 4 参）—— **加在第四位**，
+   *   同样保证既有调用零改动；缺省则无按钮（原 `o = null`）
    */
-  pushToast: (message: string, duration?: number, level?: ToastLevel) => void;
+  pushToast: (message: string, duration?: number, level?: ToastLevel, action?: ToastAction) => void;
   dismissToast: (id: string) => void;
   /** 上报后端错误（原始 message 必须原样传入） */
   pushBackendError: (kind: BackendErrorKind, message: string) => void;
@@ -160,14 +243,28 @@ export function createUiSlice(deps: UiSliceDeps) {
     selectedCount: 0,
     activeAccountId: null,
     splitKeywordModal: null,
+    // ★ 「拆分并套用节点预设」（源 `splitPresetPicker: null`，`shared.js:26775`）
+    splitPresetPicker: null,
+    genPanelNodeId: null,
+    imggenPanelNodeId: null,
     nodeSendStates: {},
     // ★ 初值**读盘**（原 `_Component26.jsx:30-45` 的 `zd(y0/v0/w0, '0') === '1'`）
     newImagesFolded: deps.readFlag(LS_NEWIMAGES_FOLDED),
     newImagesCurrentOnly: deps.readFlag(LS_NEWIMAGES_CURRENT_ONLY),
     newImagesAutoWatch: deps.readFlag(LS_NEWIMAGES_AUTOCAP),
+    // ★ 后台视图头部折叠（源 `zd('<view-head-collapsed>','0')==='1'`）
+    viewHeadCollapsed: deps.readFlag(LS_VIEW_HEAD_COLLAPSED),
+    // ★ 画布默认值（源 `canvasDefaults: NT()` —— 读盘）
+    canvasDefaults: deps.readCanvasDefaults(),
 
-    pushToast: (message, duration = TOAST_DURATION_MS, level = 'info') => {
-      set({ toasts: [...get().toasts, { id: nextId('toast'), message, duration, level }] });
+    pushToast: (message, duration = TOAST_DURATION_MS, level = 'info', action) => {
+      set({
+        toasts: [
+          ...get().toasts,
+          // 缺 `action` 时**不写该字段**（原 `action: o || null`；这里用可选属性，语义等价）
+          { id: nextId('toast'), message, duration, level, ...(action ? { action } : {}) },
+        ],
+      });
     },
 
     dismissToast: (id) => {
@@ -192,6 +289,24 @@ export function createUiSlice(deps: UiSliceDeps) {
 
     openSplitKeywordModal: (sourceNodeId) => set({ splitKeywordModal: { sourceNodeId } }),
     closeSplitKeywordModal: () => set({ splitKeywordModal: null }),
+    // ★ 源 `openSplitPresetPicker(n, r)`（`shared.js:28524-28531`）：`keywords: r || []`
+    openSplitPresetPicker: (sourceNodeId, keywords) =>
+      set({ splitPresetPicker: { sourceNodeId, keywords: [...keywords] } }),
+    closeSplitPresetPicker: () => set({ splitPresetPicker: null }),
+
+    // ⚠️ 逐字对源：`open*` 空 id **直接忽略**（`if (n) e({...})`）、`close*` 只在有值时才写
+    openGeneratePanel: (nodeId) => {
+      if (nodeId) set({ genPanelNodeId: nodeId });
+    },
+    closeGeneratePanel: () => {
+      if (get().genPanelNodeId) set({ genPanelNodeId: null });
+    },
+    openImageGenPanel: (nodeId) => {
+      if (nodeId) set({ imggenPanelNodeId: nodeId });
+    },
+    closeImageGenPanel: () => {
+      if (get().imggenPanelNodeId) set({ imggenPanelNodeId: null });
+    },
 
     setNewImagesFolded: (value) => {
       // ⚠️ 与源一致：**先写盘再改状态**（原 `p(le => { Fd(v0, …); return te; })`）
@@ -206,6 +321,25 @@ export function createUiSlice(deps: UiSliceDeps) {
       // ⚠️ 与源一致（原 `he`：`d(le); Fd(y0, …)`）—— **先写盘再改状态**
       deps.writeFlag(LS_NEWIMAGES_AUTOCAP, value);
       set({ newImagesAutoWatch: value });
+      // ★ 后台视图头部折叠（`setViewHeadCollapsed`）与上面三个同法，见下方
+    },
+
+    setViewHeadCollapsed: (value) => {
+      // ⚠️ 与源一致：**先写盘再改状态**（同 `newImagesFolded`）
+      deps.writeFlag(LS_VIEW_HEAD_COLLAPSED, value);
+      set({ viewHeadCollapsed: value });
+    },
+
+    /**
+     * 画布默认值（原 `setCanvasDefaults`，`shared.js:30458-30468`）—— **逐行对源**
+     * ⚠️ 源：`if (!n || typeof n != 'object') return;` ⇒ 非对象**静默返回**（不抛、不改）
+     * ⚠️ 源：**先落盘再改状态**（`e(...)` 之后 `ST(r)`；本仓同序）
+     */
+    setCanvasDefaults: (patch) => {
+      if (!patch || typeof patch !== 'object') return;
+      const next: CanvasDefaults = { ...get().canvasDefaults, ...patch };
+      deps.writeCanvasDefaults(next);
+      set({ canvasDefaults: next });
     },
 
     setNodeSendState: (nodeId, patch) => {

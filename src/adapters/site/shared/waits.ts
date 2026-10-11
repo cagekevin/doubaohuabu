@@ -16,6 +16,8 @@
  * ⚠️ 这里**只等**，不做决策（决策归 `core/usecases`，判据 D1）。
  */
 
+import { sleep } from '@/lib/async';
+import { log } from '@/lib/log';
 import type { WebviewElement } from './webview';
 
 /** 轮询步长（原 `fr(500)`） */
@@ -35,7 +37,7 @@ export const FILE_INPUT_PROBE = '!!document.querySelector("input[type=file]")';
 /** 探针结果（原 `On` 的两种形态，改成判别联合） */
 export type ProbeResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 /**
  * 超时竞速（原 `OP.jsx:59-64` 的 `Promise.race([executeJavaScript, setTimeout])`）
@@ -154,7 +156,7 @@ export async function navigateAndWait(
       el.loadURL?.(url);
     } catch (e: unknown) {
       // ⚠️ `loadURL` 同步抛（URL 非法 / 视图已销毁）⇒ 失败**可见**，再结束为 false
-      console.warn('[webview] loadURL 失败:', e);
+      log.warn('[webview] loadURL 失败:', e);
       finish(false);
     }
   });

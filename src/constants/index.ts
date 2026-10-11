@@ -82,8 +82,34 @@ export const SCAN_CONCURRENCY = 3;
 /**
  * 发送任务的有效时效（ms，原 `qk` 35734 = 3000000 = 50 分钟）
  * ⚠️ 用途：视频回填匹配时，只认「最近 50 分钟内发过」的任务（原 `Kk` 的第三个过滤条件）
+ * ⚠️ 另：源 `zR`（追问循环截止）**同值**（`shared.js:36559`）⇒ 不另立常量，追问循环复用它。
  */
 export const MAX_JOB_AGE_MS = 3000000;
+
+// ── 「排队追问」节奏（★ `TD-16-103` 生产者：源 `GR` 用的三个常量，逐字对源）──
+
+/**
+ * 首次追问的等待（ms，原 `LR` shared.js:36555 = 60000）
+ * ⚠️ 语义：距 `ackedAt`（发出时刻）满 60 秒**才允许第一次追问**（源 `GR` 的 `t === 0` 分支）。
+ */
+export const QUEUE_PING_FIRST_MS = 60000;
+
+/** 相邻两次追问的最小间隔（ms，原 `OR` shared.js:36556 = 300000）—— 源 `GR` 的 `t !== 0` 分支 */
+export const QUEUE_PING_INTERVAL_MS = 300000;
+
+/**
+ * 追问次数上限（原 `Cp` shared.js:36558 = **1**）
+ * ⚠️ 源就是 `1`（**不是笔误**）：一次发送只追问一次，结论定下后靠常规轮询出片。
+ */
+export const QUEUE_PING_MAX = 1;
+
+/**
+ * 启动后**多久**开始回填视频直链（ms，原 `_Component48.jsx:92-99` 的裸 `setTimeout(…, 5000)`）
+ *
+ * 用途：`state/localizeOps.backfill()` —— 把已存的 `genvideo`/`video` 节点里的 `http(s)` 直链
+ * 落盘成 `vid://`（链 18 / `docs/10` #9「视频必须落盘」）。**延迟 5s** 是给启动期让路（源即如此）。
+ */
+export const VIDEO_BACKFILL_DELAY_MS = 5000;
 
 // ── Tapnow 站点（原 `cP` 33271 · `Yl` 内联 · `r0` 33523 · `Kl` 33107）──
 

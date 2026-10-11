@@ -11,6 +11,7 @@
  */
 
 import { FACE_MASK_PATTERN_COLOR } from '@/constants/facemask';
+import { clamp } from './math';
 
 /** 临时 canvas 缓存（原 `bS()` 的 `{tmp, tiles}`） */
 export interface TmpState {
@@ -26,8 +27,6 @@ export type DrawableSource = CanvasImageSource & { readonly width: number; reado
 
 export const createTmpState = (): TmpState => ({ tmp: null, tiles: {} });
 
-const clamp = (v: number, min: number, max: number): number => (v < min ? min : v > max ? max : v);
-
 /** 加载图片（原 `eL`）—— 失败时抛 `decode-fail`（**原文透传**，原则 6） */
 export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -36,6 +35,14 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('decode-fail'));
     img.src = src;
   });
+}
+
+/** 建一个指定尺寸的离屏 canvas（`document.createElement('canvas')` + 设宽高）—— 收口全仓 7 处各自 new */
+export function createCanvas(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
 }
 
 /** 马赛克（原 `XD`）：把区域缩小到 `区域/格子`，再以**关闭插值**放大回去 */
@@ -118,9 +125,7 @@ export function makeDotGridPattern(
   const cached = st.tiles[key];
   if (cached) return ctx.createPattern(cached, 'repeat') ?? color;
 
-  const t = document.createElement('canvas');
-  t.width = cell;
-  t.height = cell;
+  const t = createCanvas(cell, cell);
   const tc = t.getContext('2d');
   if (!tc) return color;
   tc.fillStyle = color;

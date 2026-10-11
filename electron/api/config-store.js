@@ -121,15 +121,22 @@ function createConfigStore(userDataPath, safeStorage) {
     }
   }
 
-  /** 解密密钥（仅主进程内部：引擎提交 / 测试连接用） */
+  /**
+   * 解密密钥（仅主进程内部：引擎提交 / 测试连接用）
+   *
+   * ★ **解密失败必须抛**（TD-13-16）：原实现 `catch { return '' }` ⇒ 与同文件 `loadRaw`
+   *   的「三态不吞」原则**自相矛盾** —— 调用方会把「密钥读不出来」当成「没配密钥」。
+   * ⚠️ **调用方须接住**：`main.js` 的 `api-config:test` 在 `ipcGuard` 内 ✓；
+   *    `job-manager` 的 `submit` / `runJob` 已就地 try/catch（如实报，不回落成"未配"）。
+   */
   function getApiKey(adapter) {
     const cfg = getProviderConfig(adapter);
     if (!cfg.apiKeyEnc) return '';
     try {
       const buf = Buffer.from(cfg.apiKeyEnc, 'base64');
       return safeStorage.decryptString(buf) || '';
-    } catch (_) {
-      return '';
+    } catch (err) {
+      throw new Error(decryptFailMessage('API 密钥', err));
     }
   }
 
@@ -142,8 +149,13 @@ function createConfigStore(userDataPath, safeStorage) {
     const cfg = getProviderConfig(adapter);
     let hint = '';
     if (cfg.apiKeyEnc) {
-      const k = getApiKey(adapter);
-      hint = k ? maskKey(k) : '（密钥解密失败，请重新保存）';
+      try {
+        const k = getApiKey(adapter);
+        hint = k ? maskKey(k) : '（密钥解密失败，请重新保存）';
+      } catch (_) {
+        // ★ TD-13-16：解密失败**如实显示**（原实现靠 `k === ''` 推断，分不清"解密失败"与"解密成空串"）
+        hint = '（密钥解密失败，请重新保存）';
+      }
     }
     return {
       id: adapter.id,
@@ -179,14 +191,15 @@ function createConfigStore(userDataPath, safeStorage) {
     }
   }
 
+  /** 同 `getApiKey`：解密失败**抛**（★ 判据适用面 —— 债里只点名了 `getApiKey`，本处**同形同因**） */
   function getSecretKey(adapter) {
     const cfg = getProviderConfig(adapter);
     if (!cfg.secretKeyEnc) return '';
     try {
       const buf = Buffer.from(cfg.secretKeyEnc, 'base64');
       return safeStorage.decryptString(buf) || '';
-    } catch (_) {
-      return '';
+    } catch (err) {
+      throw new Error(decryptFailMessage('二次密钥（secretKey）', err));
     }
   }
 
@@ -248,6 +261,16 @@ function createConfigStore(userDataPath, safeStorage) {
     hasSecretKey,
     file
   };
+}
+
+/**
+ * 解密失败的统一原文（**不编造** —— 带 safeStorage 的原始 message）
+ *
+ * ★ TD-13-16：`getApiKey` / `getSecretKey` 共用一处（判据 C1：同一句不写两份）。
+ */
+function decryptFailMessage(what, err) {
+  const why = (err && err.message) || String(err);
+  return `${what}解密失败（safeStorage 不可用或密文损坏）：${why} —— 请到「API 服务」重新保存该密钥`;
 }
 
 /** sk-abcdef1234567890 → sk-****7890（保留前 2-6 与后 4） */

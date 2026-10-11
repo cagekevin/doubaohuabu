@@ -10,6 +10,7 @@ import { generateImage, generateVideo, type GenDeps } from '../generate';
 // ⚠️ 从 **SSOT** 导入（`constants`），不从 `generate` 转手 —— TD-03-2
 import { FAILURE_MAX_RETRY } from '@/constants';
 import { ACCOUNT_PICK_TEXT } from '@/constants/text';
+import { FAIL_LABEL } from '@/constants/failure';
 import { ok, err } from '@/core/model/result';
 import type { Account } from '@/stable/model/account';
 import type { SitePort, SiteRegistry, SendPayload } from '@/core/ports/site.port';
@@ -63,7 +64,15 @@ function makeSite(script: Array<{ reason: Parameters<typeof err>[0]; message: st
 
 function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0]; message: string }>) {
   const calls: unknown[] = [];
+  /** ★ 批量调用的实参（`{basePayload, matrix}`）—— 断言报文形状用 */
+  const batchCalls: Array<{ basePayload: unknown; matrix: unknown }> = [];
   let i = 0;
+  /** 取脚本里的下一步（两个提交口**共用同一个游标** —— 失败路径也要能测） */
+  const nextStep = () => {
+    const step = script[Math.min(i, script.length - 1)];
+    i += 1;
+    return step;
+  };
   const api: ApiPort = {
     providersList: async () => ok([]),
     configGet: async () => ok({ providers: [], configs: {} }),
@@ -73,15 +82,24 @@ function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0
     configTest: async () => ok({}),
     jobSubmit: async (payload) => {
       calls.push(payload);
-      const step = script[Math.min(i, script.length - 1)];
-      i += 1;
+      const step = nextStep();
       // ★ 后端只回 `jobId`（不是任务对象）—— 见 `job-manager.js:430`
       if (step && 'ok' in step) return ok({ jobId: 'apj-test-1' });
       return err(step!.reason, step!.message);
     },
-    jobBatch: async () => ok({ jobIds: [], errors: [], total: 0 }),
+    jobBatch: async (basePayload: unknown, matrix: unknown) => {
+      batchCalls.push({ basePayload, matrix });
+      const step = nextStep();
+      if (!step || !('ok' in step)) return err(step!.reason, step!.message);
+      // ★ 与后端同形：`matrix` 逐位展开 ⇒ 逐位回 `jobIds`（`job-manager.js:463-480`）
+      const n = Array.isArray(matrix) ? matrix.length : 0;
+      return ok({
+        jobIds: Array.from({ length: n }, (_, k) => `apj-batch-${k + 1}`),
+        errors: Array.from({ length: n }, () => null),
+        total: n,
+      });
+    },
     jobCancel: async () => ok({ status: 'cancelled' }),
-    jobList: async () => ok([]),
     setupGet: async () =>
       ok({
         setup: { imageProviderId: null, videoProviderId: null, fallbackProviderId: null, concurrency: 3 },
@@ -93,13 +111,13 @@ function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0
       }),
     onJobEvent: () => () => undefined,
   };
-  return { api, calls };
+  return { api, calls, batchCalls };
 }
 
 function makeDeps(
   site: SitePort | null,
   api: ApiPort,
-  over: Partial<Pick<GenDeps, 'holdAccount' | 'releaseAccount'>> = {},
+  over: Partial<Pick<GenDeps, 'holdAccount' | 'releaseAccount' | 'busyIds'>> = {},
 ): GenDeps {
   const sites: SiteRegistry = site ? { doubao: site } : {};
   return {
@@ -110,6 +128,13 @@ function makeDeps(
     // ★ 占用 / 释放（原 `Fi` / `tn`）—— 默认"永远占得到、释放记一笔"
     holdAccount: () => true,
     releaseAccount: () => undefined,
+    // ★ 忙账号（原 `Hk` 的 `accountBusy` 读侧）—— 默认"没人忙"（TD-02-16）
+    busyIds: () => [],
+    // ★ 尝试 id（原 `O$`）—— 测试给**确定性**产出，断言才能写死（真源用时间36 + 自增36）
+    makeAttemptId: (() => {
+      let n = 0;
+      return () => `a-test-${++n}`;
+    })(),
     ...over,
   };
 }
@@ -214,6 +239,40 @@ describe('generateImage · 账号占用与释放（原 Fi / tn）', () => {
       { accounts: [acc('a'), acc('b')], text: '猫', channel: 'doubao', cursor: 0 },
     );
     expect(order).toEqual(['hold:a', 'release:a', 'hold:b', 'release:b']);
+  });
+});
+
+/**
+ * ★ 新增（2026-10-11 · TD-02-16）：**选号必须带 `busy`**
+ *
+ * 病灶：`sendViaWeb` 选号**不传 `busy`** ⇒ 选中正在生成的账号 ⇒ `holdAccount` 失败 ⇒
+ * 直接报 `busy`（**而不是跳过它换下一个空闲号**）。这一组断言"忙号被跳过"。
+ */
+describe('generateImage · 选号跳过忙账号（TD-02-16）', () => {
+  it('★ 忙账号被跳过：cursor=0 时选中的是**下一个空闲号**（不是忙的那个）', async () => {
+    const { site, calls } = makeSite([{ ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    const r = await generateImage(makeDeps(site, api, { busyIds: () => ['a'] }), {
+      accounts: [acc('a'), acc('b')],
+      text: '猫',
+      channel: 'doubao',
+      cursor: 0,
+    });
+    expect(r.ok).toBe(true);
+    expect(calls.map((c) => c.accountId)).toEqual(['b']);
+  });
+
+  it('★ 全忙 ⇒ `busy` + SSOT 文案，且**一个都不发**', async () => {
+    const { site, calls } = makeSite([{ ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    const r = await generateImage(makeDeps(site, api, { busyIds: () => ['a', 'b'] }), {
+      accounts: [acc('a'), acc('b')],
+      text: '猫',
+      channel: 'doubao',
+      cursor: 0,
+    });
+    expect(r).toEqual(err('busy', FAIL_LABEL.busy));
+    expect(calls).toHaveLength(0);
   });
 });
 
@@ -348,21 +407,45 @@ describe('§6.5 原则 6 · 错误透传（**不得改写 / 编造**）', () => 
 });
 
 describe('generateImage / generateVideo · API 通道', () => {
-  it('★ 图片 API 通道 → 走 jobSubmit，返回 via=api + jobs', async () => {
+  it('★ 图片 API 通道 → 走 jobBatch（**张数 = N 个任务**），报文逐字对后端契约', async () => {
     const { site } = makeSite([{ ok: true }]);
-    const { api, calls } = makeApi([{ ok: true }]);
+    const { api, batchCalls } = makeApi([{ ok: true }]);
     const r = await generateImage(makeDeps(site, api), {
       accounts: [],
       text: '一只猫',
       channel: 'api',
-      model: 'Seedream 5.0 Pro',
+      count: 3,
+      styleIds: ['s1'],
+      ratio: '1:1',
+      providerId: 'sd',
+      sourceNodeId: 'ig_1',
+      images: ['data:image/png;base64,BBB'],
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.via).toBe('api');
-    // ★ 后端只回 `jobId`（结果经 `onJobEvent` 推送）—— 不是任务对象
-    expect(r.value.jobId).toBe('apj-test-1');
-    expect(calls).toHaveLength(1);
+    expect(batchCalls).toHaveLength(1);
+    const { basePayload, matrix } = batchCalls[0]!;
+    // ★ 后端 `submit(payload)` 读的就是这六个字段（`job-manager.js:415`）
+    expect(basePayload).toEqual({
+      providerId: 'sd',
+      kind: 'image',
+      // 源 `_Component45.jsx:924`：`${前缀}${正文}`（**不加**额外「，」）且正文本 `trim()`
+      prompt: '水墨风，一只猫',
+      params: { ratio: '1:1' },
+      nodeId: 'ig_1',
+      refSources: ['data:image/png;base64,BBB'],
+    });
+    // 张数 3 ⇒ matrix 是**长度 3 的数组**（源 `Array.from({length:N},()=>({}))`）
+    expect(matrix).toEqual([{}, {}, {}]);
+    expect(r.value.batch!.jobIds).toEqual(['apj-batch-1', 'apj-batch-2', 'apj-batch-3']);
+  });
+
+  it('★ 图片 API 通道：张数缺省 ⇒ 1 个任务（`clampImageCount` 兜底）', async () => {
+    const { site } = makeSite([{ ok: true }]);
+    const { api, batchCalls } = makeApi([{ ok: true }]);
+    await generateImage(makeDeps(site, api), { accounts: [], text: '猫', channel: 'api' });
+    expect((batchCalls[0]!.matrix as unknown[]).length).toBe(1);
   });
 
   it('★ API 通道失败 → 原样转发（message 与 reason 都不改）', async () => {
@@ -376,7 +459,7 @@ describe('generateImage / generateVideo · API 通道', () => {
     expect(r.reason).toBe('quota');
   });
 
-  it('★ 视频 API 通道 batch=true → 走 jobBatch（三比例）', async () => {
+  it('★ 视频 API 通道 batch=true → 走 jobBatch，matrix 是**数组**且**每个变体各带一条 attempt**', async () => {
     const { site } = makeSite([{ ok: true }]);
     const { api } = makeApi([{ ok: true }]);
     const batch = vi.spyOn(api, 'jobBatch');
@@ -385,10 +468,94 @@ describe('generateImage / generateVideo · API 通道', () => {
       text: '猫在跳舞',
       channel: 'api',
       batch: true,
+      providerId: 'kl',
+      providerName: '可灵',
+      duration: 6,
+      model: 'seedance-2.5',
     });
     expect(r.ok).toBe(true);
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0]![1]).toEqual({ ratios: ['16:9', '9:16', '1:1'] });
+    // ★ 后端 `submitBatch` 用 `Array.isArray(matrix)` 判定（job-manager.js:464）——
+    //   传对象会被静默当成空数组 ⇒ 提交 0 个任务却报成功。断言形状即锁死这条 bug。
+    const matrix = batch.mock.calls[0]![1] as Array<{
+      params: { ratio: string };
+      attempt: { id: string; status: string; accountName: string; note: string; params: unknown; edit: unknown };
+    }>;
+    expect(matrix.map((v) => v.params.ratio)).toEqual(['16:9', '9:16', '1:1']);
+    // ★ TD-03-6：每条变体带自己的 attempt（原 `Z3_1.jsx:904-927`）⇒ 出片后 genHistory 才有记录
+    expect(matrix.map((v) => v.attempt.id)).toEqual(['a-test-1', 'a-test-2', 'a-test-3']);
+    expect(matrix.map((v) => v.attempt.status)).toEqual(['pending', 'pending', 'pending']);
+    expect(matrix.map((v) => v.attempt.accountName)).toEqual([
+      'API · 可灵 · 16:9',
+      'API · 可灵 · 9:16',
+      'API · 可灵 · 1:1',
+    ]);
+    expect(matrix.map((v) => v.attempt.note)).toEqual([
+      'API 批量 · 可灵 · 16:9',
+      'API 批量 · 可灵 · 9:16',
+      'API 批量 · 可灵 · 1:1',
+    ]);
+    expect(matrix[1]!.attempt.params).toEqual({ ratio: '9:16', duration: 6, styleId: null });
+    expect(matrix[1]!.attempt.edit).toEqual({
+      text: '猫在跳舞',
+      aspectRatio: '9:16',
+      duration: 6,
+      model: 'seedance-2.5',
+      sendAccount: 'api',
+      styleIds: [],
+    });
+  });
+
+  it('★ 视频 API 通道报文逐字对后端契约（providerId / params / nodeId / refSources / attempt / prompt 含风格前缀）', async () => {
+    const { site } = makeSite([{ ok: true }]);
+    const { api, calls } = makeApi([{ ok: true }]);
+    await generateVideo(makeDeps(site, api), {
+      accounts: [],
+      text: '猫在跳舞',
+      rawText: '@[m_1|小猫]在跳舞',
+      channel: 'api',
+      providerId: 'kl',
+      providerName: '可灵',
+      ratio: '9:16',
+      duration: 6,
+      model: 'seedance-2.5',
+      styleIds: ['s1'],
+      sourceNodeId: 'gv_1',
+      images: ['data:image/png;base64,AAA'],
+    });
+    expect(calls[0]).toEqual({
+      providerId: 'kl',
+      kind: 'video',
+      // 源 `Z3_1.jsx:803`：`${前缀}，${正文}`（前缀自带尾 `，` ⇒ 这里是**双逗号**，逐字保留）
+      prompt: '水墨风，，猫在跳舞',
+      params: { ratio: '9:16', duration: 6, resolution: '1080p', watermark: 'off' },
+      nodeId: 'gv_1',
+      refSources: ['data:image/png;base64,AAA'],
+      // ★ TD-03-6：单发也带 attempt（原 `Z3_1.jsx:810-828`）
+      attempt: {
+        id: 'a-test-1',
+        at: 1_700_000_000_000,
+        accountId: null,
+        accountName: 'API · 可灵',
+        params: { ratio: '9:16', duration: 6, styleId: 's1' },
+        prompt: '水墨风，，猫在跳舞',
+        // ⚠️ `edit.text` 是**原始正文**（源 `N.current`）—— 版本切换要靠它还原节点正文
+        edit: {
+          text: '@[m_1|小猫]在跳舞',
+          aspectRatio: '9:16',
+          duration: 6,
+          model: 'seedance-2.5',
+          sendAccount: 'api',
+          styleIds: ['s1'],
+        },
+        conversationId: null,
+        messageId: null,
+        vid: null,
+        resourceId: null,
+        status: 'pending',
+        note: 'API 通道 · 可灵',
+      },
+    });
   });
 
   it('★ 视频网页通道 → source = `canvas-text-node`', async () => {

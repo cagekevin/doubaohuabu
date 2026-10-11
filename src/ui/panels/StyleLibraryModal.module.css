@@ -1,0 +1,234 @@
+/**
+ * 风格库弹窗样式（原 `US.jsx` 的 `.style-lib-*` / `.slm-*` / `.slep-*`）
+ *
+ * ⚠️ **原版 CSS 未入库、mockup 也未收录** ⇒ 全部为**推断样式**（全 token，无裸色值/裸间距）
+ *    —— 与 `TD-16-87` 家族同类，已登记 **`TD-03-10`**。
+ * ⚠️ 按钮 / 输入框一律 `composes` 真源类（`ui/common/shared.module.css`）。
+ */
+
+/* ── 顶部三颗 tab + hint（原 `.slm-tabs`）── */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.tab {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+.tabActive {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}
+
+.hint {
+  margin-left: auto;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/* ── 卡片网格（原 `.slm-grid-wrap` / `.slm-grid`）── */
+.gridWrap {
+  max-height: 46vh;
+  overflow: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.empty {
+  padding: var(--space-4) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.cardActive {
+  border-color: var(--color-brand);
+}
+
+.cardPick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 68px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.coverGlyph {
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xl);
+}
+
+.check {
+  position: absolute;
+  top: var(--space-half);
+  right: var(--space-half);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-2xs);
+}
+
+.name {
+  overflow: hidden;
+  color: var(--color-text-strong);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardActions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* ── 小按钮（原 `.slm-mini` / `.mini.danger`）── */
+.mini {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  flex: 1;
+}
+
+.miniDanger {
+  composes: btn btnSm btnDanger from '../common/shared.module.css';
+  flex: 1;
+}
+
+.primary {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}
+
+/* ── 编辑页（原 `.style-lib-edit-page` / `.slep-*`）── */
+.edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.editHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.editTitle {
+  overflow: hidden;
+  color: var(--color-text-strong);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editClose {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.editBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.editCover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.editCover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.coverActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.fileInput {
+  display: none;
+}
+
+.fieldLabel {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.input {
+  composes: field from '../common/shared.module.css';
+  width: 100%;
+}
+
+.textarea {
+  composes: field textarea from '../common/shared.module.css';
+  width: 100%;
+}
+
+.editFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.editFootRight {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}

@@ -33,6 +33,7 @@ import {
   INPUT_LOCK_SET_GLOBAL,
   INPUT_LOCK_STATE_GLOBAL,
 } from '@/constants/inputLock';
+import { log } from '@/lib/log';
 import { webviewEval, type WebviewElement } from './webview';
 
 /** 锁的三态（原 `ji` 的入参） */
@@ -139,7 +140,7 @@ export async function withInputLock<T>(view: WebviewElement, fn: () => Promise<T
       await webviewEval(view, inputLockScript('unlock'));
     } catch (e: unknown) {
       // ⚠️ 不吞：明确告警；但**不得**用它覆盖 `fn` 的错误（原则 6）
-      console.warn('[input-lock] 解锁失败（锁可能残留，建议重载该后台页）:', e);
+      log.warn('[input-lock] 解锁失败（锁可能残留，建议重载该后台页）:', e);
     }
   }
 }

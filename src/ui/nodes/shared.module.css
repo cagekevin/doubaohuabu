@@ -134,6 +134,9 @@
 
 .gvwDots {
   display: flex;
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:463 的 `.gvw-dots { gap: 3px }`；
+     3px 不在 `--space-*` 刻度上（2/4/8/…），snap 成 `--space-1`(4px) 就是**偏离源** ⇒ 保留。
+     ⚠️ 依据见 docs/17「间距 / 尺寸的凭证形态」（TD-16-33） */
   gap: 3px;
 }
 
@@ -179,6 +182,290 @@
   font-size: var(--font-size-xs);
 }
 
+/*
+ * ── 生成节点「自绘播放控件」（原 `.gv-play` / `.gv-dur-badge` / `.gv-tl*`，
+ *    `YL.jsx:502-555`）──────────────────────────────────────────────────────────
+ * 样式真源 = `docs/mockup/assets/mockup.css:449-455`。
+ * ⚠️ 同上一段的映射：`--mk-float-inset` → `var(--space-1)`、`--mk-micro-fs` → `var(--font-size-xs)`。
+ * ★ **2026-10-11 口径更正**：mockup **不是**设计真源 —— 它是**我们自己写的预演稿**
+ *   （`docs/mockup/README.md`：用途是「界面预演 / Token 试验田」；`mockup.css` 头注自述
+ *   「位置值是**推断值**……拿到原版 CSS 后只改布局旋钮」）⇒ **mockup 缺某个类 ≠ 原版没有它**。
+ *   故源里的**状态类**一律**按语义补上**（下方 `.gvPlayPlaying` / `.gvDurReal` / `.gvApijob*` /
+ *   `.gvHistBtnOpen`），并**回填 mockup**。⚠️ 这些是**推断样式**，待原版 CSS 校 —— **TD-16-87**。
+ */
+.gvPlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:449 的 `.gv-play { width/height: 26px }` */
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--color-mask-strong);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-xs);
+}
+
+/**
+ * `gv-play.is-playing`（原 `YL.jsx:502`）—— ★ **推断样式**（原版 CSS 未入库）
+ * 语义：视频**正在播放**时，正中那枚播放/暂停浮标**退居次要**（降不透明度）；
+ *       悬停 / 键盘聚焦时恢复满不透明 —— 既表达「正在播放」，又不夺走「点它暂停」的可达性。
+ */
+.gvPlayPlaying {
+  opacity: 0.65;
+}
+.gvPlayPlaying:hover,
+.gvPlayPlaying:focus-visible {
+  opacity: 1;
+}
+
+.gvDurBadge {
+  position: absolute;
+  right: var(--space-1);
+  top: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-mask-strong);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-xs);
+}
+
+/**
+ * `gv-dur-badge.gv-dur-real`（原 `YL.jsx:798`）—— ★ **推断样式**（原版 CSS 未入库）
+ * 语义：这枚徽标显示的是**真实时长**（而非计划时长）⇒ 用**品牌色底高亮**以示区别
+ *       （正文色 `--color-text-on-brand` 不变 ⇒ 对比度不变）。
+ */
+.gvDurReal {
+  background: var(--color-action-primary);
+}
+
+/* `gv-dl` 下载（原 `.gv-dl`，`YL.jsx:513`）—— 舞台右下角浮层 */
+.gvDl {
+  position: absolute;
+  right: var(--space-1);
+  bottom: var(--space-1);
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:451 的 `.gv-dl { width/height: 20px }` */
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-mask-strong);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-xs);
+}
+
+.gvTl {
+  display: flex;
+  align-items: center;
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:452 的 `.gv-tl { height: 14px }` */
+  height: 14px;
+  padding: 0 var(--space-2);
+}
+
+.gvTlTrack {
+  flex: 1;
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:453 的 `.gv-tl-track { height: 3px }` */
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  position: relative;
+}
+
+.gvTlFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-action-primary);
+}
+
+.gvTlKnob {
+  position: absolute;
+  top: 50%;
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:455 的 `.gv-tl-knob { width/height: 8px; border: 2px }` */
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-action-primary);
+  transform: translate(-50%, -50%);
+}
+
+/*
+ * ── `gv-meta`（原 `.gv-meta` / `.gv-dur`，`YL.jsx:557-560`）──────────────────────
+ * 样式真源 = `docs/mockup/assets/mockup.css:456-457`。
+ * ★ **2026-10-11 落点更正**：源把 `gv-meta` 放在**卡片底部**（`gv-stage` 之后的独立行），
+ *   而此前本仓把它经 `NodeShell` 的 `meta` 塞进了**头部右槽**（与源的 `gv-head` 结构不符）
+ *   ⇒ 本刀按源改为底部独立行（头部右槽留给源的 `gv-head-grow` / `gv-hist-btn`）。
+ */
+.gvMeta {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+}
+
+.gvDur {
+  font-family: var(--font-mono);
+}
+
+/*
+ * `gv-apijob` API 任务状态条（原 `.gv-apijob`，`YL.jsx:561`）
+ * 样式真源 = `docs/mockup/assets/mockup.css:458`（逐字译）。
+ * ⚠️ 源另有**每状态**的类 `gv-apijob-<status>`（`YL.jsx:562`）—— ★ **2026-10-11 口径更正后补上**：
+ *    只为**有视觉差异**的两态输出类（`failed` 危险色 / `cancelled` 中性色）；其余四态
+ *    （`queued`/`submitting`/`running`/`downloading`）即本类的 warning 色 ⇒ **不再多一个 no-op 类**。
+ *    ⚠️ 推断样式，待原版 CSS 校 —— **TD-16-87**。
+ */
+.gvApijob {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+}
+
+/** `gv-apijob-failed`（原 `YL.jsx:562`）—— ★ 推断样式：失败 ⇒ 危险色 */
+.gvApijobFailed {
+  color: var(--color-danger-text);
+}
+
+/** `gv-apijob-cancelled`（原 `YL.jsx:562`）—— ★ 推断样式：已取消 ⇒ 中性色（不再告警） */
+.gvApijobCancelled {
+  color: var(--color-text-muted);
+}
+
+/* `ig-chip-status`（原 `.ig-chip-status`，`ZL.jsx:218`）—— 样式真源 = mockup.css:466（逐字译） */
+.igChipStatus {
+  flex-shrink: 0;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/*
+ * `gv-frame-actions`（原 `.gv-frame-actions`，`YL.jsx:564`）—— 卡片最下方的三帧按钮行
+ * 样式真源 = `docs/mockup/assets/mockup.css:459`（逐字译）。
+ * ⚠️ `.gv-frame-btn` mockup **未定义** ⇒ 走**真源按钮类**（`composes`），不编造配色。
+ */
+.gvFrameActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.gvFrameBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/*
+ * ── 历史版本（`gv-hist-btn` / `gv-hist-pop`，原 `YL.jsx:401-470,479-483,585-620`）──
+ * ⚠️ 原版 CSS 未入库、mockup 也**没有**收录这些类 ⇒ 按**源语义**补（全 token），**并回填 mockup**。
+ * ⚠️ 宽度 `264px` **来自源**：`YL.jsx:415` 的夹取式 `innerWidth - 264 - 8` 假定弹层宽 264。
+ *    `max-height: 60vh` 是**本实现补的**（源无该约束；不补的话 20 条会很长）。
+ * ⚠️ 全部为**推断样式**，待原版 CSS 校 —— **TD-16-92**。
+ */
+.gvHistBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/**
+ * `gv-hist-btn.is-open`（原 `YL.jsx:479` / `ZL.jsx:221`）—— ★ **推断样式**
+ * 语义：弹层**正开着**时，按钮保持「按下 / 激活」观感（与真源 `.btnGhost:hover` 同底色）。
+ * ⚠️ 用复合选择器抬特异性：`.gvHistBtn` 的底色来自 `composes` 进来的 `.btnGhost`（另一个文件），
+ *    **两文件的书写顺序不确定** ⇒ 单类同优先级会靠运气，这里显式压过它。
+ */
+.gvHistBtn.gvHistBtnOpen {
+  background: var(--btn-ghost-bg-hover);
+}
+
+.gvHistPop {
+  position: fixed;
+  z-index: var(--z-overlay);
+  /* ssot-space-ok: 逐字对源 —— `YL.jsx:415` 的 `innerWidth - 264 - 8` 假定弹层宽 264px */
+  width: 264px;
+  max-height: 60vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.gvHistTitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.gvHistItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gvHistItemSel {
+  background: var(--color-selection-bg);
+}
+
+.gvHistItemDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gvHistThumb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--space-5);
+  height: var(--space-4);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+  object-fit: cover;
+  font-size: var(--font-size-xs);
+}
+
+.gvHistThumbEmpty {
+  color: var(--color-text-faint);
+}
+
+.gvHistMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gvHistRow {
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.gvHistPrompt {
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* 组节点 */
 .group {
   width: 100%;
@@ -193,6 +480,9 @@
  */
 .groupLabel {
   position: absolute;
+  /* ssot-space-ok: 本块**尚未接线**（见上方注释：样式已按原版 `.group-label` 译好、TSX 未引用）
+     —— `-20px` 是那份译法的值；**待组标签接线时**一并按 docs/17 复核（可能改为 token）。
+     依据见 docs/17「间距 / 尺寸的凭证形态」（TD-16-33） */
   top: -20px;
   left: 0;
   color: var(--color-text-muted);
@@ -894,6 +1184,226 @@
   word-break: break-all;
 }
 
+/**
+ * 出片记录的一行（原 `BL.jsx:457-462` 的 `.vn-attempt` / `.vn-at-*`）
+ *
+ * ⚠️ **mockup 未收录这一族**（`mockup.css` 只有 `.vn-panel*` / `.vn-hist-chip` / `.vn-act` / `.vn-spec`）
+ *    ⇒ 本组为**推断样式**（全 token）—— 已登记 `TD-03-12`。
+ * ⚠️ 源那半的类名是 `vn-attempt ${status}`（动态后缀）；CSS Modules 不能拼类名 ⇒
+ *    `VideoNode` 用显式查表（见 `ATTEMPT_STATUS_CLASS`）。
+ */
+.videoAttempt {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: var(--space-half) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-2xs);
+  color: var(--color-text-muted);
+}
+
+.videoAttempt:last-child {
+  border-bottom: none;
+}
+
+.videoAttemptTime {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.videoAttemptAcc {
+  flex: none;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoAttemptStatus {
+  flex: none;
+  white-space: nowrap;
+}
+
+.videoAttemptNote {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 状态着色（推断值：只动**文字**色 —— 故取 `*-text` 那两个对比度调过的 token，不是底色用的 `--color-success`/`--color-danger`） */
+.videoAttemptPending {
+  color: var(--color-text-strong);
+}
+
+.videoAttemptSuccess {
+  color: var(--color-success-text);
+}
+
+.videoAttemptFailed,
+.videoAttemptCancelled {
+  color: var(--color-danger-text);
+}
+
+/**
+ * 自绘播放条（原 `BL.jsx:468-488` 的 `.video-controls` / `.vt-*`）
+ *
+ * ★ **样式真源是 mockup**（`docs/mockup/assets/mockup.css:489-494`）—— **逐条译**，
+ *   其中 `--mk-micro-fs` → `--font-size-xs`、`--mk-micro-9` → `--font-size-2xs`
+ *   （mockup 自己就是这么别名的，见其 `:26` / `:35`）。
+ */
+.videoControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.vtBtn {
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:490 的 `.vt-btn { width/height: 20px }` */
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.videoTimeline {
+  flex: 1;
+  min-width: 0;
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:491 的 `.video-timeline { height: 3px }` */
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  position: relative;
+}
+
+.vtFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-action-primary);
+}
+
+.vtKnob {
+  position: absolute;
+  top: 50%;
+  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:493 的 `.vt-knob { width/height: 8px; border: 2px }` */
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  border: 2px solid var(--color-action-primary);
+  transform: translate(-50%, -50%);
+}
+
+.vtTime {
+  font-size: var(--font-size-2xs);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/**
+ * 人脸遮罩层（原 `iL.jsx:170-191` 的 `.face-marks-layer` / `.face-mark*`）
+ *
+ * ⚠️ **mockup 未收录**（`mockup.css` 里 `face-mark` 命中 0 处）⇒ 推断样式（只用 token），
+ *    登记 **`TD-03-19`**。
+ * ⚠️ 它铺在素材图**上**（`position: absolute; inset: 0`）—— 脸框落点由 `displayFaceRects`
+ *    按**显示框**（本层的 `clientWidth/Height`）算成像素，故这里只负责铺满与不挡点击。
+ */
+.faceMarksLayer {
+  position: absolute;
+  inset: 0;
+  /* ⚠️ 本层整体不吃点击（只有脸框吃）—— 否则整张图都点不动 */
+  pointer-events: none;
+}
+
+.faceMarksBusy,
+.faceMarksBadge {
+  position: absolute;
+  left: var(--space-1);
+  top: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-mask-strong);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
+}
+
+.faceMark {
+  position: absolute;
+  pointer-events: auto;
+  border: 1px dashed var(--color-action-primary);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.faceMarkMasking {
+  border-style: solid;
+  background: var(--color-mask-weak, rgb(0 0 0 / 0.25));
+}
+
+/* 四个角标（原 `.fc.fc-tl/tr/bl/br`）—— 只画 L 形短边 */
+.faceMarkCorner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--color-action-primary);
+}
+
+.faceMarkTl {
+  left: -1px;
+  top: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.faceMarkTr {
+  right: -1px;
+  top: -1px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.faceMarkBl {
+  left: -1px;
+  bottom: -1px;
+  border-right: none;
+  border-top: none;
+}
+
+.faceMarkBr {
+  right: -1px;
+  bottom: -1px;
+  border-left: none;
+  border-top: none;
+}
+
+.faceMarkTip {
+  position: absolute;
+  left: 0;
+  bottom: -14px;
+  padding: 0 var(--space-half);
+  border-radius: var(--radius-xs);
+  background: var(--color-mask-strong);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
+}
+
 /* ── 文本节点的「拆分」按钮（原 `.split-md-btn`，`CL.jsx:751`）── */
 .splitFoot {
   display: flex;
@@ -903,4 +1413,46 @@
 
 .splitBtn {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/* ── 文本节点的「自动匹配」按钮（原 `.auto-match-btn`，`CL.jsx:745`）──
+   ⚠️ 原版 CSS 未入库、mockup 也未收录 ⇒ 走**真源按钮类**（与同行的 `.split-md-btn` 同法）。 */
+.autoMatchBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/* `head-actions`（原 `.head-actions`，`CL.jsx:773`）—— 样式真源 = mockup.css:323（逐字译） */
+.headActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+/* 「保存预设」按钮（原 `.save-preset-btn`，`CL.jsx:774`）——
+   ⚠️ 原版 CSS 未入库、mockup 也未收录 ⇒ 走**真源按钮类**（同 `.auto-match-btn` / `.split-md-btn`）。 */
+.savePresetBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/*
+ * ── 节点「发送状态」（原 `.foot-send-status` / `.head-send-status`，`CL.jsx:757`）──
+ * 样式真源 = `docs/mockup/assets/mockup.css:326-328`（逐字译）。
+ * ⚠️ mockup 只有 **base / `-success` / `-error` 三档**（**没有** `-sending`）⇒ 本实现同此：
+ *    `sending` / `waiting` / `skipped` 一律走 base（继承正文色），只为**有差异**的两档输出类。
+ */
+.sendStatus {
+  overflow: hidden;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sendStatusSuccess {
+  color: var(--color-success);
+}
+
+.sendStatusError {
+  color: var(--color-danger);
 }

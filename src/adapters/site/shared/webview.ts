@@ -12,7 +12,7 @@
  */
 
 import type { SiteType } from '@/stable/model/account';
-// ★ 容器 DOM 钩子类名走 SSOT（2026-10-11：此前这里写字面量、而 BackendView 挂 CSS-module 类 ⇒ 定位恒失效）
+// ★ 容器 DOM 钩子类名必须走 SSOT（写字面量对不上 BackendView 的 CSS-module 类 ⇒ 定位恒失效）
 import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
 
 /** 我们用到的最小 webview 能力集（Electron `<webview>` 的子集） */

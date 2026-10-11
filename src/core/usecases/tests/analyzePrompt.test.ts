@@ -74,13 +74,13 @@ function makeDeps(over: { doubao?: SitePort; dola?: SitePort } = {}) {
   };
 
   const backendPage = {
-    isMounted: () => true,
+
     prepareForSend: async (_a: Account, opts: { targetUrl: string }) =>
       ok({ leaseId: 'rt_1', webContentsId: 42, href: opts.targetUrl }),
     release: (id: string) => events.push(`release:${id}`),
     runScript: async () => ok(undefined),
     reload: () => ok(undefined),
-    setMuted: () => ok(undefined),
+
     // ⚠️ 测试夹具：泛型方法无法逐一满足，整体断言到端口类型（与 `sendToSite.test.ts` 同法）
   } as unknown as BackendPagePort;
 

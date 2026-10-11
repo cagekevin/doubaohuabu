@@ -151,11 +151,39 @@ export interface SitePort {
   ) => Promise<Result<{ text: string }>>;
 
   /**
+   * 可选的「**追问排队进度**」能力（原 `_Component43.jsx:2200-2266` 的 `queue-ping-*` 那一跳）
+   *
+   * ★★ **它是 `store.queueProgress` 的唯一生产者**（`TD-16-103`）：发送成功后问页面一句
+   *   「现在有视频在生成吗」，把助手回复**原文**交回调用方 —— 分类归
+   *   `core/rules/replyKind.classifyReply`，落 store 归 `state/sendQueue` 的追问循环。
+   *
+   * ⚠️ **与 `askWithImage` 的关系**：同一套页内编排，差别只有两点 ——
+   *   ① **不带图**；② 源的这一步**只读一次**（页面此刻已驻留答案，不必等稳定）。
+   *   ⇒ 本仓**复用同一实现**（`adapters/site/doubao` 里就是 `askAndWaitReply`），不另写第二份页内编排。
+   *
+   * ⚠️ 缺项时调用方（`state/sendQueue`）**明确跳过并留痕**，不回落、不静默。
+   *
+   * @param ctx 账号 + `webContentsId`（后台页**必须已就绪**，同 `askWithImage`）
+   * @param instruction 要问的那句话（SSOT 文案由 core 侧给：源 `aD` 写进去的就是哨兵句）
+   * @returns 助手回复**原文**
+   */
+  readonly pingQueueProgress?: (
+    ctx: ImageQuestionContext,
+    instruction: string,
+  ) => Promise<Result<{ text: string }>>;
+
+  /**
    * ★ **无人值守轮询**能力（原 `_Component26` 的 `Ee` 428-592）—— **注册制：站点细节由 adapter 声明**
    *
    * ★★ **为什么它是「能力声明」而不是 `core`/`state`/`ui` 里的站点判断**：
    *    「这个站点能不能被自动反复扫、以什么节奏」是**站点细节**（与 `chatUrl?` / `askWithImage?` 同族）
-   *    ⇒ 必须住 adapter。`core`/`state`/`ui` **一律不得**写 `type === 'lovart'` 之类的判断。
+   *    ⇒ 必须住 adapter。`core`/`state`/`ui` **一律不得**写「**站点能力**」判断
+   *      （如 `type === 'lovart' ? 能自动扫 : 不能`）。
+   * ★ **2026-10-11 精确化（`TD-02-15`）**：原文写「一律不得写 `type === 'lovart'` 之类的判断」——
+   *    **措辞过宽**：实测全仓 16 处 `=== 'lovart'` 命中**全是 `account.type`（账号**类型**的领域逻辑**，
+   *    如 `normalizeAccountType(a.type) === 'lovart'` 决定入池 / 命名 / 展示），**没有一处**是"站点能力判断"。
+   *    ⇒ 红线**只针对站点能力**（本项 `autoWatch` 那类）；账号类型的领域判断**本来就在 `core/rules`** ✓。
+   *    遵守红线的实例见 `state/accountOps.ts:436`（"只问注册表 `ports.sites[type].autoWatch`，**不写** `type === 'lovart'`"）。
    * ⚠️ **缺项 ⇒ 不支持**（调用方**跳过**该站点，不回落、不报错）。
    * ⚠️ **`lovart` 故意不声明**：风控 —— `docs/10` #11 · `electron/main.js:2749`「默认关闭
    *    **Lovart** 自动抓取，避免每 3 秒执行一次页面脚本被判定为机器人」。⚠️ 该约束**只点名 Lovart**

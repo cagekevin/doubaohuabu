@@ -108,10 +108,10 @@ export interface ParamField {
 /**
  * provider 元信息（渲染层只读；密钥明文永不过桥）
  *
- * ⚠️ **2026-10-11 形状更正**：原先这里混进了 `enabled` / `hasKey` / `keyHint` / `hasSecret` ——
- *    那四个是**配置**字段（后端 `config-store.js:141` 的 `publicOf` 才给），而元信息口
- *    （`registry.js:27` 的 `listProvidersMeta`）**只回** `id/name/capabilities/paramSchema/defaults/domains`
- *    ⇒ 旧类型在撒谎（真实宿主**永远不给**那四个）。已移入 `ApiProviderConfig`。
+ * ⚠️ **只有元信息**：元信息口（`registry.js:27` 的 `listProvidersMeta`）**只回**
+ *    `id/name/capabilities/paramSchema/defaults/domains` —— `enabled` / `hasKey` / `keyHint` / `hasSecret`
+ *    是**配置**字段（后端 `config-store.js:141` 的 `publicOf` 才给），归 `ApiProviderConfig`；
+ *    写进本类型 = 类型撒谎（真实宿主**永远不给**那四个）。
  */
 export interface ApiProviderMeta {
   id: string;

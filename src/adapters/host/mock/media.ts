@@ -7,8 +7,9 @@
  */
 
 import type { CaptureRect, MediaPort } from '@/core/ports/host.port';
-import { err, ok, toMessage } from '@/core/model/result';
+import { err, ok } from '@/core/model/result';
 import { PROTOCOL_IMG } from '@/stable/contracts/schemas';
+import { facePortFns } from '@/adapters/media/facePort';
 
 /** 内容 → 稳定引用（同图同引用，验证幂等用） */
 const cache = new Map<string, string>();
@@ -38,7 +39,7 @@ export function createMockMedia(): MediaPort {
 
     saveVideoFromUrl: async () => err('unknown', 'mock: 视频落盘未实现（M4 接真实宿主）'),
 
-    resolveImageRef: async () => ok(null),
+    // ⚠️ `resolveImageRef` 已于 2026-10-11 删除（源前端 0 消费者）
 
     imageFetchDataUrl: async () => ok(null),
 
@@ -57,8 +58,9 @@ export function createMockMedia(): MediaPort {
      * **不返回空数组冒充成功**（否则站点层的 frames 档会"永远成功但零结果"，把失败伪装起来）
      */
     scanFrames: async () => err('unknown', 'mock: 多帧扫描需要 Electron 主进程（浏览器里不可用）'),
+
+    // ★ 人脸检测 / 遮脸：**渲染层本地**（MediaPipe WASM ＋ Canvas）⇒ 浏览器里**能跑**，
+    //   与 electron 实现**共用**一份（`TD-16-107`）
+    ...facePortFns,
   };
 }
-
-// 显式引用，避免未使用告警（mock 内部错误路径使用）
-void toMessage;

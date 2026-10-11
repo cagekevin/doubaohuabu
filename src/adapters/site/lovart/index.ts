@@ -26,7 +26,7 @@ import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { SCAN_CHAIN, nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
 import { SCAN_SCRIPT } from './scripts';
 import { requireWebview, webviewEval } from '../shared/webview';
-// ★ 单档归一 + **逐张落盘**（原先本文件自带一个同步 `normalizeAttempt`，现已提为两档共用 —— 判据 C1）
+// ★ 单档归一 + **逐张落盘**（`normalizeAttempt` 在 `site/shared/materializeScan.ts`，两档共用 —— 判据 C1）
 import { scanAttemptFromRaw, type ScanAttempt } from '../shared/materializeScan';
 
 /** 跑一档（**不做自动重试**；重试是上层编排的事） */

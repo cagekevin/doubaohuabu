@@ -26,6 +26,8 @@
  */
 
 /** 一条维度（原 `Jl` 的元素） */
+import { formatLocalDate } from '@/lib/time';
+
 export interface FingerprintDimension {
   /** 短键（原 `key`；`distinct` 与 `matched` 用的是 `label`，`key` 只作标识） */
   key: string;
@@ -196,7 +198,5 @@ export function formatScanAge(ts: number, now: number): string {
   if (hours < 24) return `${hours} 小时前`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days} 天前`;
-  const d = new Date(ts);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return formatLocalDate(ts);
 }

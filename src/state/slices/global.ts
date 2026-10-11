@@ -5,15 +5,20 @@
  * ⚠️ §5.3：若本 slice 超 300 行 / 25 字段 → 按共享范围再分（projects / accounts / settings）
  *
  * ★ **已拆（2026-10-10，判据 C2）**：`apiSetup` 已移入 `./settings.ts` ——
- *   本清单还要往本片加 `license`/`scanHistory`/`lovartGalleries`/`lastSentAccountId`/
- *   `accountConcurrency`/`presets` ⇒ 必然超 25 字段上限，故「API 配置族」先独立成片。
+ *   ⚠️ 原属本片的几族已各自独立成片（规避单 slice 的 25 字段上限）：
+ *   `lovartGalleries` → `./gallery.ts` · `scanHistory` → `./scan.ts` ·
+ *   `accountConcurrency` → `./queue.ts` · `presets` → 本片。
+ *   **仍未落**：`license` · `lastSentAccountId`。
  */
 
 import type { Account, AccountGroup, Fingerprint, PoolStrategy } from '@/stable/model/account';
+import type { StylePreset } from '@/constants/stylePresets';
+import type { FaceMaskOpts } from '@/core/rules/facemask';
 import type { Preset, Project } from '@/stable/model/project';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
 import type { ScanHistoryEntry } from '@/core/rules/scanHistory';
-import { createProject as makeProject, makeNodeId, setProjectStoragePath as applyStoragePath } from '@/core/rules/project';
+import { createProject as makeProject, makeId, setProjectStoragePath as applyStoragePath } from '@/core/rules/project';
+import { makeGraphPreset, makePromptPreset, type GraphPresetInput } from '@/core/rules/preset';
 import {
   addGroup as addGroupPure,
   deleteGroup as deleteGroupPure,
@@ -83,8 +88,16 @@ export interface HydratedSnapshot {
   accounts: Account[];
   lovartGalleries: LovartGalleries;
   scanHistory: ScanHistoryEntry[];
-  /** ★ 节点 / 提示词预设（`doubao-presets`）—— 2026-10-11 补（原先该键**读都不读**） */
+  /** ★ 节点 / 提示词预设（`doubao-presets`）—— ⚠️ 必须**读**它（此前该键只写不读 ⇒ 白落盘） */
   presets: Preset[];
+  /**
+   * ★ **风格预设**（`doubao-styles`）—— 2026-10-11 补。
+   * ⚠️ 它住 `./styles.ts` 片（判据 C2）；这里只**借用 global 的原子灌入口**把它一起写进去
+   *   （`loadHydrated` 一次灌完，不给"读了一半"的中间态）。
+   */
+  styles: StylePreset[];
+  /** ★ 遮脸参数（`doubao-face-mask-opts`）—— 同上，借 `loadHydrated` 一次灌完 */
+  faceMaskOpts: FaceMaskOpts;
   activeId: string | null;
   /** 首个工程的画布数据（**无工程 ⇒ 不给**，与源版一致） */
   canvas?: Project['data'];
@@ -140,6 +153,26 @@ export interface GlobalSlice {
   setAccounts: (a: Account[]) => void;
   /** 整体替换预设（导入工程回写 / 启动灌入） */
   setPresets: (p: Preset[]) => void;
+  /**
+   * ★ **保存一条提示词预设**（原 `addPreset`，`shared.js:27857-27873`）
+   *
+   * 纯半在 `core/rules/preset.makePromptPreset`（id 两段都 base36 + `name` 兜底）。
+   * ⚠️ 与源一致：**返回新 id**；数组**混装**（提示词预设**无 `kind`**）。
+   * ⚠️ 落盘由 `state/persist` 的 `LS_PRESETS` 分支覆盖（源是显式 `wo(a)`）⇒ 这里不显式 persist。
+   * ⚠️ 源里提示词预设**只写不读**（没有列表 / 套用 UI）—— 照实落，不假装有 UI。
+   */
+  addPreset: (input: { name?: string; content?: string }) => string;
+  /**
+   * ★ **保存一条节点图预设**（原 `addNodePreset`，`shared.js:28363-28396`）
+   *
+   * 纯半在 `core/rules/preset.makeGraphPreset`（与 `makePromptPreset` 同 id 形状、**共用本片 `seq`** ——
+   * 源里两者也是同一个 `Gl++` 计数器）。
+   * ⚠️ 与源一致：**返回新 id**；产出**带 `kind:'graph'`**（同一数组混装，靠它区分）。
+   * ⚠️ 落盘由 `state/persist` 的 `LS_PRESETS` 分支覆盖（源是显式 `wo(a)`）⇒ 这里不显式 persist。
+   * ⚠️ **2026-10-12 建（`TD-16-…`）**：此前 `presets` 里 `kind:'graph'` 那一半**连写方都没有**
+   *   （`addNodePreset` 全仓 0 命中）⇒ 拆分弹窗的「拆分并套用节点预设」即使落了也**无数据可读**。
+   */
+  addNodePreset: (input: GraphPresetInput) => string;
   setGroups: (g: AccountGroup[]) => void;
   /**
    * ★ **分组 CRUD**（原 `shared.js:31937-32040`）
@@ -173,9 +206,7 @@ export interface GlobalSlice {
   /**
    * ★ **新增账号**（原 `addAccount` 30159-30217）
    *
-   * ⚠️ 这是链上第 4 环那个断点的修法：此前本工程**只有 `setAccounts`（批量覆盖）**、
-   *    `ui/` 里**没有任何账号界面** ⇒ 选号池永远为空 ⇒ `generate` 必然报
-   *    「未配置已登录的豆包 / Dola 账号」。
+   * ⚠️ 没有它 ⇒ 选号池永远为空 ⇒ `generate` 必然报「未配置已登录的豆包 / Dola 账号」。
    *
    * 纯逻辑在 `core/rules/accountRoster.ts`（**已测**）：本 action 只做
    * 「按注入环境生成 → 追加 → 重编号 → `set`」。
@@ -191,7 +222,9 @@ export interface GlobalSlice {
    * **再**过滤 + `vo()` 重编号 + 落盘。会话那半在 `state/accountOps.ts`（需要 await 宿主），
    * 本 action 只负责列表（**同步、必定成功**）—— 这样"删号"永远不会被宿主失败卡住。
    *
-   * ⚠️ 源版还会清 `lovartGalleries[id]`；本工程**该字段尚未落地**（见本文件头部待办），故略。
+   * ⚠️ 源版还会清 `lovartGalleries[id]`。★ **2026-10-11 更正（TD-07-5）**：该字段**早已落地**
+   *   （`./gallery.ts` 的 `removeLovartImages`）。联动在 `state/accountOps.ts` 的 `removeAccount`
+   *   （删列表前调切片动作清池），**不在本 action**。
    */
   removeAccount: (accountId: string) => void;
 
@@ -297,13 +330,28 @@ export function createGlobalSlice(
     },
     setAccounts: (accounts) => set({ accounts }),
     setPresets: (presets) => set({ presets }),
+    addPreset: (input) => {
+      const preset = makePromptPreset(input, deps.now(), ++seq);
+      set({ presets: [...get().presets, preset] });
+      return preset.id;
+    },
+    addNodePreset: (input) => {
+      // ⚠️ **共用同一个 `seq`**（源 `Gl++` 对两者是同一个计数器）⇒ 不另起第二个计数
+      const preset = makeGraphPreset(input, deps.now(), ++seq);
+      set({ presets: [...get().presets, preset] });
+      return preset.id;
+    },
     setGroups: (groups) => set({ groups }),
 
     addGroup: (name) => {
       const r = addGroupPure(get().groups, name, {
         // 原 `` `grp_${Date.now().toString(36)}` `` —— 本工程复用 `makeNodeId('group', …)`
         // （与 `canvas.groupSelected` 造组 id 同一处，前缀 `grp`）
-        idFactory: () => makeNodeId('group', deps.now(), ++seq),
+        // ★ **2026-10-12 越权收口（含形状修正）**：原走 `makeNodeId('group', …)` ⇒ 拼出
+        //   `grp_<base36>_<seq>`；而源**账号组** id 是 `grp_${base36}`（`shared.js:31938`）——
+        //   **没有 seq 段**。改走唯一工厂的 `accountGroup` 类（省略 seq ⇒ 逐字对源）。
+        //   ⚠️ 别与**画布组节点**（`groupNode`，走 `Pt` 有 seq）混为一谈。
+        idFactory: () => makeId('accountGroup', deps.now()),
         now: deps.now(),
       });
       set({ groups: r.groups });

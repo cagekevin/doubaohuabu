@@ -24,6 +24,11 @@
  */
 
 import { SEND_QUEUE_TEXT } from '@/constants/text';
+import { QUEUE_PING_FIRST_MS } from '@/constants';
+import { REPLY_SENTINEL, classifyReply } from '@/core/rules/replyKind';
+import { queuePingText, shouldPingQueueProgress } from '@/core/rules/queuePing';
+import { log } from '@/lib/log';
+import { makeId } from '@/core/rules/project';
 import { isAccountUsable } from '@/stable/model/account';
 import { busyIdsOf, isAccountBusy } from '@/core/rules/accountBusy';
 import { resolveSendAccountForChain } from '@/core/usecases/sendToSite';
@@ -83,7 +88,11 @@ export interface SendQueueController {
  * ★ 2026-10-11 从 `ui/panels/SendQueuePanel.tsx` **原样迁移**（那里曾让 `ui` 持 `StoragePort`）。
  */
 function readPanelPos(storage: StoragePort): { x: number; y: number } | null {
-  const v = PERSIST[LS_SENDQUEUE_POS].read(storage) as { x?: unknown; y?: unknown } | null;
+  const r = PERSIST[LS_SENDQUEUE_POS].read(storage);
+  // ★ TD-06-1：三态 —— `missing`（没存过）/ `corrupt`（坏了）都当"没有位置"
+  //   （这是**面板位置**，丢了无害；且它不在 `persist` 的写回清单里 ⇒ 无覆盖风险）
+  if (r.kind !== 'ok') return null;
+  const v = r.value as { x?: unknown; y?: unknown } | null;
   if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return { x: v.x as number, y: v.y as number };
   return null;
 }
@@ -93,8 +102,12 @@ function writePanelPos(storage: StoragePort, pos: { x: number; y: number }): voi
     PERSIST[LS_SENDQUEUE_POS].write(storage, pos);
   } catch {
     // catch-ok: 存不进去（配额 / 隐私模式）不影响使用，只影响「下次记住位置」。
-    // ⚠️ 这是**已登记**的「兜底不留痕」= **TD-07-3**（原登记在 ui 侧）；
-    //    本批只补机器可识别的标记、**不顺手改行为**（零炸：只做被要求的那件事）。
+    // ★ **TD-07-3 结清（2026-10-11，回源）**：此处**刻意保持静默**（不加日志），三条依据 ——
+    //   ① **逐字对源**：原版 `z3.jsx:153-156` / `:172-175` 就是
+    //      `try { localStorage.setItem(Pp, JSON.stringify(…)) } catch {}`（**空 catch**，源版也不打日志）；
+    //   ② **原则 6 已合规**：本块带 `catch-ok:` 理由（该规则的两条出口之一即"标注理由"）；
+    //   ③ **后果无害**：丢的只是"面板位置"（下次开在默认位）⇒ **不值得为它偏离源版**。
+    //   ⚠️ 下轮**不要再把它当"待留痕"重开** —— 结论在此，依据是源版代码。
   }
 }
 
@@ -130,7 +143,7 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
   /** 节流句柄（原 `or`） */
   /**
    * 节流定时器
-   * ★ **2026-10-11 修正**：原先是**裸 `setTimeout`** —— 而本控制器手上就有 `ports.clock`
+   * ★ **必须用 `ports.clock`** —— 裸 `setTimeout` 不可测（原则 4）
    *   （同一个文件里 `now()` 就是用它）⇒ 走时钟端口才能**被虚拟时钟驱动**（测试/确定性复现）。
    *   `Cancel` 是本仓既有的取消形态（`state/persist.ts` 同款）。
    */
@@ -142,6 +155,19 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
   const s = () => store.useStore.getState();
   const now = () => ports.clock.now();
   const itemOf = (id: string): QueueItem | undefined => s().sendQueue.items.find((x) => x.id === id);
+
+  /**
+   * 把队列**已占住**的那个账号组装成「已定选择」（账号 ＋ 站点）—— ★ **`TD-03-18`**
+   *
+   * ⚠️ **⛔ 不往下传 `forceAccountId`**：`prepare` 从不读它 ⇒ 它会自己再选一次号；
+   *   被占住的账号在忙表里 ⇒ 第二次会**跳过它另选一个**。现在把整个归属交下去，只有**一套选号**。
+   * ⚠️ 账号或站点查不到 ⇒ `null`（`prepare` 会回落走池选号 —— 那是 `runBatchSend` 的正常路径）。
+   */
+  const forcedChoiceOf = (accountId: string) => {
+    const a = s().accounts.find((x) => x.id === accountId);
+    const site = a ? ports.sites[a.type] : undefined;
+    return a && site ? { account: a, site } : null;
+  };
 
   /**
    * 从池里挑一个空闲账号（原 `Ei({excludeIds, ...opts})`）
@@ -170,6 +196,88 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
     return { accountId: r.choice.account.id, name: r.choice.account.name };
   };
 
+  /**
+   * 「排队追问」—— ★ `TD-16-103` 的**生产者**（源 `_Component43.jsx:2190-2266` 的页面动作半）
+   *
+   * 发送成功后**到点问页面一句**：`REPLY_SENTINEL`（`现在有视频在生成吗` —— 源 `aD` 里写进
+   * 输入框的就是它），把助手回复过 `classifyReply`（源 `WR`）分类，经 `queuePingText`（源 `st`）
+   * 翻成一句话，写进 `store.queueProgress[itemId]` —— 那是发送队列面板「成片行」的**第三参**。
+   *
+   * ⚠️ **与源的一处如实差异（留痕）**：源把这段挂在 item 的异步流里**长跑一个 while 循环**
+   *   （初等 5s ⇒ 每轮 1.5s，直到出片或 `zR`=50min）。但源 `Cp = 1` ⇒ **那个循环只会追问一次**，
+   *   余下 50 分钟纯属空转等出片。本仓**不在调度流里空转**（会占住泵）⇒ 改为**到点一次性调度**。
+   *   两边**可观察行为相同**：一次发送 ⇒ 一条 `queueProgress`。
+   * ⚠️ 因为不再长跑，源传给节奏闸的 `finished` / `generating` 两参在本仓**恒 false**（不观察）。
+   *   后果被 `resolveGenProgress` 的**分支序**挡住：③「本轮 attempts 已有终态」**优先于** ④「按 `kind`」
+   *   ⇒ 即便这 60 秒里已经出片，成片行显示的仍是③的「已完成」，不会被这次追问的 `kind` 带偏。
+   * ⚠️ **不走 `withBackendPage`**（`usecases/sendToSite.ts`）：那个壳会 `holdAccount`，而账号**此刻
+   *   正由本 item 持有**（`reserve` 占的号）⇒ 再占必然 `hold-failed`，追问永远发不出去。
+   *   这里只借后台页（`prepareForSend` + `finally release`），账号归属不动。
+   */
+  const runQueuePing = async (input: {
+    itemId: string;
+    accountId: string;
+    /** 发出时刻（源 `ackedAt`）—— 节奏闸的首次基准 */
+    ackedAt: number;
+    gen: number;
+  }): Promise<void> => {
+    // 已 `stop()` / 换代 ⇒ 丢弃（与结算 `planQueueSettlement` 同纪律）
+    if (generation !== input.gen) return;
+
+    const st = s();
+    const account = st.accounts.find((a) => a.id === input.accountId);
+    // 项还在队列里才有意义（被清掉/移除 ⇒ 无事可做）
+    if (!account || !itemOf(input.itemId)) return;
+
+    const prev = st.queueProgress[input.itemId];
+    const pings = prev?.pings ?? 0;
+    // 节奏闸（源 `GR`）：首次满 60s、次数达上限（`Cp = 1`）⇒ 不再问
+    if (!shouldPingQueueProgress({ pings, ackedAt: input.ackedAt, now: now() })) return;
+
+    const site = ports.sites[account.type];
+    const ping = site?.pingQueueProgress;
+    if (!site || !ping || !site.chatUrl) {
+      // 站点没这条链 ⇒ **明确跳过并留痕**（不回落、不静默；原则 6）
+      log.warn('[sendQueue] 该站点不支持排队追问，跳过：', account.type);
+      s().clearQueueProgress(input.itemId);
+      return;
+    }
+
+    const prepared = await ports.backendPage.prepareForSend(account, {
+      targetUrl: site.chatUrl,
+      jobId: `queue-ping:${input.itemId}`,
+      purpose: 'queue-ping',
+    });
+    if (!prepared.ok) {
+      log.warn('[sendQueue] 排队追问：后台页未就绪，跳过：', prepared.message);
+      s().clearQueueProgress(input.itemId);
+      return;
+    }
+
+    try {
+      const askedAt = now();
+      const reply = await ping(
+        { account, webContentsId: prepared.value.webContentsId },
+        REPLY_SENTINEL,
+      );
+      if (!reply.ok) {
+        log.warn('[sendQueue] 排队追问失败（按无进度处理）：', reply.message);
+        s().clearQueueProgress(input.itemId);
+        return;
+      }
+      // 源 `setQueueProgress(_e, {kind, pings, askedAt, text})` —— `at` 由 store 盖
+      const kind = classifyReply(reply.value.text).kind;
+      s().setQueueProgress(input.itemId, {
+        kind,
+        text: queuePingText(kind, reply.value.text),
+        pings: pings + 1,
+        askedAt,
+      });
+    } finally {
+      ports.backendPage.release(prepared.value.leaseId, 'done');
+    }
+  };
+
   /** 跑一项：`sendOneNode` → `planQueueSettlement` → 落 store（原 42195-42294 的 `(async () => …)()`） */
   const runItem = async (d: DispatchDecision, gen: number): Promise<void> => {
     let outcome: SendOneResult | null = null;
@@ -177,8 +285,9 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
     try {
       outcome = await sendOneNode({
         nodeId: itemOf(d.itemId)?.nodeId ?? '',
-        // ★ 账号已由 `planQueueDispatch` 定好 ⇒ **强制指定**，不让它再选一次
-        forceAccountId: d.accountId,
+        // ★ `TD-03-18`：把**队列已占住的那个账号**整体交下去（账号 ＋ 站点）——
+        //   `prepare` 不再选第二次（原 `forceAccountId` 是幽灵参数，实现侧从不读它）
+        forced: forcedChoiceOf(d.accountId),
         excludeAccountIds: itemOf(d.itemId)?.excludeAccountIds ?? [],
         prepare: pipeline.prepare,
         transport: pipeline.transport,
@@ -217,6 +326,15 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
       const fp = queueFingerprint(nodeTextOf(nodesForFingerprint(s().nodes), cur.nodeId));
       if (fp) fingerprints.set(cur.nodeId, { fp, at: now() });
     }
+    // ★ `TD-16-103`：**发出去了** ⇒ 到点安排一次「排队追问」（源在同一异步流里长跑循环，见 `runQueuePing`）
+    if (outcome?.ok && d.accountId) {
+      const ackedAt = now();
+      const genAtSend = gen;
+      ports.clock.setTimeout(() => {
+        void runQueuePing({ itemId: d.itemId, accountId: d.accountId, ackedAt, gen: genAtSend });
+      }, QUEUE_PING_FIRST_MS);
+    }
+
     // 原 `.finally` 里的 `M3()`：跑完一项就再触发一次泵（节流兜住）
     schedule();
   };
@@ -284,7 +402,8 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
         incoming: inputs,
         fingerprints,
         now: now(),
-        idFactory: () => `sq_${now().toString(36)}_${++seq}`,
+        // ★ **2026-10-12 越权收口**：原在此自拼 `sq_…` —— 改委托唯一工厂（规范只在 `core/rules/project`）
+        idFactory: () => makeId('queueItem', now(), ++seq),
         ...(opts.replace === undefined ? {} : { replace: opts.replace }),
         ...(opts.force === undefined ? {} : { force: opts.force }),
         ...(opts.excludeAccountIds === undefined ? {} : { excludeAccountIds: opts.excludeAccountIds }),

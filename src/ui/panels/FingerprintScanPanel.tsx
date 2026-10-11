@@ -16,7 +16,7 @@
  *   显式更符合"历史是记录，不是打开次数"。**这一处是我加的判断，不是源版行为。**
  *
  * ⚠️ **原则 1**：本组件只调 `useStore` 暴露的 action 与**纯规则**（`scanFingerprintCollisions`
- *   是纯函数 —— 与 `deriveGenView` 同法，组件调纯规则是允许的）。
+ *   是纯函数（组件调 `core/rules` 纯规则是允许的 —— 同 `SendQueuePanel` 调 `resolveGenProgress`）。
  */
 
 import { useMemo, useState } from 'react';

@@ -134,7 +134,18 @@ export function composeBody(opts: {
   return `视频生成 ${prefix || ''}${body}${suffix}`;
 }
 
-/** 图片张数夹取（原 `PL`：`Math.max(1, Math.min(4, s | 0 || 1))`） */
+/**
+ * 图片张数夹取（原 `PL`：`Math.max(1, Math.min(4, s | 0 || 1))`）
+ *
+ * ★ **2026-10-11（`TD-08-4`）：它是这条判据的**唯一落点** —— 同一式子原版在
+ *   `_Component45.jsx:146` / `:189` 也**内联**出现过（UI 侧读写各一次），本仓那两处
+ *   此前**只做默认、没钳** ⇒ 已改为调本函数（`ui/panels/GenPanel.tsx` 的 `onChange`、
+ *   `state/slices/apiLanding.ts` 回灌、`state/generate.ts` 发请求前）。
+ * ⚠️ **不要另建同名函数**（本会话曾误建 `core/rules/imageGen.ts`，已删 —— 判据 C1）。
+ * ⚠️ **不要在 React 渲染期调用它**：编译器无法排除该调用修改入参 ⇒ 会让宿主组件的
+ *   `useMemo` 被判「依赖可能被改」而放弃优化（实测 `react-hooks/preserve-manual-memoization`）。
+ *   放在事件回调里没有这个问题。
+ */
 export function clampImageCount(count: unknown): number {
   return Math.max(1, Math.min(4, (Number(count) | 0) || 1));
 }
@@ -158,14 +169,16 @@ export function normalizeResolution(resolution: unknown): string {
  * 组装：`画一张：${body}${，画面比例 X}，${生成 N 张图片|只生成 1 张图片}${，使用 M 模型}${，图片分辨率 R}`
  */
 export function composeImagePrompt(opts: {
-  text?: unknown;
-  stylePrefix?: unknown;
-  ratio?: unknown;
-  count?: unknown;
-  model?: unknown;
-  resolution?: unknown;
+  /** ★ 必填（`TD-16-104` 收窄：调用方 `buildImagePayload` 的 `text` 本就是必填 `string`） */
+  text: string;
+  /** 风格前缀；**没配风格**是合法状态 ⇒ 可选（`undefined` 等价于空串） */
+  stylePrefix?: string;
+  ratio?: string;
+  count?: number;
+  model?: string;
+  resolution?: string;
 }): string {
-  let body = String(opts.text ?? '').trim();
+  let body = opts.text.trim();
   body = body
     .replace(/^画一张[:：]\s*/, '')
     .replace(/[,，]\s*图片分辨率\s*(?:1K|2K|4K)\s*$/, '')
@@ -177,8 +190,8 @@ export function composeImagePrompt(opts: {
   const withStyle = composeBody({ body, stylePrefix: opts.stylePrefix, mediaType: 'image' });
   const count = clampImageCount(opts.count);
   const countText = count > 1 ? `生成 ${count} 张图片` : '只生成 1 张图片';
-  const ratio = opts.ratio && opts.ratio !== 'auto' ? String(opts.ratio) : '';
-  const model = String(opts.model ?? '').trim();
+  const ratio = opts.ratio && opts.ratio !== 'auto' ? opts.ratio : '';
+  const model = (opts.model ?? '').trim();
   const resolution = normalizeResolution(opts.resolution);
 
   return (
@@ -195,11 +208,13 @@ export function composeImagePrompt(opts: {
  * 组装：`composeBody({mediaType:'video'})`（已格式化则不套娃）
  */
 export function composeVideoPrompt(opts: {
-  text?: unknown;
-  model?: unknown;
-  duration?: unknown;
-  ratio?: unknown;
-  stylePrefix?: unknown;
+  /** ★ 必填（`TD-16-104` 收窄，与 `composeImagePrompt` 同判据） */
+  text: string;
+  model?: string;
+  duration?: number;
+  ratio?: string;
+  /** 风格前缀；没配风格是合法状态 ⇒ 可选（同 `composeImagePrompt`） */
+  stylePrefix?: string;
 }): string {
   return composeBody({
     body: opts.text,
@@ -348,17 +363,20 @@ export function resolveRefMaterial(
  */
 export function mergeLinkedTexts(
   body: string,
-  linked: readonly { text?: string; label?: string }[],
+  linked: readonly { text: string; label: string }[],
 ): string {
-  let out = String(body ?? '');
+  // ⚠️ `body` / `linked` / `item.text` 均为**必填**（`TD-16-104`：删掉 4 处恒不触发的兜底）——
+  //   生产调用方是 `state/batchSend` 的 `collectLinkedTexts`（返回 `LinkedText`：三字段全必填）。
+  //   空串仍是合法值，故下面的 `if (!text)` / `if (!label)` 保留（它们判的是**空**，不是**缺失**）。
+  let out = body;
   const append: string[] = [];
 
   const escapeRe = (v: string): string => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  for (const item of linked || []) {
-    const text = String(item?.text ?? '').trim();
+  for (const item of linked) {
+    const text = item.text.trim();
     if (!text) continue;
-    const label = String(item?.label ?? '').trim();
+    const label = item.label.trim();
     if (!label) {
       append.push(text);
       continue;

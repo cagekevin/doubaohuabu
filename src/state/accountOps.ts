@@ -6,7 +6,9 @@
  * ★ **为什么纯列表动作在 slice、而这几个在控制器**：
  *   · `global.removeAccount`（sync）= 源版 30229-30236 的**列表半**（filter + `vo()` 重编号）
  *   · 本文件 = 源版 30224-30228 的**会话清理半**（要 await 宿主）+ 30237-30246 的
- *     `lovartGalleries` 清理（本工程该字段尚未落地，故略）
+ *     `lovartGalleries` 清理（★ **2026-10-11 接线（`TD-07-7`）**：调切片动作
+ *     `purgeLovartGallery`（= 源 `delete c[id]`，其纯层 `removeLovartAccount` 早有单测）；
+ *     此前那句「该字段尚未落地」是**陈旧否定**，已按 `TD-07-5` 更正）
  *   ⇒ **分开放**：删号列表是**同步、必定成功**的，绝不能被宿主失败卡住。
  *
  * ⚠️ **一处有意偏离（留痕）**：源版清会话是 `try { window.api.clearAccountSession(partition) } catch {}`
@@ -16,7 +18,7 @@
 
 import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
-import type { Result } from '@/core/model/result';
+import { err, type Result } from '@/core/model/result';
 import type { HostOS } from '@/constants';
 import {
   applyProxyAssignments,
@@ -52,7 +54,7 @@ import {
 import type { Cancel } from '@/core/ports/clock.port';
 import type { NewAccountInput } from '@/core/rules/accountRoster';
 import { ACCOUNT_STATUS, type Account } from '@/stable/model/account';
-import { SEND_TEXT } from '@/constants/text';
+import { BACKEND_VIEW_TEXT, SEND_TEXT } from '@/constants/text';
 
 /**
  * 账号导入 / 导出结果（UI 据此出提示）
@@ -171,6 +173,17 @@ export interface AccountOpsController {
   readonly canDiagnoseFingerprint: boolean;
   /** 清理浏览器缓存（原 `OP.jsx:181-213` 的 `he()`）—— 单端口调用，**不建 usecase**（无编排） */
   clearBrowserCache(): Promise<Result<{ cleared: number; failed?: number }>>;
+  /**
+   * ★ **强制刷新该账号的后台页**（原 `_Component43.jsx:3235-3245` 头部「刷新」按钮里的
+   *   `const ee = te(o); if (ee) ee.reload()`）
+   *
+   * ⚠️ `ui` 不得直调端口（铁律②）⇒ 经本控制器转发 `BackendPagePort.reload`。
+   * ⚠️ **失败可见**（原则 6）：`Result` 原样返回，由调用方 toast —— **不静默**。
+   * ⚠️ **与源的一处有意差异（留痕）**：源该按钮 `disabled={Ke.autoStart !== true}`；
+   *    本仓的 `<webview>` **常驻渲染**、没有 `autoStart` 语义 ⇒ 改为「未选中账号就不渲染」
+   *    （由 `BackendView` 守），避免伪造一个恒假的 `disabled` 判据。
+   */
+  reloadBackend(accountId: string): Result<void>;
 }
 
 /** `prepareWebviewSession` 的入参（**窄接口**：只要这三个字段） */
@@ -299,6 +312,12 @@ export function createAccountOps(
           store.useStore.getState().pushBackendError('unknown', r.message);
         }
       }
+      // ★ **`TD-07-7` 接线**：清该账号的 Lovart 画廊池 —— 逐字对源 `shared.js:30237-30246`：
+      //   `if (galleries && id in galleries) { 拷贝 ⇒ delete c[id] ⇒ set({lovartGalleries}) ⇒ 落盘 }`
+      //   ⚠️ 与「清会话」不同：这一步**纯本地、必定成功** ⇒ 放在删列表**之前**，与源同序；
+      //   ⚠️ 落盘不用手写 —— `lovartGalleries` 在 `persist` 的 5 步写回清单里（防抖自动落）。
+      //   ⚠️ 幂等：键不存在时切片动作自身会跳过（与源的 `id in galleries` 判据一致）。
+      store.useStore.getState().purgeLovartGallery(accountId);
       store.useStore.getState().removeAccount(accountId);
     },
 
@@ -482,6 +501,16 @@ export function createAccountOps(
      */
     async clearBrowserCache() {
       return ports.host.media.clearBrowserCache();
+    },
+
+    /**
+     * 刷新后台页（原 `ee.reload()`）—— 单端口调用、**无编排** ⇒ 同 `clearBrowserCache`，不建 usecase
+     * ⚠️ 账号在"点击渲染"与"执行"之间被删 ⇒ **明确报错**，不把 `undefined` 漏给端口
+     */
+    reloadBackend(accountId) {
+      const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
+      if (!account) return err('unknown', BACKEND_VIEW_TEXT.accountGone);
+      return ports.backendPage.reload(account);
     },
   };
 }

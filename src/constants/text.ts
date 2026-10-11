@@ -11,7 +11,7 @@
 // 文案只依赖 L0（constants）内的 kind 联合，不依赖 core（分层：L0 不得依赖 L2）
 export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure';
 // ⚠️ 发送/面板文案的**分片转发**（定义在 `sendPanelText.ts`，见那里的头注释）
-export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
+export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, AUTO_MATCH_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EDGE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FUZZY_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_IMAGE_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, MEDIA_PLAYER_TEXT, NODE_CTX_TEXT, PRESET_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, STYLE_LIB_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
 // ⚠️ 以下三处分片由 eslint `max-lines`(400) 触发 —— **该规则已于 2026-10-11 关闭**（分片的"各组彼此内聚"理由仍成立，但不再有"必须 <400 行"的硬约束）。
 // ⚠️ 2026-10-11：从 `sendPanelText.ts` **拆出**（那个文件代码行越过 eslint `max-lines`(400)）——
 //    「出新图」那一族彼此内聚，独立成 `newImagesText.ts`。**公开入口不变**（仍从 `@/constants/text` 取）。
@@ -54,6 +54,30 @@ export const COMMON_TEXT = {
    * `E?.error || '未知错误'`（`W3.jsx:96`）—— **同一句**，故只留一处真源。
    */
   unknownReason: '未知错误',
+  /**
+   * ★ **2026-10-11 收口（判据 C1）**：下载相关的 4 句**同时出现在**文生视频（`YL.jsx:363,370,391,392`）
+   *   与文生图（`ZL.jsx:120,127,148,149`）**两个域**、且**逐字相同** ⇒ 收到 `COMMON_TEXT`（跨域复用）。
+   *   各节点自己的「下载」按钮文案仍留在各自域（`GEN_VIDEO_TEXT.download` / `GEN_IMAGE_TEXT.download`）。
+   */
+  /** 下载失败前缀（两处源均：`'下载失败：' + (error || '未知错误')`，逐字） */
+  downloadFailed: (reason: string) => `下载失败：${reason}`,
+  /** 「另存为」成功（两处源均：`已下载到：${path}`，逐字） */
+  downloadedTo: (path: string) => `已下载到：${path}`,
+  /** 下载 toast 的操作按钮（两处源均，逐字） */
+  revealInFolder: '在文件夹中显示',
+  /** 「另存为」过滤器名（两处源均：`'图片文件'`，逐字） */
+  imageFilter: '图片文件',
+  /**
+   * ★ **2026-10-11 收口（判据 C1）**：**历史版本**弹层里这 3 个「缺省值」在
+   *   文生视频（`YL.jsx:595,596,609,615`）与文生图（`ZL.jsx:305,307,309`）**逐字相同**
+   *   ⇒ 收到 `COMMON_TEXT`。各节点独有的（`历史 N` / 标题 / 条目 title）仍在各自域。
+   */
+  /** 比例兜底（两处源均：`|| '自动'`，逐字） */
+  autoLabel: '自动',
+  /** 空值占位（两处源均：账号 / 时长兜底 `'—'`，逐字） */
+  dash: '—',
+  /** 无提示词（两处源均：`'（无提示词）'`，逐字） */
+  noPrompt: '（无提示词）',
   /**
    * 宿主边界契约违约（后端返回的形状与声明契约不符）
    *
@@ -162,6 +186,16 @@ export const API_TEXT = {
   videoFallbackName: 'API 视频',
   /** 原 `` `API · ${n.providerName}` `` —— 注意中间是**空格 + 中点 + 空格** */
   videoAccount: (providerName: string) => `API · ${providerName}`,
+  /**
+   * ★ **提交时写进 `attempt.accountName` 的批量变体**（原 `Z3_1.jsx:908`，逐字）
+   * ⚠️ 与 `videoAccount` 不是一回事：那条是「落节点时的账号标签」，这条是「尝试记录里的账号名」。
+   */
+  videoAccountBatch: (providerName: string, ratio: string) => `API · ${providerName} · ${ratio}`,
+  /** ★ 单发 `attempt.note`（原 `Z3_1.jsx:827`，逐字） */
+  attemptNote: (providerName: string) => `API 通道 · ${providerName}`,
+  /** ★ 批量 `attempt.note`（原 `Z3_1.jsx:924`，逐字） */
+  attemptNoteBatch: (providerName: string, ratio: string) =>
+    `API 批量 · ${providerName} · ${ratio}`,
   /** 原 `showToast('API 图片已存入资源库', 'success')` */
   imageStored: 'API 图片已存入资源库',
   /** 原 `API 生成失败：${d}` */
@@ -182,6 +216,20 @@ export const CANVAS_TEXT = {
   emptyTitle: '画布为空',
   emptyHint: '双击画布创建文本框，或从右侧资源库拖入素材',
   dropHint: '松开鼠标，将图片 / Markdown 文件添加到画布',
+  /**
+   * 拖入的素材**画布上本来就有**（原 `_Component42.jsx:1355`，逐字）
+   * ⚠️ 只有 `ensureMaterialNode` 返回 `reused: true` 时才提示（此时节点是被**移动**到落点的）。
+   */
+  materialReused: (name: string) => `「${name}」已在画布上，已移到落点（同一素材不重复创建）`,
+  /** 拖入 `.md` 文件时**文件名取空**的兜底标题（原 `_Component42.jsx:1416` 的 `|| 'Markdown'`） */
+  mdFallbackTitle: 'Markdown',
+  /** `s` 快捷键截图**失败**（控制器一般会带 `reason`，这是兜底） */
+  captureFailed: '截图失败',
+  /**
+   * `Ctrl+V` 粘进来的图**没有文件名**时的素材名（原 `_Component42.jsx:1262-1266` 的 `` `粘贴图片 ${Dt}:${St}:${cn}` ``）
+   * @param clock `HH:MM:SS`（`lib/time.ts` 的 `formatClockTime`）
+   */
+  pastedImageName: (clock: string) => `粘贴图片 ${clock}`,
 } as const;
 
 /**
@@ -269,11 +317,14 @@ export const LIBRARY_TEXT = {
 /**
  * 指纹诊断（**只放 UI 独有文案**）
  *
- * ⚠️ **分级文案（ok/critical/warn）的真源不在这里**（2026-10-10，TD-02-1）：
- *    真源是 `core/rules/fingerprint.ts` 的 `COLLISION_LEVEL_LABEL`
- *    —— 它是 `Record<CollisionLevel, string>`，**带类型约束**（加一个 level 编译器会逼你补）。
- *    本文件原先的 `noMatch`/`critical`/`warn` 是**松散副本**（无约束，靠人维护）⇒ 已删。
- *    UI 需要分级文案时**直接 import `COLLISION_LEVEL_LABEL`**（ui 是上层，可依赖 core/rules）。
+ * ⚠️ **分级文案（ok/critical/warn）不在这里**（2026-10-10，`TD-02-1` 删掉了本文件的松散副本）。
+ *
+ * ★ `core/rules/fingerprint.ts` 的 `COLLISION_LEVEL_LABEL` **整文件 0 生产消费**
+ *   （只有 `tests/fingerprint.test.ts` 引它）⇒ **别把它当"要用就去 import 的真源"**
+ *   （照做会给一个死文件造出第一个消费者）。
+ *   **指纹诊断的活真源是 `core/rules/fingerprintDiagnosis.ts`**（段标签 / 4 个伪装状态 label，
+ *   已被 `ui/panels/AccountPanel.tsx:46` + `state/accountOps.ts:35` 消费）。
+ *   ⚠️ `fingerprint.ts` / `COLLISION_LEVEL_LABEL` 自身的归属（删 or 接线）见「未接线／死代码批」那笔债。
  */
 export const FINGERPRINT_TEXT = {
   title: '跨账号指纹关联扫描',
@@ -287,13 +338,26 @@ export const BACKEND_VIEW_TEXT = {
   watermarkFree: (n: number) => `无水印资源（${n}）`,
   backToCanvas: '返回画布',
   silent: (name: string) => `「${name}」处于静默状态 · 页面已暂停（不占用内存 / CPU）`,
+  /**
+   * 站点标题（原 `_Component43.jsx:3231` 的**五路三目** —— **源里没有 `gpt` 分支**，它落 else ⇒「豆包对话后台」；
+   *   故本仓照源**不列** `gpt`）
+   * ⚠️ 这里的类型**故意不是 `Record<string,string>`**：`doubao` 声明为**必有**键 ——
+   *   源的 `else` 分支就是豆包文案 ⇒ 查表未命中回落它时，**知道它一定在**（故消费侧**无需 `?? ''`**）。
+   */
   title: {
     doubao: '豆包对话后台',
     dola: 'dola 对话后台',
     lovart: 'Lovart 后台',
     tapnow: 'Tapnow 后台',
     other: '自定义网站',
-  } as Record<string, string>,
+  } as { readonly [k: string]: string | undefined; readonly doubao: string },
+  /** 标题里没选账号时的占位（原 `_Component43.jsx:3232` 的 `|| '未选择账号'`，逐字） */
+  noAccount: '未选择账号',
+  /** 头部折叠按钮的 `title`／`aria-label`（原 `3268` 那两个三目，逐字） */
+  collapseHead: '收起顶部工具栏',
+  expandHead: '展开顶部工具栏',
+  /** 点「刷新」时账号已被删（防的是"点了之后才发现没了"）—— 原则 6：不静默 */
+  accountGone: '账号已不存在，无法刷新后台页',
 } as const;
 
 /** 侧栏折叠 */
@@ -334,6 +398,35 @@ export const FACEMASK_TEXT = {
   strength: '强度',
   expand: '范围外扩',
   hint: (n: number) => `单击角标即按此参数遮脸（当前 ${n} 张脸）`,
+  /** 关闭按钮 `title`（原 `_Component40.jsx:68`，逐字） */
+  closeTitle: '关闭（Esc）',
+  /** 关闭字形（原 69） */
+  closeGlyph: '✕',
+  /** 强度值的后缀（原 88：`{t.strength.toFixed(1)}×`） */
+  strengthSuffix: '×',
+  // ── 角标层（原 `iL.jsx:170-190`）──
+  /** 检测中（原 171，逐字） */
+  detecting: '识别人脸…',
+  /** 角标文字（原 173，逐字） */
+  badge: '检测到人脸',
+  /** 角标 `title`（原 172，逐字；`n` = 脸数） */
+  badgeTitle: (n: number) => `检测到 ${n} 张人脸 · 单击角标遮脸，双击设置参数`,
+  /** 人脸框 `title`（原 181：当前参数摘要） */
+  markTitle: (effect: string, strength: number, padPercent: number) =>
+    `单击：用当前参数（${effect} · 强度${strength}× · 外扩${padPercent}%）一键遮脸；双击：设置遮脸参数`,
+  /** 人脸框里的提示（原 188） */
+  markTip: '单击遮脸 · 双击设置',
+  /** 正在遮这张（原 176/181/188 的 `遮脸中…`） */
+  masking: '遮脸中…',
+  /** 遮脸后给素材名加的后缀（原 `iL.jsx:127`，逐字） */
+  nameSuffix: '·已遮脸',
+  /** 外置失败（原 `iL.jsx:124` 抛的 `图片保存失败`，逐字 —— 生产者原文，不得改写） */
+  saveFailed: '图片保存失败',
+  /**
+   * ★ **本工程新增**（源 `iL.jsx:135` 是 `console.warn` **静默**吞掉）——
+   *   按「失败可见」给一条 toast（**有意差异**，见 `TD-03-20`）。
+   */
+  failed: '遮脸失败',
 } as const;
 
 /**
@@ -443,16 +536,14 @@ export const REF_TEXT = {
 /**
  * 节点内编辑（文本正文 / 节点名 / 提示词）
  *
- * ★ **2026-10-10 补**：此前应用里**没有任何地方能写 `data.text`**（`patchNodeData`
- *   只被用来写 `aspectRatio`/`igResolution`/`imageCount`/`model`）⇒ 双击建出的文本节点
- *   永远空串、生成节点没有提示词 ⇒ `generate` 发出去的是**空提示词**。这是与
- *   「8 类节点只建得出 2 类」同批的**未登记断链**。
+ * ★ 本文件是 `data.text` 的**唯一写入点**（没有它，双击建出的文本节点永远空串、
+ *   生成节点没有提示词 ⇒ `generate` 发出去的是**空提示词**）。
  *
  * ⚠️ **两处占位文案有意短于源版**（已留痕）：源版写的是
  *   `输入文字，输入 @ 从资源库引用素材…`（`CL.jsx:818`）与
  *   `描述想要画的内容…（输入 @ 引用素材）`（`_Component45.jsx:1211`）——
- *   但 **`@` 引用特性尚未落地** ⇒ 显示原文就是**对用户承诺不存在的能力**（违背判据 B4）。
- *   故当前只显示前半段；源版全文保留在 `*WithRefs` 字段里，**该特性落地后改回**。
+ *   ★ `@` 引用特性**已落地**（`ui/nodes/RefAutocomplete.tsx` + `core/rules/refs.ts` + `richText.ts` 的
+ *   `refChipHtml`/`textToEditorHtml`，已被 `TextNode`/`GenPanel` 消费）⇒ 下面两处 `*WithRefs` 全文**待启用**（`TD-11-5`）。
  */
 export const NODE_EDIT_TEXT = {
   /**
@@ -466,6 +557,14 @@ export const NODE_EDIT_TEXT = {
   promptPlaceholder: '描述想要画的内容…',
   /** 源版全文（`@` 引用落地后改回这个） */
   promptPlaceholderWithRefs: '描述想要画的内容…（输入 @ 引用素材）',
+
+  // ── 节点「发送状态」前缀图标（原 `CL.jsx:760`，逐字；⚠️ **都带一个尾空格**）──────
+  /** `sending`（原 760，逐字） */
+  sendSendingIcon: '⏳ ',
+  /** `success`（原 760，逐字） */
+  sendSuccessIcon: '✓ ',
+  /** 其余（含 `waiting` / `skipped` / 未知）一律这个（原 760，逐字） */
+  sendErrorIcon: '⚠ ',
 } as const;
 
 
@@ -756,6 +855,11 @@ export const SESSION_TEXT = {
 export const VIDEO_TEXT = {
   /** 单条直链落盘失败（`reason` = 后端原始 message） */
   saveFailed: (url: string, reason: string) => `视频落盘失败：${url}（${reason}）`,
+  /**
+   * 一批里有多少条没落盘（★ 视频本地化接线：用户侧**只报条数**，不刷屏；
+   * 逐条原文走 `lib/log` 唯一入口 —— 读者分流：用户看 toast，开发者看 log）
+   */
+  localizeFailed: (n: number) => `有 ${n} 个视频未能落盘（原文见控制台）`,
 } as const;
 
 /**
@@ -838,4 +942,20 @@ export const GEN_PROGRESS_TEXT = {
   noProgress: '未能获取进度',
   waitingStart: '等待豆包开始生成',
   noRecord: '后台暂无该任务的生成记录',
+} as const;
+
+/**
+ * 「排队追问」的文案（★ `TD-16-103` 生产者：源 `_Component43.jsx:2255-2262` 的 `st` 映射）
+ *
+ * 用途：追问页面「现在在排队吗」之后，把 `classifyReply` 的 `kind` 翻成**一句给用户看的话**，
+ * 经 `core/rules/queuePing.queuePingText` 落到 `store.queueProgress[itemId].text`，
+ * 最终显示在发送队列面板的「成片行」上。
+ */
+export const QUEUE_PING_TEXT = {
+  none: '助手回复：当前没有正在生成的视频（仍在等待，未判定失败）',
+  offer: '助手回复：是否要现在开始生成？（本次任务可能未被受理）',
+  busy: '助手回复：任务正在排队 / 生成中',
+  noReply: '已追问排队进度，暂未收到回复（继续等待出片）',
+  /** `other` 的包装（源的 `` `助手回复：${…slice(0,80)}` `` —— 截断 80 由调用方做） */
+  other: (excerpt: string): string => `助手回复：${excerpt}`,
 } as const;

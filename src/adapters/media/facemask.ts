@@ -18,15 +18,16 @@ import {
   FACE_MASK_JPEG_QUALITY,
   type FaceMaskEffect,
 } from '@/constants/facemask';
-import { expandFaceRect, maskCellSize, normalizeFaceMaskOpts, type FaceBox } from '@/core/rules/facemask';
-import { createTmpState, drawBlur, drawMosaic, loadImage, makeDotGridPattern, type DrawableSource } from '@/lib/image';
+import {
+  expandFaceRect,
+  maskCellSize,
+  normalizeFaceMaskOpts,
+  type FaceBox,
+  type FaceMaskResult,
+} from '@/core/rules/facemask';
+import { createCanvas, createTmpState, drawBlur, drawMosaic, loadImage, makeDotGridPattern, type DrawableSource } from '@/lib/image';
 
-export interface FaceMaskResult {
-  dataUrl: string;
-  w: number;
-  h: number;
-  mime: string;
-}
+export type { FaceMaskResult };
 
 /** 单块遮罩分发（原 `ZD`） */
 function drawMask(
@@ -78,17 +79,13 @@ export async function applyFaceMask(
   const opts = normalizeFaceMaskOpts(rawOpts);
 
   // 源画布（遮罩只作用于它，避免多次调用累积）
-  const base = document.createElement('canvas');
-  base.width = W;
-  base.height = H;
+  const base = createCanvas(W, H);
   const bctx = base.getContext('2d');
   if (!bctx) throw new Error(FACE_MASK_ERROR.invalidSize);
   bctx.drawImage(img, 0, 0);
 
   // 输出画布
-  const out = document.createElement('canvas');
-  out.width = W;
-  out.height = H;
+  const out = createCanvas(W, H);
   const ctx = out.getContext('2d');
   if (!ctx) throw new Error(FACE_MASK_ERROR.invalidSize);
   ctx.drawImage(base, 0, 0);

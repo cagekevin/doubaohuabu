@@ -6,6 +6,7 @@
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { log } from '@/lib/log';
 import styles from './ErrorBoundary.module.css';
 
 interface Props {
@@ -29,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     // 原样记录，不做包装（原则 6）
     this.setState({ info });
-    console.error(`[${this.props.area}] 渲染错误：`, error, info.componentStack);
+    log.error(`[${this.props.area}] 渲染错误：`, error, info.componentStack);
   }
 
   private readonly reset = (): void => {

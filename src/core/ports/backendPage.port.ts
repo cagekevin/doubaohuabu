@@ -12,7 +12,7 @@
  *   根本没有 `reloadAccount`，已核实）。本端口即那条隐形桥的**显式契约**。
  *
  * ⚠️ 铁律（来自 `docs/10`，必须体现在契约里）：
- *   · **不开自动轮询**（#4）：`isMounted` / `prepareForSend` 都**只在被调用时**跑，不自启定时器
+ *   · **不开自动轮询**（#4）：`prepareForSend` / `probeFingerprint` 都**只在被调用时**跑，不自启定时器
  *   · **零注入**（#2）：本端口唯一的注入例外是 **`input-lock`**（那条链的既有例外，见 `docs/16` 链 17）
  *   · 失败一律返 `Result`，**不得抛异常**
  */
@@ -71,12 +71,13 @@ export interface FingerprintPageProbe {
 
 export interface BackendPagePort {
   /**
-   * 后台视图**当前是否已挂载**（原 `tT(accountId) !== null`）
-   *
-   * ⚠️ **同步 + 纯查询**：只在被调用时看一眼 DOM，**不自启轮询**（`docs/10` #4）
-   * ⚠️ 用途：UI 决定「要不要提示用户先打开后台视图」，而不是拿它当就绪判据
+   * ⚠️ **2026-10-11 已删 `isMounted(account)`** —— 它在本仓**没有真场景**，是个**假判据**：
+   *   · 本仓 `ui/panels/BackendView` 由 `AccountPanel` **常驻**渲染（`AppShell` 的左 `<aside>` 无条件挂载），
+   *     且它**为每个账号都渲染 `<webview>`** ⇒ `isMounted()` 对所有存在于 store 的账号**恒为 `true`**
+   *     ⇒ 拿它做任何判断都等于写常量。
+   *   · 它的**源消费者**（`an.isReady` ← `vr` 租约管理）在本仓已由 `prepareForSend` 内部覆盖 ⇒ 公开形态多余。
+   *   ⚠️ 与 `StoragePort` 删 3 个幽灵方法（`TD-06-2`）同判据：**不留"声明了但用不上"的契约面**。
    */
-  isMounted(account: Account): boolean;
 
   /**
    * 把后台页准备到**可发送**状态（原 `gS` 39125-39154 那一段，五处调用点共用）
@@ -117,6 +118,16 @@ export interface BackendPagePort {
   /** 强制刷新后台页（原 `an.reloadAccount`，`_Component43.jsx:428`） */
   reload(account: Account): Result<void>;
 
-  /** 静默 / 恢复（原 §3.1「创建 / 静默 / 恢复 / 刷新」命令集） */
-  setMuted(account: Account, muted: boolean): Result<void>;
+  /**
+   * ⚠️ **2026-10-11 已删 `setMuted(account, muted)`** —— **源里没有这个能力**（造物）：
+   *   · 本仓实现是 `view.setAudioMuted()`（**音频静音**）；而源全文 **`setAudioMuted` 0 命中**。
+   *   · 源的「**静默 / 恢复**」是**账号级 `autoStart` 开关**（`_Component43.jsx:517-524` 的 `Ve(id)`
+   *     = `Xy(id)` ＋ `updateAccount(id, {autoStart:true})`），其**机制**是 `:38-46` 那个过滤 ——
+   *     `autoStart !== true` 的账号**根本不渲染 `<webview>`**（元素不在 ⇒ guest 进程不在 ⇒ 才叫"不占用内存 / CPU"）。
+   *   ⇒ 正确落点是**既有字段 `Account.autoStart`**（本仓已有、且已被"自动值守"链消费），
+   *     而不是一个凭空造的端口方法。
+   *   ⚠️ 本仓对该能力有一处**刻意的架构偏离**：`BackendView` **常驻渲染全部账号**（注释原文：
+   *     "隐藏态的也要在，否则后台任务会找不到 webview"）⇒ 源的"不渲染"式暂停在本仓**表达不了**。
+   *     故「静默态」是**受该架构决策约束的未落项**（见 `docs/13` §2.3），不是"补个端口方法"能解决的。
+   */
 }

@@ -16,6 +16,7 @@ import {
   FACE_MASK_RANGE,
   type FaceMaskEffect,
 } from '@/constants/facemask';
+import { clamp } from '@/lib/math';
 
 /** 人脸框（**归一化坐标** 0~1；原 `{nx, ny, nw, nh}`） */
 export interface FaceBox {
@@ -36,10 +37,25 @@ export interface FaceMaskOpts {
   opacity: number;
 }
 
-/** clamp（原 `Ly`） */
-export function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v;
+/**
+ * 遮脸产出的**结果形状**（原 `nL` 的 `{dataUrl, w, h}` ＋ `mime`）
+ *
+ * ★ **2026-10-11 从 `adapters/media/facemask.ts` 上移到纯层**（`TD-16-107`）：
+ *   它是**纯数据形状**；而 `MediaPort.applyFaceMask` 要以它作返回类型 —— 端口**不得依赖 adapters**。
+ *   （同 `stable/model` 的「值形状」归位判据：形状住纯层，IO 住 adapter。）
+ */
+export interface FaceMaskResult {
+  dataUrl: string;
+  w: number;
+  h: number;
+  mime: string;
 }
+
+/**
+ * clamp（原 `Ly`）—— 实现已下沉到 `lib/math`（通用原语），此处**再导出**保持对外 API
+ * （`core/rules/tests/facemask.test.ts` 直接 import 它）。
+ */
+export { clamp };
 
 /**
  * 规范化遮脸选项（原 `em`）

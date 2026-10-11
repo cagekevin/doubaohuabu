@@ -132,7 +132,12 @@ describe('importProject · 正常导入', () => {
     const { deps } = makeDeps({ file: ok({ name: 'x.json', content: '{}' }) });
     const res = await importProject(deps, { ...baseInput, seq: 42 });
     if (!res.ok || res.value.kind !== 'imported') throw new Error('unreachable');
-    expect(res.value.project.id).toBe(`p_${(1_700_000_000_000).toString(36)}_42`);
+    // ⚠️ **2026-10-12 更正（越权收口）**：原断言写死十进制 `_42`，而源 `Pt`
+    //   （`shared.js:26669-26671`）的 seq 段是 **base36**（`42` ⇒ `16`）⇒ 十进制是**漂移**，
+    //   已在源头（`core/rules/project.makeId`）改对，用例随之更正。
+    expect(res.value.project.id).toBe(
+      `p_${(1_700_000_000_000).toString(36)}_${(42).toString(36)}`,
+    );
   });
 });
 

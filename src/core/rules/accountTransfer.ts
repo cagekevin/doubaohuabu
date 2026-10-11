@@ -64,8 +64,9 @@ export interface ImportedAccountDraft {
  *
  * ⚠️ **有意不在本函数做的事**：`addAccount` 会**按当前宿主 OS 重算指纹**
  *    （`shared.js:30194`：`hostOS` 不符或版本过期 ⇒ `zc(id#fpSalt)`）。
- *    指纹生成器（原 `zc` 25397-25462）**本工程尚未落地**（`docs/14` §3 已登记），
- *    ⇒ 该判定归 **state 的 `addAccount`**（M13 建号 UI 同批收口），此处**原样透传**文件里的指纹。
+ *    指纹生成器 = **`core/rules/fingerprintGenerator.ts`（已落地）**，宿主输入由 `state/slices/global.ts`
+ *    的 `addAccount` 注入（原 `zc` 现读 `Uc()`/`M$()`/`$$()`；见 `global.ts:291`「addAccount 与
+ *    `regenerateFingerprint` 共用这一处展开」）⇒ 该判定归 **state 的 `addAccount`**，此处**原样透传**文件里的指纹。
  */
 export function toImportedAccount(
   entry: Record<string, unknown>,

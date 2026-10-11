@@ -639,3 +639,151 @@ textarea.field { height: auto; padding: var(--space-2); line-height: 1.5; resize
 
 /* ═══ ★解耦演示：只改 L3 一个旋钮 ═══ */
 [data-split='on'] { --node-selected-ring: var(--color-warning); }
+
+/* ══════════════════════════════════════════════════════════════
+   ★ **推断补录**（2026-10-11）—— 原版 CSS 未入库，这些类是**照源语义推断**的
+   ══════════════════════════════════════════════════════════════
+   ⚠️ **先摆正本文件的定位**：它是**我们自己写的预演稿**（见 `README.md`：界面预演 / Token 试验田），
+      **不是**设计真源 —— 「本文件里没有某个类」**不能**推断成「原版没有它」。
+      所以：`src/` 里照源语义补出来的类，**一律回填到本节**，让本文件与 `src` 保持同形。
+   ⚠️ 本节**全部是推断样式**，**拿到原版 CSS 后要校**（对应债：`TD-16-87` / `TD-16-88` / `TD-16-92`）。
+   ⚠️ 用**原版类名**（与上面各段一致）；`src` 侧走 CSS Modules 的哈希名，两边形态一一对应。
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── ① 生成节点状态类（原 `YL.jsx:502,562,798`）—— ★ 推断：TD-16-87 ── */
+/* 播放中：正中浮标退居次要；悬停 / 键盘聚焦时恢复 */
+.gv-play.is-playing { opacity: 0.65; }
+.gv-play.is-playing:hover,
+.gv-play.is-playing:focus-visible { opacity: 1; }
+/* 真实时长：品牌色底高亮（正文色不变 ⇒ 对比度不变） */
+.gv-dur-badge.gv-dur-real { background: var(--color-action-primary); }
+/* API 任务条：失败 ⇒ 危险色；已取消 ⇒ 中性色（其余四态 = 基础 `.gv-apijob` 的 warning 色） */
+.gv-apijob-failed { color: var(--color-danger-text); }
+.gv-apijob-cancelled { color: var(--color-text-muted); }
+/* 历史版本按钮：弹层开着 ⇒ 保持「按下」观感（与按钮 hover 同底色） */
+.gv-hist-btn.is-open { background: var(--btn-ghost-bg-hover); }
+
+/* ── ② Toast 操作按钮（原 `_Component42.jsx:1474-1488`）—— ★ 推断：TD-16-88 ── */
+/* 有操作按钮时：消息 + 行内小按钮成一行（消息占满、按钮靠右） */
+.app-toast.has-action { display: flex; align-items: center; gap: var(--space-3); }
+.app-toast-msg { flex: 1; }
+.app-toast-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; height: var(--btn-height); padding: 0 var(--space-2);
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: var(--btn-ghost-bg); color: var(--color-surface-raised);
+  font-size: var(--font-size-xs); line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.app-toast-action:hover { background: var(--btn-ghost-bg-hover); }
+
+/* ── ③ 历史版本弹层（原 `YL.jsx:585-620` / `ZL.jsx:288-314`）—— ★ 推断：TD-16-92 ── */
+.gv-hist-pop {
+  position: fixed; z-index: var(--z-overlay);
+  /* 原 `YL.jsx:415` 的夹取式 `innerWidth - 264 - 8` 假定弹层宽 264px */
+  width: 264px;
+  /* ★ 本实现补的（源无该约束；不补的话 20 条会很长） */
+  max-height: 60vh;
+  overflow: auto;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.gv-hist-title { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.gv-hist-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1);
+  border: none; border-radius: var(--radius-sm);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.gv-hist-item.is-sel { background: var(--color-selection-bg); }
+.gv-hist-item.is-disabled { opacity: 0.5; cursor: not-allowed; }
+.gv-hist-thumb {
+  display: grid; place-items: center; flex: none;
+  width: var(--space-5); height: var(--space-4);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+  object-fit: cover; font-size: var(--font-size-xs);
+}
+.gv-hist-thumb.is-empty { color: var(--color-text-faint); }
+.gv-hist-meta { display: flex; flex-direction: column; min-width: 0; }
+.gv-hist-row {
+  overflow: hidden; font-size: var(--font-size-xs); color: var(--color-text-muted);
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.gv-hist-prompt {
+  overflow: hidden; font-size: var(--font-size-xs); color: var(--color-text-faint);
+  white-space: nowrap; text-overflow: ellipsis;
+}
+
+/* ── ④ 「自动匹配」按钮（原 `.auto-match-btn` `CL.jsx:745` / `.gp-automatch-btn` `Z3_1.jsx:962`）
+      —— ★ 推断：**只走共享按钮真源**，没有新增视觉（与同行的 `.split-md-btn` 同法，
+      故本文件里也不单独给样式，只在此登记类名与出处，免得下次又被当成"原版没有它"）。 ── */
+/* .auto-match-btn   —— 文本节点头部，与 `.split-md-btn` 同行 */
+/* .gp-automatch-btn —— 生成面板头部（`.gp-head` 内，标题与 `.gp-close` 之间） */
+/* .save-preset-btn  —— 文本节点头部 `.head-actions` 内（`CL.jsx:773-780`；那个 span 本身有样式，见上面 323） */
+
+/* ── ⑤ 拖入提示层 `.drop-hint`（原 `_Component42.jsx:1466`）
+      ★ **推断样式**：原版 CSS 未入库、本文件也未收录 ⇒ 按语义补（画布居中虚线框 +
+      `pointer-events: none` —— **不吃指针事件**，否则会挡住 drop）。待原版 CSS 校。 ── */
+.drop-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: var(--z-overlay);
+  transform: translate(-50%, -50%);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── ⑥ 节点右键菜单（原 `.node-ctx-menu` / `.ctx-menu-item`，`_Component42.jsx:1685-1726`）
+      ★ **推断样式**（原版 CSS 未入库、本文件也未收录 ⇒ 按源语义补）。
+      ⚠️ 定位是 `position: fixed`（`left/top` = 右键处的**屏幕坐标**）。 ── */
+.node-ctx-menu {
+  position: fixed;
+  z-index: var(--z-overlay);
+  min-width: 132px;
+  display: flex; flex-direction: column;
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.ctx-menu-item {
+  border: none; border-radius: var(--radius-sm);
+  background: transparent;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  text-align: left; cursor: pointer; white-space: nowrap;
+}
+.ctx-menu-item:hover { background: var(--btn-ghost-bg-hover); }
+.ctx-menu-item.disabled { color: var(--color-text-faint); cursor: not-allowed; }
+.ctx-menu-item.disabled:hover { background: transparent; }
+
+/* ── ⑦ 生成面板浮层（原 `.gen-panel-layer` / `.gen-panel` 定位，`Z3_1.jsx:60-90,956-959`）
+      ★ **推断样式**（原版 CSS 未入库、本文件也未收录 ⇒ 按源语义补）。
+      ⚠️ `.gen-panel-layer` = 整屏一层（承接「点外面 = 提交并关闭」）；
+         `.gen-panel` = `position: fixed`，`left/top` 由锚定 effect 写入
+         （下方优先、放不下翻上方、三重边距夹取 `12px`），宽度走源兜底式 `min(860px, 92vw)`。 ── */
+.gen-panel-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+}
+.gen-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: calc(var(--z-overlay) + 1);
+  width: min(860px, 92vw);
+}

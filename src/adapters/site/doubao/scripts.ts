@@ -220,6 +220,13 @@ export function buildSetInputScript(text: string): string {
  * 「读发送前的消息基线」脚本（原 `jD` 38726）
  * ⚠️ 存的是 **norm 全文**（不是截断）—— 回复脚本用「完全相等」匹配排除旧消息，
  *    修改轮次里新旧回答开头相同也不会误判（源注释原话）。
+ *
+ * ★ **TD-16-106**（2026-10-11）：失败由「裸 `[]`」改为**判别对象** ——
+ *   源 `catch{ return [] }` 让「脚本崩」与「页面确实没有旧消息」在上游**不可分辨**
+ *   （消费者只拿到空基线 ⇒ 旧回复可能被当成新回复，M5）。现与同文件
+ *   `buildSetInputScript` 同范式（`{ok:true,…}` ／ `{ok:false, error}`）。
+ *   ⚠️ **页内脚本不 `console.warn`**（反检测红线，见 `docs/09` C2）—— 异常只**带回结果**，
+ *      留痕由渲染进程侧（`analyze.ts`）做。
  */
 export const MESSAGE_BASELINE_SCRIPT = `(function(){
   try {
@@ -234,9 +241,14 @@ export const MESSAGE_BASELINE_SCRIPT = `(function(){
       var t = norm(b.innerText || b.textContent || '');
       if (t.length >= 8) out.push(t);
     }
-    return out;
-  } catch(e){ return []; }
+    return { ok:true, list: out };
+  } catch(e){ return { ok:false, error: e.message || String(e) }; }
 })()`;
+
+/** `MESSAGE_BASELINE_SCRIPT` 的返回（源 `jD` 恒返数组；本仓补失败判别 —— TD-16-106） */
+export type MessageBaselineResult =
+  | { ok: true; list: string[] }
+  | { ok: false; error: string };
 
 /** 「读回复」脚本入参（与 `core/rules/analyzePrompt.ts` 的 `ReplyReadOptions` 同形） */
 export interface ReplyReadScriptOptions {

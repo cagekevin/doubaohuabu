@@ -17,6 +17,7 @@
 
 import { GEN_ATTEMPT_WINDOW_MS } from '@/constants';
 import { GEN_PROGRESS_TEXT } from '@/constants/text';
+import { formatDuration } from '@/lib/time';
 
 /** 进度状态（对应原 `cls`，一一映射；`ui` 负责转类名） */
 export const GEN_PROGRESS_STATES = [
@@ -84,8 +85,7 @@ export function formatElapsed(
   if (!from) return '';
   const end = to || now;
   const sec = Math.max(0, Math.round((end - from) / 1000));
-  if (sec < 60) return `${sec}s`;
-  return `${Math.floor(sec / 60)}m${String(sec % 60).padStart(2, '0')}s`;
+  return formatDuration(sec);
 }
 
 /** 进度回显（原 `B0` 42493） */

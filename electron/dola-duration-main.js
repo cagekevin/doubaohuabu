@@ -2134,5 +2134,5 @@
   try {
     console.log('[dola-30s] 主世界注入已运行；30s 开关=', duration30Enabled());
     logDurationDiag(`injected; 30s_enabled=${duration30Enabled()}`);
-  } catch (e) {}
+  } catch (e) { /* ★ TD-16-37：这一段**就是**在打日志 ⇒ 日志自身失败只能吞（再打日志无意义） */ }
 })();

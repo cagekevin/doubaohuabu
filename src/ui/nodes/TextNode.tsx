@@ -37,8 +37,11 @@ import {
 } from 'react';
 import { useStore } from '@/state';
 import { TEXT_NODE_LABEL } from '@/stable/model/node';
-import { MATERIAL_NODE_TEXT, NODE_EDIT_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
+import { AUTO_MATCH_TEXT, MATERIAL_NODE_TEXT, NODE_EDIT_TEXT, PRESET_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
 import { parseRefChips } from '@/core/rules/refs';
+import { autoMatchText } from '@/core/rules/autoMatch';
+import { FuzzyConfirmPanel } from './FuzzyConfirmPanel';
+import { sendStatusView } from '@/core/rules/sendStatus';
 import {
   collectLinkedMaterials,
   materialDataUrlOf,
@@ -59,6 +62,9 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   const patchNodeData = useStore((s) => s.patchNodeData);
   const library = useStore((s) => s.library);
   const nodes = useStore((s) => s.nodes);
+  /** 发送状态（原 `CL.jsx:757` 的 `l` = `nodeSendStates[id]`；由 `state/batchSend` 写入） */
+  const sendState = useStore((s) => s.nodeSendStates[id]);
+  const sendView = sendStatusView(sendState?.status);
   /** ★ 素材缩略条要从**边**推导「连入的素材节点」（原 `w`） */
   const edges = useStore((s) => s.edges);
   /**
@@ -68,6 +74,13 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
    */
   const openSplitKeywordModal = useStore((s) => s.openSplitKeywordModal);
   const [editingName, setEditingName] = useState(false);
+  /** 自动匹配按钮的临时态（原 `ce`：`'ok'` / `'none'` / `null`，1.5s 后复位） */
+  const [autoMatchState, setAutoMatchState] = useState<'ok' | 'none' | null>(null);
+  const autoMatchTimerRef = useRef<number | null>(null);
+  /** 「保存预设」的临时态（原 `pe`，1.5s 后复位） */
+  const [presetSaved, setPresetSaved] = useState(false);
+  const presetTimerRef = useRef<number | null>(null);
+  const addPreset = useStore((s) => s.addPreset);
   const nameRef = useRef<HTMLSpanElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   /**
@@ -104,14 +117,14 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   useEffect(() => {
     const el = bodyRef.current;
     if (!el || document.activeElement === el) return;
-    const next = textToEditorHtml(data.text ?? '', materials);
+    const next = textToEditorHtml(data.text, materials);
     if (el.innerHTML !== next) el.innerHTML = next;
   }, [data.text, materials]);
 
   /** 读 DOM 并**变了才写**（原 `Q` 501-511） */
   const commit = useCallback(() => {
     const next = editorToText(bodyRef.current);
-    if (next !== (data.text ?? '')) patchNodeData(id, { text: next });
+    if (next !== data.text) patchNodeData(id, { text: next });
   }, [data.text, id, patchNodeData]);
 
   /** 光标左侧的纯文本（用于 `@` 触发检测） */
@@ -183,12 +196,52 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
     setEditingName(false);
   };
 
+  /**
+   * 自动匹配（原 `wt`，`CL.jsx:243-264`）
+   *
+   * 源顺序：`Q()`（先 flush 编辑器）→ 读 `data.text` → `Jh(text, library)` →
+   * **变了才写**（`r(e, {text: Y})`）→ 按钮态 `'ok'` / `'none'` → **1.5s 后复位**。
+   * ⚠️ 与生成面板的 `Z` **不同**：文本节点这条**不发提示**（源就没有）。
+   * ★ **2026-10-11**：「待确认项」已落 —— 源随后的 `l$` → `c$` 那两步现在是
+   *   `FuzzyConfirmPanel` 的**纯派生**（`useMemo`：`fuzzyCandidates` → 过滤已忽略 → `groupCandidates`）；
+   *   本函数只需照旧写回正文（`text` 一变，面板自己重算）。
+   */
+  const runAutoMatch = (): void => {
+    commit();
+    const text = data.text;
+    const next = autoMatchText(text, library);
+    if (next !== text) {
+      patchNodeData(id, { text: next });
+      setAutoMatchState('ok');
+    } else {
+      setAutoMatchState('none');
+    }
+    if (autoMatchTimerRef.current !== null) window.clearTimeout(autoMatchTimerRef.current);
+    autoMatchTimerRef.current = window.setTimeout(() => setAutoMatchState(null), AUTO_MATCH_TEXT.resetMs);
+  };
+
+  /**
+   * 保存到提示词预设（原 `q`，`CL.jsx:212-225`）
+   *
+   * 源顺序：取 `text.trim()` → **空正文直接 return**（不提示、不置态）→
+   * `addPreset({name: label || '文本框', content})` → 按钮态 1.5s 后复位。
+   * ⚠️ 源里提示词预设**只写不读**（没有列表 / 套用 UI）—— 照实落，不假装有 UI。
+   */
+  const savePreset = (): void => {
+    const text = data.text.trim();
+    if (!text) return;
+    addPreset({ name: data.label || TEXT_NODE_LABEL, content: text });
+    setPresetSaved(true);
+    if (presetTimerRef.current !== null) window.clearTimeout(presetTimerRef.current);
+    presetTimerRef.current = window.setTimeout(() => setPresetSaved(false), 1500);
+  };
+
   /** 正文里已经写下的引用（预览行 —— 药丸已经表达了，但它还标出"素材缺失"） */
   const refPreview = useMemo(() => {
     const parsed = parseRefChips(data.text);
     if (parsed.refs.length === 0) return [];
     const nodeMap: Record<string, RefNodeLike> = Object.fromEntries(
-      nodes.map((n) => [n.id, { id: n.id, type: n.type, data: n.data as unknown as Record<string, unknown> }]),
+      nodes.map((n) => [n.id, { id: n.id, type: n.type, data: n.data }]),
     );
     return parsed.refs.map((r) => ({ n: r.n, ...resolveRefMaterial(r.id, library, nodeMap) }));
   }, [data.text, library, nodes]);
@@ -276,7 +329,63 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   );
 
   return (
-    <NodeShell title={title} meta={`${data.aspectRatio} · ${data.duration}s`} selected={selected}>
+    <NodeShell
+      title={title}
+      meta={
+        <>
+          {`${data.aspectRatio} · ${data.duration}s`}
+          {/*
+            ★ 「自动匹配」（原 `CL.jsx:745-750` 的 `.auto-match-btn`）—— 在**头部**（紧跟节点名，
+            与 `.split-md-btn` 相邻）；按钮态 `'ok'` / `'none'` 1.5s 后复位。
+          */}
+          <button
+            type="button"
+            className={`${styles.autoMatchBtn} nodrag nopan`}
+            title={AUTO_MATCH_TEXT.textNodeTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              runAutoMatch();
+            }}
+          >
+            {autoMatchState === 'ok'
+              ? AUTO_MATCH_TEXT.ok
+              : autoMatchState === 'none'
+                ? AUTO_MATCH_TEXT.none
+                : AUTO_MATCH_TEXT.idle}
+          </button>
+          {/*
+            ★ 「发送状态」（原 `CL.jsx:757-762`）—— 源在**头部**（`foot-send-status head-send-status`
+            两个类名都挂，位置在拆分按钮之后）；`title` = `msg`，图标按状态三档
+            （`sending` ⏳ / `success` ✓ / **其余一律** ⚠）。
+          */}
+          {sendView ? (
+            <span
+              className={`${styles.sendStatus}${sendView.tone === 'success' ? ` ${styles.sendStatusSuccess}` : sendView.tone === 'error' ? ` ${styles.sendStatusError}` : ''} nodrag nopan`}
+              title={sendState?.msg}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {sendView.icon}
+              {sendState?.msg}
+            </span>
+          ) : null}
+          {/* `head-actions`（原 `CL.jsx:773-780`）—— 源里头部**最后**一项，`margin-left:auto` 靠右 */}
+          <span className={`${styles.headActions} nodrag nopan`}>
+            <button
+              type="button"
+              className={styles.savePresetBtn}
+              title={PRESET_TEXT.saveTitle}
+              onClick={(e) => {
+                e.stopPropagation();
+                savePreset();
+              }}
+            >
+              {presetSaved ? PRESET_TEXT.saved : PRESET_TEXT.save}
+            </button>
+          </span>
+        </>
+      }
+      selected={selected}
+    >
       <div className={styles.editWrap}>
         {/*
           ★ 正文工具条（原 `.text-toolbar`，`CL.jsx:784-815`）：
@@ -384,7 +493,7 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
       )}
 
       {/* ★ 「拆分」（原 `CL.jsx:751-756` 的 `.split-md-btn`）—— 只在有正文时出现 */}
-      {(data.text ?? '').trim().length > 0 && (
+      {data.text.trim().length > 0 && (
         <div className={styles.splitFoot}>
           <button
             type="button"
@@ -399,6 +508,19 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
           </button>
         </div>
       )}
+
+      {/*
+        ★ 模糊匹配待确认（原 `CL.jsx:834-892`）
+        ⚠️ **没有 `open` prop**：源的开合是派生的（`const Je = he.length > 0`）⇒ 无候选时
+          组件自身返回 `null`（"处理完就消失"）—— 见组件头注。
+      */}
+      <FuzzyConfirmPanel
+        text={data.text}
+        library={library}
+        onWrite={(next) => patchNodeData(id, { text: next })}
+        // ★ 高亮 / 定位滚动都要对着**正文编辑器**量（原 `x.current`）
+        editorRef={bodyRef}
+      />
     </NodeShell>
   );
 }

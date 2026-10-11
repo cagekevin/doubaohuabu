@@ -21,6 +21,7 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   applyEdgeChanges,
   applyNodeChanges,
   useReactFlow,
@@ -29,15 +30,25 @@ import {
 } from '@xyflow/react';
 import type { CanvasEdge } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
-import { useStore, useStoreApi } from '@/state';
+import { useCapture, useHostOps, useStore, useStoreApi } from '@/state';
 import { nodeTypes } from '@/ui/nodes';
+import { FaceMaskPanel } from '@/ui/panels/FaceMaskPanel';
 import type { RFCanvasNode } from '@/ui/nodes/types';
 import { InteractiveEdge } from '@/ui/edges/InteractiveEdge';
+import { playChime } from '@/lib/chime';
+import { log } from '@/lib/log';
+import { fitMaterialSize } from '@/core/rules/materialGrid';
+import { readImageFile, readTextFile, stripExtension } from '@/lib/readDroppedFile';
+import { formatClockTime } from '@/lib/time';
 import { DRAG_MIME_MATERIAL, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
 import { CANVAS_TEXT } from '@/constants/text';
 import { CreatePanel, type CreatePanelState } from './CreatePanel';
 import { SelectionToolbar } from './SelectionToolbar';
+import { NodeContextMenu, type NodeContextMenuState } from './NodeContextMenu';
+import { NodePresetModal } from './NodePresetModal';
+import { buildClipboard, type ClipboardPayload } from '@/core/rules/clipboard';
 import { SplitKeywordModal } from '@/ui/nodes/SplitKeywordModal';
+import { SplitPresetPickerModal } from '@/ui/nodes/SplitPresetPickerModal';
 import styles from './CanvasHost.module.css';
 
 const edgeTypes = { interactive: InteractiveEdge };
@@ -70,7 +81,8 @@ function Inner() {
   const pushBackendError = useStore((s) => s.pushBackendError);
   const library = useStore((s) => s.library);
   const addTextNode = useStore((s) => s.addTextNode);
-  const addMaterialNode = useStore((s) => s.addMaterialNode);
+  /** ★ 拖入素材 ⇒ 保证画布上有它的节点（原 `ensureMaterialNode`，`shared.js:29055-29083`） */
+  const ensureMaterialNode = useStore((s) => s.ensureMaterialNode);
   /** ★ 建节点浮层（原 `Ae`）—— `null` = 不显示 */
   const [createPanel, setCreatePanel] = useState<CreatePanelState | null>(null);
   /** ★ 删除必须走它（见 `onNodesChange` 的注释） */
@@ -80,9 +92,31 @@ function Inner() {
    *   拆分要删掉源节点，弹窗若住在节点里会随之卸载；且节点在变换容器内，浮层会被 transform 带偏）
    */
   const splitModal = useStore((s) => s.splitKeywordModal);
+  /** ★ 「拆分并套用节点预设」（原 `splitPresetPicker`）—— 由**外壳**渲染（同 `splitModal`） */
+  const splitPresetPicker = useStore((s) => s.splitPresetPicker);
+  const closeSplitPresetPicker = useStore((s) => s.closeSplitPresetPicker);
   const closeSplitKeywordModal = useStore((s) => s.closeSplitKeywordModal);
+  /**
+   * ★ **遮脸参数面板**（原 `_Component40`）—— **与 `splitModal` 同法**：
+   *   由**节点内**的人脸角标（双击）打开，却由**外壳**渲染（面板是视口级浮层，不属于任何节点）。
+   */
+  const faceMaskPanel = useStore((s) => s.faceMaskPanel);
+  const closeFaceMaskPanel = useStore((s) => s.closeFaceMaskPanel);
 
   const { fitView, screenToFlowPosition } = useReactFlow();
+  /** 当前工程 id（原 `b`）—— 切项目后要自适应视图 */
+  const activeId = useStore((s) => s.activeId);
+  /** 网格吸附开关（原 `y`）—— 同时喂 `snapToGrid` 与批量排布（`state/slices/materialBatch`） */
+  const snap = useStore((s) => s.snap);
+  /** 删单条边（原 `v` = `removeEdge`）—— 供「边双击」用 */
+  const removeEdge = useStore((s) => s.removeEdge);
+  // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
+  const hostOps = useHostOps();
+  const capture = useCapture();
+  const selectOnly = useStore((s) => s.selectOnly);
+  const addMaterialFromDrop = useStore((s) => s.addMaterialFromDrop);
+  const addNode = useStore((s) => s.addNode);
+  const patchNodeData = useStore((s) => s.patchNodeData);
 
   // 节点/边变更：位置变化**不在此 commit**（拖拽开始才 commit，见 onNodeDragStart）
   const onNodesChange = useCallback(
@@ -117,8 +151,11 @@ function Inner() {
 
       if (rest.length > 0) {
         // ⚠️ 用**刚读到的 `current`**（不是 React 闭包）—— 见本回调开头的注释
-        const next = applyNodeChanges(rest, current as unknown as RFCanvasNode[]);
+        const next = applyNodeChanges(rest, current);
         // ★ 只改节点（**不再带 `edges`**）—— 否则会拿旧边覆盖掉刚发生的边变更
+        // ★ **TD-02-17 确证必要的一处断言**：`applyNodeChanges` 返的是 `@xyflow/react` 自己的
+        //   `Node[]`（**第三方类型**）⇒ 回写 store 必须收窄到本仓 `CanvasNode`。
+        //   ⚠️ 这是**类型边界**（第三方 ↔ 本仓），**不是**"Lite 接口与 stable 双轨" ⇒ 断言是刻意的。
         setNodes(next as unknown as CanvasNode[]);
       }
       if (removed.length > 0) {
@@ -162,13 +199,195 @@ function Inner() {
     [connect, pushToast],
   );
 
-  // 快捷键（原实现：Ctrl+Z / Ctrl+Shift+Z）
+  // ── 复制 / 粘贴节点（原 `_Component42.jsx:1178-1326`）────────────────────────────
+  const copyNodes = useStore((s) => s.copyNodes);
+  const pasteNodes = useStore((s) => s.pasteNodes);
+  const hasClipboard = useStore((s) => s.clipboard !== null);
+  /** 鼠标屏幕坐标（原 `$t`，`1183-1194`）—— 粘贴落点优先用它 */
+  const mouseRef = useRef({ x: 0, y: 0 });
+  /** 上次「复制节点」的时刻（原 `ke` + `pe()`，`155-156`） */
+  const lastCopyAtRef = useRef(0);
+  /** 上次「窗口失焦 / 系统剪贴板变化」的时刻（原 `V`，`1195-1207`） */
+  const lastClipboardChangeRef = useRef(0);
+  /** 画布外框（原 `bt`，`1178`）—— 判「鼠标在不在画布里」 */
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent): void => {
+      mouseRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, []);
+
+  useEffect(() => {
+    // 原 `B`：**两处**都只做一件事 —— 记时间戳（`V.current = Date.now()`）
+    const mark = (): void => {
+      lastClipboardChangeRef.current = Date.now();
+    };
+    window.addEventListener('blur', mark);
+    const off = hostOps.onClipboardImageChanged(mark);
+    return () => {
+      window.removeEventListener('blur', mark);
+      off();
+    };
+  }, [hostOps]);
+
+  /**
+   * 粘贴落点（原 `mt`，`_Component42.jsx:1208-1232`）
+   *
+   * 源：鼠标在**画布矩形内** ⇒ `screenToFlowPosition(鼠标)`；否则 ⇒ **`{x:0,y:0}`**
+   * （⚠️ 不是 `null` —— 「落在画布原点」是源的行为，逐字保留）。
+   */
+  const pastePosition = useCallback((): { x: number; y: number } => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    const { x, y } = mouseRef.current;
+    if (rect && rect.width > 0 && x && y && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      return screenToFlowPosition({ x, y });
+    }
+    return { x: 0, y: 0 };
+  }, [screenToFlowPosition]);
+
+  /**
+   * 把**系统剪贴板里的图**落成素材节点（原 `$n`，`_Component42.jsx:1246-1275`）
+   *
+   * 源顺序：`readClipboardImage()` → 没有 `dataUrl` ⇒ 返回 false ·
+   * 宽高各兜底 `200/160` → 名字 = **文件名去扩展名后截 40 字**，没有文件名 ⇒ `粘贴图片 HH:MM:SS` ·
+   * 落点 = 鼠标位置**减这张图的一半**。
+   * @returns 是否真的建了节点（`false` ⇒ 调用方改走「粘贴节点」那条路，原 1314-1316）
+   */
+  const pasteClipboardImage = useCallback(
+    async (pos: { x: number; y: number }): Promise<boolean> => {
+      const r = await hostOps.readClipboardImage();
+      if (!r.ok) {
+        log.warn('[CanvasHost] 读系统剪贴板图片失败:', r.message);
+        return false;
+      }
+      const img = r.value;
+      if (!img || !img.dataUrl) return false;
+      const natW = img.w || 200;
+      const natH = img.h || 160;
+      const size = fitMaterialSize(natW, natH);
+      const name =
+        (img.name ? stripExtension(img.name).slice(0, 40) : '') ||
+        CANVAS_TEXT.pastedImageName(formatClockTime(Date.now()));
+      addMaterialFromDrop([{ name, dataUrl: img.dataUrl, natW, natH, size }], {
+        x: pos.x - size.w / 2,
+        y: pos.y - size.h / 2,
+      }, { x: 24, y: 24 });
+      return true;
+    },
+    [hostOps, addMaterialFromDrop],
+  );
+
+  /**
+   * ★ **`Ctrl/⌘+C` / `Ctrl/⌘+V` 复制 / 粘贴节点**（原 `_Component42.jsx:1276-1326` 的 keydown，**逐行回源**）
+   *
+   * 源（节选）：
+   * ```js
+   * const Oe = ue.target;
+   * if (Oe && (Oe.isContentEditable || Oe.tagName === 'INPUT' || Oe.tagName === 'TEXTAREA')) return;  // ★ 输入框守卫
+   * const Ze = ue.key.toLowerCase();
+   * if (Ze === 's' && !ue.metaKey && !ue.ctrlKey && !ue.altKey) { ...选中 video ⇒ 逐个截图...; return; }
+   * if (ue.metaKey || ue.ctrlKey) {
+   *   if (Ze === 'c') { preventDefault(); stopPropagation(); pe(); copyNodes(); return; }
+   *   if (Ze === 'v') {
+   *     preventDefault(); stopPropagation();
+   *     const vt = mt();
+   *     if (!!clipboard && V.current < ke.current) { pasteNodes(vt); return; }   // ★ 系统剪贴板没变过 ⇒ 粘节点
+   *     $n(vt).then(...);                                                        // 否则读**剪贴板图片**
+   *     return;
+   *   }
+   * }
+   * ```
+   * ⚠️ 与源一致：**两条分支都 `preventDefault` + `stopPropagation`**（否则浏览器/宿主还会
+   *    再处理一次，比如把 `Ctrl+V` 透给页面里的输入框）。
+   * ✅ **`Ctrl+V` 的图片回落已落**（2026-10-11）：`pasteClipboardImage` 走 `hostOps.readClipboardImage`
+   *    → `addMaterialFromDrop`（**TD-16-95 已结**）。
+   */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.ctrlKey || e.metaKey;
-      if (!mod || e.key.toLowerCase() !== 'z') return;
+      const t = e.target;
+      const inEditor =
+        t instanceof HTMLElement && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+      if (inEditor) return;
+      const key = e.key.toLowerCase();
+      // ★ `s`：选中 video 节点 ⇒ 逐个截图（原 `_Component42.jsx:1283-1296`，**在 mod 判断之前**）
+      if (key === 's' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const ids = storeApi
+          .getState()
+          .nodes.filter((n) => n.selected && n.type === 'video')
+          .map((n) => n.id);
+        if (ids.length) {
+          e.preventDefault();
+          for (const id of ids) {
+            void capture.captureNode(id).then((r) => {
+              // ⚠️ 源是 `.catch(() => {})` **静默**（`Rk` 失败返回 `null`）—— 本实现**给提示**（原则 6）：
+              //    否则用户按了 `s` 什么都没发生也不知道为什么
+              if (!r.ok) pushToast(r.reason || CANVAS_TEXT.captureFailed, undefined, 'warn');
+            });
+          }
+        }
+        return;
+      }
+      if (!e.metaKey && !e.ctrlKey) return;
+      if (key === 'c') {
+        e.preventDefault();
+        e.stopPropagation();
+        lastCopyAtRef.current = Date.now(); // 原 `pe()`
+        copyNodes();
+        return;
+      }
+      if (key === 'v') {
+        e.preventDefault();
+        e.stopPropagation();
+        const pos = pastePosition();
+        if (hasClipboard && lastClipboardChangeRef.current < lastCopyAtRef.current) {
+          pasteNodes(pos);
+          return;
+        }
+        // 原 1313-1317：否则读**系统剪贴板里的图**；读不到图才回落「粘贴节点」
+        void pasteClipboardImage(pos).then((done) => {
+          if (!done && hasClipboard) pasteNodes(pos);
+        });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [copyNodes, pasteNodes, hasClipboard, pastePosition, pasteClipboardImage, capture, pushToast, storeApi]);
+
+  /**
+   * 撤销 / 重做快捷键（原 `_Component48.jsx:32-54`，**逐行回源**）
+   *
+   * 源：
+   * ```js
+   * if (!y.metaKey && !y.ctrlKey) return;
+   * const b = y.key.toLowerCase();
+   * const x = y.target;
+   * if ((x && (x.isContentEditable || x.tagName === 'INPUT' || x.tagName === 'TEXTAREA'))
+   *     || (b !== 'z' && b !== 'y')) return;
+   * y.preventDefault();
+   * if (b === 'y' || (b === 'z' && y.shiftKey)) N.redo(); else N.undo();
+   * ```
+   * ★ **2026-10-11 补两处（此前本仓漏了，其中一处是真 bug）**：
+   *   ① **输入框守卫** —— 在正文 / 输入框里按 `Ctrl+Z` **不得**撤销画布：那会**同时**毁掉
+   *      用户正在编辑的文字，而且 `preventDefault` 还把**浏览器原生的文本撤销**一起吃掉
+   *      ⇒ 表现为「编辑器里按撤销，画布塌了、字没回来」；
+   *   ② **`Ctrl/⌘+Y` 也是重做**（此前只认 `Ctrl+Shift+Z`）。
+   * ⚠️ 优先级逐字：`key === 'y' || (key === 'z' && shiftKey)` ⇒ 重做；否则撤销（**不判** shift）。
+   * ⚠️ 源用 `x && x.tagName === …`（非元素 target ⇒ 不拦）；本仓用 `instanceof HTMLElement`
+   *    **同义**且免断言（`document` 之类没有 `tagName`）。
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      const key = e.key.toLowerCase();
+      const t = e.target;
+      const inEditor =
+        t instanceof HTMLElement && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+      if (inEditor || (key !== 'z' && key !== 'y')) return;
       e.preventDefault();
-      if (e.shiftKey) redoAction();
+      if (key === 'y' || (key === 'z' && e.shiftKey)) redoAction();
       else undoAction();
     };
     window.addEventListener('keydown', onKey);
@@ -181,7 +400,68 @@ function Inner() {
     return () => window.clearTimeout(t);
   }, [fitView]);
 
+  /**
+   * ★ **切项目后自适应**（原 `_Component42.jsx:500-515`）
+   *
+   * 源（逐行）：
+   * ```js
+   * useEffect(() => {
+   *   if (!b) return;                                   // `b` = 当前工程 id
+   *   const B = setTimeout(() => { try { D({ padding: 0.25, duration: 250 }); } catch {} }, 150);
+   *   return () => clearTimeout(B);
+   * }, [b, D]);
+   * ```
+   * ⚠️ **源那个 `catch {}` 是空吞**（ReactFlow 实例未就绪时会抛）—— 本实现把**同步抛**与
+   *    **Promise 拒绝**两条路都留痕（原则 6），**不吞**；语义等价（失败就不 fit，不重试）。
+   */
+  useEffect(() => {
+    if (!activeId) return;
+    const t = window.setTimeout(() => {
+      try {
+        void fitView({ padding: 0.25, duration: 250 }).catch(warnFitViewFailed);
+      } catch (err) {
+        warnFitViewFailed(err);
+      }
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [activeId, fitView]);
+
   const empty = nodes.length === 0;
+  /** 节点右键菜单（原 `Y`）—— 见 `NodeContextMenu.tsx` */
+  const [nodeMenu, setNodeMenu] = useState<NodeContextMenuState | null>(null);
+  /**
+   * ★ 「保存为节点预设」的**载荷**（原 `ae`，`_Component42.jsx:1138-1155`）—— 住**宿主本地态**
+   *   （源也是 `useState`：`we({ nodes: structuredClone(ue), edges: structuredClone(Oe) })`）。
+   *   ⚠️ 快照计算复用 `core/rules/clipboard.buildClipboard` —— 与「复制」**同一份**语义
+   *     （多选才带边，且只带**两端都在选中集合里**的边；单选 ⇒ 空边；没选中 ⇒ `null`）。
+   */
+  const [nodePresetPayload, setNodePresetPayload] = useState<ClipboardPayload | null>(null);
+  /** 拖入悬停态（原 `K`）—— 亮起 `.drop-hint` 提示层 */
+  const [dropActive, setDropActive] = useState(false);
+
+  /** 提示音开关（原 `xt` = `soundEnabled`） */
+  const soundEnabled = useStore((s) => s.soundEnabled);
+  /** 上一帧的 `video` 节点数（原 `Nt`）—— 只在**变多**时响 */
+  const lastVideoCount = useRef(0);
+
+  /**
+   * ★ **成片落地提示音**（原 `_Component42.jsx:435-443`，**逐行回源**）
+   *
+   * 源：
+   * ```js
+   * const B = r.filter(ue => ue.type === 'video').length;
+   * if (xt && B > Nt.current) gt();
+   * Nt.current = B;
+   * ```
+   * ⚠️ 判据是 **`video` 节点**（**不是** `genvideo`）—— 「成片落到画布」才响，逐字保留。
+   * ⚠️ **源的既有行为（照实保留）**：`Nt` 初值 `0` ⇒ **打开一个含 `video` 节点的工程时会响一次**
+   *    （切工程同理）。这是源的 quirk，**不擅自"修"**；要改说一声。
+   */
+  useEffect(() => {
+    const count = nodes.filter((n) => n.type === 'video').length;
+    if (soundEnabled && count > lastVideoCount.current) playChime();
+    lastVideoCount.current = count;
+  }, [nodes, soundEnabled]);
 
   /** ★ 双击空白 → 建文本节点（原「双击画布创建文本框」） */
   const onDoubleClick = useCallback(
@@ -194,28 +474,96 @@ function Inner() {
     [addTextNode, screenToFlowPosition],
   );
 
-  /** ★ 从资源库拖入 → 建素材节点（原「从右侧资源库拖入素材」） */
+  /**
+   * ★ **拖放入口**：资源库素材 / 图片文件 / `.md` 文件（原 `pa`，`_Component42.jsx:1337-1422`）
+   *
+   * 源的顺序（**逐行**）：`preventDefault` → 关 `.drop-hint` → 读**素材 MIME**（命中就处理完并 `return`）
+   * → 否则把 `dataTransfer.files` 分成**图片**（`type` 以 `image/` 开头）与 **Markdown**
+   * （`type === 'text/markdown'` 或文件名以 `.md`/`.markdown` 结尾）；两类都没有 ⇒ 直接 `return`。
+   */
   const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      const libId = e.dataTransfer.getData(DRAG_MIME_MATERIAL);
-      if (!libId) return;
+    async (e: React.DragEvent) => {
       e.preventDefault();
-      const item = library.find((it) => it.id === libId);
-      if (!item) {
-        // ★ 拖了不存在的素材 —— 明确上报（原则 6），不静默吞
-        pushBackendError('unknown', `拖入的素材不在资源库中（libId=${libId}）`);
+      setDropActive(false);
+      // ① 资源库里的素材（走 `ensureMaterialNode`：画布上已有同源节点就**移动**它）
+      const libId = e.dataTransfer.getData(DRAG_MIME_MATERIAL);
+      if (libId) {
+        const item = library.find((it) => it.id === libId);
+        if (!item) {
+          // ★ 拖了不存在的素材 —— 明确上报（原则 6），不静默吞
+          pushBackendError('unknown', `拖入的素材不在资源库中（libId=${libId}）`);
+          return;
+        }
+        const res = ensureMaterialNode(libId, {
+          position: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+          // 原 1350：`Vl(St.w, St.h)` —— 由库条目的原始尺寸算出节点级尺寸
+          size: fitMaterialSize(item.w, item.h),
+        });
+        if (res.reused) pushToast(CANVAS_TEXT.materialReused(item.name), 2800, 'info');
         return;
       }
-      addMaterialNode(item, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+      // ② 文件（图片 / Markdown），原 1360-1420
+      const files = Array.from(e.dataTransfer.files || []);
+      const images = files.filter((f) => (f.type || '').startsWith('image/'));
+      const mds = files.filter(
+        (f) => (f.type || '') === 'text/markdown' || /\.(md|markdown)$/i.test(f.name || ''),
+      );
+      if (!images.length && !mds.length) return;
+      const flow = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const stagger = { x: 24, y: 24 }; // 原 `Dt`
+      if (images.length) {
+        // 原 1379-1398：`Pu` 逐个读图 → 滤掉读不出来的 → 落点 = 鼠标位置**减第一张的一半**
+        const read = (await Promise.all(images.map((f) => readImageFile(f))))
+          .filter((i) => i.dataUrl)
+          .map((i) => ({
+            name: i.name,
+            dataUrl: i.dataUrl,
+            natW: i.natW,
+            natH: i.natH,
+            size: fitMaterialSize(i.natW, i.natH),
+          }));
+        const first = read[0];
+        if (first) {
+          addMaterialFromDrop(read, { x: flow.x - first.size.w / 2, y: flow.y - first.size.h / 2 }, stagger);
+        }
+      }
+      if (mds.length) {
+        // 原 1400-1420：先建文本节点（**标题 = 文件名去扩展名**）→ 再把正文写进去
+        const read = await Promise.all(
+          mds.map(async (f) => ({ name: stripExtension(f.name), text: await readTextFile(f) })),
+        );
+        const base = { x: flow.x - 140, y: flow.y - 75 }; // 原 1407-1409
+        read.forEach((it, i) => {
+          const nodeId = addNode('text', { x: base.x + i * stagger.x, y: base.y + i * stagger.y }, {
+            label: it.name || CANVAS_TEXT.mdFallbackTitle,
+          });
+          if (nodeId) patchNodeData(nodeId, { text: it.text });
+        });
+      }
     },
-    [library, addMaterialNode, screenToFlowPosition, pushBackendError],
+    [
+      library,
+      ensureMaterialNode,
+      addMaterialFromDrop,
+      addNode,
+      patchNodeData,
+      screenToFlowPosition,
+      pushBackendError,
+      pushToast,
+    ],
   );
 
   const onDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(DRAG_MIME_MATERIAL)) {
-      e.preventDefault(); // 允许放置
-      e.dataTransfer.dropEffect = 'copy';
-    }
+    // ★ 原 `_Component42.jsx:1327-1331` 的 `Yr`：**无条件** `preventDefault` + 提示层亮起
+    //   （此前本仓只放行素材 MIME ⇒ 拖**文件**进来时浏览器直接拒绝）
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropActive(true);
+  }, []);
+
+  /** 离开提示层（原 `Qn`，`_Component42.jsx:1332-1336`：`currentTarget === target` 才收） */
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget === e.target) setDropActive(false);
   }, []);
 
   /**
@@ -243,24 +591,91 @@ function Inner() {
     [],
   );
 
+  /**
+   * ★ **边双击 → 删边**（原 `dt`，`_Component42.jsx:576-583`）
+   *
+   * 源逐行：
+   * ```js
+   * const dt = useCallback((B, ue) => {
+   *   if (He.current) { clearTimeout(He.current); He.current = null; }   // ★ 先**取消单击的 220ms 防抖**
+   *   nt(null);          // 关掉「建节点」浮层
+   *   v(ue.id);          // removeEdge
+   * }, [v]);
+   * ```
+   * ⚠️ **关键在第一步**：不清那个防抖的话，双击会**先弹建节点浮层**（220ms 后）**再删边** ——
+   *    这正是源把 `He.current` 提出来共享的原因。
+   * ⚠️ 与源一致：**不** `stopPropagation`、**不** `preventDefault`（双击本身不改选中态）。
+   * ⚠️ 前置已就绪：本刀之前刚把 `zoomOnDoubleClick={false}` 对齐（否则双击会被 xyflow 抢去缩放）。
+   */
+  const onEdgeDoubleClick = useCallback(
+    (_e: React.MouseEvent, edge: CanvasEdge) => {
+      if (createTimer.current) {
+        clearTimeout(createTimer.current);
+        createTimer.current = null;
+      }
+      setCreatePanel(null);
+      removeEdge(edge.id);
+    },
+    [removeEdge],
+  );
+
   /** 节点右键 → 「引用该节点生成」（原 `node-ctx-menu` 的入口；多选时带上全部选中项） */
-  const onNodeContextMenu = useCallback(
-    (e: React.MouseEvent, node: { id: string }) => {
+  /**
+   * ★ **空白处右键 → 建节点浮层**（原 `W`（pane）与 `uo`（画布容器），`_Component42.jsx:1027-1046` / `1423-1442`）
+   *
+   * 源的两个入口做的是**同一件事**，只有守卫宽度不同（`uo` 额外放过 `.node-ctx-menu` 与
+   * `.create-panel`：点已开的面板本身不该再弹一个）⇒ 本仓**共用一个回调**、取守卫**并集**（判据 C1）。
+   * 源逐行：`preventDefault()` → 取 `nodes.some(n => n.selected)`（= `hasSelection`）→
+   * `nt({x: clientX, y: clientY, flowPos: screenToFlow(…), mode:'context', hasSelection})`。
+   * ⚠️ 源用**原始类名**（`.create-panel`）做守卫；本仓 CSS Modules **类名被哈希**了
+   * ⇒ 改用 `CreatePanel` 自带的 `data-testid`（同一含义，见 `CreatePanel.tsx`）。
+   * ⚠️ `.node-ctx-menu` 那半**暂不落** —— 那张菜单本身还没实现（**TD-16-94**），
+   *    等它落地时把这条守卫一起补上。
+   */
+  const onPaneContextMenu = useCallback(
+    // ⚠️ ReactFlow 的 `onPaneContextMenu` 与 React 的 `onContextMenu` **事件类型不同**
+    //   （前者收原生 `MouseEvent`，后者收 React 的合成事件）⇒ 这里取**并集**。
+    (e: MouseEvent | React.MouseEvent) => {
+      const target = e.target;
+      if (
+        target instanceof Element &&
+        (target.closest('.react-flow__node') ||
+          target.closest('[data-testid="create-panel"]') ||
+          target.closest('[data-testid="node-ctx-menu"]'))
+      ) {
+        return;
+      }
       e.preventDefault();
-      const selected = storeApi
-        .getState()
-        .nodes.filter((n) => n.selected)
-        .map((n) => n.id);
-      const sourceIds = selected.includes(node.id) ? selected : [node.id];
       setCreatePanel({
-        mode: 'node',
+        mode: 'context',
         x: e.clientX,
         y: e.clientY,
         flowPos: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
-        sourceIds,
+        hasSelection: storeApi.getState().nodes.some((n) => n.selected),
       });
     },
-    [screenToFlowPosition, storeApi],
+    [storeApi, screenToFlowPosition],
+  );
+  /**
+   * ★ **节点右键**（原 `Ce`，`_Component42.jsx:1047-1069`）—— 开 **`node-ctx-menu`**（不是建节点浮层）
+   *
+   * 源逐行：`preventDefault()` + `stopPropagation()` → **未选中且当前选中 < 2 个** ⇒
+   * `onNodesChange` 把它设为**唯一选中**（多选时保留多选）→ `de({x, y, nodeId, nodeType})` 开菜单。
+   * ⚠️ **2026-10-11 更正（TD-16-94）**：此前本仓在这里开**建节点浮层**（`mode:'node'`）——
+   *   源的节点右键**从来不开它**；那个浮层只属于「连线落到空白」（`G`，`onConnectEnd`）与
+   *   「空白右键」（`mode:'context'`）两个入口。
+   */
+  const onNodeContextMenu = useCallback(
+    // ⚠️ 只取右键那一项需要的字段（ReactFlow 传的是完整节点，这里按结构收）
+    (e: React.MouseEvent, node: { id: string; type?: string; selected?: boolean }) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const st = storeApi.getState();
+      const selectedCount = st.nodes.filter((n) => n.selected).length;
+      if (!node.selected && selectedCount < 2) selectOnly([node.id]);
+      setNodeMenu({ x: e.clientX, y: e.clientY, nodeId: node.id, nodeType: node.type ?? '' });
+    },
+    [selectOnly, storeApi],
   );
 
   // 卸载时清掉未触发的防抖（不留下悬空定时器 —— 原则 4 的"不自启常驻定时器"）
@@ -275,16 +690,19 @@ function Inner() {
     // ⚠️ 这些事件挂**外层容器**（原实现是 `div.canvas-wrap`）—— ReactFlow 自身不透传。
     //    `onDoubleClick` 用**捕获阶段**：ReactFlow 的 pane 会拦截冒泡（W15 实测抓到）
     <div
+      ref={wrapRef}
       className={styles.wrap}
       onDoubleClickCapture={onDoubleClick}
+      onContextMenu={onPaneContextMenu}
       onDrop={onDrop}
       onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
     >
       <ReactFlow<RFCanvasNode, CanvasEdge>
         className="xy-theme"
         // ⚠️ `stable/model` 的 `CanvasNode` 与 xyflow 的 `RFCanvasNode` 语义一致，
         //    仅框架约束不同（见 `ui/nodes/types.ts`）⇒ 边界处断言
-        nodes={nodes as unknown as RFCanvasNode[]}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -294,14 +712,50 @@ function Inner() {
         onConnect={onConnect}
         // ★ 建节点入口（原 `st` 的边点击 + `node-ctx-menu` 的节点右键）
         onEdgeClick={onEdgeClick}
+        // ★ 边双击 → 删边（原 `dt`，`_Component42.jsx:576-583`）
+        onEdgeDoubleClick={onEdgeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
+        // ★ 空白右键（源 `W`，`_Component42.jsx:1027-1046`）
+        onPaneContextMenu={onPaneContextMenu}
         // ★ 与源一致（`_Component42.jsx:1444`）：原版**显式设了两个删除键**。
         //   不设的话 xyflow 默认只有 `Backspace` ⇒ `Delete` 键删不掉节点（实测差距）
         deleteKeyCode={['Backspace', 'Delete']}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         onlyRenderVisibleElements
-        proOptions={{ hideAttribution: true }}
+        /*
+         * ★ **2026-10-11 补齐（原 `_Component42.jsx:1444-1449` 的 props 全量对齐）**
+         *
+         * 逐字对源的这一批（此前只落了 `deleteKeyCode`/`minZoom`/`maxZoom`/`onlyRenderVisibleElements`）：
+         *   `defaultEdgeType="interactive"` · `colorMode="light"` · `snapToGrid={snap}` ·
+         *   `snapGrid={[20,20]}` · `selectionOnDrag={false}` · `panOnDrag` · `selectionMode=Partial` ·
+         *   `zoomOnDoubleClick={false}` · `connectionRadius={60}` · `multiSelectionKeyCode={['Shift','Meta']}` ·
+         *   `fitView` + `fitViewOptions={{padding:.25,duration:250}}` · `proOptions={{hideAttribution:false}}`
+         *
+         * ⚠️ `snapToGrid` 绑的是**工程级的 `snap` 开关**（源 `y` = store 的 `snap`）—— 它同时
+         *    参与批量排布的网格对齐（`state/slices/materialBatch`），两处同一个真源。
+         * ⚠️ `fitView` + `fitViewOptions` **与下面「字体就绪后 fitView」的 effect 并存** —— 源也是
+         *    两者都有（prop 管首帧、effect 管字体/布局就绪后的二次对齐），**不合并**。
+         * ⚠️ `proOptions.hideAttribution: false` = **显示** xyflow 的水印（源如此，逐字）。
+         *    此前本仓写的是 `true`（隐藏）—— 本刀按源改回 `false`。
+         * ⚠️ 源的 `defaultEdgeType="interactive"` **本仓不落**：① 当前 `@xyflow/react` 的
+         *    `ReactFlowProps` **没有这个 prop**（v12 已移除，传了会报 TS 错）；② 本仓
+         *    `CanvasEdge.type` **已收窄为字面量 `'interactive'`**（`stable/model/project.ts:16`），
+         *    连线时由 `state/store` 显式写 `type: 'interactive'`（`store.ts:144`）
+         *    ⇒ **结构上已保证**，该 prop 在本仓**冗余**。
+         */
+        colorMode="light"
+        snapToGrid={snap}
+        snapGrid={[GRID_SIZE, GRID_SIZE]}
+        selectionOnDrag={false}
+        panOnDrag
+        selectionMode={SelectionMode.Partial}
+        zoomOnDoubleClick={false}
+        connectionRadius={60}
+        multiSelectionKeyCode={['Shift', 'Meta']}
+        fitView
+        fitViewOptions={{ padding: 0.25, duration: 250 }}
+        proOptions={{ hideAttribution: false }}
       >
         <Background variant={BackgroundVariant.Lines} gap={GRID_SIZE} size={1} style={{ opacity: GRID_OPACITY }} />
         <Controls showInteractive={false} />
@@ -316,6 +770,26 @@ function Inner() {
       )}
 
       {/* ★ 选择工具条（原 `.sel-toolbar`）—— 成组的入口（`groupSelected` 此前没有调用方） */}
+      {dropActive && <div className={styles.dropHint}>{CANVAS_TEXT.dropHint}</div>}
+
+      {/* ★ 节点右键菜单（原 `node-ctx-menu`，`_Component42.jsx:1685-1726`）—— 4/6 项（见组件头注） */}
+      {nodeMenu && (
+        <NodeContextMenu
+          state={nodeMenu}
+          onClose={() => setNodeMenu(null)}
+          // 源 `Te`：先记「刚复制」时刻再 `copyNodes()`（⇒ `Ctrl+V` 才粘得出来）
+          onCopyNodes={() => {
+            lastCopyAtRef.current = Date.now();
+            copyNodes();
+          }}
+          // ★ 项 5「保存为节点预设」（原 `rt`）：抓选中子图快照 → 开模态（菜单随即卸载）
+          onSaveAsPreset={() => {
+            setNodeMenu(null);
+            setNodePresetPayload(buildClipboard(nodes, edges));
+          }}
+        />
+      )}
+
       <SelectionToolbar />
 
       {/* ★ 建节点浮层（原 `create-panel`）—— 8 类节点此前只有 2 类能建出来，这是补上的入口 */}
@@ -329,8 +803,41 @@ function Inner() {
           onSplit={(ids) => void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.2 })}
         />
       )}
+
+      {/* ★ 「拆分并套用节点预设」弹窗（原 `_Component42.jsx:1816-1863`）—— 由拆分弹窗提交时开 */}
+      {splitPresetPicker && (
+        <SplitPresetPickerModal
+          sourceNodeId={splitPresetPicker.sourceNodeId}
+          keywords={splitPresetPicker.keywords}
+          onClose={closeSplitPresetPicker}
+          onSplit={(ids) => void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.2 })}
+        />
+      )}
+
+      {/* ★ 「保存为节点预设」弹窗（原 `_Component42.jsx:1745-1773`）—— 载荷 = 选中子图快照 */}
+      {nodePresetPayload && (
+        <NodePresetModal
+          payload={nodePresetPayload}
+          onClose={() => setNodePresetPayload(null)}
+        />
+      )}
+
+      {/* ★ 遮脸参数面板（原 `_Component40`）—— 视口级浮层，由外壳挂（同 `splitModal`） */}
+      {faceMaskPanel && (
+        <FaceMaskPanel
+          nodeId={faceMaskPanel.nodeId}
+          x={faceMaskPanel.x}
+          y={faceMaskPanel.y}
+          onClose={closeFaceMaskPanel}
+        />
+      )}
     </div>
   );
+}
+
+/** 切项目后 `fitView` 失败 → 就地留痕（源是空 `catch {}`；原则 6） */
+function warnFitViewFailed(err: unknown): void {
+  log.warn('[CanvasHost] 切项目后 fitView 失败:', err);
 }
 
 export function CanvasHost() {

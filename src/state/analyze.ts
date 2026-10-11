@@ -17,7 +17,7 @@ import type { Ports } from '@/core/ports';
 import type { AnalyzeDeps } from '@/core/usecases/analyzePrompt';
 import { analyzeNodePrompt, reviseNodePrompt } from '@/core/usecases/analyzePrompt';
 import { busyIdsOf } from '@/core/rules/accountBusy';
-// ⚠️ 语气档的**唯一真源**在 `constants/text.ts` —— 原先这里手写了 `'info' | 'warn' | 'error'`
+// ⚠️ 语气档的**唯一真源**在 `constants/text.ts` —— 本文件**不得**手写 `'info' | 'warn' | 'error'`
 //    （比真源少 `'success'`，一改真源就编译不过 = 重复定义，已收口）
 import type { ToastLevel } from '@/constants/text';
 
@@ -88,7 +88,7 @@ export function createAnalyzeController(store: AppStore, ports: Ports): AnalyzeC
       // 原 `yS` 只对**生成类**节点工作（其它类型没有 `analyzePrompt`）
       if (!node || (node.type !== 'imggen' && node.type !== 'genvideo')) return false;
 
-      const data = node.data as unknown as Record<string, unknown>;
+      const data = node.data;
       const res = await reviseNodePrompt(deps, {
         nodeId,
         // ★ 与源 `yS` 一致：原图取自 **`data.dataUrl`**（不是 `resultUrl`）

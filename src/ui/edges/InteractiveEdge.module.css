@@ -1,0 +1,50 @@
+/**
+ * 连线悬停气泡（原 `B3.jsx:129-150` 的 `.edge-actions` / `.edge-act`）
+ *
+ * ⚠️ **mockup 未收录这一族**（`mockup.css` 全仓没有 `edge-actions` / `edge-act` / `edge-hl`）
+ *    ⇒ 本文件为**推断样式**（全 token，无裸色值）—— 登记 **`TD-03-15`**。
+ * ⚠️ 源是 `.edge-actions.edge-actions-v2` + `.edge-act-lg`；本仓**不带**这两个修饰名
+ *    （无样式真源，带了也没意义）。
+ */
+
+.edgeActions {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-half);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+  /* portal 出去的浮层要自己接管指针（源 `:132` 的 `pointerEvents: 'all'`） */
+  pointer-events: all;
+  z-index: var(--z-modal);
+}
+
+.edgeAct {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.edgeAct svg {
+  width: 18px;
+  height: 18px;
+}
+
+.edgeAct:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+.edgeActDel:hover {
+  color: var(--color-danger-text);
+}

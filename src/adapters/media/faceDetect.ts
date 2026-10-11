@@ -38,8 +38,9 @@ import {
   FACE_MIN_SCORE,
   type PixelFaceBox,
 } from '@/core/rules/faceDetect';
-import { loadImage } from '@/lib/image';
+import { createCanvas, loadImage } from '@/lib/image';
 import { withThumb } from '@/stable/protocols/img';
+import { PROTOCOL_APPASSET } from '@/stable/contracts/schemas';
 
 /** 资源目录名（与 `main.js` 的 `appasset://mediapipe/...` → `dist/mediapipe/...` 对应） */
 const ASSET_DIR = 'mediapipe';
@@ -81,7 +82,10 @@ export function faceDetectStats(): FaceDetectStats {
 function assetBase(): string {
   try {
     return typeof location !== 'undefined' && location.protocol === 'file:'
-      ? `appasset://${ASSET_DIR}`
+      // ★ **2026-10-12（`TD-01-7`）**：改吃契约层 `PROTOCOL_APPASSET` —— 此前这里硬编码
+      //   `appasset://`，而 `stable/contracts/schemas.ts:64` 有同名常量却 0 消费（且它自己的
+      //   注释**自称**"前端只在本文件拼这个 URL" ⇒ 声索与实现不符，属 SSOT 第二份）
+      ? `${PROTOCOL_APPASSET}${ASSET_DIR}`
       : `/${ASSET_DIR}`;
   } catch {
     return `/${ASSET_DIR}`;
@@ -122,9 +126,7 @@ function loadDetectors(): Promise<Detectors> {
 function scaleImage(img: HTMLImageElement, scale: number): HTMLCanvasElement {
   const w = Math.max(1, Math.round((img.naturalWidth || img.width || 1) * scale));
   const h = Math.max(1, Math.round((img.naturalHeight || img.height || 1) * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  const canvas = createCanvas(w, h);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('无法创建 2D 画布上下文（人脸检测缩放）');
   ctx.drawImage(img, 0, 0, w, h);

@@ -1,12 +1,27 @@
 /** 生成面板样式（原则 5：只用 var(--...)） */
 
+/**
+ * 浮层（原 `gen-panel-layer`，`Z3_1.jsx:956`）—— **整屏一层**，托住面板并承接「点外面关闭」。
+ * ★ **推断样式**（原版 CSS 未入库、mockup 未收录 ⇒ 已回填 mockup.css —— TD-16-98）。
+ */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+}
+
+/**
+ * 面板本体（原 `.gen-panel`）—— ★ **`position: fixed` + `left/top` 由锚定 effect 写入**
+ * （原 `Z3_1.jsx:60-90` 直写 `style.left/top`，不走 React 状态）。
+ * 宽度走源那个兜底式 `min(860, 92vw)`（`Z3_1.jsx:73`；仅当量不到时才用，这里是 CSS 直给）。
+ */
 .panel {
   composes: overlay from '../common/shared.module.css';
-  position: absolute;
-  right: var(--space-4);
-  top: var(--space-4);
-  z-index: var(--z-overlay);
-  width: 220px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: calc(var(--z-overlay) + 1);
+  width: min(860px, 92vw);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -15,8 +30,32 @@
 }
 
 .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
+}
+
+/**
+ * 关闭按钮（原 `Z3_1.jsx:969` 的 `.gp-close`）
+ * ⚠️ mockup 无 `.gp-close` 样式 ⇒ 走**真源按钮类**（同 `.close` 先例），全 token。
+ */
+.close {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+/**
+ * 自动匹配按钮（原 `Z3_1.jsx:962` 的 `.gp-automatch-btn.gp-head-automatch`）
+ * ⚠️ 原版 CSS 未入库、mockup 也未收录 ⇒ 走**真源按钮类**，全 token。
+ */
+.autoMatch {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  flex: none;
 }
 
 .row {
@@ -24,6 +63,61 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+}
+
+/**
+ * 风格行（原 `Z3_1.jsx:1020-1045` 的 `.gp-style-chip*`）
+ * ⚠️ mockup 无 `.gp-style-*` 样式 ⇒ 走**真源按钮类** + 全 token（推断样式，同 `TD-16-87` 家族）。
+ */
+.styleWrap {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.styleBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+.styleChip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.styleChipMain {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+  padding: 0 var(--space-1);
+  border: none;
+  background: none;
+  color: var(--color-text-strong);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.styleChipGlyph {
+  color: var(--color-text-faint);
+}
+
+.styleChipX {
+  padding: 0 var(--space-half);
+  border: none;
+  background: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  font: inherit;
+}
+
+.styleChipX:hover {
+  color: var(--color-text-strong);
 }
 
 /**
@@ -63,6 +157,14 @@
           （同一段间距只许有一个来源） */
 .run {
   composes: btn btnPrimary from '../common/shared.module.css';
+}
+
+/**
+ * 批量出片按钮（原 `Z3_1.jsx:1200` 的 `.gp-batch`）
+ * ⚠️ mockup 无 `.gp-batch` 样式 ⇒ 走**真源次按钮类**（同 `.autoMatch` 先例），全 token。
+ */
+.batch {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
 /** 提示词区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */

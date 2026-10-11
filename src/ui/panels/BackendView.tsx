@@ -25,11 +25,12 @@
  *    指纹伪装是宿主 preload（`preload=<file://…>`）的活。
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAccountOps, useStore } from '@/state';
 import type { Account } from '@/stable/model/account';
 // ★ 容器钩子类名的 SSOT（`findWebview` 靠它定位；见下方 `className`）
 import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
+import { BACKEND_VIEW_TEXT } from '@/constants/text';
 import styles from './BackendView.module.css';
 
 /**
@@ -127,14 +128,77 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
 export function BackendView() {
   const accounts = useStore((s) => s.accounts);
   const activeAccountId = useStore((s) => s.activeAccountId);
+  /** 头部折叠（原 `se`）—— 键 `doubao-view-head-collapsed`，**读盘初始化 / 切换即写盘** */
+  const headCollapsed = useStore((s) => s.viewHeadCollapsed);
+  const setHeadCollapsed = useStore((s) => s.setViewHeadCollapsed);
+  const pushToast = useStore((s) => s.pushToast);
+  const accountOps = useAccountOps();
+
+  /** 当前选中的账号（原 `_Component43:3220-3222` 的 `Ke`） */
+  const active = accounts.find((a) => a.id === activeAccountId) ?? null;
+
+  /**
+   * 「刷新」—— 原 `_Component43.jsx:3235-3245`：`const ee = te(o); if (ee) ee.reload()`
+   *
+   * ★ 经 `accountOps.reloadBackend`（`ui` **不持端口** —— 铁律②；端口方法 `BackendPagePort.reload`
+   *   此前**零消费**，本按钮是它的消费者）。
+   * ⚠️ **失败可见**（原则 6）：源版这条链点下去**没有任何反馈**（`ee.reload()` 无返回）⇒
+   *   本仓把 `Result` 的失败原文 toast 出来 —— **不静默**。
+   */
+  const onRefresh = useCallback(() => {
+    if (!active) return;
+    const r = accountOps.reloadBackend(active.id);
+    if (!r.ok) pushToast(r.message, 4000, 'error');
+  }, [accountOps, active, pushToast]);
+
+  const headTitle = headCollapsed ? BACKEND_VIEW_TEXT.expandHead : BACKEND_VIEW_TEXT.collapseHead;
 
   return (
-    // ★ 这个**字面量类**不是装饰：`adapters/site/shared/webview.ts` 的 `findWebview` 靠它定位容器
-    //   （`WEBVIEWS_HOST_CLASS` = SSOT）。2026-10-11 前这里只挂 CSS-module 哈希类 ⇒ 定位恒失效。
-    <div className={`${WEBVIEWS_HOST_CLASS} ${styles.webviews}`}>
-      {accounts.map((a) => (
-        <AccountWebview key={a.id} account={a} active={a.id === activeAccountId} />
-      ))}
-    </div>
+    <>
+      {/*
+        ★ **头部工具栏**（原 `_Component43.jsx:3225-3271`）—— 2026-10-11 前**整条没落**，
+          于是 `LS_VIEW_HEAD_COLLAPSED` 这个跨层契约键、`BACKEND_VIEW_TEXT` 的六键文案、
+          以及 `BackendPagePort.reload` 都**没有消费者**。
+        ⚠️ 源版这块只在后台视图可见（`t`）时渲染；本仓 `BackendView` 常驻 ⇒ 改以
+          「**选中了账号**」为条件（`active`），未选中不渲染（与源代码里的 `Ke` 兜底一致）。
+      */}
+      {active && (
+        <div className={`${styles.head} ${headCollapsed ? styles.headCollapsed : ''}`}>
+          <div className={styles.headClip}>
+            <div className={styles.headInner}>
+              <div className={styles.title}>
+                {/* 原 `3231-3232`：站点标题 · 账号名（未选账号 ⇒ `未选择账号`） */}
+                {BACKEND_VIEW_TEXT.title[active.type] ?? BACKEND_VIEW_TEXT.title.doubao} ·{' '}
+                {active.name || BACKEND_VIEW_TEXT.noAccount}
+              </div>
+              <div className={styles.actions}>
+                <button type="button" className={styles.btn} onClick={onRefresh}>
+                  {BACKEND_VIEW_TEXT.refresh}
+                </button>
+              </div>
+            </div>
+          </div>
+          {/* 原 `3268`：`dv-head-toggle`（`∨`/`∧` + 两个 title/aria 文案，逐字） */}
+          <button
+            type="button"
+            className={styles.headToggle}
+            title={headTitle}
+            aria-label={headTitle}
+            aria-expanded={!headCollapsed}
+            onClick={() => setHeadCollapsed(!headCollapsed)}
+          >
+            {headCollapsed ? '∨' : '∧'}
+          </button>
+        </div>
+      )}
+
+      {/* ★ 这个**字面量类**不是装饰：`adapters/site/shared/webview.ts` 的 `findWebview` 靠它定位容器
+          （`WEBVIEWS_HOST_CLASS` = SSOT）。2026-10-11 前这里只挂 CSS-module 哈希类 ⇒ 定位恒失效。 */}
+      <div className={`${WEBVIEWS_HOST_CLASS} ${styles.webviews}`}>
+        {accounts.map((a) => (
+          <AccountWebview key={a.id} account={a} active={a.id === activeAccountId} />
+        ))}
+      </div>
+    </>
   );
 }

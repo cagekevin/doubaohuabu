@@ -254,13 +254,30 @@ function initLovartFetch({ getMainWindow }) {
     }
 
     const win = getMainWindow && getMainWindow();
+    /**
+     * 进度推送 —— ★ **返回"是否真的送到"**（`TD-13-8`）
+     *
+     * ⚠️ 此前它**没有返回值**且 `catch` 全吞 ⇒ 调用方**无从知道有没有送到**，
+     *    于是「先 `okCount++`、再推送」的写法会把**没送达**的图算成成功
+     *    ⇒ 用户看到「已获取 N 张」而实际缺图（假成功）。
+     */
     const sender = (channel, data) => {
       try {
         // 优先回到发起请求的那个渲染进程；窗口已销毁则退回主窗口
         const target = (event && event.sender && !event.sender.isDestroyed()) ? event.sender
           : (win && !win.isDestroyed() ? win.webContents : null);
-        if (target && !target.isDestroyed()) target.send(channel, data);
-      } catch (e) { /* ignore */ }
+        if (target && !target.isDestroyed()) {
+          target.send(channel, data);
+          return true;
+        }
+        // ★ TD-13-8：**没有可送达的目标**同样是"没送到"（此前一律静默）
+        console.warn('[lovart-fetch] 进度推送无目标（窗口/渲染进程已销毁）:', channel);
+        return false;
+      } catch (e) {
+        // ★ TD-13-8：推送失败**不再静默**（原则 6）—— 否则调用方会把"没送到"算成成功
+        console.warn('[lovart-fetch] 进度推送失败:', channel, (e && e.message) || e);
+        return false;
+      }
     };
 
     const jobId = `lj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -287,8 +304,10 @@ function initLovartFetch({ getMainWindow }) {
             r = { ok: false, error: (e && e.message) || '未知错误' };
           }
           if (r.ok) {
-            okCount++;
-            sender('lovart-fetch-item', {
+            // ★ **TD-13-8：先送、再计数** —— 送不到就不算成功。
+            //   （此前是 `okCount++` 在前、`sender` 在后且全吞 ⇒ 渲染层永远收不到那张图，
+            //     它却已被计入「已获取」⇒ 用户看到成功数虚高、实际缺图。）
+            const delivered = sender('lovart-fetch-item', {
               jobId,
               accountId,
               index: i,
@@ -303,6 +322,15 @@ function initLovartFetch({ getMainWindow }) {
                 source: 'capture'
               }
             });
+            if (delivered) {
+              okCount++;
+            } else {
+              // 图**已下载**但没送到渲染层 ⇒ 对用户而言就是没拿到 ⇒ 记失败并给出可读原因
+              failCount++;
+              if (failures.length < 12) {
+                failures.push({ url: rawUrl, error: '图片已下载但未送达渲染层（IPC 推送失败）' });
+              }
+            }
           } else if (r.skipped) {
             // 占位图 / 站点杂图：不计失败，单独通知（UI 上提示「已跳过」）
             skipCount++;

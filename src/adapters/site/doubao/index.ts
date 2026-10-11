@@ -21,9 +21,10 @@ import type { GenResult } from '@/stable/model/gen';
 import type { HostPort } from '@/core/ports/host.port';
 import type { SendPayload, SendResult, SitePort, SiteProbe, ScanResult } from '@/core/ports/site.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
+import { sleep } from '@/lib/async';
 import { GEN_POLL_MS, GEN_SILENT_MS, GEN_TIMEOUT_MS } from '@/constants';
 import { buildClickSendScript } from './scripts';
-import { createDoubaoAskWithImage } from './analyze';
+import { createDoubaoAskWithImage, createDoubaoPingQueueProgress } from './analyze';
 import { requireWebview, webviewEval } from '../shared/webview';
 import { buildResultScanScript } from '../shared/scanScripts';
 
@@ -130,6 +131,8 @@ export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SiteP
     chatUrl: CHAT_URL[kind],
     // ★ 提示词分析 / 调整的页内半（原 `hS` + `mS`）—— 只有豆包 / Dola 有这条链
     askWithImage: createDoubaoAskWithImage(host),
+    // ★ `TD-16-103`：`store.queueProgress` 的生产者接缝（发送后追问排队进度）
+    pingQueueProgress: createDoubaoPingQueueProgress(host),
 
     async send(account: Account, payload: SendPayload): Promise<Result<SendResult>> {
       const partition = account.partition;
@@ -273,7 +276,7 @@ async function pollResults(
   }
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 
 /** 32 位字符串哈希（幂等键用；非加密用途） */
 function hash32(s: string): string {

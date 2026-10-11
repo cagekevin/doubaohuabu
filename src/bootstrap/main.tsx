@@ -25,6 +25,7 @@ import { CanvasHost } from '@/ui/canvas/CanvasHost';
 import { ActivatePage } from '@/ui/pages/ActivatePage';
 import { isLicenseUsable } from '@/core/rules/license';
 import type { LicenseStatus } from '@/core/model/license';
+import { log } from '@/lib/log';
 
 /** 根组件：按 `started` 切换启动页 / 画布外壳 */
 /**
@@ -128,7 +129,12 @@ const container = createContainer();
 
 // 启动加载 + 5 条迁移（M1）；迁移日志原样打印，不吞（原则 6）
 const hydrated = container.hydrate();
-if (hydrated.notes.length > 0) console.info('[hydrate]', hydrated.notes.join('\n'));
+if (hydrated.notes.length > 0) log.info('[hydrate]', hydrated.notes.join('\n'));
+
+// ★ 视频本地化回填（源 `_Component48.jsx:92-99`）：启动后 5s 把已存的 `genvideo`/`video`
+//   节点里的 `http(s)` 直链落盘成 `vid://`（链 18「视频必须落盘」）。
+//   ⚠️ 定时器在控制器内部走**注入时钟**（原则 4）；这里只负责"启动时调一次"。
+container.startVideoBackfill();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('#root 不存在');

@@ -29,7 +29,8 @@ export default defineConfig({
     // ⚠️ 前提：生产代码里**不得有跨文件共享的模块级可变状态**。
     //    已清理：mock/api（jobSeq）· doubao/index（sentSessions）的工厂级状态。
     //    有意保留（进程级资源 / 互斥，且不被 ≥2 个测试文件触达）：
-    //    hostEnv.gpuCache · media/faceDetect 单例 · lib/captureRegistry · core/usecases/sendQueue 批量闩。
+    //    hostEnv.gpuCache · media/faceDetect 单例 · lib/captureRegistry · core/usecases/sendQueue 批量闩 ·
+    //    **lib/log 的级别闩（TD-16-108）**：进程级设置，`src/lib/tests/log.test.ts` 每例后 `resetLevel()` 复位。
     //    新增模块级可变状态前，先清理再依赖本开关。
     isolate: false,
   },

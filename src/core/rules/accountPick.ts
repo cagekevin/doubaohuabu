@@ -230,6 +230,40 @@ export function hasExecutableAccount(list: readonly Account[]): boolean {
 }
 
 /**
+ * 「**当前账号**」的初值 —— **三级回退**（原 `shared.js:26791-26805` 的 IIFE，**逐字**）
+ *
+ * 源里这个字段（`activeDoubaoAccountId`）的**初值不是 `null`**，而是一次挑选：
+ * ```js
+ * const n = Vy();                                   // 读盘 accounts
+ * const r = n.find(a => (a.status || '已登录') === '已登录' && a.autoStart === true);
+ * if (r) return r.id;
+ * return n.find(a => (a.status || '已登录') === '已登录')?.id || n[0]?.id || null;
+ * ```
+ * ⇒ ① 第一个「已登录 **且** `autoStart === true`」→ ② 第一个「已登录」→ ③ **第一个账号**（**不看状态**）→ `null`
+ *
+ * ★ **2026-10-12（越权族 · 源头补齐）**：本仓此前**没有这条规则** —— `ui` 切片的
+ *   `activeAccountId` 初值**硬写 `null`**，于是"打开应用先帮你选中一个可用账号"这个**源行为整条丢了**。
+ *   ⚠️ 注意这**不是**"字段缺位"：源字段在本仓是**改名**（`activeDoubaoAccountId` ⇒ `activeAccountId`），
+ *      缺的是它**初值的语义** ⇒ 补在**纯层**（一处），消费侧（`bootstrap/hydrate` 的种子点）只调用。
+ *
+ * ⚠️ 「已登录」判据**复用** `isAccountUsable`（它的实现逐字就是源这句 `(status || '已登录') === '已登录'`）
+ *   —— **不写第二份**。
+ * ⚠️ 第三条回退**不看状态**（源 `n[0]`）是**刻意的**：哪怕全未登录，也把第一个选上（用户至少有个可点的）
+ *   ⇒ 照抄。
+ */
+export function pickInitialActiveAccount(
+  accounts: readonly Account[] | null | undefined,
+): string | null {
+  const list = accounts ?? [];
+  return (
+    list.find((a) => isAccountUsable(a) && a.autoStart === true)?.id ??
+    list.find((a) => isAccountUsable(a))?.id ??
+    list[0]?.id ??
+    null
+  );
+}
+
+/**
  * 账号选择器按钮上的**文案**（原 `Se` `_Component45.jsx:685-711`）
  *
  * 五档（**逐字对齐**）：

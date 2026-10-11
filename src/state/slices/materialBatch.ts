@@ -12,6 +12,7 @@
 import type { CanvasNode } from '@/stable/model/node';
 import type { LibraryItem } from '@/stable/model/project';
 import { defaultNodeData } from '@/core/model/defaults';
+import { materialLibId } from '@/core/rules/materialNode';
 import { LOVART_ITEM_DEFAULT_NAME } from '@/core/rules/lovartGallery';
 import {
   autoPlaceCenter,
@@ -34,6 +35,12 @@ export interface MaterialBatchOptions {
   scale?: number;
   /** 按**已有节点**的右边界自动落点（原 `r.autoPlace`；画廊**不传**，`_Component26` 才传） */
   autoPlace?: boolean;
+  /**
+   * ★ 直接给定每个落点（原 `addMaterialFromDrop`：`position + i*stagger`）——
+   * 给了就**跳过排网格**（`gap`/`cols`/`scale`/`autoPlace` 都不参与）。
+   * ⚠️ 落盘 / library 去重 / 复用节点那套**只有一份**（判据 C1），这里只是**另一个落点来源**。
+   */
+  placements?: readonly MaterialPlacement[];
 }
 
 export interface MaterialBatchState {
@@ -74,8 +81,16 @@ export function buildMaterialBatch(
     snap: state.snap,
     ...(opts.cols === undefined ? {} : { cols: opts.cols }),
   };
-  let plan = planMaterialGrid(items, base);
-  if (opts.autoPlace) {
+  let plan = opts.placements
+    ? {
+        placements: opts.placements as MaterialPlacement[],
+        cols: 0,
+        rows: 0,
+        width: 0,
+        height: 0,
+      }
+    : planMaterialGrid(items, base);
+  if (!opts.placements && opts.autoPlace) {
     const c = autoPlaceCenter(state.nodes, gap, plan.width, plan.height);
     plan = planMaterialGrid(items, { ...base, centerOn: c });
   }
@@ -86,9 +101,9 @@ export function buildMaterialBatch(
   const nodeByLibId = new Map<string, string>();
   for (const n of state.nodes) {
     if (n.type !== 'material') continue;
-    const d = n.data as { libId?: string; dataUrl?: string; poster?: string };
-    // 原 `Ms(node, library)`：`data.libId || (按 dataUrl 找库条目).id || ''`
-    const libId = d.libId || state.library.find((l) => l.dataUrl === (d.dataUrl || d.poster || ''))?.id || '';
+    // 原 `Ms(node, library)` —— ★ 2026-10-11 **收口到 `core/rules/materialNode`**（判据 C1：
+    //   同一段判据在 `addMaterial`/`ensureMaterialNode`/这里都要用）
+    const libId = materialLibId(n, state.library);
     if (libId && !nodeByLibId.has(libId)) nodeByLibId.set(libId, n.id);
   }
 

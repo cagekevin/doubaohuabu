@@ -32,8 +32,8 @@ import type {
 import { GPT_SEND_TIMEOUT_MS } from '@/constants';
 import { GPT_TEXT } from '@/constants/text';
 import { err, ok, type Result } from '@/core/model/result';
-import { withTimeout } from '@/lib/async';
-// ★ 判据 C1：`isRecord`/`asRecord` 原先在本文件、`tapnow/api.ts`、`tapnow/index.ts` 各写一遍
+import { sleep, withTimeout } from '@/lib/async';
+// ★ 判据 C1：`isRecord`/`asRecord` 取自 `lib/object` —— ⛔ 不在本文件 / `tapnow/api.ts` / `tapnow/index.ts` 各写一遍
 //   ⇒ 第 3 次出现即抽出到 `lib/object.ts`
 import { asRecord } from '@/lib/object';
 // ★ 复用既有 SSOT 的内容指纹（`doubao/index.ts` 自带一个局部 `hash32`，
@@ -48,7 +48,7 @@ const ATTACH_RETRY_DELAY_MS = 1500;
 /** 附加成功后的静置（原 `aO`：`await sleep(2000)` —— 等页面把图挂上再发文本） */
 const ATTACH_SETTLE_MS = 2000;
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 export function createGptSite(host: HostPort): SitePort {
   return {

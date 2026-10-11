@@ -1,0 +1,26 @@
+/**
+ * 「保存为节点预设」弹窗（原 `.modal-sub` / `.modal-input`）
+ *
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 输入框 / 按钮走 `ui/common/shared.module.css` **真源**（`composes`），不自造第二份。
+ */
+
+.sub {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.input {
+  composes: field from '../common/shared.module.css';
+  width: 100%;
+}
+
+.btnPrimary {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}
+
+.btnGhost {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}

@@ -18,6 +18,7 @@
 
 import type { CanvasNode } from '@/stable/model/node';
 import type { Account } from '@/stable/model/account';
+import type { SitePort } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { classifyFailure } from '@/core/rules/failure';
 import { orderBatchTargetsOf, type BatchTarget } from '@/core/rules/batchTargets';
@@ -28,6 +29,15 @@ import { BATCH_TEXT } from '@/constants/text';
 /** 单节点「准备发送」的产物（原 `jS` 返回的 `{account, operation, recipe}`） */
 export interface PreparedSend {
   account: Account;
+  /**
+   * 该账号所属的**站点适配器**（`transport` 要它来发）。
+   *
+   * ★ **TD-03-18**（2026-10-11）：此前只返回 `account`、**把 `site` 丢了** ⇒ `transport`
+   *   拿不到"发给谁"，`state/batchSend` 只好造一张**以报文对象引用为键**的 Map 走私账号
+   *   （`picked`；其注释自认"用 nodeId 反查会取到第一个节点的账号"）。现在 `prepare` 给全
+   *   （账号 ＋ 站点）⇒ `transport` 直接收，Map 删除。
+   */
+  site: SitePort;
   /** 待发送的报文（**不透明** —— 组装细节各站点自己知道） */
   operation: unknown;
   /** 要写进节点的 recipe（原 `recipe`；`PS` 会 `setNodeRecipe`） */
@@ -37,8 +47,24 @@ export interface PreparedSend {
 export interface PrepareSendOptions {
   /** 排除这些账号（源 `x3` 没传；`PS` 传 `excludeAccountIds`） */
   excludeAccountIds?: readonly string[];
-  /** 强制指定账号（源 `PS` 传 `accountId`） */
-  forceAccountId?: string | null;
+  /**
+   * 调用方**已经选好并占住**的那个账号（队列的 `planQueueDispatch` 定的）—— ★ **`TD-03-18`**
+   *
+   * ⚠️ **⛔ 不要加 `forceAccountId` 参数**：它是个**幽灵参数** ——
+   *   唯一实现（`state/batchSend` 的 `prepare`）**根本不读 `opts`** ⇒ "队列已占号"这件事
+   *   对 `prepare` 不可见，它**自己又选一次号**。后果不止是重复：队列占住的 A 在忙表里，
+   *   第二次选号会**跳过 A 选到 B**（或 `all-busy` 失败）⇒ **面板显示的账号 ≠ 实际发送的账号**。
+   *   现在改为把**整个已定选择**（账号 ＋ 站点）交下来 ⇒ `prepare` 不再有第二套选号。
+   */
+  forced?: ForcedSendChoice | null;
+}
+
+/** 调用方已定的发送归属（`state/sendQueue` 占号后交下来） */
+export interface ForcedSendChoice {
+  account: Account;
+  site: SitePort;
+  /** 走了退级吗（源 `gS` 的 `degraded`；仅展示用 —— 重选已经不发生了） */
+  degraded?: boolean;
 }
 
 /**
@@ -56,15 +82,39 @@ export interface TransportOutcome {
   sessionId?: string;
 }
 
-/** 传输进度（源 `Bu` 的 `onProgress` 事件：`{type:'success'|'error'|...}`） */
+/**
+ * 传输进度（源 `Bu` 的 `onProgress` 事件 —— **逐字对源** `shared.js:40411-40475`）
+ *
+ * ⚠️ 源 `Bu` 发 **5 类**：`start`（循环前）· `retry`（每次重试）· `transport`（转发内层进度）·
+ *    `success` · `error`；各带 `attempt` / `maxRetries`（`transport` 另带 `detail`）。
+ * ⚠️ **消费侧只认 `success`/`error`**（源 `shared.js:41729` 如此，本仓 `sendQueue.ts` 同）——
+ *    其余类型是**给别的消费者**的（如 `retry` 给发送队列面板）。
+ */
 export interface TransportProgress {
   type: string;
   note?: string;
+  /** 第几次尝试（源 `Bu` 的 `attempt`） */
+  attempt?: number;
+  /** 上限（源 `Bu` 的 `maxRetries`） */
+  maxRetries?: number;
 }
 
 /** 把报文发出去（原 `Bu` 40411：可重试的传输壳） */
+/**
+ * 传输的入参 —— `transport` 需要的**全部上下文**（★ TD-03-18：取代 `picked` Map 的走私）
+ *
+ * ⚠️ 源版 `Bu` 只收一个 `operation`，因为源 `x3`／`PS` 里「账号 ＋ 站点」就在**闭包**里
+ *   （一个节点一份闭包）。本仓是注入式契约、一份管道被多方共用 ⇒ 必须**显式传递**，
+ *   否则下游只能靠**引用相等**反查（重构即碎、漏一处就发错账号）。
+ */
+export interface TransportInput {
+  account: Account;
+  site: SitePort;
+  operation: unknown;
+}
+
 export type TransportFn = (
-  operation: unknown,
+  input: TransportInput,
   opts?: { onProgress?: (e: TransportProgress) => void },
 ) => Promise<Result<TransportOutcome>>;
 
@@ -246,7 +296,7 @@ export async function runBatchSend(
         }
         continue;
       }
-      const { account, operation } = prepared.value;
+      const { account, site, operation } = prepared.value;
 
       notify(target, index, {
         status: 'sending',
@@ -258,7 +308,7 @@ export async function runBatchSend(
       let status: BatchItemStatus;
       let msg: string;
       try {
-        const sent = await input.transport(operation, {
+        const sent = await input.transport({ account, site, operation }, {
           onProgress: (e) => {
             if (e.type === 'success') {
               notify(target, index, { status: 'success', msg: BATCH_TEXT.sentTo(account.name), accountName: account.name });
@@ -336,8 +386,8 @@ export interface SendOneInput {
   nodeId: string;
   /** 排除这些账号（源 `PS` 的 `excludeAccountIds`） */
   excludeAccountIds?: readonly string[];
-  /** 强制指定账号（源 `PS` 的 `accountId`） */
-  forceAccountId?: string | null;
+  /** 调用方**已选好并占住**的账号（源 `PS` 的 `accountId`）—— ★ `TD-03-18`，见 `PrepareSendOptions.forced` */
+  forced?: ForcedSendChoice | null;
   prepare: PrepareSendFn;
   transport: TransportFn;
   releaseAccount: (accountId: string) => void;
@@ -373,7 +423,7 @@ export async function sendOneNode(input: SendOneInput): Promise<SendOneResult> {
 
   const prepared = input.prepare(nodeId, {
     excludeAccountIds: input.excludeAccountIds,
-    forceAccountId: input.forceAccountId ?? null,
+    forced: input.forced ?? null,
   });
   if (!prepared.ok) {
     input.setState({
@@ -385,11 +435,11 @@ export async function sendOneNode(input: SendOneInput): Promise<SendOneResult> {
       ok: false,
       reason: prepared.reason,
       note: prepared.message,
-      accountId: input.forceAccountId ?? null,
+      accountId: input.forced?.account.id ?? null,
     };
   }
 
-  const { account, operation, recipe } = prepared.value;
+  const { account, site, operation, recipe } = prepared.value;
   if (recipe !== undefined) input.setRecipe?.(nodeId, recipe);
 
   input.setState({
@@ -402,7 +452,7 @@ export async function sendOneNode(input: SendOneInput): Promise<SendOneResult> {
 
   let sent: Result<TransportOutcome>;
   try {
-    sent = await input.transport(operation);
+    sent = await input.transport({ account, site, operation });
   } catch (e: unknown) {
     input.releaseAccount(account.id);
     const msg = e instanceof Error ? e.message : BATCH_TEXT.sendException;

@@ -18,6 +18,7 @@
  */
 
 import { LICENSE_TEXT } from '@/constants/text';
+import { formatDateTimeMinute } from '@/lib/time';
 import type { LicenseStatusKind } from '@/core/model/license';
 
 const DAY_MS = 86400000;
@@ -66,7 +67,5 @@ export function formatLicenseRemaining(expireAt: number, now: number): string {
  */
 export function formatDateTime(ts: unknown): string {
   if (!ts || typeof ts !== 'number') return '—';
-  const d = new Date(ts);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTimeMinute(ts);
 }

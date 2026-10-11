@@ -15,25 +15,29 @@
  *   | 列表 | 216-269 | 序号 + 名称 + 账号（未分配 ⇒ 待分配）+ 第N次 + note + 两个动作 + **成片行** |
  *   | 暂停/清空 | `j3`/`_3`/`A3` | 走控制器 |
  *
- * ⚠️ **一处如实标注（未接通）**：源版的「成片行」吃三样 —— 队列项 + 节点 + **`queueProgress`**
- *   （第 13 行的 `A.queueProgress`，由**发送端的 `onProgress` 回写**）。本工程**没有这个 store 字段**
- *   ⇒ 这里传 `progress: null`。后果：`deriveGenView` 会走它的**兜底分支**（"生成中"）——
- *   **不会**区分出「排队中 / 未在生成」（那两档要 `progress.kind`）。
- *   `queueProgress` 的写入方属**发送适配器**那一层，已登记。
+ * ✅ **2026-10-11 已接通（`TD-16-103`）**：源版的「成片行」吃三样 —— 队列项 + 节点 + **`queueProgress`**
+ *   （`z3.jsx:13` 的 `A.queueProgress`）。此前本工程**没有这个 store 字段** ⇒ 这里硬写
+ *   `progress: null`，第 ④ 组恒走"生成中"兜底。现在**生产者已归位**：`state/sendQueue` 的
+ *   `runQueuePing` 在发出后追问页面一次（源 `_Component43.jsx:2200-2266`），把 `classifyReply`
+ *   （源 `WR`）的产物写进 `store.queueProgress[itemId]` ⇒ 本组件直接读它喂第三参。
+ *   ⚠️ **同日勘误**：原文写「由**发送端的 `onProgress` 回写**」**不成立** —— 回源后**唯一写入方**
+ *   是队列泵里的「排队追问」轮询。证据见 `TD-16-103` 的日志 §八。
  * ⚠️ **一处有意省略**：源版点队列项能 `fitViewAction([nodeId])` 把画布定位过去（80-89）。
  *   本工程的 `CanvasHost` 还没暴露 fitView（属另一件事）⇒ **不做**（不做一个没反应的按钮）。
  * ⚠️ **原则 1 + 铁律 2**：本组件只调 `useSendQueue()` 与 store action，不写 store、**也不持 `Ports`**
- *   —— 原先两处 `ports.storage`（读/写面板位置）已收口到控制器（TD-16-8，2026-10-11）。
+ *   —— 面板位置的读写经控制器，`ports.storage` 不进 `ui`（TD-16-8）。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSendQueue, useStore } from '@/state';
+import { clampPanelPosition } from '@/core/rules/sendQueuePanel';
 import {
-  clampPanelPosition,
-  deriveGenView,
   formatElapsed,
-  type QueueProgressLike,
-} from '@/core/rules/sendQueuePanel';
+  resolveGenProgress,
+  type GenNodeLite,
+  type GenProgressState,
+  type GenReplyLite,
+} from '@/core/rules/genProgress';
 import { queueStats } from '@/core/rules/sendQueueOps';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
 import styles from './SendQueuePanel.module.css';
@@ -44,9 +48,28 @@ const PANEL_H = 260;
 /** tick 间隔（原 61-65 的 `setTimeout(…, 1000)`） */
 const TICK_MS = 1000;
 
+/**
+ * `GenProgressState` → CSS 类后缀（`SendQueuePanel.module.css` 的 `gen_*`）
+ *
+ * ★ **表驱动**（不是把 `state` 直接当类名拼）：`Record<GenProgressState, string>` 逼**穷尽** ——
+ *   `core` 将来新增/改名一个状态，这里就**编译不过**（不靠"两边都记得改"的约定）。
+ * ⚠️ 类名归属 `ui`：`core/rules/genProgress` 只给**语义状态**，不认识 CSS（判据 A1）。
+ */
+const GEN_CLS: Record<GenProgressState, string> = {
+  idle: 'idle',
+  na: 'na',
+  unknown: 'unknown',
+  failed: 'failed',
+  done: 'done',
+  queued: 'queued',
+  generating: 'generating',
+};
+
 export function SendQueuePanel() {
   const q = useSendQueue();
   const queue = useStore((s) => s.sendQueue);
+  /** 后台进度（源 `A.queueProgress`）—— 「成片行」第三参；写入方 = `state/sendQueue` 的 `runQueuePing` */
+  const queueProgress = useStore((s) => s.queueProgress);
   const concurrency = useStore((s) => s.accountConcurrency);
   const nodes = useStore((s) => s.nodes);
 
@@ -204,14 +227,21 @@ export function SendQueuePanel() {
             <div className={styles.list}>
               {items.map((it, idx) => {
                 const node = nodeById.get(it.nodeId);
-                // ⚠️ `progress` 传 `null` —— 见文件头的如实标注
-                const progress: QueueProgressLike | null = null;
-                const gen = deriveGenView(
-                  { status: it.status, ...(it.startedAt == null ? {} : { startedAt: it.startedAt }), ...(it.finishedAt == null ? {} : { finishedAt: it.finishedAt }), ...(it.accountId == null ? {} : { accountId: it.accountId }) },
-                  node ? { data: node.data as { genHistory?: { attempts?: readonly { at?: number; status?: string; accountId?: string; note?: string }[] } | null; resultAt?: number } } : null,
+                // ★ 后台进度（源 `A.queueProgress[item.id]`）—— 由 `state/sendQueue` 的 `runQueuePing` 写（`TD-16-103`）
+                const progress: GenReplyLite | null = queueProgress[it.id] ?? null;
+                const g = resolveGenProgress(
+                  {
+                    status: it.status,
+                    startedAt: it.startedAt ?? null,
+                    finishedAt: it.finishedAt ?? null,
+                    accountId: it.accountId ?? null,
+                  },
+                  node ? { data: node.data as GenNodeLite['data'] } : null,
                   progress,
                   nowMs,
                 );
+                // 字段改名只在这一处（`state`→`cls`、`elapsed`→`wait`）—— 视图要的四个名字就齐了
+                const gen = { text: g.text, cls: GEN_CLS[g.state], wait: g.elapsed, note: g.note };
                 return (
                   <div className={styles.item} key={it.id}>
                     <div className={styles.itemTop}>
@@ -282,7 +312,7 @@ export function SendQueuePanel() {
             <button type="button" className={styles.btn} onClick={() => q.clearFinished()}>
               {SEND_QUEUE_TEXT.clearDone}
             </button>
-            <span className={styles.footHint}>{formatElapsed(items[0]?.startedAt ?? null, nowMs)}</span>
+            <span className={styles.footHint}>{formatElapsed(items[0]?.startedAt ?? null, null, nowMs)}</span>
           </div>
         </>
       )}

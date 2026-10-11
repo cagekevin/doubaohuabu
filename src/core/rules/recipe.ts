@@ -17,6 +17,7 @@
  */
 
 import { RECIPE_TEXT } from '@/constants/text';
+import { pad2 } from '@/lib/time';
 import { normalizeModelLabel } from './prompt';
 
 /**
@@ -194,7 +195,7 @@ export function formatClock(seconds: number | null | undefined): string {
   if (!seconds && seconds !== 0) return '';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
+  return `${m}:${pad2(s)}`;
 }
 
 // ─────────────────────────── 按配方重跑（原 `addTextNodeFromRecipe` 29450-29494）───────────────────────────

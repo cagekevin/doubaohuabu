@@ -6,6 +6,8 @@
  */
 
 import { err, ok, toMessage, type Result } from '@/core/model/result';
+import { COMMON_TEXT } from '@/constants/text';
+import type { SendFailKind } from '@/constants/failure';
 import type { HostApi } from './window-api';
 
 /** 宿主缺失时的明确错误（**不返回假成功**） */
@@ -36,6 +38,37 @@ export function normalize<T>(raw: unknown): Result<T> {
     if (r.ok === false) {
       return err('unknown', typeof r.error === 'string' ? r.error : JSON.stringify(r.error ?? ''));
     }
+  }
+  return ok(raw as T);
+}
+
+/**
+ * 宿主**恒带 `ok`** 通道的收口（★ **fail-closed** 侧 —— TD-04-5 / TD-16-74 / TD-04-7）
+ *
+ * ⚠️ **与 `normalize` 的分工（别混用）**：
+ *   · `normalize` 是 `ok === false`（**fail-open**）—— 服务"后端**无 `ok` 裸返回**"的通道
+ *     （`save-file` 返 `true`、`load-file` 返字符串 / `null`）；那里漏 `ok` 是**正常**的。
+ *   · 本函数服务"后端**恒带 `ok`**"的通道 —— 下列 handler 的**每条 return 都带 `ok`**（已逐条回源核）：
+ *     `reveal-path`（`main.js:1893`）· `show-in-folder`（`main.js:1262`）·
+ *     `project-storage-reveal`（`main.js:408`）· `lovart-scan.js` · `clear-browser-cache`（`main.js:1201,1213`）。
+ *     ⇒ 漏 `ok` / 非布尔即**契约违约**（`boundaryViolation`），**不得静默当成功**（原则 6）。
+ *
+ * @param reason 失败分类（默认 `unknown`；调用方有更准的分类时可覆盖）
+ * @param fallback 后端说失败但没给 `error` 时的原文（默认 `COMMON_TEXT.unknownReason`）
+ * @returns 成功 ⇒ `ok(原对象)`（调用方按自己的载荷形状取值）；失败 ⇒ `err`（**原文透传**）
+ */
+export function checkOk<T = Record<string, unknown>>(
+  raw: unknown,
+  {
+    reason = 'unknown',
+    fallback = COMMON_TEXT.unknownReason,
+  }: { reason?: SendFailKind; fallback?: string } = {},
+): Result<T> {
+  if (!raw || typeof raw !== 'object') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
+  const v = raw as { ok?: unknown; error?: unknown };
+  if (typeof v.ok !== 'boolean') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
+  if (v.ok !== true) {
+    return err(reason, typeof v.error === 'string' ? v.error : fallback);
   }
   return ok(raw as T);
 }

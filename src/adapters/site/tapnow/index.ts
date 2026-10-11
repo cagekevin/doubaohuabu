@@ -38,7 +38,7 @@ import { AUTO_WATCH_IDLE_BACKOFF_MS, AUTO_WATCH_INTERVAL_MS, TAPNOW_MIN_SIDE } f
 import { TAPNOW_TEXT } from '@/constants/text';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
-// ★ 单档归一 + **逐张落盘**（原先本文件自带一个同步 `normalizeAttempt`，已提为两档共用 —— 判据 C1）
+// ★ 单档归一 + **逐张落盘**（`normalizeAttempt` 在 `site/shared/materializeScan.ts`，两档共用 —— 判据 C1）
 import { scanAttemptFromRaw, type ScanAttempt } from '../shared/materializeScan';
 import { buildResultScanScript } from '../shared/scanScripts';
 import { findWebview, webviewEval } from '../shared/webview';

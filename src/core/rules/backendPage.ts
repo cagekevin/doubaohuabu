@@ -23,9 +23,10 @@ import {
   BACKEND_LOAD_TIMEOUT_MS,
   BACKEND_RELOAD_AFTER_MS,
 } from '@/constants';
+import { makeId } from './project';
 
-/** 租约 id 前缀（原 `vr` 26034：`` `rt_${Date.now().toString(36)}_${++seq}` ``） */
-export const LEASE_ID_PREFIX = 'rt_';
+// ⚠️ **2026-10-12 越权收口**：此处原有 `export const LEASE_ID_PREFIX = 'rt_'`（0 消费的自持前缀）
+//   —— 现由 `core/rules/project.ts` 的 `ID_PREFIX.lease` 承载，本文件一律走 `makeId('lease', …)`。
 
 /**
  * 轮询步长（原 `vr` 26061：`Math.min(250, Math.max(10, Math.floor(a / 20)))`）
@@ -100,7 +101,8 @@ export interface BackendPageLease {
 
 /** 租约 id（原 26034：`rt_<base36(now)>_<seq>`） */
 export function makeLeaseId(now: number, seq: number): string {
-  return `${LEASE_ID_PREFIX}${now.toString(36)}_${seq.toString(36)}`;
+  // ★ **2026-10-12 越权收口**：原在此自持 `LEASE_ID_PREFIX`（`rt_`）并自拼 —— 改委托唯一工厂
+  return makeId('lease', now, seq);
 }
 
 /** 建租约（原 `vr` 26035-26056 的构造段） */

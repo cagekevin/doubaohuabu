@@ -12,7 +12,14 @@ export const SNAPSHOT_FORMAT = 'doubao-canvas-project';
 /** 快照版本（原 `version: 1`） */
 export const SNAPSHOT_VERSION = 1;
 
-/** 项目级分类存储的目录名（原 `PROJECT_STORAGE_DIRS`，`main.js:31-41`） */
+/**
+ * 项目级分类存储的目录名（原 `PROJECT_STORAGE_DIRS`，`main.js:31-41`）
+ *
+ * ⚠️ **`@backend-contract`（2026-10-12 · `TD-01-7` 定性）**：这**是磁盘布局契约**（主进程建/读目录），
+ *   **前端 0 消费**（`grep` 全仓仅定义处）⇒ 它该由**后端**持有。
+ *   留在前端 SSOT 的原因是本仓"桌面端与后端共库、契约串集中此处"（同 `PROTOCOL_*` 的先例），
+ *   **但不再假装它有前端落点** —— 若将来前端要拼路径，**必须 import 本常量**（别写字面量）。
+ */
 export const PROJECT_STORAGE_DIRS = {
   engineering: '工程文件',
   data: '项目数据',
@@ -22,10 +29,10 @@ export const PROJECT_STORAGE_DIRS = {
   videos: '视频',
 } as const;
 
-/** 项目级存储的内层目录名（原 `INNER_FOLDER_NAME`） */
+/** 项目级存储的内层目录名（原 `INNER_FOLDER_NAME`）—— ⚠️ `@backend-contract`，同 `PROJECT_STORAGE_DIRS` */
 export const INNER_FOLDER_NAME = '资源';
 
-/** 工程文件名（new-file 布局：`wrapper/<项目名>.json`） */
+/** 工程文件名（new-file 布局：`wrapper/<项目名>.json`）—— ⚠️ `@backend-contract`，同 `PROJECT_STORAGE_DIRS` */
 export const PROJECT_FILE_SUFFIX = '.json';
 
 /**
@@ -66,7 +73,14 @@ export const PROTOCOL_APPASSET = 'appasset://';
 /** 缩略图查询参数（原 handler `?w=N`） */
 export const THUMB_QUERY_KEY = 'w';
 
-/** 旧单工程迁移后的 id（原 `p_migrated`） */
+/**
+ * 旧单工程迁移后的 id（原 `p_migrated`）
+ * ⚠️ **2026-10-12（`TD-01-7`）定性**：前端 **0 消费** —— 而它的**姊妹常量**
+ *   `LEGACY_PROJECT_NAME`（下一行）**有**消费（`core/rules/project.ts:15` import）。
+ *   ⇒ 说明本仓的迁移实现**只用名字、不用这个 id**（`migrations/**` 不拼 `p_migrated`）。
+ *   保留原因：迁移产物一旦落盘，`p_migrated` 就写进用户数据里 ⇒ 它仍是**读旧数据的契约**；
+ *   ⚠️ 若某天真要"识别旧单工程"，**必须 import 本常量**（别写字面量）。
+ */
 export const LEGACY_PROJECT_ID = 'p_migrated';
 /** 旧单工程迁移后的名字 */
 export const LEGACY_PROJECT_NAME = '导入的项目';
@@ -91,7 +105,12 @@ export const ACCOUNT_ID_PREFIX = 'acc_';
 export const PRESET_ID_PREFIX = 'pre_';
 /** 素材库 id 前缀（原 `lib_...`） */
 export const LIBRARY_ID_PREFIX = 'lib_';
-/** 生成图片流 id 前缀（原 `ig_...`） */
-export const IMAGE_GEN_FEED_ID_PREFIX = 'ig_';
+/**
+ * ⚠️ **2026-10-12 删除 `IMAGE_GEN_FEED_ID_PREFIX = 'ig_'`**（`TD-01-7`）：两个理由 ——
+ *   ① **撞值**：`core/rules/project.ts:41` 的 `NODE_ID_PREFIX.imggen` **就是 `'ig_'`**
+ *      ⇒ 同值两份（母体 M3），而节点那份**有真消费者**（`makeNodeId('imggen', …)`）；
+ *   ② **配套形状不落**：它服务的 `imageGenFeed` 已被裁定为「**派生视图**，不落 store」
+ *      （`TD-16-84`）⇒ 前缀失去服务对象。留节点那份足矣。
+ */
 /** 连线 id 前缀（原 `e_...`） */
 export const EDGE_ID_PREFIX = 'e_';

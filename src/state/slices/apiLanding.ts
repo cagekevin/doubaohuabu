@@ -20,7 +20,7 @@
  * | `addVideoNode` 的「**源节点非 genvideo ⇒ 网格新建视频节点**」分支 | 28162-28330 | 唯一调用方是**网页（doubao）视频流程**，该流程**未接线**；而 API 通道的视频任务源节点**必为 `genvideo`**（`state/generate.ts` 按节点类型分派）⇒ 该分支**不可达** ⇒ 不落（已登记 TD-16-83） |
  * | `imageGenKeyParams[u]` 查表（`u = genKey || jobId`） | 27247 / 27280 | 该表**无生产者**（`bindImageGenKey` / `bindImageGenJobs` 未接线）⇒ 恒为 `null` ⇒ 全走节点自身兜底 ⇒ 与源在「无绑定」时**逐字等价**（已登记 TD-16-84） |
  * | `pushImageGenFeed` / `imageGenFeed` | 27131-27167 | 源把它当 state 维护（去重 + 上限 80），但**119 个展开组件里无任何读者** ⇒ `docs/16` §2.9 已裁定为「派生视图」⇒ 不落（判据 B5；已登记 TD-16-85） |
- * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | 两者都是**异步 + 未接线**（`usecases/localizeVideos` 0 消费；海报抓取需宿主能力）⇒ 不落（TD-02-5 家族） |
+ * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | ⚠️ **2026-10-11 回写**：`localizeNodeVideos` **已接线** —— `state/localizeOps`（← `state/generate` 写完 `resultUrl` 后 · 启动 5s 的 `container.startVideoBackfill()`）；**只剩海报抓取**（`_cmp_bk`）未落（需宿主能力，TD-02-5 家族） |
  */
 
 import type { CanvasNode } from '@/stable/model/node';
@@ -29,6 +29,7 @@ import type { LibraryItem } from '@/stable/model/project';
 import type { ApiJobAttempt } from '@/stable/model/gen';
 import { appendGenHistoryAttempt, patchGenHistoryAttempt } from '@/core/rules/genHistory';
 import { IMAGE_GEN_RESULT_LIMIT } from '@/constants';
+import { clampImageCount } from '@/core/rules/prompt';
 
 /** 落库的一张图（原 `addToLibrary` 的入参项） */
 export interface LibraryAddItem {
@@ -159,7 +160,7 @@ export function createApiLandingActions(
         channel: (typeof data.channel === 'string' && data.channel) || 'doubao',
         aspectRatio: (typeof data.aspectRatio === 'string' && data.aspectRatio) || '1:1',
         styleIds: Array.isArray(data.styleIds) ? data.styleIds : [],
-        imageCount: (typeof data.imageCount === 'number' && data.imageCount) || 1,
+        imageCount: clampImageCount(data.imageCount),
         igModel: (typeof data.igModel === 'string' && data.igModel) || '',
         igResolution: (typeof data.igResolution === 'string' && data.igResolution) || '',
         sendAccount: (typeof data.sendAccount === 'string' && data.sendAccount) || 'auto',
@@ -200,7 +201,7 @@ export function createApiLandingActions(
       if (!node || node.type !== 'genvideo') return;
 
       const { url, attempt } = result;
-      const prevData = node.data as unknown as Record<string, unknown>;
+      const prevData = node.data;
       let data: Record<string, unknown> = { ...prevData };
 
       if (attempt) {

@@ -16,7 +16,7 @@
  * 授权状态（后端 `license.js` 实际会给出的取值）
  *
  * ⚠️ `used` 是**激活**独有的状态（`license.js:698`：激活码已被使用）——
- *    原先本联合只有 5 项、**漏了 `used`** ⇒ 会被静默当成未知值。已补齐。
+ *    ⚠️ `used` **必须**在联合里（否则被静默当成未知值）。
  */
 export const LICENSE_STATUSES = ['ok', 'none', 'invalid', 'expired', 'tampered', 'used'] as const;
 export type LicenseStatusKind = (typeof LICENSE_STATUSES)[number];

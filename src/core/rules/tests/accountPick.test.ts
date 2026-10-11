@@ -11,6 +11,7 @@ import {
   deriveChannelFromGroup,
   filterPoolAccounts,
   hasExecutableAccount,
+  pickInitialActiveAccount,
   resolveSendAccount,
   UNGROUPED,
 } from '../accountPick';
@@ -297,5 +298,39 @@ describe('accountPickerLabel（原 `Se` 685-711）', () => {
     expect(accountPickerLabel({ sendAccount: `auto:group:${UNGROUPED}`, groups: [{ id: UNGROUPED, name: 'X' }] })).toBe(
       '未分组 · 自动',
     );
+  });
+});
+
+describe('pickInitialActiveAccount（原 `shared.js:26791-26805` 的 IIFE）', () => {
+  /** 加 `autoStart` 的账号（既有 `acc` 助手不带这个字段） */
+  const withAuto = (id: string, autoStart: boolean, status = '已登录'): Account => ({
+    ...acc(id, 'doubao', { status }),
+    autoStart,
+  });
+
+  it('① 第一个「已登录 **且** `autoStart`」优先 —— 即使它不是第一个账号', () => {
+    const list = [withAuto('a', false), withAuto('b', true), withAuto('c', true)];
+    expect(pickInitialActiveAccount(list)).toBe('b');
+  });
+
+  it('② 没有 `autoStart` 的 ⇒ 回落「第一个已登录」（跳过未登录的）', () => {
+    const list = [withAuto('a', false, '未登录'), withAuto('b', false), withAuto('c', false)];
+    expect(pickInitialActiveAccount(list)).toBe('b');
+  });
+
+  it('③ 全都未登录 ⇒ **仍取第一个**（源 `n[0]`，**不看状态** —— 刻意的）', () => {
+    const list = [withAuto('a', false, '未登录'), withAuto('b', false, '未登录')];
+    expect(pickInitialActiveAccount(list)).toBe('a');
+  });
+
+  it('空 / `null` / `undefined` ⇒ `null`（不抛）', () => {
+    expect(pickInitialActiveAccount([])).toBeNull();
+    expect(pickInitialActiveAccount(null)).toBeNull();
+    expect(pickInitialActiveAccount(undefined)).toBeNull();
+  });
+
+  it('未登录账号**不会**因 `autoStart` 被选中（条件是 `&&`，不是 `||`）', () => {
+    const list = [withAuto('a', true, '未登录'), withAuto('b', false)];
+    expect(pickInitialActiveAccount(list)).toBe('b');
   });
 });

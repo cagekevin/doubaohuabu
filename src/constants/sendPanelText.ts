@@ -97,7 +97,7 @@ export const BATCH_SEND_TEXT = {
  * 生成面板（原 `_Component45.jsx` 的 `.gp-*` 工具条）
  *
  * ★ **2026-10-10 补**：`GenPanel.tsx` 里 `比例`/`分辨率`/`张数`/`模型` 四个标签
- *   原先是**内联中文字面量**（违反原则 5），一并收口到这里。
+ *   （内联中文字面量违反原则 5 ⇒ 一律从本表取）。
  * ⚠️ 源版这些按钮**没有可见标签**（说明都写在 `title` 里）⇒ 这五个标签是**本工程新增**
  *    （本工程的面板是纵向表单式，不是横向工具条，需要标签才读得懂）。
  */
@@ -108,6 +108,89 @@ export const GEN_PANEL_TEXT = {
   resolutionLabel: '分辨率',
   countLabel: '张数',
   modelLabel: '模型',
+  /** 关闭按钮 `title`（原 `Z3_1.jsx:969`，逐字） */
+  closeTitle: '保存并关闭（Esc）',
+  /** 关闭按钮字形（原 `Z3_1.jsx:970`，逐字） */
+  closeGlyph: '✕',
+
+  // ── 批量出片（原 `Z3_1.jsx:856-944` 的 `st`）─────────────────────────────
+  /** 按钮文案（原 1201，逐字） */
+  batchLabel: '批量出片',
+  // ── 风格库入口（原 `Z3_1.jsx:1021-1045` 的 `.gp-style-*`）───────────────
+  /** 未选风格时的按钮内文（原 1024 的 `◇ 风格 ` —— **尾部有一个空格**，逐字） */
+  styleIdle: '◇ 风格 ',
+  /** 未选风格时的按钮 `title`（原 1021，逐字） */
+  styleIdleTitle: '风格库：发送时注入的修饰前缀（单选；「不使用风格」则不传）',
+  /** 药丸号/前缀字形（原 1034 的 `◇`） */
+  styleChipGlyph: '◇',
+  /** 药丸主按钮 `title`（原 1031，逐字） */
+  styleChipTitle: (name: string) => `风格「${name}」：点击打开风格库`,
+  /** 药丸移除按钮 `title`（原 1036，逐字） */
+  styleChipRemove: (name: string) => `移除风格「${name}」`,
+  /** 药丸移除字形（原 1039，逐字） */
+  styleChipRemoveGlyph: '×',
+  /** 本工程新增：表单式面板的「风格」行标签（源版是横向工具条，无可见标签） */
+  styleLabel: '风格',
+  /** 按钮 `title`（原 1200，逐字；`name` = provider 展示名） */
+  batchTitle: (name: string) =>
+    `批量出片：同一提示词 + ${name}，按 16:9 / 9:16 / 1:1 三个比例各出一片（复用并发队列）`,
+  /** 提示词为空（原 858，逐字；文生图面板同句，见 `_Component45.jsx:862`） */
+  batchNoPrompt: '请先输入提示词',
+  /** 无可用视频 provider（原 862，逐字） */
+  batchNoProvider: '没有可用的 API 服务商：请到顶栏「API 服务」启用并保存密钥',
+  /** 提交成功（原 940，逐字；`count` = 真正提交成功的任务数、`name` = provider 名） */
+  batchSubmitted: (count: number, name: string) =>
+    `已批量提交 ${count} 个任务（多比例 · ${name}），出片后自动连到本节点`,
+  /** 提交失败（原 942，逐字；`msg` = **后端原文**，原则 6 不得改写） */
+  batchFailed: (msg: string) => `批量提交失败：${msg}`,
+} as const;
+
+/**
+ * 风格库弹窗（原 `US.jsx`，294 行 —— 本仓落其**视图半**）
+ *
+ * ⚠️ 全部**逐字对齐源版**（含全角标点 / 空格）。
+ * ⚠️ 源版 CSS 未入库、mockup 也未收录 `.slm-*` / `.style-lib-*` ⇒ 样式为**推断值**
+ *    （全 token，见 `StyleLibraryModal.module.css`）—— 并入 `TD-16-87` 家族。
+ */
+export const STYLE_LIB_TEXT = {
+  title: '风格库',
+  /** ✕ 的 `title`（原 154） */
+  close: '关闭',
+  /** ✕ 字形（原 155） */
+  closeGlyph: '✕',
+  /** 卡片选中勾（原 200） */
+  checkGlyph: '✓',
+  // ── 顶部三颗 tab（原 158-179）──
+  tabNew: '新建风格',
+  tabNone: '不使用风格',
+  tabReset: '恢复默认',
+  hint: '点击卡片选用并关闭 · 「不使用风格」则不传风格',
+  /** 空表（原 182-184） */
+  empty: '风格库为空。点「新建风格」添加，或点「恢复默认」载入内置风格集。',
+  // ── 卡片（原 185-217）──
+  cardPick: (selected: boolean, name: string) => `${selected ? '取消选用' : '选用'}「${name}」并关闭`,
+  cardEdit: '编辑',
+  cardRemove: '删除',
+  /** 无封面时的字形（原 199 的 `(D.name || '风').slice(0, 1)` —— 兜底字 `风`） */
+  cardGlyph: (name: string) => (name || '风').slice(0, 1),
+  // ── 编辑页（原 224-292）──
+  editTitleNew: '新建风格',
+  editTitle: (name: string) => `编辑：${name}`,
+  editClose: '关闭编辑',
+  uploadCover: '上传封面',
+  clearCover: '清除封面',
+  nameLabel: '名称',
+  namePlaceholder: '风格名称，如：国风二次元',
+  prefixLabel: '提示词（会注入生成）',
+  prefixPlaceholder: '发送时注入到账号对话框的修饰文字，如：国风二次元插画风格，工笔线条，青绿山水配色，',
+  cancel: '取消',
+  save: '保存',
+  confirmDelete: (name: string) => `确定删除风格「${name}」？`,
+  /**
+   * ★ **本工程新增**（源版是 `console.warn('[style-lib] 封面解析失败:', …)` **静默**）——
+   *   按「失败可见」给一条 toast（**有意差异**，并入 `TD-16-87` 家族说明）。
+   */
+  coverFailed: '封面读取失败，请重试',
 } as const;
 
 
@@ -128,7 +211,14 @@ export const ACCOUNT_NODE_TEXT = {
   noInput: '未连接文本框或素材',
   /** 进行中（原 `OL.jsx:323`） */
   filling: '正在同步参数并填入…',
-  /** 重试中（原 `OL.jsx:334`，由 `onProgress.type === 'retry'` 触发） */
+  /**
+   * 重试中（原 `OL.jsx:334`，由 `onProgress.type === 'retry'` 触发）
+   *
+   * ★ **`TD-07-9` 结清（2026-10-11，回源）**：本条**当前 0 消费者** —— 它的触发链在
+   *   **「仅填入」半**（`OL.jsx:329` 的 `Bu(pe, {onProgress})`），而该半**未落**：
+   *   `AccountNode.tsx:16-22` ⛔ 如实标注 · `docs/13` §1.3 `[~]` · `docs/14`「3 账号节点发送」`[~]`。
+   *   ⇒ **保留不删**（那条链落时即用）；**也不给它造消费者**（那是另一条链的事）。
+   */
   retrying: '重试中…',
   /** 失败兜底（原 `OL.jsx:367`） */
   fillFailed: '填入失败',
@@ -286,7 +376,7 @@ const GEN_VIDEO_CHANNEL_LABELS: Readonly<Record<string, string>> = {
  *    的 `generation-confirm`）**无数据源** —— 见 TD-16-81。
  */
 export const GEN_VIDEO_TEXT = {
-  /** 节点标题（原 `YL.jsx`；此前是 `GenVideoNode.tsx` 里的裸字面量 —— 原则 5） */
+  /** 节点标题（原 `YL.jsx`；禁裸字面量 —— 原则 5） */
   title: '文生视频',
   /** `gv-meta` 的「已连接 N 个输入」（原 558，逐字） */
   metaInputs: (n: number) => `已连接 ${n} 个输入`,
@@ -324,6 +414,246 @@ export const GEN_VIDEO_TEXT = {
   mediaFallback: '视频已生成',
   /** 缩略图/海报的按需宽度（原 `Xt(d.resultPoster, 480)` 的 `480`） */
   posterThumbWidth: 480,
+
+  // ── 自绘播放控件（`gv-play` / `gv-dur-badge` / `gv-tl`，原 502-555）──────────────
+  /** `gv-dur-badge` 的 `aria-label`（原 510：`真实时长 ${D} 秒`，逐字） */
+  durBadgeAria: (seconds: string) => `真实时长 ${seconds} 秒`,
+
+  // ── `gv-dl` 下载（原 `ke`，`YL.jsx:349-400`）──────────────────────────────────
+  /** `gv-dl` 的 `title` / `aria-label`（原 513，逐字） */
+  download: '下载',
+  /**
+   * 另存为对话框的过滤器名 —— **视频支**（原 363：`X ? '视频文件' : '图片文件'`，逐字）。
+   * ⚠️ 「图片文件」与「下载失败 / 已下载到 / 在文件夹中显示」4 句**两域逐字相同**
+   *    ⇒ 已收口到 `COMMON_TEXT`（判据 C1，2026-10-11）。
+   */
+  videoFilter: '视频文件',
+
+  // ── `gv-apijob` API 任务状态条（原 561-563）──────────────────────────────────
+  /** 状态条的 `title`（原 561，逐字） */
+  apiJobTitle: 'API 通道任务状态',
+  /** `queued`（原 562，逐字） */
+  apiJobQueued: '⏳ API 排队中',
+  /** `submitting`（原 562，逐字） */
+  apiJobSubmitting: '⏳ API 提交中',
+  /** `running` 但**无进度**（原 562 的 `'…'` 支，逐字） */
+  apiJobRunning: '🎬 API 生成中…',
+  /** `running` 且有进度（原 562：`🎬 API 生成中 ${progress}%`，逐字） */
+  apiJobRunningProgress: (progress: number) => `🎬 API 生成中 ${progress}%`,
+  /** `downloading`（原 562，逐字） */
+  apiJobDownloading: '⬇️ API 结果接收中',
+  /** `failed`（原 562：`⚠️ API 失败：${error.message || '未知错误'}`，逐字） */
+  apiJobFailed: (message: string) => `⚠️ API 失败：${message}`,
+  /** `cancelled`（原 562，逐字） */
+  apiJobCancelled: '⏹ API 任务已取消',
+
+  /** 卡片 `title`（原 471，逐字）—— 三帧按钮 / 下载 / 播放 / 时间线**均已落**（2026-10-11） */
+  cardTitle:
+    '点击卡片（除正中播放按钮 / 时间线 / 下载 / 三帧按钮外）打开生成面板；正中按钮内联播放暂停；时间线拖动定位当前帧；↧ 下载结果；卡片下方三帧按钮把对应画面落到画布作参考图',
+
+  // ── 「三帧→画布参考图」（原 `se`，`YL.jsx:206-348,564-584`）──────────────────────
+  /** 三个按钮文案（原 572/577/582，逐字） */
+  frameHead: '头帧→画布参考图',
+  frameCurrent: '当前帧→画布参考图',
+  frameTail: '尾帧→画布参考图',
+  /** 取帧后的素材名（原 294-298 的内联映射，逐字） */
+  frameLabels: { head: '视频首帧', current: '视频当前帧', tail: '视频尾帧' } as const,
+  /** 映射查不到时的兜底（原 298 的 `|| '视频当前帧'`，逐字） */
+  frameFallbackLabel: '视频当前帧',
+  /** 成功提示（原 335：`` `已把「${名}」放到画布作参考图` ``，逐字） */
+  frameToast: (name: string) => `已把「${name}」放到画布作参考图`,
+  /** 失败提示前缀（原 337：`'截帧失败：' + (msg || '未知错误')`，逐字） */
+  frameFailed: (reason: string) => `截帧失败：${reason}`,
+  /** 取帧内部错误原文（原 218/249/264 的三个 `throw`，逐字） */
+  frameNoUrl: '无视频地址',
+  frameLoadFailed: '视频加载失败',
+  frameNoSize: '视频尺寸未就绪',
+  frameTimeout: '取帧超时',
+  /** 取帧总超时（原 227 的 `8000`） */
+  frameTimeoutMs: 8000,
+
+  // ── 历史版本（`gv-hist-btn` / `gv-hist-pop`，原 401-470,479-483,585-620）──────
+  /** 头部按钮（原 482：`` `历史 ${V.length}` ``，逐字） */
+  histBtn: (n: number) => `历史 ${n}`,
+  /** 按钮 `title`（原 479，逐字） */
+  histBtnTitle: '历史版本：查看 / 切换历次生成的视频',
+  /** 弹层标题（原 593：`` `历史版本 · 共 ${V.length} 版` ``，逐字） */
+  histTitle: (n: number) => `历史版本 · 共 ${n} 版`,
+  /** 条目 `title` —— 可切换（原 600：`` `切换到版本 #${n}` ``，逐字） */
+  histItemTitle: (n: number) => `切换到版本 #${n}`,
+  /** 条目 `title` —— 未出片（原 600，逐字） */
+  histItemDisabledTitle: '该版本未出片（无视频）',
+  /** 缩略图缺位文案（原 605，逐字） */
+  histNoVideo: '无片',
+  /** 缩略图缺位字形（原 605，逐字） */
+  histPlayGlyph: '▶',
+  /**
+   * 缩略图按需宽度（原 604 的 `Xt(X.poster, 120)`）
+   * ⚠️ 文生图（`ZL.jsx:302`）**同一个 120** ⇒ 两域各留一份（判据 C1 第 2 次出现；第 3 次须收口）。
+   */
+  histThumbWidth: 120,
+} as const;
+
+/**
+ * 文生图节点（原 `ZL.jsx`）
+ *
+ * ⚠️ 与 `GEN_VIDEO_TEXT` **逐字相同**的下载 4 句（`下载失败：` / `已下载到：` /
+ *    `在文件夹中显示` / `图片文件`）**已收口到 `COMMON_TEXT`**（判据 C1，两域共用）；
+ *    此处只放**本域独有**的文案。
+ */
+/**
+ * 提示词预设（原 `addPreset` `shared.js:27857-27873` + 按钮 `CL.jsx:774-779`）
+ *
+ * ⚠️ 源里提示词预设**只写不读**（没有列表 / 套用方 —— 119 个展开组件里都没有）
+ *    ⇒ 本仓照实建模，**不假装它有 UI**（同 `stable/model/project.ts` 的 `PromptPreset` 头注）。
+ */
+export const PRESET_TEXT = {
+  /** 按钮 `title`（原 `CL.jsx:774`，逐字） */
+  saveTitle: '保存到提示词预设',
+  /** 空闲态按钮（原 778，逐字） */
+  save: '保存预设',
+  /** 保存后 **1.5s** 的按钮态（原 778 + 222-224，逐字） */
+  saved: '✓ 已保存',
+  /** `name` 兜底（原 `shared.js:27864`，逐字） */
+  unnamed: '未命名预设',
+  /** **节点预设**的 `name` 兜底（原 `shared.js:28391` 的 `'未命名节点预设'`，逐字） */
+  unnamedNode: '未命名节点预设',
+
+  // ── 「保存为节点预设」模态（原 `_Component42.jsx:1745-1773`，逐字）──
+  /** 模态标题（原 1749，逐字） */
+  saveNodeTitle: '保存为节点预设',
+  /**
+   * 模态副标题（原 1750-1753）：`已选中 N 个节点` ＋ **有连线时**才追加 `，含 M 条连线`
+   * ⚠️ 源是两段 JSX 条件拼接，这里是等价模板（`edges === 0` **不出现**后半句）。
+   */
+  selectedSummary: (nodes: number, edges: number): string =>
+    `已选中 ${nodes} 个节点${edges > 0 ? `，含 ${edges} 条连线` : ''}`,
+  /** 名称输入框占位（原 1754，逐字） */
+  namePlaceholder: '请输入节点预设名称',
+  /** 主按钮（原 1766，逐字）—— ⚠️ 与 `save: '保存预设'`（节点上的按钮）**不同字**，别合并 */
+  modalSave: '保存',
+  /** 次按钮（原 1769，逐字） */
+  modalCancel: '取消',
+} as const;
+
+/**
+ * 文生图 `gv-meta` 的**频道显示名**（原 `QL`，`shared.js:41004-41008`）
+ *
+ * ⚠️ 源是**独立的一张表**（只有 3 项）—— 与 `ACCOUNT_TYPE_LABEL`（7 项）、
+ *    `GEN_VIDEO_CHANNEL_LABELS`（`doubao → 豆包`）**都不是同一张**：
+ *    `QL['lovart']` 是 `undefined` ⇒ 走 `|| '豆包后台'` 兜底（而 `ACCOUNT_TYPE_LABEL` 会给 `'Lovart'`）
+ *    ⇒ 逐字保留，不合并。
+ */
+const GEN_IMAGE_CHANNEL_LABELS: Readonly<Record<string, string>> = {
+  doubao: '豆包后台',
+  dola: 'Dola',
+  api: 'API',
+};
+
+/**
+ * 「自动匹配」—— 资源库素材名 ↔ 正文（原 `Jh`，`shared.js:24280`）
+ *
+ * ⚠️ **两个消费者是同一个功能、两个入口**（源就是同一个 `Jh`，判据 C1 的正例）：
+ *   · 文本框 `auto-match-btn`（`CL.jsx:243-264,745-750`）—— **只有按钮文案，没有提示**；
+ *   · 生成面板 `gp-automatch-btn`（`Z3_1.jsx:630-674,962-964`）—— 另有**三条提示**。
+ * ⇒ 共用一份文案（不各写一遍），差异只体现在各自的 `title`。
+ */
+export const AUTO_MATCH_TEXT = {
+  /** 空闲态按钮（两处源均，逐字） */
+  idle: '自动匹配',
+  /** 命中态按钮（两处源均，逐字） */
+  ok: '✓ 已匹配',
+  /** 未命中态按钮（两处源均，逐字） */
+  none: '无匹配',
+  /** 文本框按钮 `title`（原 `CL.jsx:745`，逐字） */
+  textNodeTitle:
+    '将资源库素材名称与文本匹配（精确 / 字母数字组合自动匹配；部分重叠将列出待确认项），命中后追加 @素材 引用',
+  /** 生成面板按钮 `title`（原 `Z3_1.jsx:962`，逐字） */
+  panelTitle:
+    '自动匹配：把资源库素材名与正文比对（精准 / 「参考图」前缀 / 字母数字组合），命中后追加 @素材 引用',
+  /** 资源库为空（原 `Z3_1.jsx:639`，逐字） */
+  emptyLibrary: '资源库为空：先添加素材再自动匹配',
+  /** 未匹配到（原 `Z3_1.jsx:651`，逐字） */
+  noMatch: '未匹配到资源库素材：正文里没有与素材同名的文字',
+  /** 完成（原 `Z3_1.jsx:670`：`` `自动匹配完成：新增 ${be} 处素材引用` ``，逐字） */
+  done: (count: number) => `自动匹配完成：新增 ${count} 处素材引用`,
+  /** 三条提示的时长（原 639 的 `3200` / 651 的 `3500` / 670 的 `3000`） */
+  emptyLibraryMs: 3200,
+  noMatchMs: 3500,
+  doneMs: 3000,
+  /** 按钮态复位延时（原 653 / 671 的 `1500`，两处源相同） */
+  resetMs: 1500,
+} as const;
+
+/**
+ * 节点右键菜单（原 `node-ctx-menu`，`_Component42.jsx:1685-1726` + 处理函数 `1093-1160`）
+ *
+ * ⚠️ **本仓只落 4/6 项** —— 「更换素材」（要素材选择器）与「保存为节点预设」（`addNodePreset`
+ *    未移植）**不渲染**（渲染一个点了没反应的按钮 = 假装功能在）。
+ */
+export const NODE_CTX_TEXT = {
+  /** 「自动排列（整理所选节点）」（原 1695，逐字） */
+  arrange: '自动排列（整理所选节点）',
+  /** 「打开文件所在位置」（原 1711，逐字） */
+  reveal: '打开文件所在位置',
+  /** 该项的 `title`（原 1710，逐字） */
+  revealTitle: '在 Finder 中显示图片文件',
+  /** 「复制 Ctrl+C」（原 1714，逐字） */
+  copy: '复制 Ctrl+C',
+  /** 「保存为节点预设」（原 `_Component42.jsx:1717`，逐字） */
+  saveNodePreset: '保存为节点预设',
+  /** 「粘贴 Ctrl+V」（原 1724，逐字） */
+  paste: '粘贴 Ctrl+V',
+} as const;
+
+export const GEN_IMAGE_TEXT = {
+  /** `gv-dl` 的 `title`（原 `ZL.jsx:244`，逐字） */
+  download: '下载这张图',
+  /** `gv-dl` 的 `aria-label`（原 244，逐字） */
+  downloadAria: '下载',
+  /**
+   * 下载文件名（原 114：`` `文生图_${Date.now()}.png` ``，逐字）
+   * ⚠️ 与文生视频的 `genVideoDownloadName`（走 `label` + 后缀参数）**不同** —— 源这里**写死** `png`。
+   */
+  downloadName: (now: number) => `文生图_${now}.png`,
+  /** 卡片 `title`（原 `ZL.jsx:210`，逐字） */
+  cardTitle: '点击卡片打开文生图面板（填提示词与参数，出图直接展示在这里）',
+
+  // ── 头部：`ig-chip-status` API 任务芯片（原 `ZL.jsx:218-220`）──────────────────
+  /** 未完成（原 219：`API {… ? '失败' : '进行中'}` 的**进行中**支，逐字含前缀） */
+  apiChipRunning: 'API 进行中',
+  /** 失败（同上**失败**支，逐字含前缀） */
+  apiChipFailed: 'API 失败',
+
+  // ── 历史版本（`gv-hist-btn` / `gv-hist-pop`，原 `ZL.jsx:221-225,288-314`）──────
+  /**
+   * 头部按钮（原 224：`` `历史 ${c.length}` ``，逐字）
+   * ⚠️ 与 `GEN_VIDEO_TEXT.histBtn`（`YL.jsx:482`）**逐字相同** ⇒ 两域各留一份
+   *    （判据 C1 第 2 次出现；第 3 次须收口到 `COMMON_TEXT`）。
+   */
+  histBtn: (n: number) => `历史 ${n}`,
+  /** 按钮 `title`（原 221，逐字 —— ⚠️ 与文生视频只差「图片 / 视频」二字） */
+  histBtnTitle: '历史版本：查看 / 切换历次生成的图片',
+  /** 弹层标题（原 296：`` `历史版本 · 共 ${c.length} 张` ``，逐字 —— 视频那边是「版」） */
+  histTitle: (n: number) => `历史版本 · 共 ${n} 张`,
+  /** 条目 `title`（原 299：`` `切换到这张（#${pe + 1}）` ``，逐字） */
+  histItemTitle: (n: number) => `切换到这张（#${n}）`,
+  /** 缩略图按需宽度（原 302 的 `Xt(V.dataUrl, 120)`）—— 与文生视频同一个 120 */
+  histThumbWidth: 120,
+
+  // ── `gv-meta`（原 `ZL.jsx:960-962`）──────────────────────────────────────────
+  /** `gv-meta` 的「已连接 N 个输入」（原 961，逐字）—— ⚠️ 与 `GEN_VIDEO_TEXT.metaInputs` **逐字相同**（C1 第 2 次） */
+  metaInputs: (n: number) => `已连接 ${n} 个输入`,
+  /** meta 各项之间的分隔（原 961 的 ` · `，逐字）—— 同上，两域各留一份 */
+  metaSep: ' · ',
+  /** 频道显示名表（原 `QL`，`shared.js:41004`） */
+  channelLabels: GEN_IMAGE_CHANNEL_LABELS,
+  /** 频道查不到时的兜底（原 961 的 `|| '豆包后台'`，逐字） */
+  metaChannelFallback: '豆包后台',
+  /** 比例兜底（原 961 的 `f = l.aspectRatio || '1:1'`，逐字） */
+  metaDefaultRatio: '1:1',
+  /** 已出张数（原 962：`` ` · 已出 ${c.length} 张` ``，逐字含前缀分隔） */
+  metaOutput: (n: number) => ` · 已出 ${n} 张`,
 } as const;
 
 export const VIDEO_NODE_TEXT = {
@@ -363,8 +693,92 @@ export const VIDEO_NODE_TEXT = {
   capture: '截图',
   captureTitle: '把当前画面截成图，并在右侧生成一个素材节点（文件名带播放位置）',
   captureBusy: '截图中…',
-  /** 出片记录（原 449，本工程未落地 —— 见文件头） */
+  /** 出片记录面板标题（原 447，逐字） */
   historyTitle: (n: number) => `出片记录（${n}）`,
+  /**
+   * ★ **2026-10-11 接通**（原 `BL.jsx:346-354` 的 `vn-hist-chip`）—— 此前本工程**未落地**
+   *   （见文件头「⛔ 出片记录」那条）。
+   * ⚠️ 源版**只在 `total > 1` 时**渲染它（判据在调用方）；内文是 `×N`（**不是**「出片记录」四个字），
+   *    `title` 才是那句话。
+   */
+  historyChip: (n: number) => `×${n}`,
+  historyChipTitle: (n: number) => `出片记录：共 ${n} 次`,
+  /** 尝试行（原 457-462 的 `vn-attempt` / `vn-at-*`） */
+  attemptAccountFallback: '—',
+  /** 状态标签（原 `FL`，`shared.js:40772-40777` —— 逐字；⚠️ 命中不到时**原样回显**状态串） */
+  attemptStatus: {
+    pending: '进行中',
+    success: '成功',
+    failed: '失败',
+    cancelled: '已取消',
+  },
+} as const;
+
+/**
+ * 「模糊匹配待确认」面板（原 `CL.jsx:834-892` 的 `.fuzzy-*`）
+ *
+ * ⚠️ 全部**逐字对齐源版**；⚠️ 源版 CSS 未入库、mockup 也**未收录** `.fuzzy-*` ⇒ 样式为推断值
+ *    （见 `ui/nodes/FuzzyConfirmPanel.module.css`）—— 并入 `TD-03-17`。
+ */
+export const FUZZY_TEXT = {
+  /** 头部前缀（原 837，逐字，含全角冒号） */
+  matchPrefix: '疑似匹配：',
+  /** 走「最长公共子串」那条路时的括注（原 838） */
+  same: '大致相同',
+  /** 走「分词命中」那条路时的括注（原 838 的三元另一支） */
+  byKeyword: '关键词命中',
+  /** 上一个（原 841 的 `title`，逐字） */
+  prevTitle: '定位文本框内上一处疑似匹配文字',
+  /** 下一个（原 850 的 `title`，逐字） */
+  nextTitle: '定位文本框内下一处疑似匹配文字',
+  /** 两个字形（原 845 / 854） */
+  prevGlyph: '‹',
+  nextGlyph: '›',
+  /** 计数器（原 848：`{ut + 1} / {he.length}` —— 数字与斜杠之间有空格） */
+  counter: (index: number, total: number) => `${index} / ${total}`,
+  /** 卡片 `title`（原 860，逐字） */
+  cardTitle: (name: string) => `素材：${name}`,
+  /** 无图占位（原 871，逐字） */
+  noPreview: '无预览',
+  /** 卡片脚（原 879） */
+  matchFuzzy: '大致匹配',
+  /** 卡片脚（原 879 的另一支） */
+  matchKeyword: '关键词命中',
+  /** 脚注提示（原 884，逐字） */
+  tip: '选择一个素材确认，自动跳到下一处疑似匹配',
+  /** 忽略当前**位置**（原 889，逐字） */
+  ignore: '忽略此位置',
+} as const;
+
+/**
+ * 连线（边）的悬停气泡（原 `B3.jsx:129-150` 的 `.edge-actions` / `.edge-act`）
+ *
+ * ⚠️ 两个按钮都**只有 SVG 图标**（源即如此），文案只出现在 `title` 上 —— 逐字抄源 138/144。
+ */
+export const EDGE_TEXT = {
+  insertNode: '插入节点',
+  disconnect: '断开连线',
+} as const;
+
+/**
+ * 自绘播放器文案（**两个节点共用**）
+ *
+ * ★ **2026-10-11 收口（判据 C1）**：同一对 `播放`/`暂停`（以及 `▶`/`❚❚` 两个字形）
+ *   在源里**出现两次**：文生视频节点 `YL.jsx:502`（`gv-play`）与视频节点 `BL.jsx:471`（`vt-btn`）
+ *   —— 逐字相同。此前只有前者有常量（且字形是**内联字面量**）；现在两处都从本表取，
+ *   **两份实现 → 一份**（第 2 处消费者出现即收口，正合「三振出局」）。
+ */
+export const MEDIA_PLAYER_TEXT = {
+  /** 播放（原 `YL.jsx:502` / `BL.jsx:471` 的 `'播放'`，逐字） */
+  play: '播放',
+  /** 暂停（同上） */
+  pause: '暂停',
+  /** 播放字形（原两处都是内联 `▶`） */
+  playGlyph: '▶',
+  /** 暂停字形（原两处都是内联 `❚❚`） */
+  pauseGlyph: '❚❚',
+  /** 时间线 `title`（原 `BL.jsx:474`，逐字） */
+  timelineTitle: '点击或拖动选择时间点',
 } as const;
 
 /**
@@ -409,23 +823,13 @@ export const SEND_QUEUE_TEXT = {
    * ⚠️ `cls` 是样式类名（`idle`/`na`/`unknown`/`failed`/`done`/`queued`/`generating`），
    *   也一并放这里 —— 文案与样式成对出现，分开会漂。
    */
-  gen: {
-    notStarted: '生成未开始',
-    dash: '—',
-    unknown: '状态未知',
-    nodeMissing: '节点不存在',
-    failed: '失败',
-    done: '已完成',
-    queued: '排队中',
-    /** `offer` 的兜底 note（原 42550） */
-    queuedNote: '等待豆包开始生成',
-    idle: '未在生成',
-    /** `none` 的兜底 note（原 42557） */
-    idleNote: '后台暂无该任务的生成记录',
-    generating: '生成中',
-    /** `unknown` 的兜底 note（原 42543） */
-    unknownNote: '未能获取进度',
-  },
+  /*
+   * ⚠️ **2026-10-11（`TD-16-103`）删除 `gen: {…}` 一整段** —— 它与 `GEN_PROGRESS_TEXT`
+   *   （`constants/text.ts`）**逐字重复**（同 13 个键、同 13 句文案，只是键名不同）：
+   *   `gen.unknownNote` ≡ `noProgress`、`gen.queuedNote` ≡ `waitingStart`、`gen.idleNote` ≡ `noRecord`。
+   *   成片文案的**唯一真源 = `GEN_PROGRESS_TEXT`**（由 `core/rules/genProgress.ts` 消费）。
+   *   本段原先的唯一消费者是 `core/rules/sendQueuePanel.ts` 里那份 `deriveGenView` 抄本 —— 同批已删。
+   */
   /**
    * 调度泵在"拿不到账号"时写进队列项的等待原因（原 `TS` 42134-42167 的四句）
    * ⚠️ 逐字对齐源版（含「排队等待」与「已排队等待」两种措辞 —— 源版就不一致，照抄）。
@@ -603,7 +1007,9 @@ export const FP_SCAN_TEXT = {
  *
  * ⚠️ 弹窗说明那段源版带 `<b>` 强调（三处）；本工程按**纯文本**渲染（同一句，只是不加粗）。
  * ⚠️ **失败文案不在这里** —— 真源是 `core/rules/splitText.ts` 的 `SPLIT_FAIL_REASON_LABEL`
- *    （带类型的 label，与 `COLLISION_LEVEL_LABEL` 同形态；且 `constants` 是 L0，不能 import `core`）。
+ *    （带类型的 label；且 `constants` 是 L0，不能 import `core`）。
+ *    ⚠️ **2026-10-11 更正（`TD-02-12`）**：原句把 `COLLISION_LEVEL_LABEL` 当同形例子 ——
+ *    但**那个文件 0 生产消费** ⇒ 已删该引用（`SPLIT_FAIL_REASON_LABEL` 本身就是活的同形实例）。
  */
 export const SPLIT_TEXT = {
   title: '按关键词拆分',
@@ -617,6 +1023,25 @@ export const SPLIT_TEXT = {
   useDefaultTitle: '未输入关键词时，使用默认关键词（提示词组/分镜/镜头/场景/Prompt）拆分',
   /** 「按关键词拆分」（原 1808-1810） */
   submit: '按关键词拆分',
+
+  // ── 「拆分并套用节点预设」弹窗（原 `_Component42.jsx:1816-1863`，逐字）──
+  /** 标题（原 1822，逐字） */
+  presetTitle: '拆分并套用节点预设',
+  /** 说明（原 1824，逐字） */
+  presetSub: '选中一个预设：将用拆分结果替换该预设的第一个节点，其余节点与连线保持不变',
+  /** 说明里的关键词尾注（原 1825：`（当前关键词：k1 / k2）`） */
+  presetKeywords: (kws: readonly string[]): string => `（当前关键词：${kws.join(' / ')}）`,
+  /** 列表每项的第二行（原 1841：`N 节点 · M 连线`） */
+  presetMeta: (nodes: number, edges: number): string => `${nodes} 节点 · ${edges} 连线`,
+  /** 底部「直接拆分（不使用预设）」（原 1850，逐字） */
+  presetDirect: '直接拆分（不使用预设）',
+  /** 该项的第二行（原 1852 的三目，逐字） */
+  presetDirectMeta: (hasKeywords: boolean): string =>
+    hasKeywords ? '按自定义关键词拆成多个文本框' : '按关键词+数字拆成多个文本框',
+  /** 失败原因：找不到预设（本工程 toast 用；源只写 `reason` 不改文案） */
+  presetMissing: '没有找到这个节点预设',
+  /** 失败原因：预设是空的 */
+  presetEmpty: '这个节点预设是空的',
   /** 文本节点上的按钮（原 `CL.jsx:751` 的按钮文字；`title` 逐字） */
   button: '拆分',
   buttonTitle:
@@ -766,7 +1191,9 @@ export const GROUP_MANAGER_TEXT = {
  * 指纹诊断 / 重新生成指纹（原 `OP.jsx:751-765` 的账号行两个图标按钮 + 112 的 toast 前缀）
  *
  * ⚠️ **只放自由文案**：7 段摘要的**段标签**与 4 个**伪装状态**是带类型的真源，
- *    住在 `core/rules/fingerprintDiagnosis.ts`（与 `COLLISION_LEVEL_LABEL` 同一形态/理由）。
+ *    住在 `core/rules/fingerprintDiagnosis.ts`（与 `core/rules/splitText.ts` 的 `SPLIT_FAIL_REASON_LABEL`
+ *    同一形态/理由 —— ★ **2026-10-11 更正（`TD-02-12`）**：原引 `COLLISION_LEVEL_LABEL`，
+ *    但其所在文件 **0 生产消费** ⇒ 改引活的实例）。
  * ⚠️ 两条 `title` 逐字对源（含全角括号与「」）。
  * ⚠️ `diagTitle` 的按钮**只在 Windows 宿主显示**（源 `_P`，`shared.js:34202-34210`）——
  *    见 `AccountPanel` 的 `canDiagnose`。

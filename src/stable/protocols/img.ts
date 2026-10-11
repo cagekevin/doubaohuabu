@@ -58,12 +58,10 @@ export function isInlineImage(v: unknown): v is string {
 /**
  * 拼缩略图 URL：`img://xxx.png` → `img://xxx.png?w=480`
  *
- * ★ **2026-10-11 回源纠错**：此前它给**任意**非 `data:` 地址都挂 `?w=`；而源 `Xt` 22564-22570
- *   是 `Kh(e) ? …?w=… : e`，**`Kh` = 「已是 `img://` 引用」**（`qM = 'img://'`）
- *   ⇒ **只对 `img://` 拼**。`?w=` 是**宿主协议处理器**认的参数（`electron/main.js:709`：
- *   「之后 `img://xxx.png?w=480` 直接命中磁盘缓存」）—— 挂到远程 URL 上，CDN 只会收到一个
- *   它不认识的 query（可能 404 / 返回别的图）。
- *   ⇒ `adapters/media/faceDetect.ts` 原先各自加的那道 `isImgRef` 守卫由此**冗余**（已随之简化）。
+ * ★ **只对 `img://` 拼**（源 `Xt` 22564-22570：`Kh(e) ? …?w=… : e`，`Kh` = 「已是 `img://` 引用」）。
+ *   `?w=` 是**宿主协议处理器**认的参数（`electron/main.js:709`：「`img://xxx.png?w=480` 直接命中磁盘缓存」）
+ *   —— 挂到远程 URL 上，CDN 只会收到一个它不认识的 query（可能 404 / 返回别的图）。
+ *   ⇒ 调用方**无需**再自己加 `isImgRef` 守卫（`adapters/media/faceDetect.ts` 已随之简化）。
  *
  * ⚠️ **幂等**：非 `img://` 的（`data:` / 远程 / `file:` / 空）—— 一律**原样返回**；
  *   已带 `?w=` 的**不再叠加**。

@@ -3,6 +3,11 @@
 // 该脚本在 webview 的 document-start 阶段运行，覆盖 DOM 层指纹：
 //   navigator(userAgent/platform/languages/...)、screen、devicePixelRatio、
 //   Intl.DateTimeFormat 时区、Date.getTimezoneOffset、WebGL 渲染器/厂商。
+//
+// ⚠️ ★ **TD-16-37 豁免（21 处静默 catch 中的 14 处）**：本文件生成的脚本**跑在页面里**
+//    ⇒ 其中**所有空 catch（`catch` + 空体）一律刻意静默** —— 在页内打任何日志都会**泄漏到页面 console**
+//    （站点可读）⇒ 与「指纹伪装」目标**直接冲突**（反检测红线）。
+//    ⇒ 这些静默**不是"漏留痕"，而是"必须静默"**；**不得**按主进程口径给它们加 `console.warn`。
 
 function buildFingerprintPreload(fp) {
   const fpJson = JSON.stringify(fp || {});

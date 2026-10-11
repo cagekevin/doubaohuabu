@@ -2,9 +2,7 @@
  * Settings slice（① 全局共享 —— 见 `docs/11` §5.1 / `docs/16` §1.8）
  *
  * **为什么从 `global` 拆出来**（判据 C2 / `docs/11` §5.3）：
- *   `global` 原 14 字段；本清单还要加 `license` / `scanHistory` / `lovartGalleries` /
- *   `lastSentAccountId` / `accountConcurrency` / `presets` ⇒ **必然超 25 字段上限**
- *   ⇒ 按**共享范围**再分（「API 配置族」自成一片）。
+ *   `global` 字段数逼近 25 上限 ⇒ 按**共享范围**再分（「API 配置族」自成一片）。
  *
  * ⚠️ 原则 1：只有 state 能写 store；本片**只做编排**，不含业务规则（组装报文/解析 provider 都在 core/rules）
  * ⚠️ 原则 5（SSOT）：默认并发引用 `constants`，不在本文件写魔法数

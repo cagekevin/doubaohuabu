@@ -33,12 +33,13 @@ export interface Subscriptions {
  *     `addToLibrary` / `attachVideoResultToNode` / `patchNodeData` / `attachImageResultToNode` / `pushToast`。
  *     ⇒ **API 通道的「出片落画布」至此闭环**（原 `applyApiJobEvent` 直接写 store 的六件事）。
  *
- * ★ **2026-10-10 修**：原先 `ApiPort.onJobEvent` 的载荷类型声明成 `ApiJobLite`（字段 `id`），
+ * ★ **载荷字段是 `jobId`**（不是 `id`）：类型声明成 `ApiJobLite`（字段 `id`）⇒
  *   而后端事件字段名是 **`jobId`** ⇒ `upsertApiJob` 按 `id` 去重时恒拿到 `undefined`
  *   ⇒ **所有任务塌进同一条记录**（订阅等于失效）。现已改用 `ApiJobEvent`（`jobId`）。
  *
  * **待接线（各自用例落地时补，仍只在本文件）**：
- *   - `host.clipboard.onChanged` → 剪贴板图片（M11 `usecases`）
+ *   - ~~`host.clipboard.onChanged` → 剪贴板图片~~ ★ **已接（2026-10-12 复核）**：走 `state/hostOps.ts:134`
+ *     ← `ui/canvas/CanvasHost.tsx:225`（**不经本文件** —— 若日后要收口"订阅唯一写入点"，这是落点）
  *   - `host.media.onDolaMedia` → 无水印资源（**需先扩 `HostPort`**，见 `docs/16` §1.5）
  *   - ⚠️ `applyApiJobEvent` 决策的 **`feed` 字段未落**（`pushImageGenFeed`）：源把它当 state 维护，
  *     但 119 个展开组件里**无读者** ⇒ `docs/16` §2.9 裁定「派生视图」⇒ 不落（TD-16-85）。

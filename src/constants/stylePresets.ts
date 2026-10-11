@@ -11,6 +11,13 @@ export interface StylePreset {
   name: string;
   /** 纯前缀，拼接在正文前 */
   prefix: string;
+  /**
+   * ★ **封面图**（`dataUrl`；原 `US.jsx` 的 `D.cover`，可为 `null`）—— 2026-10-11 补。
+   *
+   * ⚠️ 原类型**漏了它** ⇒ 真实 `doubao-styles` 里的 `cover` 会被"类型说谎"地标成不存在
+   *   （`US.jsx` 的编辑页会读写它）。缺省 = 无封面 ⇒ UI 用 `styleCoverGradient(name)` 兜底。
+   */
+  cover?: string | null;
 }
 
 export const DEFAULT_STYLE_PRESETS: readonly StylePreset[] = [

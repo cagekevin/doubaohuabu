@@ -36,8 +36,12 @@ const SALT = 'p0Z5zCsRnTlwpaKJjnnkkg==';
 const HMAC_SECRET = 'i/UJRBkqWpwgUFGrcPGRvZ2Z8YI3K3RGzSl4ioPlUig=';
 const LICENSE_VERSION = 1;
 
-// [本地激活补丁] 跳过 Ed25519 签名 + 时间防篡改
-const LOCAL_MODE = true;
+// ★ **2026-10-11 恢复验签（`TD-13-4`）**：此前的「[本地激活补丁] 跳过 Ed25519 签名 + 时间防篡改」
+//   （`const LOCAL_MODE = true`）**已删除** —— 它让 `checkLicenseStatus` **恒返 `ok`**、
+//   `activateWithCode` **任何码都成功** ⇒ 许可形同虚设。
+//   ⚠️ 删除时**无任何存量激活码**（用户 2026-10-11 确认）⇒ **零迁移成本**。
+//   ⚠️ `SALT` / `HMAC_SECRET` 是**客户端固有限制**（桌面端密钥必然可被提取），
+//      `docs/05` §5.3 已如实登记为「硬编码（仅公钥可公开）」⇒ **不在本债范围内**。
 // 永久授权使用一个足够远的固定到期时间戳（2100-01-01 UTC）
 const PERMANENT_EXPIRE = Date.UTC(2100, 0, 1);
 // 10 秒（测试用）
@@ -123,7 +127,11 @@ function collectStableId() {
         ).toString().trim();
         const um = uuidOut.match(/"IOPlatformUUID" = "([^"]+)"/);
         if (um && um[1]) secondary.push('uuid:' + um[1]);
-      } catch { /* ignore */ }
+      } catch {
+        // ★ TD-13-17：**补上理由**（原先只写 `/* ignore */` —— 那不是理由）。
+        //   辅键（平台 UUID）采集失败**只影响指纹的稳定性**（机器码由 primary/secondary 组合而成，
+        //   少一档仍能出码），**不影响功能** ⇒ 刻意静默。与上方主键那处（`:116`）同口径。
+      }
 
     } else if (platform === 'win32') {
       // ---- 主键：BIOS 序列号 ----
@@ -133,7 +141,10 @@ function collectStableId() {
         ).toString().trim();
         const bm = biosOut.match(/\b[A-Za-z0-9]{5,}\b/);
         if (bm && bm[0] && !/^[0-9]+$/.test(bm[0])) primary.push('serial:' + bm[0].toUpperCase());
-      } catch { /* ignore */ }
+      } catch {
+        // ★ TD-13-17：Windows **主键**采集失败（wmic 不在 / 无权限）—— 只影响指纹稳定性
+        //   （机器码由 primary/secondary/fallback 三档组合，少一档仍能出码），不影响功能。同 `:116` 口径。
+      }
 
       // ---- 辅键：主板 UUID ----
       try {
@@ -141,7 +152,9 @@ function collectStableId() {
           .toString().trim();
         const um = uuidOut.match(/[0-9A-Fa-f]{8}-[0-9A-Fa-f-]{27}/);
         if (um) secondary.push('uuid:' + um[0].toUpperCase());
-      } catch { /* ignore */ }
+      } catch {
+        // ★ TD-13-17：Windows **辅键**（主板 UUID）采集失败 —— 同主键口径：只影响指纹稳定性。
+      }
 
     } else if (platform === 'linux') {
       // ---- 主键：machine-id（/etc/machine-id 或 /var/lib/dbus/machine-id）----
@@ -150,7 +163,9 @@ function collectStableId() {
           const id = fs.readFileSync(p, 'utf-8').trim();
           if (id) { primary.push('mid:' + id); break; }
         }
-      } catch { /* ignore */ }
+      } catch {
+        // ★ TD-13-17：Linux **主键**（machine-id）读取失败（文件不存在 / 无权限）—— 只影响指纹稳定性。
+      }
 
       // ---- 辅键：DMI product_uuid ----
       try {
@@ -159,7 +174,9 @@ function collectStableId() {
           { timeout: 3000 }
         ).toString().trim();
         if (dmiOut) secondary.push('uuid:' + dmiOut);
-      } catch { /* ignore */ }
+      } catch {
+        // ★ TD-13-17：Linux **辅键**（DMI product_uuid）采集失败 —— 同主键口径。
+      }
     }
   } catch (e) {
     console.warn('[license] 硬件标识采集异常:', e.message);
@@ -170,7 +187,9 @@ function collectStableId() {
   // 不包含 MAC 地址（虚拟网卡随网络切换增删）
   try {
     fallback.push('cpu:' + ((os.cpus()[0] && os.cpus()[0].model) || ''));
-  } catch { /* ignore */ }
+  } catch {
+    // ★ TD-13-17：**兜底档**采集失败 —— 指纹仍可由 primary/secondary 组合，不影响功能。
+  }
   fallback.push('mem:' + os.totalmem());
 
   return { primary: primary.join('|'), secondary: secondary.join('|'), fallback: fallback.join('|') };
@@ -382,7 +401,10 @@ function fetchDateHeader(url, depth) {
     }
     req.on('error', () => resolve(null));
     req.on('timeout', () => {
-      try { req.destroy(); } catch { /* ignore */ }
+      try { req.destroy(); } catch {
+        // ★ TD-13-17：这里**已经在**错误/超时路径上收尾 —— destroy 失败无副作用
+        //   （socket 最终由宿主/GC 回收），故刻意静默。
+      }
       resolve(null);
     });
   });
@@ -600,11 +622,7 @@ async function detectTimeTamper(app) {
 // 对外状态查询 / 激活
 // ============================================================
 async function checkLicenseStatus(app) {
-  // [本地激活补丁] 地基入口：直接返回 ok，跳过全部验证
-  if (LOCAL_MODE) {
-    const mc = getMachineCode(app);
-    return { status: 'ok', machineCode: mc, expireAt: PERMANENT_EXPIRE, activatedAt: Date.now() };
-  }
+  // ★ `TD-13-4`：本地激活补丁已删 —— 这里**真的**读授权文件 + 复核激活码
   const mc = getMachineCode(app);
   const res = readLicense(app);
   if (!res.exists) return { status: 'none', machineCode: mc };
@@ -650,11 +668,7 @@ async function checkLicenseStatus(app) {
 }
 
 async function activateWithCode(app, code) {
-  // [本地激活补丁] 地基入口：直接成功
-  if (LOCAL_MODE) {
-    const mc = getMachineCode(app);
-    return { ok: true, status: 'ok', expireAt: PERMANENT_EXPIRE, activatedAt: Date.now(), machineCode: mc };
-  }
+  // ★ `TD-13-4`：本地激活补丁已删 —— 这里**真的**校验 Ed25519 签名 + 机器码 + 版本
   const mc = getMachineCode(app);
   const raw = (code || '').trim();
   const verify = verifyActivationCode(raw, mc);

@@ -17,7 +17,8 @@ import type {
 } from '@/core/ports/host.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { PROJECT_TEXT } from '@/constants/text';
-import { getHostApi, HOST_MISSING } from './host-api';
+import { isRecord } from '@/lib/object';
+import { getHostApi, checkOk, HOST_MISSING } from './host-api';
 
 export function createElectronProjectPort(): ProjectPort {
   return {
@@ -30,9 +31,11 @@ export function createElectronProjectPort(): ProjectPort {
       if (!api) return err('unknown', HOST_MISSING);
       try {
         const raw = api.activateProjectStorage(payload);
-        const r = raw as { ok?: boolean; error?: unknown; path?: string };
-        if (r?.ok === false) return err('unknown', typeof r.error === 'string' ? r.error : String(r.error ?? ''));
-        return ok({ path: r?.path });
+        // ★ TD-04-5：后端 `project-storage-activate-sync` 的 `e.returnValue` **两条都带 `ok`**
+        //   ⇒ 走 `checkOk`（fail-closed：漏 `ok` 不算成功）
+        const c = checkOk<{ path?: string }>(raw);
+        if (!c.ok) return c;
+        return ok({ path: c.value.path });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -42,20 +45,17 @@ export function createElectronProjectPort(): ProjectPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.pickProjectStorage(payload)) as {
-          ok?: boolean;
-          path?: string;
-          canceled?: boolean;
-          error?: string;
-          migrated?: AssetMigration;
-        } | null;
+        const raw = await api.pickProjectStorage(payload);
         // 用户取消：**如实**返回 canceled（不是错误，也不是成功）
-        if (raw?.canceled) return ok({ canceled: true });
-        // ★ 修（原则 6）：原先无视 `ok:false` 直接 `ok({path})` ⇒ 失败被吞成成功
-        if (!raw || raw.ok === false) {
-          return err('unknown', raw?.error || PROJECT_TEXT.unknownReason);
-        }
-        return ok({ path: raw.path, migrated: raw.migrated });
+        //   ⚠️ 必须**先于** `checkOk` —— 后端取消时返 `{ok:false, canceled:true}`，
+        //      那不是失败；顺序颠倒会把"用户点了取消"误报成错误。
+        if (isRecord(raw) && raw.canceled === true) return ok({ canceled: true });
+        // ★ TD-04-5：后端 `project-storage-pick` 的 4 条 return **都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ path?: string; migrated?: AssetMigration }>(raw, {
+          fallback: PROJECT_TEXT.unknownReason,
+        });
+        if (!c.ok) return c;
+        return ok({ path: c.value.path, migrated: c.value.migrated });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -100,12 +100,12 @@ export function createElectronProjectPort(): ProjectPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.revealProjectStorage(storagePath)) as
-          | { ok?: boolean; path?: string; error?: string }
-          | null;
-        // ★ 修（原则 6）：原先无视 `ok:false` 直接 `ok(undefined)` ⇒ 打不开目录也报成功
-        if (raw && raw.ok === false) return err('unknown', raw.error || PROJECT_TEXT.unknownReason);
-        return ok({ path: raw?.path });
+        const raw = await api.revealProjectStorage(storagePath);
+        // ★ 原则 6 + **TD-04-7**：后端 `main.js:408` 的 handler **每条 return 都带 `ok`**
+        //   ⇒ 统一走 `checkOk`（fail-closed：`raw == null` 与漏 `ok` 都判失败）。
+        const c = checkOk<{ path?: string }>(raw, { fallback: PROJECT_TEXT.unknownReason });
+        if (!c.ok) return c;
+        return ok({ path: c.value.path });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -115,15 +115,17 @@ export function createElectronProjectPort(): ProjectPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = (await api.getProjectStorageSize(storagePath)) as
-          | { ok?: boolean; bytes?: number; files?: number; partial?: boolean; error?: string }
-          | null;
-        // ★ 修（原则 6）：原先把返回当 `{size}` 读 ⇒ **恒为 0**；实际字段是 `bytes/files/partial`
-        if (!raw || raw.ok === false) return err('unknown', raw?.error || PROJECT_TEXT.unknownReason);
+        const raw = await api.getProjectStorageSize(storagePath);
+        // ★ 原则 6：后端字段是 `bytes/files/partial`（当 `{size}` 读 ⇒ **恒为 0**）
+        // ★ TD-04-5：后端 `project-storage-size` 的 6 条 return **都带 `ok`** ⇒ fail-closed
+        const c = checkOk<{ bytes?: number; files?: number; partial?: boolean }>(raw, {
+          fallback: PROJECT_TEXT.unknownReason,
+        });
+        if (!c.ok) return c;
         return ok({
-          bytes: typeof raw.bytes === 'number' ? raw.bytes : 0,
-          files: typeof raw.files === 'number' ? raw.files : 0,
-          partial: raw.partial === true,
+          bytes: typeof c.value.bytes === 'number' ? c.value.bytes : 0,
+          files: typeof c.value.files === 'number' ? c.value.files : 0,
+          partial: c.value.partial === true,
         });
       } catch (e) {
         return err('unknown', toMessage(e), e);

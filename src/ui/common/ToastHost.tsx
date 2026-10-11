@@ -9,11 +9,12 @@ import { useEffect } from 'react';
 // ★ 数据形状由 state 拥有（分层：state 不得依赖 ui，所以类型定义放 state）
 import type { ToastItem } from '@/state/slices/ui';
 import type { ToastLevel } from '@/constants/text';
+import { log } from '@/lib/log';
 import styles from './shared.module.css';
 
 /**
  * 语气 → 样式类（原 `.app-toast-${type}`）
- * ⚠️ `info` 是默认态 ⇒ **不给类**（与原先的写法一致，避免多一个无差别类）
+ * ⚠️ `info` 是默认态 ⇒ **不给类**（避免多一个无差别类）
  */
 const TOAST_LEVEL_CLASS: Partial<Record<ToastLevel, string>> = {
   warn: styles.toastWarn,
@@ -36,11 +37,31 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
   return (
     <div
       // 语气 → 样式（原 `showToast(text, level)`）；`info` 是默认态，不加额外类
-      className={`${styles.toast} ${TOAST_LEVEL_CLASS[item.level] ?? ''}`}
+      className={`${styles.toast} ${TOAST_LEVEL_CLASS[item.level] ?? ''} ${item.action ? styles.toastHasAction : ''}`}
       role="status"
+      // 原 `_Component42.jsx:1474`：点 toast 本体即清掉
       onClick={() => onDismiss(item.id)}
     >
-      {item.message}
+      <span className={styles.toastMsg}>{item.message}</span>
+      {/* 操作按钮（原 1478-1488）：`stopPropagation` → 调 `onClick` → 清 toast */}
+      {item.action?.label ? (
+        <button
+          type="button"
+          className={styles.toastAction}
+          onClick={(e) => {
+            e.stopPropagation();
+            try {
+              item.action?.onClick();
+            } catch (err) {
+              // 源此处 `catch {}` 吞错 ⇒ 就地留痕（原则 6；读者 = 开发者）
+              log.warn('[ToastHost] 操作按钮回调失败:', err);
+            }
+            onDismiss(item.id);
+          }}
+        >
+          {item.action.label}
+        </button>
+      ) : null}
     </div>
   );
 }

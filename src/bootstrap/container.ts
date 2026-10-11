@@ -25,6 +25,8 @@ import { createSendQueueController, type SendQueueController } from '@/state/sen
 import { createCaptureController, type CaptureController } from '@/state/capture';
 import { createLicenseOps, type LicenseOpsController } from '@/state/licenseOps';
 import { createHostOps, type HostOpsController } from '@/state/hostOps';
+import { createLocalizeOps, type LocalizeOpsController } from '@/state/localizeOps';
+import { VIDEO_BACKFILL_DELAY_MS } from '@/constants';
 import { createProjectOps, type ProjectOpsController } from '@/state/projectOps';
 import { createApiOps, type ApiOpsController } from '@/state/apiOps';
 import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/lib/hostEnv';
@@ -74,10 +76,16 @@ export interface Container {
   projectOps: ProjectOpsController;
   /** API 配置控制器（provider / 密钥 / 测试连接；原 `_Component46` 直调 `window.api` 的收口） */
   apiOps: ApiOpsController;
+  /** 视频本地化控制器（★ `core/usecases/localizeVideos` 的唯一调用方 —— 链 18「视频必须落盘」） */
+  localizeOps: LocalizeOpsController;
+  /**
+   * ★ 启动后 **5s** 回填视频直链（源 `_Component48.jsx:92-99`）
+   * ⚠️ 走注入时钟（原则 4）；由 `main.tsx` 在 `hydrate()` 之后调一次
+   */
+  startVideoBackfill: () => void;
   /**
    * 启动加载（读键 + **启动归位** + 灌 store）
-   * ⚠️ 注释更正（2026-10-10）：原写「+ 5 条迁移」—— 4 条已按 TD-16-2 删除，
-   *    现只剩图片外置（落盘时跑）与 `resetStaleJobs`（每次启动跑）。
+   * ⚠️ 迁移只剩两条：图片外置（落盘时跑）与 `resetStaleJobs`（每次启动跑）。
    */
   hydrate(): HydrateResult;
   /** 持久化调度器（防抖 600ms + beforeunload） */
@@ -133,6 +141,10 @@ export function createContainer(): Container {
         scanHistory: s.scanHistory,
         // ★ 节点 / 提示词预设（同上：不接这一步就只在内存）
         presets: s.presets,
+        // ★ 风格预设（`doubao-styles`）：不接这一步 ⇒ 改风格重启即丢
+        styles: s.styles,
+        // ★ 遮脸参数（`doubao-face-mask-opts`）：同上
+        faceMaskOpts: s.faceMaskOpts,
       };
     },
     // 原则 6：错误原样写入 saveError（不改写 message）
@@ -159,6 +171,10 @@ export function createContainer(): Container {
     s.scanHistory,
     // ★ 预设：变了也要安排落盘（否则导入并入的预设不落盘）
     s.presets,
+    // ★ 风格预设：变了也要安排落盘（否则改风格 / 恢复默认重启即丢）
+    s.styles,
+    // ★ 遮脸参数：同上
+    s.faceMaskOpts,
   ];
   let last = pick(store.useStore.getState());
   store.useStore.subscribe((s) => {
@@ -172,6 +188,10 @@ export function createContainer(): Container {
   // ★ 宿主事件订阅（唯一写入点）：`onApiJobEvent` → `settings.upsertApiJob`
   //   —— 原实现适配器早就暴露了订阅，但 state 侧无人订阅 ⇒ API 任务结果回不来（docs/14 §4）
   const subscriptions = createSubscriptions(store, ports);
+
+  // ★ 视频本地化（`core/usecases/localizeVideos` 的**唯一**接线处 —— 此前 0 调用方：
+  //   链 18「视频必须落盘」整条没接，`MediaPort.saveVideoFromUrl` 也一直无人消费）
+  const localizeOps = createLocalizeOps(store, ports);
 
   return {
     store,
@@ -198,6 +218,18 @@ export function createContainer(): Container {
       flush: (reason) => persist.flush(reason),
     }),
     apiOps: createApiOps(store, ports),
+    localizeOps,
+    /**
+     * ★ 启动后 **5s** 回填视频直链（源 `_Component48.jsx:92-99`：挂载 5s 后 `backfillLocalVideos()`）
+     *
+     * ⚠️ 定时器走**注入时钟**（`ports.clock`，原则 4）；触发方是**组合根**（`main.tsx` 调一次），
+     *   **不需要 `ui` 参与** —— 所以不必新增 Context / hook。
+     */
+    startVideoBackfill: () => {
+      ports.clock.setTimeout(() => {
+        void localizeOps.backfill();
+      }, VIDEO_BACKFILL_DELAY_MS);
+    },
     sendQueue: (() => {
       const c = createSendQueueController(store, ports);
       /**
@@ -208,7 +240,13 @@ export function createContainer(): Container {
       c.start();
       return c;
     })(),
-    hydrate: () => hydrate(store, ports),
+    hydrate: () => {
+      const r = hydrate(store, ports);
+      // ★ TD-06-1：把「读不出来的键」交给 `persist` —— 它**跳过这些键的写回**，
+      //   否则下一次防抖写盘就会把**可恢复的坏数据覆盖掉**（真丢数据）。
+      persist.setSkipKeys(r.corruptKeys);
+      return r;
+    },
     persist,
     subscriptions,
   };

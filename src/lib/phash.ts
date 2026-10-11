@@ -15,22 +15,15 @@
  */
 
 import { PHASH_SIZE } from '@/constants/dedupe';
+import { createCanvas, loadImage } from './image';
 
 /** 感知哈希（8×8 aHash → 16 位 hex）；失败返回 `null` */
 export async function perceptualHash(src: string, size: number = PHASH_SIZE): Promise<string | null> {
   if (!src || typeof document === 'undefined' || typeof Image === 'undefined') return null;
   try {
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      // ★ 原样抛出（不吞）—— 由调用方决定（原则 6）
-      img.onerror = () => reject(new Error('decode-fail'));
-      img.src = src;
-    });
+    const img = await loadImage(src);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    const canvas = createCanvas(size, size);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 

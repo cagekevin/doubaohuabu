@@ -1,9 +1,8 @@
 /**
  * 节点模型（8 类判别联合）—— ★ 冻结契约（**值形状**不可改）
  *
- * 归属说明（2026-10-10 修正）：`11` §六「契约边界表」明确把「**值形状**」列为冻结项
- *   ⇒ 数据形状属 `stable`（L1），不属 `core`（L2）。
- *   原先放在 `core/model` 导致 `stable/migrations → core/model` **反向依赖**，已修正。
+ * 归属：`11` §六「契约边界表」把「**值形状**」列为冻结项 ⇒ 数据形状属 `stable`（L1），不属 `core`（L2）
+ *   （放 `core` 会造出 `stable/migrations → core/model` 的**反向依赖**）。
  *
  * 依据：docs/03-人类版.md §0.2（逐条对照还原源码行号）
  * ⚠️ 字段名**冻结**（老数据兼容，docs/08 W2）。新增字段可以，**改名不行**。
@@ -80,10 +79,8 @@ export interface ImageGenResult {
  *   1. **老数据兼容**：旧工程可能带我们不知道的字段（`docs/08` W2），契约上必须允许
  *   2. **框架要求**：`@xyflow/react` 的 `Node<T>` 约束 `T extends Record<string, unknown>`
  *
- * ⚠️ **字段级不变量的「运行时校验」当前未接线**（TD-02-13）：`core/rules/node.ts` 的
- *    `validateNode` / `validateNodes` 已实现且**有单测**，但**零生产消费**
- *    ⇒ 加载老数据 / 建节点时**不会**被体检。原文写"由 … 在运行时校验"是**假声称**，2026-10-11 改如实。
- *    见 `docs/DATAFLOW.md` §十二。
+ * ★ **字段级不变量的「运行时校验」**：`core/rules/node.ts` 的 `validateNode` / `validateNodes`
+ *    由 `bootstrap/hydrate.ts:26` 在**加载后对全部节点**跑体检（2.5 步）。
  */
 export interface NodeDataBase {
   [k: string]: unknown;

@@ -8,6 +8,7 @@ import {
   nodeDisplayName,
   orderBatchTargets,
   orderBatchTargetsOf,
+  type NameableNode,
 } from '../batchTargets';
 import { GEN_VIDEO_LABEL, TEXT_NODE_LABEL, type CanvasNode } from '@/stable/model/node';
 
@@ -17,7 +18,7 @@ const node = (
   x: number,
   y: number,
   data: Record<string, unknown> = {},
-): { id: string; type: string; position: { x: number; y: number }; data: unknown } => ({
+): NameableNode & { id: string; position: { x: number; y: number } } => ({
   id,
   type,
   position: { x, y },
@@ -56,14 +57,9 @@ describe('nodeDisplayName（原 v3）', () => {
     expect(nodeDisplayName({ type: 'text', data: { label: GEN_VIDEO_LABEL } })).toBe(GEN_VIDEO_LABEL);
   });
 
-  it('非字符串 label ⇒ `String()` 归一', () => {
-    expect(nodeDisplayName({ type: 'text', data: { label: 42 } })).toBe('42');
-  });
-
-  it('data 缺失 / 非对象 ⇒ 不崩', () => {
-    expect(nodeDisplayName({ type: 'text', data: null })).toBe(TEXT_NODE_LABEL);
-    expect(nodeDisplayName({ type: 'text', data: undefined })).toBe(TEXT_NODE_LABEL);
-  });
+  // ⚠️ 原「非字符串 `label` ⇒ `String()` 归一」与「`data` 缺失 / 非对象 ⇒ 不崩」两个用例已**删除**
+  //   （`TD-16-104`）：`data` 现为 `{label?: string; name?: string; text?: string} & Record<string, unknown>`
+  //   ⇒ "传 42" / "传 null/undefined" 在**类型层已不可能**，那两个兜底随签名收窄一并消失。
 });
 
 describe('orderBatchTargets（原 $p）', () => {
@@ -128,26 +124,23 @@ describe('orderBatchTargets（原 $p）', () => {
     expect(diff.map((t) => t.nodeId)).toEqual(['a', 'b']); // 不同行 ⇒ 按 y
   });
 
-  it('position 缺失 ⇒ 当 0 处理（不崩）', () => {
-    const got = orderBatchTargets([
-      { id: 'a', type: 'text', data: {} },
-      { id: 'b', type: 'text', position: null, data: {} },
-    ]);
-    expect(got.map((t) => t.nodeId)).toEqual(['a', 'b']);
-    expect(got[0]).toMatchObject({ x: 0, y: 0 });
-  });
+  // ⚠️ 原「`position` 缺失 / 为 `null` ⇒ 当 0 处理」用例已**删除**（`TD-16-104`）：
+  //   `position` 现为**必填** `{x: number; y: number}`（`CanvasNode.position: XY` 本就是这个形状）
+  //   ⇒ "没有 position" 在类型层不可能；`x || 0` 只兜**数值 0/NaN**，那由下面的坐标用例覆盖。
 
   it('带上 `name`（= `nodeDisplayName`）', () => {
     const got = orderBatchTargets([node('a', 'text', 0, 0, { label: '甲' })]);
     expect(got[0]!.name).toBe('甲');
   });
 
-  it('非节点项 / 空数组不崩', () => {
+  it('空数组 ⇒ 空结果', () => {
     expect(orderBatchTargets([])).toEqual([]);
-    expect(orderBatchTargets([null as never])).toEqual([]);
+    // ⚠️ 原「`[null as never]` 非节点项不崩」的断言已**删除**（`TD-16-104`）：入参现为
+    //   `readonly (NameableNode & {id, position})[]`，"数组里混进 null" 在类型层已不可能 ——
+    //   那条断言是靠 `as never` **强迫类型系统接受非法输入**才存在的（正是收窄要消掉的东西）。
   });
 
-  it('`orderBatchTargetsOf` 与手写投影等价（可直接吃 `CanvasNode[]`）', () => {
+  it('`orderBatchTargetsOf` 可直接吃 `CanvasNode[]`（按视觉序）', () => {
     const nodes = [
       { id: 'g', type: 'genvideo', position: { x: 0, y: 200 }, data: { text: '片' } },
       { id: 't', type: 'text', position: { x: 0, y: 10 }, data: { text: '文' } },

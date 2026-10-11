@@ -28,8 +28,10 @@ export type SplitFailReason = 'node-missing' | 'no-keyword' | 'not-splittable';
 /**
  * 失败原因 → 文案（原 `CL.jsx:411` 那个三目 + `CL.jsx:755` 的按钮文字）
  *
- * ★ 与 `fingerprint.ts` 的 `COLLISION_LEVEL_LABEL` **同形态同理由**：带类型的 label 真源住
- *   `core/rules`（加一档编译器会逼你补）；`constants/` 是 L0、**不能** import `core`。
+ * ★ 与 `core/rules/fingerprintDiagnosis.ts` 的段标签 / 伪装状态 label **同形态同理由**：
+ *   带类型的 label 真源住 `core/rules`（加一档编译器会逼你补）；`constants/` 是 L0、**不能** import `core`。
+ *   ⚠️ **2026-10-11 更正（`TD-02-12`）**：原引 `fingerprint.ts` 的 `COLLISION_LEVEL_LABEL` ——
+ *   但**那个文件 0 生产消费** ⇒ 改引**活的** `fingerprintDiagnosis.ts`（免得读者去追一个死文件）。
  */
 export const SPLIT_FAIL_REASON_LABEL: Record<SplitFailReason, string> = {
   'node-missing': '节点不存在',

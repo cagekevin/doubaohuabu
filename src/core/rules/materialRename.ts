@@ -13,9 +13,9 @@
  *   ④ 资源库里 `id === libId` 的那条也改成新名字
  *   ⑤ `commit` 的 key 是 **`rename-${nodeId}`**（原 27570）—— 按节点分区，故"改 A 再改 B"是两步撤销
  *
- * ⚠️ **明确跳过的一支（如实标注）**：源版还会同步 `lovartGalleries` 里 `dataUrl` 相同的条目
- *    （27571-27590）。本工程 **`lovartGalleries` 尚未落地**（见 `state/slices/global.ts` 的待办）
- *    ⇒ 这一支**不实现**，也不假装。等该字段落地时**必须回来补**。
+ * ★ 源版还会同步 `lovartGalleries` 里 `dataUrl` 相同的条目（27571-27590）—— 本函数吃 `input.galleries`
+ *    算出新映射（见下方 `:117-133`）；`state/slices/canvas.ts:727` 的 `renameMaterialNode` 传入
+ *    `galleries: s.lovartGalleries ?? {}` 并把 `plan.galleries` 写回（`:736`）。
  */
 
 /** 本模块只读素材节点的这几个字段 */
@@ -57,6 +57,25 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
  *
  * @returns `null` = **不做任何事**（节点不存在 / 没有 data / 新名字 trim 后为空）
  */
+/**
+ * 解析一个节点当前引用的**库条目 id**（原 `Ms`，`shared.js:24117-24134`）
+ *
+ * `data.libId` 优先；没有就按 `dataUrl`（**其次 `poster`**）**反查资源库**；都没有 ⇒ `''`。
+ * ⚠️ 第二处消费者 = 「更换图片」动作（`replaceMaterialImage`）—— 判据 C1：不再写第二份。
+ */
+export function resolveMaterialLibId(
+  node: { data?: Record<string, unknown> | null } | null | undefined,
+  library: readonly { id?: string; dataUrl?: string }[],
+): string {
+  const d = node?.data ?? {};
+  const libId = str(d.libId);
+  if (libId) return libId;
+  const url = str(d.dataUrl) || str(d.poster);
+  if (!url) return '';
+  const hit = (library ?? []).find((l) => l.dataUrl && l.dataUrl === url);
+  return hit?.id ?? '';
+}
+
 export function planMaterialRename(input: {
   nodes: readonly MaterialNodeLike[];
   library: readonly RenamableLibraryItem[];
@@ -76,12 +95,8 @@ export function planMaterialRename(input: {
   if (!name) return null;
 
   const dataUrl = str(target.data.dataUrl);
-  let libId = str(target.data.libId);
-  if (!libId && dataUrl) {
-    // ② 按 dataUrl 反查资源库
-    const hit = input.library.find((l) => l.dataUrl && l.dataUrl === dataUrl);
-    if (hit) libId = hit.id;
-  }
+  // ② 解析 `libId`（走共享助手 —— 与「更换图片」同一份规则，判据 C1）
+  const libId = resolveMaterialLibId(target, input.library);
 
   const renamedNodeIds: string[] = [];
   const nodes = input.nodes.map((n) => {

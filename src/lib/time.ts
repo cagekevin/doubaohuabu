@@ -42,7 +42,26 @@ export function parseSiteTimestamp(value: unknown): number {
   return ms > 0 ? ms : NaN;
 }
 
-const pad2 = (n: number): string => String(n).padStart(2, '0');
+/**
+ * 数字 ⇒ 两位补零字符串（`String(n).padStart(2, '0')`）
+ *
+ * ⚠️ **导出**（原为文件内私有）：`core/rules` 的 `license`／`fingerprintScan`／`capture`／
+ *    `recipe`／`accountName` 此前各自抄了一份同句 `String(n).padStart(2, '0')`（5 处）⇒ 收口于此。
+ */
+export function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * 时长 `Xs` / `Xm YYs`（原 `tc` shared.js:42481）
+ *
+ * `< 60`（含负数，调用方一般已 `Math.max(0, …)`）⇒ `'{n}s'`；否则 `'{m}m{ss}s'`（秒**补零 2 位**）。
+ * ⚠️ 收口 `core/rules` 的 `sendQueuePanel.formatElapsed` 与 `genProgress.formatElapsed` 两处**逐字相同**的尾段。
+ */
+export function formatDuration(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}m${pad2(sec % 60)}s`;
+}
 
 /**
  * 本地时钟时刻 `HH:MM:SS`（原 `applyApiJobEvent` 的
@@ -55,8 +74,8 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
  * ⚠️ 仍是**本地时区**语义（与原版一致）—— 时间戳由调用方注入（原则 4）。
  *
  * @public 跨边界消费者：src/core/usecases/applyApiJobEvent.ts
- *   ⚠️ **为什么需要这行**：消费者 `core/usecases/applyApiJobEvent.ts` 自己**尚未接线**
- *   （它在死代码基线里，见 `state/subscriptions.ts` 的"待接线"清单）⇒ knip 看不到这条引用。
+ *   ⚠️ **为什么需要这行**：该消费者经 `state/subscriptions.ts:20,58` 间接调用（**TD-01-9 已接线**），
+ *   但 knip 的 `--production` 分析看不到这条跨层引用 ⇒ 仍打 `@public` 防误判为死代码。
  *   详见 `parseSiteTimestamp` 的同一说明。
  */
 export function formatClockTime(ms: number): string {
@@ -87,4 +106,18 @@ export function formatLocalDate(ms: number): string {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/**
+ * 本地时刻 `MM-DD HH:mm`（原 `YL.jsx:460-470` 的 `te`，文生视频历史版本条目用）
+ *
+ * ⚠️ 与 `formatDateTimeMinute`（`YYYY-MM-DD HH:mm`）**不同**：**不带年份** —— 源如此，逐字保留。
+ * ⚠️ 空 / `0` / 非法 ⇒ `''`（源是 `try { ... } catch { return '' }`，本实现用 `NaN` 判定，等价）。
+ * ⚠️ **本地时区**（源用 `new Date` 的本地 getter），手写 `pad2` 同 `formatClockTime`。
+ */
+export function formatMonthDayMinute(ms?: number | null): string {
+  if (!ms) return '';
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }

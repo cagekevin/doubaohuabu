@@ -10,6 +10,7 @@
 
 import type { Result } from '@/core/model/result';
 import type { LicenseStatus } from '@/core/model/license';
+import type { FaceBox, FaceMaskOpts, FaceMaskResult } from '@/core/rules/facemask';
 import type { HostOS } from '@/constants';
 import type { Project } from '@/stable/model/project';
 import type {
@@ -24,7 +25,7 @@ import type {
 
 /**
  * ★ SSOT 转出（2026-10-10）：授权状态的**形状与字面量联合**真源在 `core/model/license.ts`。
- *    本文件原先内联了一份联合 ⇒ 两处表达式（改一处漏一处），已收口。
+ *    ⛔ 不得在本文件内联这份联合（内联 = 两处表达式，改一处漏一处）。
  */
 export type { LicenseStatus, LicenseStatusKind } from '@/core/model/license';
 
@@ -160,7 +161,16 @@ export interface MediaPort {
    */
   saveImageSync(dataUrl: string): Result<string>;
   saveVideoFromUrl(url: string, referer?: string): Promise<Result<{ ref: string; size: number }>>;
-  resolveImageRef(ref: string): Promise<Result<string | null>>;
+  /**
+   * ⚠️ **2026-10-11 已删 `resolveImageRef(ref)`** —— **源前端 0 消费者**：
+   *   回源检索 `resolveImageRef` / `img-resolve` 在 `expanded_components/**` 的 `.jsx` 与 `shared.js`
+   *   **一处都没有**；`img://` → 真实路径的解析是**主进程内部**的事（`main.js:739` 的 `resolveImageRef`
+   *   被 `main.js:1005/1244/1275/1402/1536/1807/1879/3047` 内部调用），前端拿到的**是路径或文案**，不需要自己解析。
+   *   ⇒ 与 `setMuted` / `StoragePort` 的 3 个幽灵方法同判据（判据 B5：不留"声明了但没人调"的契约面）。
+   *   ⚠️ **不是**"暂时没接" —— 是**源里就没有这个前端入口**。
+   */
+
+  imageFetchDataUrl(url: string): Promise<Result<string | null>>;
   imageFetchDataUrl(url: string): Promise<Result<string | null>>;
   captureRect(rect: CaptureRect): Promise<Result<string | null>>;
   showInFolder(ref: string): Promise<Result<void>>;
@@ -173,7 +183,7 @@ export interface MediaPort {
    *    ⇒ **调用方不得据此报「已拖出」**（如实登记：`docs/16` · 母体 M5「失败不可见」的新实例）。
    * ⚠️ **payload 只有 `dataUrl` + `name`**：**不传缩略图** —— icon 由**后端**从原图 resize 到 64px
    *    （`docs/10` #53「拖拽预览 icon 必须是 64px」；`main.js:1239-1244`）。
-   *    原先本端口还声明过一个 `thumbDataUrl?`，**后端从不读它**（它在那边的注释里被写成"会额外落盘
+   *    ⛔ **不要声明 `thumbDataUrl?`** —— **后端从不读它**（它在那边的注释里被写成"会额外落盘
    *    缩略图"，属**假承诺**）⇒ 2026-10-11 **删除**（幽灵字段，母体 M6）。
    * ⚠️ 后端另支持 `path`（`docs/10` #64「传 path 优先」）—— 本仓**不暴露**：我们手上的引用是
    *    `img://`，后端 `persistImageDataUrl` 对它**原样返回**（非 data URL 早退）⇒ 不会重复写盘，
@@ -202,6 +212,27 @@ export interface MediaPort {
     /** 上限（后端夹在 1–24，默认 12） */
     maxFrames?: number;
   }): Promise<Result<{ items: unknown[]; href?: string }>>;
+
+  // ── 人脸检测 / 遮脸（★ **渲染层本地能力**，与上面各方法**不同源**：不走 IPC）──
+  /**
+   * 人脸检测（原 `qD`）
+   *
+   * ⚠️ **它不经 `window.api`** —— 在本渲染进程内跑 MediaPipe WASM ＋ DOM
+   *   （实现住 `adapters/media/faceDetect`）。放在 `media` 域是因为它同属媒体能力，
+   *   且 `docs/11` §一 已定「端口数量只开 5 个」⇒ **不新增端口**，就地扩展本域。
+   *
+   * ★ **2026-10-11 补（`TD-16-107`）**：此前 `ui/nodes/FaceMarksLayer` **直接 import
+   *   `adapters/media`**（违反铁律② `ui-no-adapters`，闸实红 2 条）；媒体实现被焊进视图组件。
+   *   现经**本端口** ＋ `state/hostOps` 控制器 ⇒ `ui` 只拿结果。
+   *
+   * ⚠️ **失败必须返 `Result`**：底层 `detectFaces` 会抛（WASM 加载 / 图片解码失败）。
+   */
+  detectFaces(src: string): Promise<Result<FaceBox[]>>;
+  /**
+   * 对人脸框应用遮罩（原 `nL`）—— 同 `detectFaces`，**渲染层本地能力**（Canvas）。
+   * ⚠️ **失败必须返 `Result`**：底层对空源 / 非法框 / 尺寸为 0 都会抛。
+   */
+  applyFaceMask(src: string, face: FaceBox, opts: FaceMaskOpts): Promise<Result<FaceMaskResult>>;
 }
 
 /**
@@ -210,7 +241,7 @@ export interface MediaPort {
  * ★ **2026-10-10 契约更正（又一组"照文档抄"的签名）**：后端三个 `ensure*` 收的是
  *   **账号对象**，不是 id 字符串 —— `preload.js:89/94/97` 原样转发 `acc`，而
  *   `main.js:2692/2805` 读 `acc.partition` / `acc.proxy`，读不到就**回落到 `persist:lovart`**。
- *   本工程原先传字符串 ⇒ `'abc'.partition === undefined` ⇒ **分区与指纹目录全错**（静默）。
+ *   ⚠️ **必须传对象** —— 传字符串 ⇒ `'abc'.partition === undefined` ⇒ **分区与指纹目录全错**（静默）。
  *
  * ⚠️ **约束 #5（`docs/10`）：cookie 由后端管理，前端一律不碰** ——
  *    本端口**没有**、也**不得新增**「读/写 cookie」的方法（会话态由主进程的
@@ -315,8 +346,29 @@ export interface ApiPort {
   jobSubmit(payload: unknown): Promise<Result<{ jobId: string }>>;
   /** 批量提交 ⇒ 逐位 `jobIds` / `errors` */
   jobBatch(basePayload: unknown, matrix: unknown): Promise<Result<ApiBatchResult>>;
+  /**
+   * 取消一个任务（原 `cancelApiJob` `shared.js:30694` 的 `await window.api.apiJobCancel(n)`）
+   *
+   * ⚠️ **保留但当前零消费 —— 而这是"对源"的（不是本仓漏接）**。取证：
+   *   · 源**有**该能力位：store action `cancelApiJob`（`shared.js:30694-30704`）＋ preload `apiJobCancel`；
+   *   · 但**源内一处都没有调用它** —— `grep -rn "cancelApiJob\|apiJobCancel" expanded_components/`
+   *     只命中 `30694`／`30695`／`30701` 三行，**全在它自己的定义里**；
+   *   · 源里 `apiJobs` 的真消费者是**文生图面板**（`_Component45.jsx:38-40` 的 `c = $.apiJobs`），
+   *     而它**只读状态、没有取消入口**（`grep 取消\|cancel` 在该文件 0 命中）。
+   *   ⇒ 按铁律 1「**该不该有**一律照抄源」：能力位**保留**；给它"造一个 UI"会**超出源** ⇒ **不造**。
+   *   ⚠️ 别把"零消费"一律当缺口 —— 这条**源亦零消费**。
+   */
   jobCancel(jobId: string): Promise<Result<{ status: ApiJobStatus }>>;
-  jobList(): Promise<Result<ApiJobEvent[]>>;
+  /**
+   * ⚠️ **2026-10-12 已删 `jobList()`** —— **源前端没有这个入口**：
+   *   `apiJobList` 在 `expanded_components/**` **0 命中**（源既不调它、也没有"任务列表"UI）；
+   *   源里那张 `apiJobs` 表由 **`applyApiJobEvent` 的事件增量**维护（`shared.js:30713-30714`
+   *   的 `apiJobs: { ...t().apiJobs, … }`），**从不"拉列表"**。
+   *   后端 `api-job:list` handler 确实在（`main.js:3170`），但**前端不需要它** ——
+   *   与 `setMuted` / `resolveImageRef` 同判据（判据 B5：不留"声明了但没人调"的契约面）。
+   *   ⚠️ 本仓 `settings.apiJobs` **不是**它的替代物：那张表由 `state/subscriptions` 的事件增量写、
+   *      由 `core/usecases/applyApiJobEvent` 读（判"上一快照"），链路自洽、不依赖本方法。
+   */
   setupGet(): Promise<Result<{ setup: ApiSetup; usage: ApiUsage }>>;
   setupSet(patch: Partial<ApiSetup>): Promise<Result<{ setup: ApiSetup }>>;
   /** 订阅（只转发 —— 原则 2） */
