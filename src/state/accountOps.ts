@@ -30,6 +30,9 @@ import {
   exportAccounts as runExportAccounts,
   importAccounts as runImportAccounts,
 } from '@/core/usecases/accountTransfer';
+// ★ 抓图入库用例（原 `wp` / `xp` / `NR` 的编排半 —— 扫页面 → 画廊入参）
+import { scanGallery as runScanGallery } from '@/core/usecases/scanGallery';
+import type { ScanPhaseEvent } from '@/core/ports/site.port';
 import type { NewAccountInput } from '@/core/rules/accountRoster';
 import { ACCOUNT_STATUS } from '@/stable/model/account';
 import { SEND_TEXT } from '@/constants/text';
@@ -102,6 +105,32 @@ export interface AccountOpsController {
    *    （文案是 SSOT 的活，控制器只交**结构化结果**）。
    */
   diagnoseAccount(accountId: string): Promise<FingerprintDiagnosis>;
+
+  /**
+   * ★ **抓图入库**（原 `wp` / `xp` / `NR` 的**编排半**）—— 逐账号扫描 → 写 `lovartGalleries`
+   *
+   * ⚠️ 与源一致：**逐账号**进行，**单个账号失败不中断其余**（源 `oe` 的 `for` 里就是跳过）。
+   *   但失败**原样上报**（`pushBackendError`）：源版只对 tapnow 那条出提示
+   *   （`Tapnow「X」未打开画布页，已跳过`），其余站点**静默吞掉** —— 本工程统一不静默（原则 6）。
+   * ⚠️ **去重**由 `addLovartImages` 兜底（按 `dataUrl` + `sourceUrl` 双去重），控制器不重复实现。
+   * ⚠️ 文案（`已抓取 N 张新图` / `没有新的图` …）是 **UI 的活** —— 本方法只交**结构化计数**。
+   */
+  scanGallery(
+    accountIds: readonly string[],
+    opts?: { onPhase?: (event: ScanPhaseEvent) => void },
+  ): Promise<ScanGallerySummary>;
+}
+
+/** `scanGallery` 的结果（**结构化计数** —— UI 据此出提示，控制器不拼文案） */
+export interface ScanGallerySummary {
+  /** 实际扫了几个账号（`accountIds` 里存在的那些） */
+  scanned: number;
+  /** 真正**新增**的画廊条数（`addLovartImages` 的返回；已存在的被去重掉） */
+  added: number;
+  /** 逐张**落盘失败**（原 `wp.failed`） */
+  failed: number;
+  /** 扫描阶段跳过（重复 / 过小 / 占位图） */
+  skipped: number;
 }
 
 export function createAccountOps(store: AppStore, ports: Ports): AccountOpsController {
@@ -225,6 +254,31 @@ export function createAccountOps(store: AppStore, ports: Ports): AccountOpsContr
       }
 
       return buildFingerprintDiagnosis(page, net, source);
+    },
+
+    async scanGallery(accountIds, opts) {
+      const targets = store.useStore.getState().accounts.filter((a) => accountIds.includes(a.id));
+      let added = 0;
+      let failed = 0;
+      let skipped = 0;
+      for (const account of targets) {
+        const r = await runScanGallery(
+          { sites: ports.sites },
+          account,
+          // ⚠️ `onPhase` 只做转发（阶段机归 UI；本控制器不存它）
+          { ...(opts?.onPhase ? { onPhase: opts.onPhase } : {}) },
+        );
+        if (!r.ok) {
+          // 原则 6：不静默（源版只对 tapnow 那条提示，其余吞掉）；**但不中断**其余账号
+          store.useStore.getState().pushBackendError('unknown', r.message);
+          continue;
+        }
+        // ★ 落库（原则 1：写 store 只在 state）—— 去重由 `addLovartImages` 兜底
+        added += store.useStore.getState().addLovartImages(account.id, r.value.items);
+        failed += r.value.failed;
+        skipped += r.value.skipped;
+      }
+      return { scanned: targets.length, added, failed, skipped };
     },
   };
 }

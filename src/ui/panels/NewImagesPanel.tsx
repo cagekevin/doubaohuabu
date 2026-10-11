@@ -8,34 +8,43 @@
  * ★ **聚合逻辑在纯层**：`core/rules/newImages.ts`（`aggregateNewImages`，**24 条单测**）
  *   —— 源版那四个内联站点判定（`Ep`/`ho`/`Ud`/`x0`）与两条过滤规则在组件里无法单独验证。
  *
- * ✅ **已落（2026-10-11）**：聚合列表 · **发送到画布**（含大图确认）· **从列表移除** ·
- *   **折叠**（`doubao-newimages-folded`）· **只留本画布**（`doubao-newimages-current-only`）·
- *   `NEW` / `✓ 已发送` / `⚠` / 来源标签 四类徽标。
+ * ✅ **已落**：聚合列表 · **发送到画布**（含大图确认）· **从列表移除** · **折叠**
+ *   （`doubao-newimages-folded`）· **只留本画布**（`doubao-newimages-current-only`）·
+ *   `NEW` / `✓ 已发送` / `⚠` / 来源标签 四类徽标 · **「立即抓取」+ 四阶段状态机**
+ *   （2026-10-11 接通：`accountOps.scanGallery` → `SitePort.scan`）。
  *
  * ⛔ **未落地的逐条标注（判据 B4/B5，不假装）**：
  *   | 缺 | 源 | 原因 |
  *   |---|---|---|
- *   | **手动抓取** | `oe`（原 333-421） | 三条扫描链（Lovart `wp` / Tapnow `xp` / 其它 `NR`）+ `Yl` 读画布 id —— 本工程 `SitePort.scan` **零调用方**（见 `docs/14` §5） |
- *   | **自动值守轮询** | `Ee`（原 428-592） | 依赖上一条；另有抖动 / 退避 / 上限一整套 |
+ *   | **自动值守轮询** | `Ee`（原 428-592） | 抖动 / 退避（3s/6s/10s/15s）/ 空转上限 / 单账号计数 —— 一整套定时器编排，**与「扫描链」是两件事**（后者已通） |
  *   | 长按拖出到系统 | `se`（原 152-192） | 走 `startFileDrag`（`MediaPort` 未用，见 `docs/14` §1.4） |
- *   | 状态机四阶段 | `onStatus`（原 50-60） | 由扫描链上报；无扫描则恒 `待机` |
+ *   | 「正在抓取中，请稍候」 | 原 336 | 源版有**模块级并发锁**（`Jy()`/`o0()`）；本工程只有本面板会发起，且按钮在忙时**禁用** ⇒ 该分支**不可达** ⇒ 不落（判据 B5） |
  *
  * ⚠️ **一处刻意的处理**：源版的 toast 是**面板内**的 `.dvl-toast`（3200ms 自动消失），
  *   本工程统一走 store 的 `pushToast`（与 `GalleryPanel` 同法），**时长逐条对源**。
- * ⚠️ **`currentCanvasId` 传 `null`**：源版由 `Yl(account)` 读页面地址取画布 id，那条链属抓取子系统
- *   ⇒ 本工程暂不读；纯层判据本身逐字保留（见 `newImages.ts` 文件头「源版怪癖」）。
+ * ⚠️ **`currentCanvasId` 传 `null`**：源版由 `Yl(account)` 读页面地址取画布 id；纯层判据本身逐字保留
+ *   （见 `newImages.ts` 文件头「源版怪癖」）。
  *
- * ⚠️ **原则 1**：本组件只调 `useStore` 暴露的 action，不写 store。
+ * ⚠️ **原则 1**：本组件只调 `useStore` 暴露的 action 与 `useAccountOps()`，不写 store。
  */
 
 import { useMemo, useState } from 'react';
-import { useStore } from '@/state';
+import { useAccountOps, useStore } from '@/state';
 import { NewImagesThumb } from './NewImagesThumb';
 import { NEW_IMAGES_TEXT } from '@/constants/text';
 import { GALLERY_GRID_GAP } from '@/constants';
 import { formatBytes } from '@/core/rules/downloadNode';
 import { galleryItemDims, isBigGalleryItem } from '@/core/rules/materialGrid';
-import { aggregateNewImages, galleryItemKey, isFetchableSite, isFreshItem, type NewImageItem } from '@/core/rules/newImages';
+import {
+  aggregateNewImages,
+  galleryItemKey,
+  isAggregatableSite,
+  isFetchableSite,
+  isFreshItem,
+  isOtherSite,
+  type NewImageItem,
+} from '@/core/rules/newImages';
+import type { ScanPhaseEvent } from '@/core/ports/site.port';
 import styles from './NewImagesPanel.module.css';
 
 export function NewImagesPanel() {
@@ -49,6 +58,7 @@ export function NewImagesPanel() {
   const currentOnly = useStore((s) => s.newImagesCurrentOnly);
   const setFolded = useStore((s) => s.setNewImagesFolded);
   const setCurrentOnly = useStore((s) => s.setNewImagesCurrentOnly);
+  const accountOps = useAccountOps();
 
   /**
    * ⚠️ 时钟**只在挂载时取一次**（`useState(() => …)`）—— 渲染期禁 `Date.now()`（`docs/11` §9.1）。
@@ -57,6 +67,10 @@ export function NewImagesPanel() {
   const [now] = useState(() => Date.now());
   /** ★ 已发送过的条目（原 `b.current` 的 `Set`）—— 键是 `galleryItemKey` */
   const [sent, setSent] = useState<Set<string>>(() => new Set());
+  /** ★ 抓取状态机（原 `N` 的 `{phase, message}`）—— `null` = 未扫过（显示「待机」） */
+  const [phase, setPhase] = useState<ScanPhaseEvent | null>(null);
+  /** ★ 抓取进行中（原 `q`）—— 用于按钮 `disabled` 与文案切换 */
+  const [busy, setBusy] = useState(false);
 
   const items = useMemo(
     () =>
@@ -70,6 +84,55 @@ export function NewImagesPanel() {
   );
   /** 「聚合 N 个账号」徽标（原 `c.length` = **可抓取**账号数，不是过滤后的数） */
   const fetchableCount = useMemo(() => accounts.filter((a) => isFetchableSite(a)).length, [accounts]);
+  const activeAccount = useMemo(
+    () => accounts.find((a) => a.id === activeAccountId) ?? null,
+    [accounts, activeAccountId],
+  );
+
+  /** 状态文案（原 614 的三目：`scanning` ⇒ 固定句；`working`/其余 ⇒ 后端 message；全空 ⇒ 待机） */
+  const statusText =
+    phase === null
+      ? NEW_IMAGES_TEXT.statusIdle
+      : phase.phase === 'scanning'
+        ? NEW_IMAGES_TEXT.statusScanning
+        : phase.message || (phase.phase === 'working' ? NEW_IMAGES_TEXT.statusWorking : NEW_IMAGES_TEXT.statusIdle);
+  const spinning = phase?.phase === 'scanning' || phase?.phase === 'working';
+
+  /** 按钮文案（原 `De` 599 的四路三目） */
+  const fetchLabel = isAggregatableSite(activeAccount)
+    ? NEW_IMAGES_TEXT.fetch
+    : isOtherSite(activeAccount)
+      ? NEW_IMAGES_TEXT.fetchCurrentPage
+      : fetchableCount > 1
+        ? NEW_IMAGES_TEXT.fetchAll
+        : NEW_IMAGES_TEXT.fetch;
+
+  /**
+   * ★ **立即抓取**（原 `oe` 333-421）
+   *
+   * 目标账号（**逐字对源**）：当前账号**可抓取** ⇒ 只扫它；否则扫**全部**可抓取的账号。
+   * 结果 → 一条 toast（`ok`/`err`/`warn` 三档，时长对源）；失败账号由控制器 `pushBackendError` 上报。
+   */
+  const runFetch = async (): Promise<void> => {
+    if (busy) return;
+    const targets =
+      activeAccount && isFetchableSite(activeAccount)
+        ? [activeAccount.id]
+        : accounts.filter((a) => isFetchableSite(a)).map((a) => a.id);
+    if (targets.length === 0) {
+      pushToast(NEW_IMAGES_TEXT.noAccounts, 2600, 'warn');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await accountOps.scanGallery(targets, { onPhase: setPhase });
+      if (r.added > 0) pushToast(NEW_IMAGES_TEXT.fetched(r.added, r.failed), 4500, 'info');
+      else if (r.failed > 0) pushToast(NEW_IMAGES_TEXT.failedOnly(r.failed), 6000, 'error');
+      else pushToast(NEW_IMAGES_TEXT.noNew, 4000, 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /**
    * 发送到画布（原 `ke` 193-223）
@@ -124,10 +187,10 @@ export function NewImagesPanel() {
               </span>
             )}
           </div>
-          {/* 状态机（原 611-616）—— ⚠️ 无扫描链 ⇒ 恒 `待机`（见文件头） */}
-          <div className={styles.status} title={NEW_IMAGES_TEXT.statusIdle}>
-            <span className={styles.statusDot} />
-            <span>{NEW_IMAGES_TEXT.statusIdle}</span>
+          {/* 状态机（原 611-616）—— 阶段由 `onPhase` 上报（`scanning`/`found`/`working`/`done`） */}
+          <div className={styles.status} title={statusText}>
+            <span className={`${styles.statusDot} ${spinning ? styles.statusDotBusy : ''}`} />
+            <span>{statusText}</span>
           </div>
         </div>
 
@@ -136,9 +199,9 @@ export function NewImagesPanel() {
             {items.length === 0 ? (
               <div className={styles.empty}>
                 <span>{NEW_IMAGES_TEXT.emptyHint}</span>
-                {/* ⛔ 抓取未落地 ⇒ 禁用 + 说明原因（判据 B4；与 `GalleryPanel` 的扫描按钮同法） */}
-                <button type="button" className={styles.fetch} disabled title={NEW_IMAGES_TEXT.pendingFetch}>
-                  {NEW_IMAGES_TEXT.fetch}
+                {/* 原 621-623：空态里那个抓取按钮（源版**没有** `title`） */}
+                <button type="button" className={styles.fetch} disabled={busy} onClick={() => void runFetch()}>
+                  {busy ? NEW_IMAGES_TEXT.fetchBusy : fetchLabel}
                 </button>
               </div>
             ) : (
@@ -176,10 +239,17 @@ export function NewImagesPanel() {
               >
                 {currentOnly ? NEW_IMAGES_TEXT.onlyCurrentOn : NEW_IMAGES_TEXT.onlyCurrent}
               </button>
-              {/* ⛔ 抓取 / 自动值守均未落地 ⇒ 禁用 + 说明原因（判据 B4） */}
-              <button type="button" className={styles.fetch} disabled title={NEW_IMAGES_TEXT.pendingFetch}>
-                {NEW_IMAGES_TEXT.fetch}
+              {/* ★ 抓取（原 671-673）—— 这一处**带 `title`**（与空态那个不同，逐字对源） */}
+              <button
+                type="button"
+                className={styles.fetch}
+                disabled={busy}
+                title={NEW_IMAGES_TEXT.fetchTitle}
+                onClick={() => void runFetch()}
+              >
+                {busy ? NEW_IMAGES_TEXT.fetchBusy : fetchLabel}
               </button>
+              {/* ⛔ 自动值守未落地 ⇒ 禁用 + 说明原因（判据 B4） */}
               <button type="button" className={styles.auto} disabled title={NEW_IMAGES_TEXT.pendingAuto}>
                 {NEW_IMAGES_TEXT.autoPaused}
               </button>

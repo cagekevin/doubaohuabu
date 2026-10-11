@@ -60,6 +60,34 @@ const DEFAULT_NAME = LOVART_ITEM_DEFAULT_NAME;
 /** 出处兜底（原 29274 的 `f.source || 'import'`） */
 const DEFAULT_SOURCE = 'import';
 
+/** 抓来的图**命名**（原 `XT` 33039-33057）—— `wp` 32493-32941 逐张抓到时用它取名 */
+export function captureImageName(url: string, index = 0): string {
+  const fallback = `Lovart 生成图 ${index + 1}`;
+  if (typeof url !== 'string' || !url) return fallback;
+  if (/^blob:/i.test(url)) return fallback;
+  if (/^data:/i.test(url)) return `Lovart 内联图 ${index + 1}`;
+  try {
+    const seg = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || '')
+      .replace(/[?#].*$/, '')
+      .slice(0, 64);
+    return seg && /\.(png|jpe?g|webp|gif|avif|bmp|tiff?|heic)$/i.test(seg) ? seg : fallback;
+  } catch {
+    // ⚠️ 与源一致：解析不了（相对路径 / 乱码）⇒ 兜底名，**不抛**
+    return fallback;
+  }
+}
+
+/**
+ * 抓来的图**出处标记**（原 `wp` 的 `M.kind === 'http' ? 'capture-page' : 'capture-blob'`）
+ *
+ * ⚠️ 源版的 `kind` 由**页面脚本**给出（`http` / `data` / `blob`）；本仓的采集脚本
+ *    （`shared/scanScripts.ts` 的 `SCAN_SCRIPT`）**没带 `kind`** ⇒ 这里按 **URL 协议**等价划分
+ *    （`blob:` / `data:` ⇒ `capture-blob`，其余 ⇒ `capture-page`）。两类下 `name` 的取值也与之同族。
+ */
+export function captureSource(url: string): string {
+  return /^(blob|data):/i.test(url) ? 'capture-blob' : 'capture-page';
+}
+
 /**
  * 解析落盘的画廊 JSON（原 `ET` 26637-26649）
  * ⚠️ 与源一致：**空 / 坏数据 / 不是对象 ⇒ `{}`**（**不抛** —— 画廊丢了不该挡住启动）。

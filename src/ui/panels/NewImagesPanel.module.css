@@ -66,13 +66,17 @@
 
 /*
  * 状态圆点 —— 复用真源 `.dot`（`shared.module.css`）而不是自造一个。
- * ⚠️ 只覆盖**颜色**（§3.1「修饰符只写差异」）：无扫描链 ⇒ 恒「待机」= 灰点
- *   （源版那套 `scanning/working` 的活动态随状态机一起未落，见 `NewImagesPanel.tsx` 文件头）。
+ * ⚠️ 只覆盖**颜色**（§3.1「修饰符只写差异」）：待机 = 灰点；`scanning` / `working` = 主色点。
  * ⚠️ 名字不叫 `.spin` —— 它**不转**（`docs/17` §1.3：名字说形态，不说时机）。
  */
 .statusDot {
   composes: dot dotLg from '../common/shared.module.css';
   background: var(--color-text-faint);
+}
+
+/* 抓取进行中（`scanning` / `working`）—— 源版 `.dvl-spin` 去掉 `-idle` 的那一态 */
+.statusDotBusy {
+  background: var(--color-action-primary);
 }
 
 /* 折叠时只留头（原 `.nip-wrap.collapsed .nip-fold-body { display:none }`） */

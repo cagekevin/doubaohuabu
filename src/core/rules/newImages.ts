@@ -31,14 +31,23 @@ import type { LovartGalleries } from '@/core/rules/lovartGallery';
 import type { LovartGalleryImage } from '@/stable/contracts/lsValues';
 import { NEW_IMAGES_FRESH_MS, NEW_IMAGES_LIMIT } from '@/constants';
 
-/** 站点判定（原 `Ep`）：是不是 Lovart / Tapnow（即「值得聚合」的账号） */
-function isAggregatableSite(account: Pick<Account, 'type'> | null | undefined): boolean {
+/**
+ * 站点判定（原 `Ep`）：是不是 Lovart / Tapnow（即「值得聚合」的账号）
+ * ⚠️ 导出给面板判「抓取按钮该显示哪句话」（原 `De` 的四路三目）——
+ *   只判**站点类型**，文案仍住 `NEW_IMAGES_TEXT`（`core` 不碰文案）。
+ */
+export function isAggregatableSite(account: Pick<Account, 'type'> | null | undefined): boolean {
   return !!account && (account.type === 'lovart' || account.type === 'tapnow');
 }
 
 /** 站点判定（原 `ho`） */
 function isLovartSite(account: Pick<Account, 'type'> | null | undefined): boolean {
   return !!account && account.type === 'lovart';
+}
+
+/** 站点判定（原 `tS`）：`other`（自定义网站）—— 面板的抓取按钮据此显示「抓取本页图」 */
+export function isOtherSite(account: Pick<Account, 'type'> | null | undefined): boolean {
+  return !!account && account.type === 'other';
 }
 
 /** 站点判定（原 `Ud`） */

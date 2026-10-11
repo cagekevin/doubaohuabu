@@ -20,6 +20,9 @@
  *
  * ⚠️ **`scan` 的编排与 `lovart/index.ts` 目前是重复的**（现为**第 2 处**）。
  *    按 **C1 三振出局**：到**第三个**站点（`gpt`）时必须抽到 `site/shared/`（或 M11 的用例层）。
+ *    ★ 2026-10-11 进展：**「归一 + 逐张落盘」那半已经抽走**（`shared/materializeScan.ts` ——
+ *    两档各自那份同形 `Attempt` + `normalizeAttempt` 已删）；**剩下的重复**只有外面那层
+ *    降级循环（`for(;;) nextScanStrategy → tryScan`），等 `gpt` 有抓取时一并判。
  */
 
 import type { Account } from '@/stable/model/account';
