@@ -16,7 +16,7 @@
  * ⛔ **未落地的逐条标注（判据 B4/B5，不假装）**：
  *   | 缺 | 源 | 原因 |
  *   |---|---|---|
- *   | **自动值守轮询** | `Ee`（原 428-592） | ★ **不是缺口气，是裁定**：`docs/10` #11 + `electron/main.js:2749`「**默认关闭 Lovart 自动抓取**（每 3 秒执行页面脚本会被判机器人）」⇒ **本项目不开自动轮询抓取**。按钮**保留可见但禁用**，`title` 如实说明（见 `NEW_IMAGES_TEXT.autoOff`） |
+ *   | **自动值守轮询（非 Lovart）** | `Ee`（原 428-592） | ⏳ **未落（欠账）**：源版按账号 `autoStart` 建循环 + 抖动 `tD(id)`(0~8s) + 基础间隔 `qR=3000`(Lovart)/`KR=6000`(其它) + 空转退避 `YR=10000`/`XR=15000`（`idleRounds>=xl=4`）+ 单账号累计上限 `QR=40` + 每轮 `limit=m0=6`。★ **只有 Lovart 不做**（`docs/10` #11 · `main.js:2749` 只点名 Lovart）⇒ **接通时跳过 Lovart**。当前按钮为**禁用占位**（见 `NEW_IMAGES_TEXT.autoOff`） |
  *   | 长按拖出到系统 | `se`（原 152-192） | 走 `startFileDrag`（`MediaPort` 未用，见 `docs/14` §1.4） |
  *   | 「正在抓取中，请稍候」 | 原 336 | 源版有**模块级并发锁**（`Jy()`/`o0()`）；本工程只有本面板会发起，且按钮在忙时**禁用** ⇒ 该分支**不可达** ⇒ 不落（判据 B5） |
  *
@@ -250,9 +250,10 @@ export function NewImagesPanel() {
                 {busy ? NEW_IMAGES_TEXT.fetchBusy : fetchLabel}
               </button>
               {/*
-                ⛔ 自动值守 —— **保留可见但禁用**（维持源版布局，判据「组件照抄」）。
-                ★ `title` 说的是**项目裁定**（不开自动轮询抓取），**不是**「还没做完」——
-                  见 `docs/10` #11 / `electron/main.js:2749`。
+                ⏳ 自动值守 —— **禁用占位**（维持源版布局，判据「组件照抄」）。
+                ★ 它是**未落（欠账）**，**不是裁定不做**：裁定只管 **Lovart**（`docs/10` #11 /
+                  `electron/main.js:2749`「默认关闭 **Lovart** 自动抓取」），**Tapnow 等站点要做**。
+                  `title` 已如实写明（`NEW_IMAGES_TEXT.autoOff`）。
               */}
               <button type="button" className={styles.auto} disabled title={NEW_IMAGES_TEXT.autoOff}>
                 {NEW_IMAGES_TEXT.autoPaused}
