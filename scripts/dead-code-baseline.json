@@ -1,7 +1,7 @@
 {
   "_comment": "死代码闸基线（scripts/check-dead-code.mjs 消费）。基线内=存量（不阻塞，可逐步清偿）；基线外新增=闸红。重生成：node scripts/check-dead-code.mjs --update-baseline",
   "knipVersion": "6.41.0",
-  "count": 172,
+  "count": 169,
   "items": [
     "package.json::dependencies::@mediapipe/tasks-vision",
     "src/adapters/host/electron/index.ts::exports::HOST_MISSING",
@@ -85,7 +85,6 @@
     "src/core/rules/genProgress.ts::files::src/core/rules/genProgress.ts",
     "src/core/rules/index.ts::files::src/core/rules/index.ts",
     "src/core/rules/lovartGallery.ts::exports::parseLovartGalleries",
-    "src/core/rules/lovartGallery.ts::exports::shouldMaterializeImage",
     "src/core/rules/lovartGallery.ts::types::CanvasMaterialLike",
     "src/core/rules/media.ts::files::src/core/rules/media.ts",
     "src/core/rules/node.ts::files::src/core/rules/node.ts",
@@ -140,7 +139,6 @@
     "src/stable/contracts/schemas.ts::exports::PROTOCOL_VID",
     "src/stable/migrations/index.ts::exports::externalizeDeep",
     "src/stable/migrations/index.ts::exports::externalizeProjectImages",
-    "src/stable/migrations/index.ts::exports::isInlineImage",
     "src/stable/model/account.ts::exports::isFingerprintStale",
     "src/stable/model/gen.ts::exports::STALE_JOB_STATUSES",
     "src/stable/model/gen.ts::types::GenEndReason",
@@ -148,7 +146,6 @@
     "src/stable/model/node.ts::exports::GEN_HISTORY_KEY",
     "src/stable/model/project.ts::types::ImageGenFeedItem",
     "src/stable/model/project.ts::types::ProjectSnapshot",
-    "src/stable/protocols/img.ts::exports::isImgRef",
     "src/stable/protocols/vid.ts::files::src/stable/protocols/vid.ts",
     "src/state/index.ts::exports::createSettingsSlice",
     "src/state/index.ts::exports::createSubscriptions",

@@ -9,11 +9,9 @@
  */
 
 import type { NormalizeContext, MigrationOutcome } from './types';
-
-/** 是不是内联图片 dataUrl */
-export function isInlineImage(v: unknown): v is string {
-  return typeof v === 'string' && v.startsWith('data:image/') && v.includes('base64,');
-}
+// ★ 2026-10-11：判据提为**协议真源**（`docs/17` §5 判据 C1 —— 它此前在本文件与
+//   `lovartGallery.ts` 各写一遍，且后者写反了）。本文件不再自己定义。
+import { isInlineImage } from '@/stable/protocols/img';
 
 interface Stats {
   count: number;

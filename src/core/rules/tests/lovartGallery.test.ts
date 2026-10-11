@@ -25,7 +25,6 @@ import {
   clearLovartGallery,
   parseLovartGalleries,
   removeLovartImages,
-  shouldMaterializeImage,
   type LovartGalleries,
 } from '../lovartGallery';
 
@@ -208,19 +207,9 @@ describe('clearLovartGallery（原 29315）', () => {
   });
 });
 
-describe('shouldMaterializeImage（原 `Tn` 的判据半）', () => {
-  it('★ **只有远程 http(s) 才落盘**', () => {
-    expect(shouldMaterializeImage('https://x/a.png')).toBe(true);
-    expect(shouldMaterializeImage('http://x/a.png')).toBe(true);
-  });
-
-  it('★ 本地引用 / data URL / 空 ⇒ 不落盘（原样返回）', () => {
-    expect(shouldMaterializeImage('img://a.png')).toBe(false);
-    expect(shouldMaterializeImage('file:///a.png')).toBe(false);
-    expect(shouldMaterializeImage('data:image/png;base64,AAA')).toBe(false);
-    expect(shouldMaterializeImage('')).toBe(false);
-  });
-});
+// ⚠️ `shouldMaterializeImage` 的测试**已删**（2026-10-11 回源纠错）：该函数及其判据都写反了
+//    （以为「远程才落盘」）。真判据「**是不是内联 base64 图**」已提为协议真源
+//    `stable/protocols/img.ts` 的 `isInlineImage`，测试随之搬到 `protocols/tests/img.test.ts`。
 
 describe('isLovartJunk（原 `Dc` 23537）', () => {
   const mk = (natW: number, natH: number, sizeBytes = 0) => ({ natW, natH, sizeBytes });

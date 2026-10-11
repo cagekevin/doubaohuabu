@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { isDataUrl, isImgRef, withThumb } from '../img';
+import { isDataUrl, isImgRef, isInlineImage, withThumb } from '../img';
 
 describe('withThumb · 拼缩略图 URL', () => {
   it('img:// 无查询串 → 用 `?` 接', () => {
@@ -56,5 +56,38 @@ describe('协议判定', () => {
     expect(isDataUrl('data:image/png;base64,x')).toBe(true);
     expect(isDataUrl('img://a.png')).toBe(false);
     expect(isDataUrl('')).toBe(false);
+  });
+});
+
+/**
+ * ★ 2026-10-11 回源纠错：这条判据（原 `fp`）是「**要不要落盘**」（原 `Tn`）的真判据。
+ * ⚠️ 此前 `core/rules/lovartGallery.ts` 的 `shouldMaterializeImage` 写成了「是不是远程 http」
+ *   —— **恰好反了** ⇒ 两处测试都锁的是错行为。这里锁**正确**的那一条。
+ */
+describe('isInlineImage · 「要不要落盘」的判据（原 `fp` 22561 / `Tn` 22578）', () => {
+  it('★ 内联 base64 图片 ⇒ true（只有它需要外置成 `img://`）', () => {
+    expect(isInlineImage('data:image/png;base64,AAA')).toBe(true);
+    expect(isInlineImage('data:image/jpeg;base64,/9j/4AAQ')).toBe(true);
+    // 带 charset 也是内联 base64 图
+    expect(isInlineImage('data:image/png;charset=utf-8;base64,AAA')).toBe(true);
+  });
+
+  it('★ **远程 http(s) ⇒ false**（远程图**不该**落盘 —— 这正是此前写反的那条）', () => {
+    expect(isInlineImage('https://x/a.png')).toBe(false);
+    expect(isInlineImage('http://x/a.png')).toBe(false);
+  });
+
+  it('★ 已是 `img://` 引用 ⇒ false（否则会被**二次外置**成坏引用）', () => {
+    expect(isInlineImage('img://a.png')).toBe(false);
+  });
+
+  it('非图片 data URL / file:// / 空 / 非字符串 ⇒ false', () => {
+    expect(isInlineImage('data:text/plain;base64,AAA')).toBe(false);
+    expect(isInlineImage('data:image/png,AAA')).toBe(false); // 非 base64
+    expect(isInlineImage('file:///x.png')).toBe(false);
+    expect(isInlineImage('')).toBe(false);
+    expect(isInlineImage(null)).toBe(false);
+    expect(isInlineImage(undefined)).toBe(false);
+    expect(isInlineImage(42)).toBe(false);
   });
 });

@@ -55,8 +55,10 @@ export interface GallerySliceDeps {
   /** 造图 id（原 `Pt('lg')`） */
   idFactory: () => string;
   /**
-   * 把远程图**落成本地引用**（原 `Tn`）—— ⚠️ **不纯**（内部走 `MediaPort.saveImageSync`，
-   * 是个**同步 IPC**）⇒ 由 `bootstrap` 注入，不在 `core` 里碰宿主。
+   * 把**内联 base64 图**落成本地 `img://` 引用（原 `Tn`）—— 其余（`img://` / 远程 / 空）
+   * **原样返回**（⚠️ 2026-10-11 回源纠错：此前文档写的是「远程图」，判据写反了 —— 见
+   * `stable/protocols/img.ts` 的 `isInlineImage`）。
+   * ⚠️ **不纯**（内部走 `MediaPort.saveImageSync`，是个**同步 IPC**）⇒ 由 `bootstrap` 注入。
    */
   normalizeImage: (dataUrl: string) => string;
 }

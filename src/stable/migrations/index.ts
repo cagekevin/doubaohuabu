@@ -15,5 +15,7 @@
  */
 
 export * from './types';
-export { externalizeProjectImages, externalizeDeep, isInlineImage } from './imageExternalize';
+// ⚠️ `isInlineImage` 已**不是**本目录的导出（2026-10-11）：它提为协议真源
+//    `stable/protocols/img.ts`（判据 C1）。此处原有一个转发导出，本来也无人 import（在死代码基线里）。
+export { externalizeProjectImages, externalizeDeep } from './imageExternalize';
 export { resetStaleJobs } from './resetStaleJobs';

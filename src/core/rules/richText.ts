@@ -17,6 +17,8 @@
 /** 一段文本里是否已经有 HTML 标签或实体（原 `bL` 40051 的判定，**逐字**） */
 // ⚠️ `@图N` 协议正则的**唯一真源**在 `refs.ts`（原 `Ks` 40795）—— 不复刻第二份
 import { createRefMarkRe } from './refs';
+// ⚠️ `img://` + `?w=` 的**协议真源**在 `stable/protocols/img.ts`（本文件只做「是不是 img://」的守卫）
+import { isImgRef, withThumb } from '@/stable/protocols/img';
 
 export function hasRichMarkup(text: string): boolean {
   return /<[a-z][^>]*>/i.test(text) || /&(?:[a-zA-Z]+|#\d+|#x[0-9a-f]+);/i.test(text);
@@ -38,21 +40,20 @@ export function escapeAttr(v: unknown): string {
 
 /**
  * 缩略图地址（原 `Xt` 22564-22570）
- * ⚠️ 与源一致：**只对**「看起来像远程 URL」的地址追加 `?w=<宽>`（先切掉原 query/hash）；
- *    本地/`img://` 一律原样返回。
- * ⚠️ `Kh` 的判定本工程用「有协议且不是 `data:`/`img://`」表达 —— 见 `isRemoteImageUrl`。
+ *
+ * ★★ **回源纠错（2026-10-11）**：此前本函数是**反的** —— 它给**远程** URL 挂 `?w=`、
+ *   而给 `img://` 引用原样返回。逐行回源确认原版是
+ *   `Kh(e) ? \`${e.split(/[?#]/)[0]}?w=${t}\` : e || ''`，而 **`Kh` = 「已是 `img://` 引用」**
+ *   （`qM = 'img://'`）⇒ **只有 `img://` 才挂 `?w=`**：
+ *   `?w=` 是 **`img://` 协议自带的缩略参数**（宿主协议处理器按它缩放 ——
+ *   `electron/main.js:709`：「之后 `img://xxx.png?w=480` 直接命中磁盘缓存」），
+ *   远程 URL 挂 `?w=` 反而会向 CDN 请求一个它不认识的 query。
+ *   ⇒ 与 `stable/protocols/img.ts` 的 `withThumb`（**协议真源**）一致；拼接委托给它，不写第二份。
+ *   ⚠️ 副产物：同文件里那个基于误读的 `isRemoteImageUrl` 已删（`img://` 才是 `Kh`）。
  */
 export function thumbUrl(url: unknown, w = 480): string {
   const s = typeof url === 'string' ? url : '';
-  if (!isRemoteImageUrl(s)) return s;
-  return `${s.split(/[?#]/)[0]}?w=${w}`;
-}
-
-/** 是不是可以挂 `?w=` 的远程图片地址（原 `Kh` 的等价物） */
-export function isRemoteImageUrl(url: string): boolean {
-  if (!url) return false;
-  if (url.startsWith('data:') || url.startsWith('img://') || url.startsWith('file:')) return false;
-  return /^https?:\/\//i.test(url);
+  return isImgRef(s) ? withThumb(s, w) : s;
 }
 
 /** 药丸的内文（原 `la` 39981-39987）—— 有图 ⇒ 图 + `@名`；无图 ⇒ `@名 (无图片)` */

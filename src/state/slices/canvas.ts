@@ -65,8 +65,10 @@ export interface CanvasSliceDeps {
   /** 新边的 id 生成（副作用，由 state 注入） */
   makeEdge(conn: ConnectRequest): Edge;
   /**
-   * 把一张图**落成本地引用**（原 `Tn` 22578-22596）—— ⚠️ **不纯**（内部走
-   * `MediaPort.saveImageSync`，是个**同步 IPC**）⇒ 由 `bootstrap` 注入，`core` 不碰宿主。
+   * 把一张**内联 base64 图**落成本地 `img://` 引用（原 `Tn` 22578-22596）—— 其余
+   * （`img://` / 远程 / 空）**原样返回**（⚠️ 2026-10-11 回源纠错：判据是「是不是内联 base64」，
+   * 不是「是不是远程」—— 见 `stable/protocols/img.ts` 的 `isInlineImage`）。
+   * ⚠️ **不纯**（内部走 `MediaPort.saveImageSync`，是个**同步 IPC**）⇒ 由 `bootstrap` 注入。
    * ⚠️ 与 `GallerySliceDeps.normalizeImage` 是**同一个东西**（同一处注入实现）。
    */
   persistImage(dataUrl: string): string;

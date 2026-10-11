@@ -49,6 +49,7 @@ export function NewImagesThumb({ item, isNew, sent, onSend, onRemove }: NewImage
         title={NEW_IMAGES_TEXT.thumbTitle(item.name, dims, from)}
         onClick={() => onSend(item)}
       >
+        {/* ⚠️ 与素材节点同法：`thumbUrl` 只给 **`img://` 引用**挂 `?w=` 参数（本地协议处理器缩放） */}
         <img className={styles.thumbCover} src={thumbUrl(item.dataUrl, 320)} alt={item.name} loading="lazy" />
         <span className={styles.caption}>{NEW_IMAGES_TEXT.overlay}</span>
         {isNew && !sent && <span className={styles.badgeNew}>{NEW_IMAGES_TEXT.badgeNew}</span>}

@@ -67,7 +67,7 @@ export function GalleryCard({
 
       {/* 原 497-510：**双击**缩略图预览；单击由卡片本体接管（切换勾选） */}
       <div className={styles.thumbWrap} onDoubleClick={() => onPreview(index)}>
-        {/* ⚠️ 与素材节点同法：`thumbUrl` 只给**远程** URL 挂 `?w=` 参数 */}
+        {/* ⚠️ 与素材节点同法：`thumbUrl` 只给 **`img://` 引用**挂 `?w=` 参数（2026-10-11 回源纠错） */}
         <img className={styles.thumb} src={thumbUrl(item.dataUrl, 320)} alt={item.name} loading="lazy" />
         {big && (
           <span className={styles.bigBadge} title={GALLERY_TEXT.bigBadge(formatBytes(item.sizeBytes), dims)}>

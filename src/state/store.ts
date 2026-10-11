@@ -19,6 +19,7 @@ import { createQueueSlice, type QueueSlice } from './slices/queue';
 import { createGallerySlice, type GallerySlice } from './slices/gallery';
 import { createScanSlice, type ScanSlice } from './slices/scan';
 import { createSettingsSlice, type SettingsSlice } from './slices/settings';
+import { isInlineImage } from '@/stable/protocols/img';
 
 export type AppState = GlobalSlice & CanvasSlice & UiSlice & SettingsSlice & QueueSlice & GallerySlice & ScanSlice;
 
@@ -53,6 +54,22 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
   let edgeSeq = 0;
   /** 画廊图 id 的序号（原 `Pt('lg')`） */
   let lgSeq = 0;
+
+  /**
+   * 图片外置（原 `Tn` 22578-22596）—— **只有内联 base64 图才落盘**，其余原样返回。
+   *
+   * ⚠️ **2026-10-11 回源纠错**：此前两处调用方都是**无条件**调 `saveImageSync`
+   *   ⇒ 已是 `img://` 的引用会被**二次外置**成坏引用（`img://` 不再是合法 dataUrl）。
+   *   真判据是 `if (Kh(e) || !fp(e)) return e;` —— `Kh` = 已是 `img://`，`fp` = 是内联 base64
+   *   ⇒ 提为协议真源 `stable/protocols/img.ts` 的 `isInlineImage`。
+   * ⚠️ `saveImageSync` 是**同步 IPC**（W1 明列的两处 `sendSync` 之一，**不得 await**）；
+   *   失败**原样返回入参**（与源 `Tn` 的 `catch { return e }` 同法）。
+   */
+  const persistImage = (url: string): string => {
+    if (!isInlineImage(url)) return url;
+    const r = ports.host.media.saveImageSync(url);
+    return r.ok ? r.value : url;
+  };
 
   const useStore = create<AppState>()((set, get) => {
     /**
@@ -102,13 +119,8 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
           style: { ...EDGE_STYLE },
           markerEnd: { ...EDGE_MARKER },
         }),
-        // ⚠️ 与下面的 `GallerySliceDeps.normalizeImage` 是**同一个东西**（原 `Tn`）：
-        //    `saveImageSync` 是**同步 IPC**（W1 明列的两处 `sendSync` 之一，**不得 await**）
-        //    ⇒ 包成普通函数注入；失败**原样返回入参**（与源 `Tn` 的 `catch { return e }` 同法）。
-        persistImage: (dataUrl) => {
-          const r = ports.host.media.saveImageSync(dataUrl);
-          return r.ok ? r.value : dataUrl;
-        },
+        // ⚠️ 与下面的 `GallerySliceDeps.normalizeImage` 是**同一个东西**（原 `Tn`）
+        persistImage,
       }),
       // ★ UI 开关（折叠 / 只留本画布）的读写在 `persistKeys` 的**唯一落点**上（原版直接 `localStorage`）
       ...createUiSlice({
@@ -120,15 +132,11 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       })(setPartial, getState),
       ...createQueueSlice(() => ports.clock.now())(setPartial, getState),
       // ★ Lovart 画廊（独立成片，见 slices/gallery.ts 头注释）。
-      //   ⚠️ `normalizeImage` 走 `MediaPort.saveImageSync` —— 它是**同步 IPC**（W1 明列的两处
-      //      `sendSync` 之一，**不得 await**）⇒ 这里包成普通函数注入。
+      //   ⚠️ `normalizeImage` 与 `canvas` 的 `persistImage` 是**同一实现**（原 `Tn`）⇒ 共用上面那个闭包。
       ...createGallerySlice({
         now: () => ports.clock.now(),
         idFactory: () => `lg_${ports.clock.now().toString(36)}_${++lgSeq}`,
-        normalizeImage: (url) => {
-          const r = ports.host.media.saveImageSync(url);
-          return r.ok ? r.value : url;
-        },
+        normalizeImage: persistImage,
       })(setPartial, getState),
       // ★ 指纹体检历史（独立成片，见 slices/scan.ts 头注释）
       ...createScanSlice(() => ports.clock.now())(setPartial, getState),

@@ -29,6 +29,31 @@ export function isDataUrl(v: unknown): boolean {
 }
 
 /**
+ * 是不是**内联 base64 图片**（`data:image/…;base64,…`）—— 原 `fp` 22561-22563
+ *
+ * ★ **它就是「要不要落盘」的判据**（原 `Tn` 22578-22592 的判据半）：
+ *   只有内联 base64 需要外置成 `img://`；`img://` / 远程 http(s) / `file://` / 空
+ *   ⇒ **一律原样返回**。
+ *
+ * ⚠️ 与 `isDataUrl` 的区别：`isDataUrl` 只认 `data:` 前缀（也可能是文本 data URL）；
+ *   本判据要求**是图片 + base64**（`fp` 逐字）。
+ *
+ * ★★ **2026-10-11 收口（判据 C1 + 回源纠错）**：此前这条判据在**两处**各写一遍，且
+ *   **其中一处写反了** —— `core/rules/lovartGallery.ts` 的 `shouldMaterializeImage` 用的是
+ *   「是不是**远程 http**」（恰好反了：远程根本不该落盘，内联 base64 才该），
+ *   并因此让 `state/store.ts` 的 `normalizeImage` / `persistImage` **无条件**调 `saveImageSync`
+ *   ⇒ 已是 `img://` 的引用会被**二次外置**成坏引用。
+ *   另一处 `stable/migrations/imageExternalize.ts` 的 `isInlineImage` **是对的** ⇒ 提到协议真源，
+ *   两处改用它（那份本地定义已删）。
+ *   （旁证：`adapters/media/faceDetect.ts:192` 早就写着「直接调 `withThumb` 会给任意 URL 也拼
+ *   `?w=`，与原版**不等价**」并用 `isImgRef` 守住 —— 说明 `?w=` 属 `img://` 这条事实在仓里
+ *   已有正确认知，只是没推广开。）
+ */
+export function isInlineImage(v: unknown): v is string {
+  return typeof v === 'string' && v.startsWith('data:image/') && v.includes(';base64,');
+}
+
+/**
  * 拼缩略图 URL：`img://xxx.png` → `img://xxx.png?w=480`
  *
  * ⚠️ **幂等**：已是 `?w=` 的、`data:` 的、空的 —— 一律**原样返回**（不叠加、不抛）

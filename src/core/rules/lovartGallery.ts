@@ -23,7 +23,6 @@
  * ⚠️ **`Date.now()` 必须注入**（原 29277）⇒ 收 `now`。
  */
 
-import { isRemoteImageUrl } from './richText';
 // ⚠️ 持久化形状的**真源**在 `stable/contracts`（本文件只做转发，不再自己定义一份）
 import type { LovartGalleryImage, LovartGalleriesMap } from '@/stable/contracts/lsValues';
 
@@ -171,16 +170,15 @@ export function clearLovartGallery(
   return { galleries: { ...galleries, [accountId]: [] } };
 }
 
-/**
- * 这条 `dataUrl` 要不要落本地（原 `Tn` 22578-22592 的**判据半**）
- *
- * ⚠️ 与源一致：**只有远程 http(s) 才尝试落盘**；`img://` / `file://` / `data:` / 空
- *   ⇒ **原样返回**（源版是 `Kh(e) || !fp(e)` 两个判据，而"本地引用"必然是"非远程"
- *   ⇒ 用本工程既有的 `isRemoteImageUrl` 一个判据就能覆盖，不必再造一个 `Kh`）。
+/*
+ * ★ **2026-10-11 删除 `shouldMaterializeImage`（回源纠错）**：
+ *   原以为「该落盘的是**远程 http**」—— **恰好反了**。逐行回源：`Tn` 是
+ *   `if (Kh(e) || !fp(e)) return e;`，其中 `Kh` = 「已是 `img://` 引用」（`qM = 'img://'`）、
+ *   `fp` = 「是内联 base64 图片」⇒ 真判据是「**内联 base64 才落盘**」。
+ *   正确实现已提为协议真源 `stable/protocols/img.ts` 的 **`isInlineImage`**（原 `fp`），
+ *   由 `state/store.ts` 的 `normalizeImage` / `persistImage` 直接使用。
+ *   （这也与宿主一致：`img-save-sync` 收的就是 dataUrl —— `electron/main.js:679`。）
  */
-export function shouldMaterializeImage(dataUrl: string): boolean {
-  return isRemoteImageUrl(dataUrl);
-}
 
 // ─────────────── 清理族（原 `purgeLovartGallery`/`purgeLovartJunk`/`purgeLovartByScope`）───────────────
 

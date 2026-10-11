@@ -14,7 +14,6 @@ import {
   gpRefChipHtml,
   textToGpEditorHtml,
   hasRichMarkup,
-  isRemoteImageUrl,
   refChipHtml,
   refMissingHtml,
   splitRefMarkers,
@@ -54,20 +53,29 @@ describe('hasRichMarkup（原 bL 40051 的判定）', () => {
   });
 });
 
-describe('thumbUrl / isRemoteImageUrl（原 Xt 22564）', () => {
-  it('★ 远程 http(s) ⇒ 切掉原 query/hash 再挂 `?w=`', () => {
-    expect(thumbUrl('https://cdn.x.com/a.png?x=1#f', 120)).toBe('https://cdn.x.com/a.png?w=120');
+/**
+ * ★ 2026-10-11 回源纠错：`thumbUrl`（原 `Xt`）此前是**反的** —— 给远程挂 `?w=`、给 `img://` 原样返回。
+ *   源版是 `Kh(e) ? …?w=… : e`，而 `Kh` = 「已是 `img://` 引用」（`qM = 'img://'`）
+ *   ⇒ **只有 `img://` 挂 `?w=`**（这是 `img://` 协议自带的缩放参数）。这里锁**正确**行为。
+ *   （同文件里那个基于误读的 `isRemoteImageUrl` 已删。）
+ */
+describe('thumbUrl（原 Xt 22564）', () => {
+  it('★ **只有 `img://` 引用**才挂 `?w=`', () => {
+    expect(thumbUrl('img://a.png', 120)).toBe('img://a.png?w=120');
+    expect(thumbUrl('img://a.png')).toBe('img://a.png?w=480'); // 默认宽 480
   });
 
-  it('★ `data:` / `img://` / `file:` **原样返回**（不挂 `?w=`）', () => {
+  it('★ 远程 http(s) / `data:` / `file:` / 空 ⇒ **原样返回**（不再给远程挂 `?w=`）', () => {
+    expect(thumbUrl('https://cdn.x.com/a.png?x=1#f', 120)).toBe('https://cdn.x.com/a.png?x=1#f');
     expect(thumbUrl('data:image/png;base64,AAA', 120)).toBe('data:image/png;base64,AAA');
-    expect(thumbUrl('img://a.png', 120)).toBe('img://a.png');
     expect(thumbUrl('file:///x.png', 120)).toBe('file:///x.png');
+    expect(thumbUrl('')).toBe('');
+    expect(thumbUrl(null)).toBe('');
+    expect(thumbUrl(undefined)).toBe('');
   });
 
-  it('空串 ⇒ 空串', () => {
-    expect(thumbUrl('')).toBe('');
-    expect(isRemoteImageUrl('')).toBe(false);
+  it('★ 幂等 —— 委托给协议真源 `withThumb`（已带 `?w=` 不叠加）', () => {
+    expect(thumbUrl(thumbUrl('img://a.png', 120), 999)).toBe('img://a.png?w=120');
   });
 });
 
@@ -80,10 +88,15 @@ describe('refChipHtml（原 P0 39988）', () => {
     expect(html).toContain('data-name="素材甲"');
   });
 
-  it('★ 有图 ⇒ `<img class="chip-img">` + `@名`（缩略图宽 **120**）', () => {
-    const html = refChipHtml({ id: 'a', name: '甲', dataUrl: 'https://x/a.png' });
-    expect(html).toContain('src="https://x/a.png?w=120"');
+  it('★ 有图 ⇒ `<img class="chip-img">` + `@名`（缩略图宽 **120**；⚠️ 只有 `img://` 挂 `?w=`）', () => {
+    const html = refChipHtml({ id: 'a', name: '甲', dataUrl: 'img://a.png' });
+    expect(html).toContain('src="img://a.png?w=120"');
     expect(html).toContain('<span class="chip-name">@甲</span>');
+  });
+
+  it('★ 远程 URL ⇒ **原样**（不给远程挂 `?w=` —— 2026-10-11 回源纠错）', () => {
+    const html = refChipHtml({ id: 'a', name: '甲', dataUrl: 'https://x/a.png' });
+    expect(html).toContain('src="https://x/a.png"');
   });
 
   it('★ 无图 ⇒ `@名 (无图片)`', () => {
@@ -194,8 +207,8 @@ describe('gpRefChipHtml（原 X3 42662）—— 生成面板的药丸', () => {
     expect(gpRefChipHtml(NaN)).toContain('data-n="1"');
   });
 
-  it('有图 ⇒ 缩略图（宽 **120**）；无图 ⇒ `(无图片)`', () => {
-    expect(gpRefChipHtml(1, '甲', 'https://x/a.png')).toContain('src="https://x/a.png?w=120"');
+  it('有图 ⇒ 缩略图（宽 **120**，仅 `img://`）；无图 ⇒ `(无图片)`', () => {
+    expect(gpRefChipHtml(1, '甲', 'img://x.png')).toContain('src="img://x.png?w=120"');
     expect(gpRefChipHtml(1, '甲')).toContain('(无图片)');
   });
 });
