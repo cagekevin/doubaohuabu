@@ -49,6 +49,26 @@ export interface BackendPagePrepareOptions {
   leaseTtlMs?: number;
 }
 
+/**
+ * 页面**实际生效**指纹的探针结果（原 `AP` 脚本 shared.js:34211-34229 的返回值）
+ *
+ * ⚠️ 形状由**脚本**决定（契约在此）；字段**全部可选** —— 探针是 best-effort，
+ *    页面可能只答一部分（源版也逐字段 `|| '?'` 兜底）。
+ */
+export interface FingerprintPageProbe {
+  url?: string;
+  ua?: string;
+  platform?: string;
+  languages?: string;
+  uadPlatform?: string;
+  screen?: string;
+  tz?: string;
+  cores?: number | string;
+  gl?: string;
+  /** 我们的 preload 是否已注入伪装（原 `window.__fpSpoofed`） */
+  spoofed?: boolean;
+}
+
 export interface BackendPagePort {
   /**
    * 后台视图**当前是否已挂载**（原 `tT(accountId) !== null`）
@@ -81,6 +101,18 @@ export interface BackendPagePort {
    * ⚠️ 调用方须先 `prepareForSend`；本方法不自查就绪（省一次往返）
    */
   runScript<T = unknown>(account: Account, script: string): Promise<Result<T>>;
+
+  /**
+   * ★ 读取后台页**实际生效**的指纹（原 `OP.jsx:59-78` 的 `AP` 探针）
+   *
+   * ⚠️ **只读**（零注入）：脚本只读 `navigator` / `screen` / `window.__fpSpoofed`，
+   *    不改环境（`__fpSpoofed` 是**我们自己的 preload** 置的标记，不是注入）
+   * ⚠️ **best-effort**：找不到 webview / 超时（默认 `FP_DIAG_TIMEOUT_MS` = 2.5s）/
+   *    脚本抛错 ⇒ 返 `Result` 失败。**调用方回落账号里存的指纹配置**（原版同，
+   *    见 `OP.jsx:83-97`）—— 所以这不是"错误"，是"探不到"。
+   * ⚠️ 不走租约（`prepareForSend`）：源版这条链就是**轻量直探**，不排队
+   */
+  probeFingerprint(account: Account, timeoutMs?: number): Promise<Result<FingerprintPageProbe>>;
 
   /** 强制刷新后台页（原 `an.reloadAccount`，`_Component43.jsx:428`） */
   reload(account: Account): Result<void>;

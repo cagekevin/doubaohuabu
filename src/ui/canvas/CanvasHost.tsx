@@ -37,6 +37,7 @@ import { DRAG_MIME_MATERIAL, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from 
 import { CANVAS_TEXT } from '@/constants/text';
 import { CreatePanel, type CreatePanelState } from './CreatePanel';
 import { SelectionToolbar } from './SelectionToolbar';
+import { SplitKeywordModal } from '@/ui/nodes/SplitKeywordModal';
 import styles from './CanvasHost.module.css';
 
 const edgeTypes = { interactive: InteractiveEdge };
@@ -74,6 +75,12 @@ function Inner() {
   const [createPanel, setCreatePanel] = useState<CreatePanelState | null>(null);
   /** ★ 删除必须走它（见 `onNodesChange` 的注释） */
   const removeNodes = useStore((s) => s.removeNodes);
+  /**
+   * ★ 「按关键词拆分」弹窗（原 `splitKeywordModal`）—— **必须由本组件渲染**（见 `ui.ts` 的注释：
+   *   拆分要删掉源节点，弹窗若住在节点里会随之卸载；且节点在变换容器内，浮层会被 transform 带偏）
+   */
+  const splitModal = useStore((s) => s.splitKeywordModal);
+  const closeSplitKeywordModal = useStore((s) => s.closeSplitKeywordModal);
 
   const { fitView, screenToFlowPosition } = useReactFlow();
 
@@ -313,6 +320,15 @@ function Inner() {
 
       {/* ★ 建节点浮层（原 `create-panel`）—— 8 类节点此前只有 2 类能建出来，这是补上的入口 */}
       {createPanel && <CreatePanel state={createPanel} onClose={() => setCreatePanel(null)} />}
+
+      {/* ★ 「按关键词拆分」弹窗（原 `splitDirect` 末尾的 `fitViewAction` 由这里承担 —— 视图能力归 ui） */}
+      {splitModal && (
+        <SplitKeywordModal
+          sourceNodeId={splitModal.sourceNodeId}
+          onClose={closeSplitKeywordModal}
+          onSplit={(ids) => void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.2 })}
+        />
+      )}
     </div>
   );
 }

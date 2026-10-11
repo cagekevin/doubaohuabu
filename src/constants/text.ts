@@ -11,7 +11,7 @@
 // 文案只依赖 L0（constants）内的 kind 联合，不依赖 core（分层：L0 不得依赖 L2）
 export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure';
 // ⚠️ 发送/面板文案的**分片转发**（定义在 `sendPanelText.ts`，见那里的头注释）
-export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_PANEL_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, SEND_QUEUE_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
+export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_PANEL_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, NEW_IMAGES_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
 
 /**
  * toast 语气（原 `showToast(text, 'info' | 'warn' | 'err')`）
@@ -242,8 +242,11 @@ export const ACCOUNT_TRANSFER_TEXT = {
 
 /** 保存错误 */
 export const PERSIST_TEXT = {
-  serializeFailed: '工程数据序列化失败，未保存',
+  /** ⚠️ 查 7：原文案含实现黑话「序列化」—— 本工程自造，非源版原文，已改写为用户语 */
+  serializeFailed: '保存失败：工程数据无法写入本地存储，本次改动未生效',
   quotaExceeded: '保存失败：工程数据未能写入本地存储（本地存储空间不足）',
+  /** 保存失败横幅的关闭按钮 `title`（原 `Z0.jsx:25` 逐字） */
+  close: '关闭提示',
 } as const;
 
 /** 错误横幅按钮 */
@@ -252,31 +255,12 @@ export const BANNER_TEXT = {
   clearAll: '全部清除',
 } as const;
 
-/** 画布选中工具条 */
-export const SELECT_TOOLBAR_TEXT = {
-  selected: (n: number) => `已选 ${n}`,
-  group: '打组',
-  groupHint: '至少选中 2 个非组节点才能打组',
-  arrange: '整齐排列',
-  ungroup: '取消组',
-  ungroupHint: '释放组内节点，仅删除组容器',
-  smartArrange: '智能整齐排列（网格）',
-} as const;
-
 /** 资源库 / 素材 */
 export const LIBRARY_TEXT = {
   empty: '资源库为空，请先从右侧资源库或文件添加素材。',
   pickFromLibrary: '从资源库选择素材进行更换',
   pickFromFile: '从文件选择',
   alreadyOnCanvas: (name: string) => `「${name}」已在画布上，已移到落点（同一素材不重复创建）`,
-} as const;
-
-/** 代理池 */
-export const PROXY_TEXT = {
-  title: 'Lovart 出口代理池',
-  hint: '每行一个代理（支持 http://host:port / socks5://host:port / host:port）',
-  save: '保存并自动分配',
-  assignment: '当前 Lovart 账号出口分配',
 } as const;
 
 /**
@@ -665,7 +649,36 @@ export const ACCOUNT_PANEL_TEXT = {
   /** 新增：确认（源版 `OP.jsx:801` 的 onClick 里自带确认逻辑，此处用最简单的一种） */
   confirmRemove: (name: string) => `确定移除「${name}」？其登录数据会一并清理。`,
   /** 新增：去掉分组概念的说明（源版有分组，本工程尚未落地） */
-  groupPending: '（分组功能尚未落地）',
+  groupPending: '（分组功能尚未实现）',
+
+  // ── 面板底部操作条（原 `OP.jsx:925-941` 的 `.panel-foot`）──
+  /** 网格吸附（原 926 的 `.snap-toggle` 文案，逐字） */
+  snapLabel: '网格吸附',
+  /** 网格吸附 `title`（原 926，逐字） */
+  snapTitle: '开启后节点移动自动吸附到网格线',
+  /** 返回首页（原 933，逐字） */
+  backHome: '返回首页',
+  /** 清空画布（原 940，逐字） */
+  clearCanvas: '清空画布',
+  /** 清空画布的确认（原 936，逐字） */
+  clearCanvasConfirm: '确定清空当前画布？此操作不可撤销。',
+
+  // ── 清理浏览器缓存（原 `OP.jsx:181-213` 的 `he()` + 850-852 的按钮）──
+  /** 按钮文案（原 851 的**非忙**态） */
+  clearCache: '🧹 清理缓存',
+  /** 按钮文案（原 851 的**忙**态） */
+  clearCacheBusy: '🧹 清理中…',
+  /** 按钮 `title`（原 850，逐字） */
+  clearCacheTitle:
+    '清理各账号页面的浏览器缓存（Cache / Code Cache 等），可释放数 GB 磁盘空间；登录态不受影响，账号不会掉线',
+  /** 确认框（原 191-194，逐字；含**两处换行**） */
+  clearCacheConfirm:
+    '将清理全部账号页面的浏览器缓存（可释放数 GB 空间）。\n登录态不受影响，账号不会掉线；清理后页面首次打开会稍慢。\n\n确定继续？',
+  /** 成功（原 199，逐字；`failed` 非 0 时带括号后缀） */
+  clearCacheDone: (cleared: number, failed: number) =>
+    `✓ 已清理 ${cleared} 个缓存目录${failed ? `（${failed} 个被占用，下次启动会自动清理）` : ''}`,
+  /** 失败（原 201 / 204 —— 统一成「后端原文」一句，不编造） */
+  clearCacheFailed: (msg: string) => `清理失败：${msg}`,
 } as const;
 
 /**

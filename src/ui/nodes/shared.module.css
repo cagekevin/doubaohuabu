@@ -98,12 +98,9 @@
   border-color: var(--field-border-focus);
 }
 
+/* ★ 查 6：与 shared 的 `.thumbImg` 逐字相同 ⇒ 走真源 */
 .thumb {
-  display: block;
-  max-width: 100%;
-  max-height: 200px;
-  object-fit: contain;
-  background: var(--color-surface-sunken);
+  composes: thumbImg from '../common/shared.module.css';
 }
 
 .placeholder {
@@ -123,6 +120,10 @@
   border-radius: var(--radius-lg);
   background: var(--color-selection-bg);
 }
+/**
+ * ⚠️ **未接线**：样式已按原版 `.group-label` 译好，但 TSX 尚未引用
+ * （组节点左上角的「组」字，原版 `GL.jsx`）。**保留以便对齐，勿当死代码删**。
+ */
 .groupLabel {
   position: absolute;
   top: -20px;
@@ -138,18 +139,15 @@
   gap: var(--space-2);
 }
 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-success);
+  composes: dot dotLg from '../common/shared.module.css';
 }
 .dotInvalid {
-  background: var(--color-text-faint);
+  composes: dotInvalid from '../common/shared.module.css';
 }
 
-/* 生成中 */
+/* 生成中（文字型 · 与 AnalyzePrompt 的圆环型 spinner 区分开）*/
 .spinner {
-  color: var(--spinner-color);
+  composes: spinnerText from '../common/shared.module.css';
   font-size: var(--font-size-xs);
 }
 
@@ -180,7 +178,7 @@
 
 .refMissing {
   padding: 0 var(--space-1);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   background: var(--color-danger-bg);
   border: 1px solid var(--color-danger-border);
   border-radius: var(--radius-sm);
@@ -205,6 +203,10 @@
   display: inline-flex;
   align-items: center;
   cursor: pointer;
+}
+/* ★ 三态扫描补：可点但无 hover 反馈 —— 文字变深（不改布局、不改配色）*/
+.autoSend:hover {
+  color: var(--color-text-strong);
 }
 
 .accountPreview {
@@ -252,27 +254,21 @@
   background: var(--color-danger);
 }
 
-/* 原 `.account-send-btn` */
+/* 原 `.account-send-btn` —— ★ 查 6：走共享真源 */
 .accountSend {
-  padding: var(--space-1);
-  color: var(--btn-primary-fg);
-  font: inherit;
-  background: var(--btn-primary-bg);
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  composes: btn btnPrimary from '../common/shared.module.css';
 }
 
+/* 节点特有语义：未接通时用灰底（比通用 disabled 的降透明更明确）*/
 .accountSend:disabled {
   background: var(--color-text-faint);
-  cursor: not-allowed;
 }
 
 /* 未接通说明（**本工程新增** —— 只写进 `title` 等于要悬停才知道按钮为何点不动） */
 .accountPending {
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
-  line-height: 1.3;
+  line-height: var(--line-height-tight);
 }
 
 /**
@@ -318,7 +314,7 @@
 }
 
 .textEditor :global(.ref-missing) {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   background: var(--color-danger-bg);
   border: 1px solid var(--color-danger-border);
 }
@@ -327,7 +323,7 @@
   width: 16px;
   height: 16px;
   object-fit: cover;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .textEditor :global(.chip-name) {
@@ -375,19 +371,14 @@
   border-radius: var(--radius-sm);
 }
 
+/* ★ 查 6 + 三态扫描：原为自造小按钮（有边框、无 hover）⇒ 走共享真源 */
 .groupUngroup {
+  composes: btn btnSm from '../common/shared.module.css';
   flex: 0 0 auto;
-  padding: 0 var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
 
 .groupUngroup:hover {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   border-color: var(--color-danger-border);
 }
 
@@ -410,12 +401,10 @@
 }
 
 /* 原 `.dot.material-dot` —— 素材类型的状态点（用信息色，与发送状态的绿点区分） */
+/* ★ 查 2.3/7.1：形状走真源 `.dot`，只覆盖身份色 */
 .materialDot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
+  composes: dot from '../common/shared.module.css';
   background: var(--node-dot-material);
-  border-radius: 50%;
 }
 
 .materialTitle {
@@ -479,23 +468,12 @@
 }
 
 .matFloatBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
   padding: 0 var(--space-1);
   color: var(--color-text-strong);
-  font-size: var(--font-size-xs);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
-
-.matFloatBtn:hover:not(:disabled) {
-  color: var(--btn-ghost-fg-hover);
-  background: var(--color-surface-sunken);
-}
-
 .matFloatBtn:disabled {
   color: var(--color-text-faint);
-  cursor: not-allowed;
 }
 
 /* ── 下载节点（原 `WL.jsx` 的 `.download-node` / `.dn-*`）── */
@@ -509,12 +487,10 @@
   border-radius: var(--radius-md);
 }
 
+/* ★ 查 2.3/7.1：形状走真源 `.dot` */
 .downloadDot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
+  composes: dot from '../common/shared.module.css';
   background: var(--node-dot-download);
-  border-radius: 50%;
 }
 
 .downloadTitle {
@@ -555,24 +531,11 @@
 }
 
 .downloadBtn {
+  composes: btn btnSm from '../common/shared.module.css';
   flex: 0 0 auto;
-  padding: 0 var(--space-1);
-  color: var(--color-text-strong);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
-
-.downloadBtn:hover:not(:disabled) {
-  border-color: var(--btn-default-border-hover);
-}
-
 .downloadBtn:disabled {
   color: var(--color-text-faint);
-  cursor: not-allowed;
 }
 
 .downloadList {
@@ -608,11 +571,11 @@
 }
 
 .downloadStatusOk {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .downloadStatusErr {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .downloadEmpty {
@@ -644,12 +607,10 @@
   border-radius: var(--radius-md);
 }
 
+/* ★ 查 2.3/7.1：形状走真源 `.dot` */
 .videoDot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
+  composes: dot from '../common/shared.module.css';
   background: var(--node-dot-other);
-  border-radius: 50%;
 }
 
 /* 原 `.video-node-account` / `.video-node-dur` / `.video-node-res` —— 三处同款小字 */
@@ -670,18 +631,13 @@
 
 /* 原 `.vn-src-chip` / `.vn-recipe` */
 .videoChip {
+  composes: btn btnSm from '../common/shared.module.css';
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 var(--space-1);
   color: var(--node-chip-fg);
-  font: inherit;
-  font-size: var(--font-size-xs);
   background: var(--color-surface-sunken);
   border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
 
 .videoChip:hover {
@@ -726,10 +682,7 @@
 }
 
 .videoPanelClose {
-  color: var(--color-text-faint);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
 }
 
 .videoPanelBody {
@@ -770,24 +723,11 @@
 }
 
 .videoAct {
+  composes: btn btnSm from '../common/shared.module.css';
   flex: 1;
-  padding: var(--space-half) var(--space-1);
-  color: var(--color-text-strong);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
-
-.videoAct:hover:not(:disabled) {
-  border-color: var(--btn-default-border-hover);
-}
-
 .videoAct:disabled {
   color: var(--color-text-faint);
-  cursor: not-allowed;
 }
 
 /* 原 `.video-node-fallback` / `.vnf-*` */
@@ -802,4 +742,15 @@
   margin-top: var(--space-1);
   color: var(--color-text-faint);
   word-break: break-all;
+}
+
+/* ── 文本节点的「拆分」按钮（原 `.split-md-btn`，`CL.jsx:751`）── */
+.splitFoot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.splitBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
 }

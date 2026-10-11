@@ -23,11 +23,13 @@ import type {
   BackendPagePort,
   BackendPagePrepareOptions,
   BackendPageReady,
+  FingerprintPageProbe,
 } from '@/core/ports/backendPage.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { FILE_INPUT_TIMEOUT_MS } from './waits';
+import { FP_DIAG_PROBE } from './fpProbe';
 import { BACKEND_PAGE_TEXT } from '@/constants/text';
-import { BACKEND_LOAD_TIMEOUT_MS } from '@/constants';
+import { BACKEND_LOAD_TIMEOUT_MS, FP_DIAG_TIMEOUT_MS } from '@/constants';
 import {
   backendFailure,
   backendPollDelayMs,
@@ -74,6 +76,17 @@ export function createBackendPage(): BackendPagePort {
       if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
       const r = await runProbe<T>(view, script);
       // ⚠️ 探针失败返 `page-error`（原文保留）—— 不静默
+      return r.ok ? ok(r.value) : err('page-error', r.error);
+    },
+
+    async probeFingerprint(
+      account: Account,
+      timeoutMs: number = FP_DIAG_TIMEOUT_MS,
+    ): Promise<Result<FingerprintPageProbe>> {
+      const view = viewOf(account);
+      // ⚠️ 找不到 webview 也是"探不到"（best-effort）—— 但**不静默**，用 Result 失败表达
+      if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
+      const r = await runProbe<FingerprintPageProbe>(view, FP_DIAG_PROBE, timeoutMs);
       return r.ok ? ok(r.value) : err('page-error', r.error);
     },
 

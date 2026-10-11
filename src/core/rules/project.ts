@@ -62,6 +62,18 @@ export function makeNodeId(kind: NodeIdKind, now: number, seq: number): string {
   return `${NODE_ID_PREFIX[kind]}${now.toString(36)}_${seq}`;
 }
 
+/**
+ * 生成**素材库条目** id（原 `Pt('lib')`）
+ *
+ * ⚠️ **2026-10-11 收口（判据 C1）**：此前只有 `ui/panels/LibraryPanel.tsx` 里内联过
+ *   `` `lib_${Date.now().toString(36)}_${i}` ``；`canvas.addMaterialsBatch` 是第 **2** 处
+ *   ⇒ 提到这里（与 `makeNodeId` 同法，前缀固定 `lib_`；`lib` **不是节点类型**，故不进
+ *   `NODE_ID_PREFIX`）。
+ */
+export function makeLibraryId(now: number, seq: number): string {
+  return `lib_${now.toString(36)}_${seq}`;
+}
+
 /** 新建工程（原「＋ 新建项目」） */
 export function createProject(opts: {
   now: number;

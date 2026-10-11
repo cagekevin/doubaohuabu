@@ -13,16 +13,13 @@
 }
 
 .card {
+  composes: overlay from '../common/shared.module.css';
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   width: 100%;
   max-width: 460px;
   padding: var(--space-4);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px var(--color-shadow);
 }
 
 .top {
@@ -34,7 +31,7 @@
 /* 原 `.license-brand` */
 .brand {
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
 }
 
 /* 原 `.license-sub` */
@@ -52,17 +49,17 @@
 }
 
 .ok {
-  color: var(--color-success);
+  color: var(--color-success-text);
   background: var(--color-success-bg);
 }
 
 .warn {
-  color: var(--color-warning);
+  color: var(--color-warning-text);
   background: var(--color-warning-bg);
 }
 
 .err {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   background: var(--color-danger-bg);
 }
 
@@ -71,24 +68,18 @@
 }
 
 .bTitle {
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
 }
 
 .bDesc {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: var(--line-height-snug);
 }
 
 /* 原 `.btn.ghost.block`（重新检测） */
 .recheck {
-  padding: var(--space-1) var(--space-2);
-  color: var(--color-text-strong);
-  font: inherit;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
 .recheck:hover {
@@ -129,14 +120,7 @@
 }
 
 .sm {
-  padding: 0 var(--space-1);
-  color: var(--color-text-strong);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
 .ghost:hover,
@@ -153,32 +137,20 @@
 .hint {
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: var(--line-height-snug);
 }
 
 /* 原 `.license-input` */
 .input {
-  min-height: 72px;
-  padding: var(--space-2);
-  color: var(--color-text-strong);
-  font: inherit;
+  composes: field textarea from '../common/shared.module.css';
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  resize: vertical;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
 }
 
 /* 原 `.btn.primary.block.lg` */
+/* ★ 查 6：主按钮走共享真源 */
 .primary {
-  padding: var(--space-2);
-  color: var(--color-surface-raised);
-  font: inherit;
-  background: var(--btn-primary-bg);
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  composes: btn btnPrimary from '../common/shared.module.css';
 }
 
 .primary:disabled {

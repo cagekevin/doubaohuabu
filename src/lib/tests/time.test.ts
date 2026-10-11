@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatClockTime, parseSiteTimestamp } from '../time';
+import { formatClockTime, formatDateTimeMinute, parseSiteTimestamp } from '../time';
 
 describe('parseSiteTimestamp（原 `pR` 35735）', () => {
   it('null / undefined → NaN', () => {
@@ -69,5 +69,44 @@ describe('formatClockTime（原 `toLocaleTimeString("zh-CN", { hour12: false })`
 
   it('0 点补零（不是 "0:00:00"）', () => {
     expect(formatClockTime(0)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+});
+
+/**
+ * ⚠️ 同上：`formatDateTimeMinute` 也是**本地时区**语义 ⇒ 不写死字面量，
+ *    只断言**形态**与**可推算的增量关系**（跨分/跨时/跨日都能推）。
+ */
+describe('formatDateTimeMinute（原 `l0` 34180）', () => {
+  const T0 = Date.UTC(2026, 9, 10, 12, 34, 56);
+
+  it('★ 空 / 0 / 非法 ⇒ 空串（源版 `if (!e) return ""` + `isNaN` 兜底）', () => {
+    expect(formatDateTimeMinute(undefined)).toBe('');
+    expect(formatDateTimeMinute(null)).toBe('');
+    expect(formatDateTimeMinute(0)).toBe('');
+    expect(formatDateTimeMinute(NaN)).toBe('');
+  });
+
+  it('形态恒为 YYYY-MM-DD HH:mm（两位补零）', () => {
+    expect(formatDateTimeMinute(T0)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  });
+
+  it('★ 分钟级递增严格 +1 分钟（可推算 ⇒ 不是"仅验不崩"）', () => {
+    const toMin = (s: string): number => {
+      const [d, t] = s.split(' ');
+      const [y, mo, da] = (d ?? '').split('-').map(Number);
+      const [h, mi] = (t ?? '').split(':').map(Number);
+      return Date.UTC(y ?? 0, (mo ?? 1) - 1, da ?? 1, h ?? 0, mi ?? 0) / 60000;
+    };
+    expect(toMin(formatDateTimeMinute(T0 + 60_000)) - toMin(formatDateTimeMinute(T0))).toBe(1);
+  });
+
+  it('★ 跨日进位正确（+1 天的分钟差 = 1440）', () => {
+    const toMin = (s: string): number => {
+      const [d, t] = s.split(' ');
+      const [y, mo, da] = (d ?? '').split('-').map(Number);
+      const [h, mi] = (t ?? '').split(':').map(Number);
+      return Date.UTC(y ?? 0, (mo ?? 1) - 1, da ?? 1, h ?? 0, mi ?? 0) / 60000;
+    };
+    expect(toMin(formatDateTimeMinute(T0 + 86_400_000)) - toMin(formatDateTimeMinute(T0))).toBe(1440);
   });
 });

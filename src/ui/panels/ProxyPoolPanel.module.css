@@ -1,0 +1,68 @@
+/**
+ * Lovart 出口代理池面板（原 `LP.jsx` 的 `.proxy-pool-*`）
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 查 6：按钮 / 输入框 / 空态走 `ui/common/shared.module.css` 真源，不自造。
+ */
+
+.tip {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.input {
+  composes: field textarea from '../common/shared.module.css';
+  width: 100%;
+}
+
+.status {
+  min-height: 18px;
+  margin: var(--space-1) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.assignTitle {
+  margin-top: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.empty {
+  composes: emptyInline from '../common/shared.module.css';
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net,
+.direct {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.saveBtn {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}

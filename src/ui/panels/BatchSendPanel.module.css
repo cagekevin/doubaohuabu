@@ -16,15 +16,12 @@
   pointer-events: auto;
 }
 
+/* ★ 查 6：走共享真源；浮动入口比特例保留「更大 + 投影」*/
 .trigger {
+  composes: btn btnPrimary from '../common/shared.module.css';
+  height: auto;
   padding: var(--space-2) var(--space-3);
-  color: var(--color-surface-raised);
-  font-size: var(--font-size-sm);
-  background: var(--btn-primary-bg);
-  border: 0;
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px var(--color-shadow);
-  cursor: pointer;
+  box-shadow: var(--shadow-md);
 }
 
 .trigger:hover {
@@ -33,16 +30,13 @@
 
 /* ── 卡片（原 `.bs-card`）── */
 .card {
+  composes: overlay from '../common/shared.module.css';
   width: 380px;
   max-height: 60vh;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px var(--color-shadow-strong);
   font-size: var(--font-size-sm);
 }
 
@@ -57,44 +51,27 @@
   color: var(--color-text-strong);
 }
 
-.abort,
-.close,
+/* ★ 查 6：三个按钮走共享真源 */
 .continue {
-  padding: var(--space-half) var(--space-2);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  composes: btn btnPrimary from '../common/shared.module.css';
 }
-
 .abort {
-  color: var(--color-danger);
+  composes: btn from '../common/shared.module.css';
+  color: var(--color-danger-text);
   background: transparent;
-  border: 1px solid var(--color-danger-border);
+  border-color: var(--color-danger-border);
 }
-
-.continue {
-  color: var(--color-surface-raised);
-  background: var(--btn-primary-bg);
-  border: 0;
-}
-
 .close {
-  color: var(--color-text-muted);
-  background: transparent;
-  border: 1px solid var(--color-border);
+  composes: btn btnGhost from '../common/shared.module.css';
 }
 
 /* ── 进度条（原 `.bs-progress`）── */
 .progress {
-  height: 4px;
-  overflow: hidden;
-  background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
+  composes: progressTrack from '../common/shared.module.css';
 }
 
 .progressBar {
-  height: 100%;
-  background: var(--progress-fill);
-  transition: width 0.2s linear;
+  composes: progressFill from '../common/shared.module.css';
 }
 
 /* ── 列表（原 `.bs-item` / `.bs-chip`）── */
@@ -106,12 +83,9 @@
   max-height: 40vh;
 }
 
+/* ★ 查 6：与 `listItem` 几乎逐字相同 ⇒ 走真源（本处**不可点**，不加 Clickable）*/
 .item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-half) var(--space-1);
-  border-radius: var(--radius-sm);
+  composes: listItem from '../common/shared.module.css';
 }
 
 .idx {
@@ -128,12 +102,7 @@
 }
 
 .chip {
-  flex: 0 0 auto;
-  padding: 0 var(--space-1);
-  color: var(--color-text-muted);
-  background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
+  composes: pill from '../common/shared.module.css';
 }
 
 .msg {
@@ -146,19 +115,21 @@
   font-size: var(--font-size-xs);
 }
 
-/* 状态底色（原 `.bs-${status}`） */
+/* 状态底色（原 `.bs-${status}`）
+   ⚠️ `composes` 只允许单个类选择器 ⇒ 这里是后代选择器，只能本地写；
+      但色值统一走 token（原先混用 --color-surface-raised 当文字色）。*/
 .st_success .chip {
-  color: var(--color-surface-raised);
+  color: var(--color-text-on-brand);
   background: var(--color-success);
 }
 
 .st_error .chip {
-  color: var(--color-surface-raised);
+  color: var(--color-text-on-danger);
   background: var(--color-danger);
 }
 
 .st_sending .chip {
-  color: var(--color-surface-raised);
+  color: var(--color-text-on-brand);
   background: var(--btn-primary-bg);
 }
 

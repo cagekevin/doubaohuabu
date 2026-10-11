@@ -51,8 +51,13 @@ export interface LovartImageInput {
 /** `accountId → 图片列表`（同样转发自契约层） */
 export type LovartGalleries = LovartGalleriesMap;
 
-/** 名字兜底（原 29269 的 `f.name || 'Lovart 图'`） */
-const DEFAULT_NAME = 'Lovart 图';
+/**
+ * 名字兜底（原 29269 的 `f.name || 'Lovart 图'`）
+ * ⚠️ 导出给 `canvas.addMaterialsBatch` 复用（原 `addMaterialsBatch` 29192 用的是**同一句**
+ *   `n[j].name || 'Lovart 图'`）—— 判据 C1：同一字面量不写两份。
+ */
+export const LOVART_ITEM_DEFAULT_NAME = 'Lovart 图';
+const DEFAULT_NAME = LOVART_ITEM_DEFAULT_NAME;
 /** 出处兜底（原 29274 的 `f.source || 'import'`） */
 const DEFAULT_SOURCE = 'import';
 

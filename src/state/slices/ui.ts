@@ -11,9 +11,27 @@ import type { BackendErrorKind } from '@/constants/failure';
 import type { ToastLevel } from '@/constants/text';
 // ⚠️ 形状真源在用例层（`sendQueue.ts`）—— state 依赖 core 是允许方向
 import type { NodeSendState } from '@/core/usecases/sendQueue';
+import { LS_NEWIMAGES_CURRENT_ONLY, LS_NEWIMAGES_FOLDED } from '@/stable/contracts/keys';
 
 /** 默认 toast 时长（ms） */
 const TOAST_DURATION_MS = 3000;
+
+/**
+ * 本片负责持久化的**布尔开关**（原 `zd(key,'0') === '1'` / `Fd(key, v?'1':'0')`）
+ *
+ * ⚠️ 只列**本片真的用**的键（判据 B5：不留没人读的开关）—— `doubao-newimages-autocap`
+ *    与 `doubao-view-head-collapsed` 目前**无人用**，故不在此列。
+ */
+export type UiFlagKey = typeof LS_NEWIMAGES_FOLDED | typeof LS_NEWIMAGES_CURRENT_ONLY;
+
+/** 本片的注入（`state` 不碰 `localStorage` —— 键的读写在 `persistKeys` 的唯一落点上） */
+export interface UiSliceDeps {
+  now: () => number;
+  /** 读一个开关（原 `zd(key, '0') === '1'`；缺省 ⇒ false） */
+  readFlag: (key: UiFlagKey) => boolean;
+  /** 写一个开关（原 `Fd(key, v ? '1' : '0')`） */
+  writeFlag: (key: UiFlagKey, value: boolean) => void;
+}
 
 /**
  * Toast 数据形状（★ 由 state 拥有 —— 数据在 state；`ui/common/ToastHost` 只 import 类型）
@@ -55,6 +73,29 @@ export interface UiSlice {
    * 用户就是在那个可见页面里登录。`null` ⇒ 全隐藏（只跑后台任务、不给人看）。
    */
   activeAccountId: string | null;
+  /**
+   * ★ **「按关键词拆分」弹窗**（原 `splitKeywordModal` shared.js:26776 / 28535-28546）
+   *
+   * ⚠️ **为什么它住 store 而不是组件局部 state**：弹窗由**画布节点内**的按钮打开，
+   *    但必须由**画布宿主**（`CanvasHost.Inner`）渲染 —— 因为拆分会**删掉源节点**
+   *    （渲染在节点里的弹窗会随之卸载），且节点在 ReactFlow 的**变换容器**内
+   *    （`position: fixed` 的浮层会被 transform 带偏）。源版也正是这么放的。
+   */
+  splitKeywordModal: { sourceNodeId: string } | null;
+  openSplitKeywordModal: (sourceNodeId: string) => void;
+  closeSplitKeywordModal: () => void;
+
+  // ── 「出新图」面板的持久化开关（原 `_Component26` 的 `f` / `m` 两个 `useState` + `Fd`）──
+  /**
+   * 折叠态（原 `f`，键 `doubao-newimages-folded`）
+   * ⚠️ 与源一致：**初始化时读盘**（`zd(v0,'0')==='1'`），切换时**立即写盘**（`Fd`）——
+   *    不经防抖落盘（它不在 `PersistSnapshot` 里；源版也是直接 `localStorage`）。
+   */
+  newImagesFolded: boolean;
+  /** 只留本画布（原 `m`，键 `doubao-newimages-current-only`） */
+  newImagesCurrentOnly: boolean;
+  setNewImagesFolded: (value: boolean) => void;
+  setNewImagesCurrentOnly: (value: boolean) => void;
 
   // ── actions（只做编排，不做业务）──
   /**
@@ -90,16 +131,20 @@ export interface UiSlice {
 }
 
 /** 用注入的时钟生成 id（避免在 store 里直接调 Date.now —— 原则 4 的延伸） */
-export function createUiSlice(now: () => number) {
+export function createUiSlice(deps: UiSliceDeps) {
   let seq = 0;
-  const nextId = (prefix: string) => `${prefix}-${now().toString(36)}-${++seq}`;
+  const nextId = (prefix: string) => `${prefix}-${deps.now().toString(36)}-${++seq}`;
 
   return (set: (partial: Partial<UiSlice>) => void, get: () => UiSlice): UiSlice => ({
     toasts: [],
     backendErrors: [],
     selectedCount: 0,
     activeAccountId: null,
+    splitKeywordModal: null,
     nodeSendStates: {},
+    // ★ 初值**读盘**（原 `_Component26.jsx:30-45` 的 `zd(v0/w0, '0') === '1'`）
+    newImagesFolded: deps.readFlag(LS_NEWIMAGES_FOLDED),
+    newImagesCurrentOnly: deps.readFlag(LS_NEWIMAGES_CURRENT_ONLY),
 
     pushToast: (message, duration = TOAST_DURATION_MS, level = 'info') => {
       set({ toasts: [...get().toasts, { id: nextId('toast'), message, duration, level }] });
@@ -124,6 +169,19 @@ export function createUiSlice(now: () => number) {
 
     setSelectedCount: (n) => set({ selectedCount: n }),
     setActiveAccountId: (activeAccountId) => set({ activeAccountId }),
+
+    openSplitKeywordModal: (sourceNodeId) => set({ splitKeywordModal: { sourceNodeId } }),
+    closeSplitKeywordModal: () => set({ splitKeywordModal: null }),
+
+    setNewImagesFolded: (value) => {
+      // ⚠️ 与源一致：**先写盘再改状态**（原 `p(le => { Fd(v0, …); return te; })`）
+      deps.writeFlag(LS_NEWIMAGES_FOLDED, value);
+      set({ newImagesFolded: value });
+    },
+    setNewImagesCurrentOnly: (value) => {
+      deps.writeFlag(LS_NEWIMAGES_CURRENT_ONLY, value);
+      set({ newImagesCurrentOnly: value });
+    },
 
     setNodeSendState: (nodeId, patch) => {
       set({ nodeSendStates: { ...get().nodeSendStates, [nodeId]: { nodeId, ...patch } } });

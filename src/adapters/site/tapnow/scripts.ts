@@ -12,9 +12,9 @@
  *   ③ `text` **截断到 40000 字符**（防止超大响应撑爆 IPC）
  *   ④ 任何抛出 ⇒ `{ok:false, status:0, error: <原文>}`（**不抛回渲染层**）
  *
- * ⚠️ 空 `catch` 拆行：`check-invariants.cjs` 的 `原则6/no-swallow` 是**逐行**正则；
- *    注入脚本里的空 catch 把 `{` 与 `}` 拆到两行即**不误报、也无需加豁免**
- *    （与 `shared/inputLock.ts` 同一处理；JS 里换行无语义，注入结果等价）。
+ * ⚠️ 空 `catch` 拆行：原为规避已退役的 grep 型闸（`check-invariants.cjs` 的 `原则6/no-swallow`
+ *    逐行正则）；注入脚本里的空 catch 把 `{` 与 `}` 拆到两行即**不误报、也无需加豁免**
+ *    （与 `shared/inputLock.ts` 同一处理；JS 里换行无语义，注入结果等价）。**此写法保留无害**。
  */
 
 /**

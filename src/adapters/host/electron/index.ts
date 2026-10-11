@@ -6,7 +6,7 @@
  *
  * 铁律：
  *   - 原则 6：**所有方法返回 `Result`，不抛异常给上层**（`try/catch` 统一收口）
- *   - W1：**不得调用 `preload.js` 不存在的方法**（`scripts/check-host-api.cjs` 强制）
+ *   - W1：**不得调用 `preload.js` 不存在的方法**（原 `check-host-api.cjs` 已于 2026-10-11 退役，现靠 tsc + code review）
  *   - W1：两个 `sendSync`（`activateProjectStorage` / `saveImageSync`）**必须同步调用**，不得 `await`
  */
 
@@ -150,7 +150,14 @@ export function createElectronHost(): HostPort {
       },
       clearBrowserCache: async () => {
         const r = await guard((a) => a.clearBrowserCache());
-        return r.ok ? ok(undefined) : r;
+        if (!r.ok) return r;
+        const v = r.value as { ok?: boolean; error?: string; cleared?: unknown; failed?: unknown } | null;
+        // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**，与 `scanFrames` 同法）
+        if (!v || v.ok === false) return err('unknown', v?.error ?? '清理浏览器缓存返回失败');
+        return ok({
+          cleared: typeof v.cleared === 'number' ? v.cleared : 0,
+          ...(typeof v.failed === 'number' ? { failed: v.failed } : {}),
+        });
       },
     },
     account,

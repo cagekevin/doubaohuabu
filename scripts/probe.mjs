@@ -13,7 +13,7 @@
  *
  * 用法：
  *   # ① 先拿真实断言串（在**未改**的代码上跑，看退出码与输出）
- *   node scripts/probe.mjs --run "node scripts/check-invariants.cjs" --suggest-out
+ *   node scripts/probe.mjs --run "npm run lint" --suggest-out
  *
  *   # ② 看注入 diff（不写盘）
  *   node scripts/probe.mjs --file <相对路径> --find "<旧>" --replace "<新>" --dry

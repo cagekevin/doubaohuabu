@@ -45,9 +45,6 @@ interface ResultScanItem {
   h: number;
 }
 
-/** 已发送过的幂等键（原实现用 `sessionId` 防重复点菜单） */
-const sentSessions = new Set<string>();
-
 /** 结果扫描脚本（模块级常量 —— 原 `Xk.toString()` 每次重建，这里只建一次） */
 const RESULT_SCAN = buildResultScanScript();
 
@@ -123,6 +120,9 @@ const CHAT_URL: Readonly<Record<'doubao' | 'dola', string>> = {
 };
 
 export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SitePort {
+  /** 已发送过的幂等键（原实现用 `sessionId` 防重复点菜单）—— 收进闭包，避免模块级可变状态 */
+  const sentSessions = new Set<string>();
+
   return {
     kind,
     chatUrl: CHAT_URL[kind],

@@ -1,0 +1,48 @@
+/**
+ * 导出账号弹窗（原 `PP.jsx` 的 `.export-modal` / `.export-body` / `.export-row`）
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 查 6：按钮 / 列表项 / 空态走 `ui/common/shared.module.css` 真源，不自造。
+ */
+
+.status {
+  min-height: 18px;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.empty {
+  composes: emptyInline from '../common/shared.module.css';
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.row {
+  /* ★ 查 6.1：它是**可点行**（原手写 cursor:pointer）⇒ 应走 `listItemClickable`
+     —— 那个修饰符自带 hover 反馈；只 composes 基础形状会缺 hover。 */
+  composes: listItem listItemClickable from '../common/shared.module.css';
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btnGhost {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+.btnPrimary {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}

@@ -16,10 +16,35 @@
 
 import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
-import { releaseSession } from '@/core/usecases/prepareSession';
+import { applyProxyAssignments, releaseSession } from '@/core/usecases/prepareSession';
+import { assignProxyPool, normalizeProxyPool } from '@/core/rules/proxy';
+import {
+  buildFingerprintDiagnosis,
+  probeFromFingerprint,
+  type DiagnosisSource,
+  type FingerprintDiagnosis,
+  type FingerprintNetProbe,
+} from '@/core/rules/fingerprintDiagnosis';
+import type { FingerprintPageProbe } from '@/core/ports/backendPage.port';
+import {
+  exportAccounts as runExportAccounts,
+  importAccounts as runImportAccounts,
+} from '@/core/usecases/accountTransfer';
 import type { NewAccountInput } from '@/core/rules/accountRoster';
 import { ACCOUNT_STATUS } from '@/stable/model/account';
 import { SEND_TEXT } from '@/constants/text';
+
+/**
+ * 账号导入 / 导出结果（UI 据此出提示）
+ *
+ * ⚠️ 原则 6：`message` 是**后端原文**（如 `已取消` / `文件格式错误`）—— **不改写、不加前缀**。
+ * ⚠️ `warnings`（cookie 读取/恢复失败）已**同时**上报到 `backendErrors`（不静默），此处再带出供 UI 计数。
+ */
+export type AccountTransferResult =
+  | { kind: 'canceled' }
+  | { kind: 'failed'; message: string }
+  | { kind: 'exported'; count: number; warnings: string[] }
+  | { kind: 'imported'; imported: number; skipped: number; restored: number; warnings: string[] };
 
 export interface AccountOpsController {
   /**
@@ -40,6 +65,43 @@ export interface AccountOpsController {
    * @returns 是否已登录（同时已把 `status` 写成 `已登录` / `未登录`）
    */
   probeLogin(accountId: string): Promise<boolean>;
+  /**
+   * ★ **导出账号数据**（原 `PP.jsx:36-94`）
+   * @param accountIds UI 已勾选的账号 id（空 ⇒ `failed`，转发源版 `请至少选择一个账号`）
+   * @returns `exported`（含 cookie 失败 `warnings`）/ `failed`（后端原文，如 `已取消`）
+   */
+  exportAccounts(accountIds: readonly string[]): Promise<AccountTransferResult>;
+  /**
+   * ★ **导入账号数据**（原 `OP.jsx:585-699`）
+   *
+   * ★ 逐个入 store 用**既有** `addAccount`（`NewAccountInput` 收 `id`/`partition`/`fingerprint`
+   *   ⇒ 保留导入字段 + 与源一致地 `vo()` 重编号）—— **不是**直接 `setAccounts` 追加。
+   * ⚠️ 文件格式错误 / 无账号数据 ⇒ `failed`（转发源版文案）；用户取消 ⇒ `canceled`。
+   */
+  importAccounts(): Promise<AccountTransferResult>;
+  /**
+   * ★ **保存 Lovart 出口代理池**（原 `setProxyPool` 30320-30330 + `reassignLovartProxies` 30331+）
+   *
+   * 顺序（**逐行对源**）：归一 → 落 store → 纯层**轮询分配** → 账号写回 → **逐条落宿主**。
+   * @param text 文本域原文（每行一个代理；空 ⇒ 全部直连）
+   * @returns `count` = 归一后的代理数（0 ⇒ 直连）；`failures` = 落宿主失败清单（已上报，原则 6）
+   */
+  saveProxyPool(text: string): Promise<{ count: number; applied: number; failures: string[] }>;
+  /**
+   * ★ **指纹诊断**（原 `OP.jsx:59-125` 的 `h(W)`）
+   *
+   * 顺序（**逐行对源**）：
+   *   ① 页面**实际生效**指纹（`BackendPagePort.probeFingerprint`，best-effort 2.5s 超时）
+   *   ② 探不到 ⇒ **回落账号里存的指纹配置**（原 83-97，来源标 `configured`）
+   *   ③ 真实出口网络（`AccountPort.fpNetDiag`）
+   *   ④ 纯层拼摘要（`buildFingerprintDiagnosis`）
+   *
+   * ⚠️ **不弹错**：源版这两处失败都是 `catch {}` 后置 `null`（best-effort）——
+   *    失败只体现在摘要的「伪装 / 出口」段，**不打断**诊断。
+   * ⚠️ 调用方（UI）用 `diagnosisSegments()` + `FP_DIAG_TEXT.prefix` 拼 toast 文案
+   *    （文案是 SSOT 的活，控制器只交**结构化结果**）。
+   */
+  diagnoseAccount(accountId: string): Promise<FingerprintDiagnosis>;
 }
 
 export function createAccountOps(store: AppStore, ports: Ports): AccountOpsController {
@@ -89,6 +151,80 @@ export function createAccountOps(store: AppStore, ports: Ports): AccountOpsContr
       store.useStore.setState({ accounts: next });
       // ⚠️ `accounts` 已在 `container.ts` 的自动落盘监听列表里 ⇒ 无需显式 persist
       return loggedIn;
+    },
+
+    async exportAccounts(accountIds) {
+      const s = store.useStore.getState();
+      const selected = s.accounts.filter((a) => accountIds.includes(a.id));
+      const r = await runExportAccounts(
+        { account: ports.host.account, clock: ports.clock },
+        { accounts: selected },
+      );
+      if (!r.ok) return { kind: 'failed', message: r.message };
+      // ★ 原则 6：cookie 失败**不静默**（源版 `PP.jsx:61` 是 `console.warn`）
+      for (const w of r.value.warnings) s.pushBackendError('unknown', w);
+      return { kind: 'exported', count: r.value.count, warnings: r.value.warnings };
+    },
+
+    async importAccounts() {
+      const s = store.useStore.getState();
+      const r = await runImportAccounts(
+        { account: ports.host.account, clock: ports.clock },
+        { existing: s.accounts },
+      );
+      if (!r.ok) return { kind: 'failed', message: r.message };
+      if (r.value.kind === 'canceled') return { kind: 'canceled' };
+      const { accounts, skipped, restored, warnings } = r.value;
+      // ★ 只有 state 能写 store（原则 1）—— 逐个走既有 `addAccount`
+      //   （`NewAccountInput` 收 id/partition/fingerprint ⇒ 保留导入字段 + `vo()` 重编号）
+      for (const acc of accounts) store.useStore.getState().addAccount(acc);
+      const s2 = store.useStore.getState();
+      // ★ 原则 6：cookie 恢复失败**不静默**（源版 `OP.jsx:660` 是 `console.warn`）
+      for (const w of warnings) s2.pushBackendError('unknown', w);
+      return { kind: 'imported', imported: accounts.length, skipped, restored, warnings };
+    },
+
+    async saveProxyPool(text) {
+      const pool = normalizeProxyPool(text);
+      const s0 = store.useStore.getState();
+      // ① 落 store（原则 1）；`proxyPool` 已在 `container.ts` 的自动落盘监听列表里
+      s0.setProxyPool(pool);
+      // ② 纯层轮询分配（原 `reassignLovartProxies` 30331-30346）
+      const r = assignProxyPool(s0.accounts, pool);
+      // ③ 账号写回（`proxy` 字段）
+      store.useStore.setState({ accounts: r.accounts });
+      // ④ 逐条落宿主（原 30347-30351）—— 源版 `.catch(() => {})` **全吞** ⇒ 这里如实上报（原则 6）
+      const out = await applyProxyAssignments({ account: ports.host.account }, r.assignments);
+      for (const f of out.failures) store.useStore.getState().pushBackendError('unknown', f);
+      return { count: pool.length, applied: out.applied, failures: out.failures };
+    },
+
+    async diagnoseAccount(accountId) {
+      const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
+      // 找不到账号 ⇒ 什么都不知道（**不编造**，全段落 `?` / `页面未加载`）
+      if (!account) return buildFingerprintDiagnosis(null, null, 'live');
+
+      // ① 页面**实际生效**指纹（best-effort，2.5s 超时）
+      let page: FingerprintPageProbe | null = null;
+      let source: DiagnosisSource = 'live';
+      const r = await ports.backendPage.probeFingerprint(account);
+      if (r.ok) {
+        page = r.value;
+      } else if (account.fingerprint) {
+        // ② 探不到 ⇒ 回落账号里**存的**指纹配置（原 `OP.jsx:83-97`，`rt = 'configured'`）
+        page = probeFromFingerprint(account.fingerprint);
+        source = 'configured';
+      }
+      // ⚠️ 与源一致：探针失败**不弹错**（它本就是 best-effort）—— 只体现在摘要的「伪装」段
+
+      // ③ 真实出口网络（原 98-107）—— 无分区 / 失败 ⇒ `null`（源版 `catch` 后置 null）
+      let net: FingerprintNetProbe | null = null;
+      if (account.partition) {
+        const nr = await ports.host.account.fpNetDiag(account.partition);
+        if (nr.ok) net = nr.value as FingerprintNetProbe;
+      }
+
+      return buildFingerprintDiagnosis(page, net, source);
     },
   };
 }

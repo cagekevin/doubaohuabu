@@ -15,24 +15,11 @@
 }
 
 .analyzeBtn {
-  padding: var(--space-half) var(--space-2);
-  color: var(--color-text-strong);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px var(--color-shadow);
+  composes: btn btnSm from '../common/shared.module.css';
+  box-shadow: var(--shadow-sm);
 }
-
 .analyzeBtn:hover:not(:disabled) {
-  border-color: var(--btn-default-border-hover);
   color: var(--btn-ghost-fg-hover);
-}
-
-.analyzeBtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 /* ── 结果浮层（原 `.mat-prompt-pop.nodrag.nopan.nowheel`）── */
@@ -46,7 +33,7 @@
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px var(--color-shadow-strong);
+  box-shadow: var(--shadow-lg);
   font-size: var(--font-size-xs);
 }
 
@@ -59,20 +46,15 @@
 }
 
 .badge {
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
+  composes: pill from '../common/shared.module.css';
 }
 
 .badgeDone {
-  background: var(--color-success);
-  color: var(--color-surface-raised);
+  composes: pillOk from '../common/shared.module.css';
 }
 
 .badgeFailed {
-  background: var(--color-danger);
-  color: var(--color-surface-raised);
+  composes: pillErr from '../common/shared.module.css';
 }
 
 .title {
@@ -84,10 +66,7 @@
 }
 
 .close {
-  color: var(--color-text-faint);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
 }
 
 .body {
@@ -95,7 +74,8 @@
 }
 
 .error {
-  color: var(--color-danger);
+  /* ★ 查 1.5：反馈色**当文字**用 ⇒ 走文字版（底色版在白底上只有 3.76:1）*/
+  color: var(--color-danger-text);
   word-break: break-word;
 }
 
@@ -114,18 +94,7 @@
 }
 
 .spinner {
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--spinner-color);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  composes: spinnerRing from '../common/shared.module.css';
 }
 
 /* ── tab 区（原 `.mpp-tabs` / `.mpp-content` / `.mpp-pre`）── */
@@ -136,16 +105,16 @@
   margin-bottom: var(--space-1);
 }
 
-.tabs button {
+/* ★ 查 6：原为元素选择器 `.tabs button`（`composes` 不支持单一类以外）
+   ⇒ 给 TSX 的三个 tab 按钮加了 `styles.tab`，走共享真源。 */
+.tab {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
   padding: 0 var(--space-1);
-  color: var(--color-text-muted);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
 
-.tabs button.on {
+/* 激活态（原 `.tabs button.on`；现在是独立类，TSX 直接加在按钮上）
+   ⚠️ 必须定义在 `.tab` **之后** —— 同优先级下靠书写顺序取胜。 */
+.on {
   color: var(--tab-active-fg);
   border-color: var(--tab-active-border);
 }
@@ -155,10 +124,7 @@
 }
 
 .copy {
-  color: var(--color-text-muted);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
 .content {
@@ -184,29 +150,12 @@
 }
 
 .reviseInput {
+  composes: field from '../common/shared.module.css';
   flex: 1;
   min-width: 0;
-  padding: var(--space-half) var(--space-1);
-  color: var(--color-text-strong);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  outline: none;
 }
 
-.reviseInput:focus {
-  border-color: var(--field-border-focus);
-}
-
+/* ★ 查 6：主按钮走共享真源 */
 .reviseBtn {
-  padding: var(--space-half) var(--space-2);
-  color: var(--color-surface-raised);
-  background: var(--btn-primary-bg);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.reviseBtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  composes: btn btnPrimary btnSm from '../common/shared.module.css';
 }

@@ -19,13 +19,6 @@ const PROVIDERS: readonly ApiProviderMeta[] = [
   { id: 'llm-openai-compat', name: 'LLM（OpenAI 兼容）', capabilities: ['llm'], enabled: true, hasKey: false },
 ];
 
-/** mock 任务序号（原 `apj-<base36>-<seq>` 形态） */
-let mockJobSeq = 0;
-const nextJobId = (): string => {
-  mockJobSeq += 1;
-  return `apj-mock-${mockJobSeq}`;
-};
-
 const defaultSetup = (): ApiSetup => ({
   imageProviderId: null,
   videoProviderId: null,
@@ -34,6 +27,13 @@ const defaultSetup = (): ApiSetup => ({
 });
 
 export function createMockApi(): ApiPort {
+  // mock 任务序号（原 `apj-<base36>-<seq>` 形态）—— 收进闭包，避免模块级可变状态
+  let jobSeq = 0;
+  const nextJobId = (): string => {
+    jobSeq += 1;
+    return `apj-mock-${jobSeq}`;
+  };
+
   return {
     providersList: async () => ok(PROVIDERS.map((p) => ({ ...p }))),
 

@@ -3,7 +3,8 @@
  * ⚠️ 原则 5：色值只走 token。
  */
 
-.panel {
+/** ★ 改名（原 `.panel`）：与「浮层卡片」同名不同物 —— 本类是**栏容器**，没有视觉壳。 */
+.column {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -13,14 +14,48 @@
 }
 
 /* ── 「＋ 添加账号」（原 `OP.jsx:822-827` 的 `.account-actions` 主按钮）── */
+/* ★ 查 6：主按钮不再自造 —— 引用共享真源 */
 .addBtn {
-  width: 100%;
-  padding: var(--space-2);
-  color: var(--color-surface-raised);
-  background: var(--btn-primary-bg);
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  composes: btn btnPrimary btnBlock from '../common/shared.module.css';
+}
+
+/* ── 工具条（原 `.account-tool-row`：导入 / 导出 / 关联扫描 / 出口代理）── */
+.toolRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.toolBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  flex: 1 1 auto;
+}
+
+.toolMsg {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* ── 实时隔离体检状态按钮（原 `.fp-health`，三态：crit / warn / ok）── */
+.fpHealth {
+  composes: btn btnSm btnBlock from '../common/shared.module.css';
+  justify-content: center;
+}
+
+.fpHealthCrit {
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+}
+
+.fpHealthWarn {
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+}
+
+.fpHealthOk {
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
 }
 
 /* ── 选平台（源版是 `_ComponentTP` 弹窗；这里做成内联展开，省一个弹窗件）── */
@@ -41,13 +76,8 @@
 }
 
 .pickItem {
-  padding: var(--space-1) var(--space-2);
-  text-align: left;
-  color: var(--color-text-strong);
-  background: transparent;
+  composes: listItem from '../common/shared.module.css';
   border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
 
 .pickItem:hover {
@@ -55,20 +85,15 @@
 }
 
 .pickCancel {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
   position: absolute;
   right: var(--space-1);
   top: var(--space-1);
-  color: var(--color-text-faint);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
 }
 
 /* ── 账号列表（原 `.account-row`）── */
 .empty {
-  padding: var(--space-2);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  composes: emptyInline from '../common/shared.module.css';
 }
 
 .list {
@@ -101,7 +126,12 @@
   color: var(--color-text-strong);
   background: transparent;
   border: 0;
+  border-radius: var(--radius-sm); /* ★ 三态扫描补：hover 底色需要一个圆角 */
   cursor: pointer;
+}
+/* ★ 三态扫描补：点整行会进详情，却没有 hover 提示 */
+.rowMain:hover {
+  background: var(--color-surface-hover);
 }
 
 .name {
@@ -118,25 +148,44 @@
 
 .rowBtn,
 .rowBtnDanger {
-  flex: 0 0 auto;
-  padding: var(--space-half) var(--space-1);
-  font-size: var(--font-size-xs);
+  composes: btn btnSm from '../common/shared.module.css';
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.rowBtn {
-  color: var(--color-text-muted);
 }
 
 .rowBtnDanger {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   border-color: var(--color-danger-border);
 }
 
-.rowBtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+/* ── 面板底部操作条（原 `.panel-foot`）── */
+/* ⚠️ 位置偏离：源版 footer 固定在面板底（列表区单独滚动）；本工程随栏滚动（`margin-top: auto` 贴底） */
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.snapToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+/* ★ 三态扫描补：可点但无 hover 反馈 */
+.snapToggle:hover {
+  color: var(--color-text-strong);
+}
+
+/* ★ 查 6：按钮走共享真源 */
+.footBtn {
+  composes: btn btnSm btnGhost btnBlock from '../common/shared.module.css';
+}
+
+.footDanger {
+  composes: btn btnSm btnDanger btnBlock from '../common/shared.module.css';
 }

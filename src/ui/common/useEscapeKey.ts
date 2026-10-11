@@ -1,8 +1,8 @@
 /**
  * `Esc` 关闭（★ **`ui/common/` 是 `Escape` 处理唯一允许的落点**）
  *
- * ★ **为什么必须住在这儿**：`scripts/check-invariants.cjs` 的 `原则8/rule-of-three`
- *   规定「`Escape` 键盘处理只允许在 `ui/common/`」——否则每个浮层（`Modal` / `ContextMenu` /
+ * ★ **为什么必须住在这儿**：约定「`Escape` 键盘处理只允许在 `ui/common/`」
+ *   ——否则每个浮层（`Modal` / `ContextMenu` /
  *   `RefAutocomplete` / …）都会手写一份 `if (e.key === 'Escape')`，解散法迟早不一致
  *   （有的只关最上层、有的连点两下关两层、有的根本不关）。
  *

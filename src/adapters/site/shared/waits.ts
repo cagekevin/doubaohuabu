@@ -38,18 +38,35 @@ export type ProbeResult<T> = { ok: true; value: T } | { ok: false; error: string
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * 超时竞速（原 `OP.jsx:59-64` 的 `Promise.race([executeJavaScript, setTimeout])`）
+ *
+ * ⚠️ 错误文案 `webview_exec_timeout` **逐字对源**（源版也是这个字面量）
+ */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('webview_exec_timeout')), ms);
+    }),
+  ]);
+}
+
+/**
  * 在 webview 里跑一个探针（原 `On`）
- * ⚠️ **不抛**：webview 不可用 / 脚本抛错 ⇒ `{ok:false, error}`（错误原文保留）
+ * ⚠️ **不抛**：webview 不可用 / 脚本抛错 / 超时 ⇒ `{ok:false, error}`（错误原文保留）
+ * @param timeoutMs 不给 ⇒ **不设超时**（等页面自己答）；给了 ⇒ 竞速（见 `withTimeout`）
  */
 export async function runProbe<T = unknown>(
   view: WebviewElement | null | undefined,
   script: string,
+  timeoutMs?: number,
 ): Promise<ProbeResult<T>> {
   if (!view || typeof view.executeJavaScript !== 'function') {
     return { ok: false, error: 'webview 不可用' };
   }
   try {
-    return { ok: true, value: (await view.executeJavaScript(script, true)) as T };
+    const pending = view.executeJavaScript(script, true) as Promise<T>;
+    return { ok: true, value: timeoutMs === undefined ? await pending : await withTimeout(pending, timeoutMs) };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

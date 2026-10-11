@@ -52,16 +52,17 @@ function makeDeps(over: Partial<SendToSiteDeps> = {}) {
   const prepared: BackendPagePrepareOptions[] = [];
   const backendPage: BackendPagePort = {
     isMounted: () => true,
-    prepareForSend: async (_a, opts) => {
+    prepareForSend: async (_a: Account, opts: BackendPagePrepareOptions) => {
       prepared.push(opts);
       events.push('prepare');
       return ok({ leaseId: 'rt_1', webContentsId: 42, href: opts.targetUrl });
     },
-    release: (leaseId) => events.push(`release:${leaseId}`),
+    release: (leaseId: string) => events.push(`release:${leaseId}`),
     runScript: async () => ok(undefined),
     reload: () => ok(undefined),
     setMuted: () => ok(undefined),
-  } as BackendPagePort;
+    // ⚠️ 测试夹具：泛型方法无法逐一满足，整体断言到端口类型（与 `analyzePrompt.test.ts` 同法）
+  } as unknown as BackendPagePort;
 
   const deps: SendToSiteDeps = {
     sites: registry(),

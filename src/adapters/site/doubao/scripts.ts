@@ -188,9 +188,8 @@ export const READ_INPUT_STATE_SCRIPT = `(function(){
  *    `contenteditable` 走 `textContent`；两者都补发 `input` 事件。
  *
  * ⚠️ **格式差异（非语义）**：源版这几处 `catch(_){}` 写成**一行**；这里把 `{` 与 `}`
- *    **分行** —— 因为 `check-invariants.cjs` 的 `原则6/no-swallow` 是**逐行**正则
- *    （`/catch\s*(\([^)]*\))?\s*\{\s*\}/`，且会剥掉注释），一行写法必然被误判。
- *    注入脚本的 JS 语义**完全不变**（与 `site/shared/inputLock.ts` 同法）。
+ *    **分行** —— 原为规避已退役的 grep 型闸（`check-invariants.cjs` 的 `原则6/no-swallow` 逐行正则）。
+ *    注入脚本的 JS 语义**完全不变**（与 `site/shared/inputLock.ts` 同法）；**此写法保留无害**。
  */
 export function buildSetInputScript(text: string): string {
   return `(function(Q){

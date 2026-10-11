@@ -35,6 +35,7 @@ import {
   type EnqueueInput,
   type QueueItem,
 } from '@/core/rules/sendQueuePlan';
+import type { Cancel } from '@/core/ports/clock.port';
 import { clearFinishedQueue, planCancel, planRetry, resolveSendMode } from '@/core/rules/sendQueueOps';
 import { planQueueDispatch, type DispatchDecision, type PickAutoResult } from '@/core/rules/sendQueueDispatch';
 import { planQueueSettlement } from '@/core/rules/sendQueueSettle';
@@ -94,7 +95,13 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
   /** 代次（原 `Tp`）：`stop()` 时 +1 ⇒ 在途结果被 `planQueueSettlement` 丢弃 */
   let generation = 0;
   /** 节流句柄（原 `or`） */
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * 节流定时器
+   * ★ **2026-10-11 修正**：原先是**裸 `setTimeout`** —— 而本控制器手上就有 `ports.clock`
+   *   （同一个文件里 `now()` 就是用它）⇒ 走时钟端口才能**被虚拟时钟驱动**（测试/确定性复现）。
+   *   `Cancel` 是本仓既有的取消形态（`state/persist.ts` 同款）。
+   */
+  let timer: Cancel | null = null;
   /** 是否已启动（原 `Do` 的"允许自触发"那一半） */
   let active = false;
   let seq = 0;
@@ -228,8 +235,8 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
   /** 节流触发（原 `M3` 42033-42042：`clearTimeout` + `setTimeout(ls, 50)`） */
   const schedule = (): void => {
     if (!active) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
+    if (timer) timer();
+    timer = ports.clock.setTimeout(() => {
       timer = null;
       void pump();
     }, PUMP_THROTTLE_MS);
@@ -307,7 +314,7 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
       // ★ 代次 +1 ⇒ **在途结果全部作废**（原 42203：派发时记的 `y !== Tp` 就丢弃）
       generation += 1;
       if (timer) {
-        clearTimeout(timer);
+        timer();
         timer = null;
       }
     },

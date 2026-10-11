@@ -13,7 +13,8 @@ import type { Ports } from '@/core/ports';
 import { EDGE_MARKER, EDGE_STYLE } from '@/constants';
 import { createCanvasSlice, type CanvasSlice } from './slices/canvas';
 import { createGlobalSlice, type GlobalSlice, type GlobalSliceDeps } from './slices/global';
-import { createUiSlice, type UiSlice } from './slices/ui';
+import { createUiSlice, type UiSlice, type UiFlagKey } from './slices/ui';
+import { PERSIST } from './persistKeys';
 import { createQueueSlice, type QueueSlice } from './slices/queue';
 import { createGallerySlice, type GallerySlice } from './slices/gallery';
 import { createScanSlice, type ScanSlice } from './slices/scan';
@@ -101,8 +102,22 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
           style: { ...EDGE_STYLE },
           markerEnd: { ...EDGE_MARKER },
         }),
+        // ⚠️ 与下面的 `GallerySliceDeps.normalizeImage` 是**同一个东西**（原 `Tn`）：
+        //    `saveImageSync` 是**同步 IPC**（W1 明列的两处 `sendSync` 之一，**不得 await**）
+        //    ⇒ 包成普通函数注入；失败**原样返回入参**（与源 `Tn` 的 `catch { return e }` 同法）。
+        persistImage: (dataUrl) => {
+          const r = ports.host.media.saveImageSync(dataUrl);
+          return r.ok ? r.value : dataUrl;
+        },
       }),
-      ...createUiSlice(() => ports.clock.now())(setPartial, getState),
+      // ★ UI 开关（折叠 / 只留本画布）的读写在 `persistKeys` 的**唯一落点**上（原版直接 `localStorage`）
+      ...createUiSlice({
+        now: () => ports.clock.now(),
+        readFlag: (key: UiFlagKey) => PERSIST[key].read(ports.storage) === '1',
+        writeFlag: (key: UiFlagKey, value: boolean) => {
+          PERSIST[key].write(ports.storage, value ? '1' : '0');
+        },
+      })(setPartial, getState),
       ...createQueueSlice(() => ports.clock.now())(setPartial, getState),
       // ★ Lovart 画廊（独立成片，见 slices/gallery.ts 头注释）。
       //   ⚠️ `normalizeImage` 走 `MediaPort.saveImageSync` —— 它是**同步 IPC**（W1 明列的两处

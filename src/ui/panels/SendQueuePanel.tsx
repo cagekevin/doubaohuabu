@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSendQueue, useStore } from '@/state';
+import { usePorts, useSendQueue, useStore } from '@/state';
 import { LS_SENDQUEUE_POS } from '@/stable/contracts/keys';
 import {
   clampPanelPosition,
@@ -36,6 +36,8 @@ import {
 } from '@/core/rules/sendQueuePanel';
 import { queueStats } from '@/core/rules/sendQueueOps';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
+import { PERSIST } from '@/state/persistKeys';
+import type { StoragePort } from '@/core/ports';
 import styles from './SendQueuePanel.module.css';
 
 /** 面板假想尺寸（原 `Qd(e, t, n, r)` 的 `n`/`r`）—— 用于把坐标夹进视口 */
@@ -44,22 +46,23 @@ const PANEL_H = 260;
 /** tick 间隔（原 61-65 的 `setTimeout(…, 1000)`） */
 const TICK_MS = 1000;
 
-/** 读回面板位置（原 `U3` 42570-42585）—— 解析失败/字段不是有限数 ⇒ `null` */
-function readPanelPos(): { x: number; y: number } | null {
-  try {
-    const raw = localStorage.getItem(LS_SENDQUEUE_POS);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as { x?: unknown; y?: unknown };
-    if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return { x: v.x as number, y: v.y as number };
-  } catch {
-    // ⚠️ 与源一致：坏数据**静默忽略**（位置丢了不影响功能）
-  }
+/**
+ * 读回面板位置（原 `U3` 42570-42585）—— 解析失败/字段不是有限数 ⇒ `null`
+ *
+ * ★ **2026-10-11 修正**：原先这里**直接读写 `localStorage`**（绕过 `StoragePort`）——
+ *   那是「`ui` 直接碰宿主」：一旦换成 mock 宿主（或跑测试）这条持久化就失效，
+ *   而本仓的规矩是**能力经端口**（`ui` 经 `usePorts()` 拿端口，与 `BackendView` 同法）。
+ *   ⚠️ 仍然**保留"字段必须是有限数"的校验**：端口只负责取回值，坏形状得自己挡。
+ */
+function readPanelPos(storage: StoragePort): { x: number; y: number } | null {
+  const v = PERSIST[LS_SENDQUEUE_POS].read(storage) as { x?: unknown; y?: unknown } | null;
+  if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return { x: v.x as number, y: v.y as number };
   return null;
 }
 
-function writePanelPos(pos: { x: number; y: number }): void {
+function writePanelPos(storage: StoragePort, pos: { x: number; y: number }): void {
   try {
-    localStorage.setItem(LS_SENDQUEUE_POS, JSON.stringify(pos));
+    PERSIST[LS_SENDQUEUE_POS].write(storage, pos);
   } catch {
     // ⚠️ 存不进去（配额/隐私模式）也**不影响使用**，只影响"下次记住位置"
   }
@@ -67,6 +70,8 @@ function writePanelPos(pos: { x: number; y: number }): void {
 
 export function SendQueuePanel() {
   const q = useSendQueue();
+  // ★ 面板位置走 StoragePort（不直接碰 localStorage —— 见 `readPanelPos` 的注释）
+  const ports = usePorts();
   const queue = useStore((s) => s.sendQueue);
   const concurrency = useStore((s) => s.accountConcurrency);
   const nodes = useStore((s) => s.nodes);
@@ -88,7 +93,7 @@ export function SendQueuePanel() {
    *   与 `BackendView` 那次被拦下的是同一条规则）—— 读盘时就把它夹进视口。
    */
   const [pos, setPos] = useState(() => {
-    const p = readPanelPos();
+    const p = readPanelPos(ports.storage);
     if (!p) return null;
     return clampPanelPosition(p.x, p.y, PANEL_W, PANEL_H, {
       w: window.innerWidth || 1280,
@@ -156,7 +161,7 @@ export function SendQueuePanel() {
       setDragging(false);
       dragRef.current = null;
       setPos((cur) => {
-        if (cur) writePanelPos(cur);
+        if (cur) writePanelPos(ports.storage, cur);
         return cur;
       });
     };
@@ -169,7 +174,10 @@ export function SendQueuePanel() {
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
-  }, [dragging]);
+    // ⚠️ `ports.storage` 必须进依赖（`up` 里用它写位置）—— `ports` 来自 context ⇒ 是稳定引用，
+    //    加进来**不会**导致重复绑定（这是刚才那条第 177 行 eslint warning 的正确修法：
+    //    改**代码**，不是去放宽门禁）
+  }, [dragging, ports.storage]);
 
   if (items.length === 0 && collapsed) return null;
 
@@ -209,9 +217,9 @@ export function SendQueuePanel() {
 
       {!collapsed && (
         <>
-          <div className={styles.bar}>
+          <div className={styles.track}>
             <div
-              className={styles.progress}
+              className={styles.fill}
               style={{ width: `${stats.total ? Math.round((done / stats.total) * 100) : 0}%` }}
             />
           </div>

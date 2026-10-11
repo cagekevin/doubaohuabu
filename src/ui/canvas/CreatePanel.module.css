@@ -2,7 +2,7 @@
  * 建节点浮层样式（原 `.panel-backdrop` / `.create-panel` / `.create-option`）
  *
  * ⚠️ 原则 5：**所有色值走 token**（字面量色值只允许出现在 `styles/tokens.css`，
- *    由 `check-invariants.cjs` 的 `ssot-color` 逐行拦截）。
+ *    约定；原 `ssot-color` 闸已于 2026-10-11 退役）。
  * ⚠️ 与 `ui/common/shared.module.css` 的 `.menu` / `.menuItem` 同一套写法
  *    （原版 `.create-panel` 与 `.node-ctx-menu` 也是同一族样式）。
  */
@@ -14,16 +14,13 @@
 }
 
 .panel {
+  composes: overlay from '../common/shared.module.css';
   position: fixed;
   z-index: var(--z-overlay);
   min-width: 160px;
   padding: var(--space-1);
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px var(--color-shadow);
 }
 
 .title {

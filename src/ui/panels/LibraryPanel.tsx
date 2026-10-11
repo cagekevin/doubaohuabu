@@ -13,6 +13,7 @@ import { Thumb } from '@/ui/common/Thumb';
 import { EmptyState } from '@/ui/common/EmptyState';
 import { LIBRARY_TEXT } from '@/constants/text';
 import { DRAG_MIME_MATERIAL } from '@/constants';
+import { makeLibraryId } from '@/core/rules/project';
 import styles from './LibraryPanel.module.css';
 
 export function LibraryPanel() {
@@ -37,10 +38,12 @@ export function LibraryPanel() {
       const picked = res.value.filter((f) => f.dataUrl);
       if (picked.length === 0) return;
       commit('library');
+      // ⚠️ id 形状与 `canvas.addMaterialsBatch` **共用一处**（`makeLibraryId`，判据 C1）
+      const now = Date.now();
       setLibrary([
         ...library,
         ...picked.map((f, i) => ({
-          id: `lib_${Date.now().toString(36)}_${i}`,
+          id: makeLibraryId(now, i),
           favorite: false,
           name: f.name,
           dataUrl: f.dataUrl as string,
@@ -63,10 +66,10 @@ export function LibraryPanel() {
 
   if (library.length === 0) {
     return (
-      <div className={styles.panel}>
+      <div className={styles.column}>
         <div className={styles.head}>
           <span>资源库</span>
-          <button type="button" onClick={() => void addFromFile()} disabled={busy}>
+          <button type="button" className={styles.headBtn} onClick={() => void addFromFile()} disabled={busy}>
             从文件选择
           </button>
         </div>
@@ -76,10 +79,10 @@ export function LibraryPanel() {
   }
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.column}>
       <div className={styles.head}>
         <span>资源库（{library.length}）</span>
-        <button type="button" onClick={() => void addFromFile()} disabled={busy}>
+        <button type="button" className={styles.headBtn} onClick={() => void addFromFile()} disabled={busy}>
           从文件选择
         </button>
       </div>
@@ -102,12 +105,18 @@ export function LibraryPanel() {
             <div className={styles.actions}>
               <button
                 type="button"
+                className={styles.actionBtn}
                 aria-label={it.favorite ? '取消收藏' : '收藏'}
                 onClick={() => toggleFavorite(it.id)}
               >
                 {it.favorite ? '★' : '☆'}
               </button>
-              <button type="button" aria-label="删除" onClick={() => remove(it.id)}>
+              <button
+                type="button"
+                className={styles.actionBtn}
+                aria-label="删除"
+                onClick={() => remove(it.id)}
+              >
                 ✕
               </button>
             </div>

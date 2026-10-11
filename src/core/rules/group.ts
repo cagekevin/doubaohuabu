@@ -64,6 +64,24 @@ export function absolutePositionOf(
   return { x: x + (parent.position.x || 0), y: y + (parent.position.y || 0) };
 }
 
+/**
+ * 「选中的那个组」—— 供选择工具条决定是否显示「取消组」（原 `_Component42.jsx:112-129` 的 `H`）
+ *
+ * 规则（**逐字回源**）：取**所有选中节点**的 `parentId`；
+ *   ① 没有选中节点、或**第一个**选中节点没有 `parentId` ⇒ `null`；
+ *   ② 所有选中节点的 `parentId` **相同** ⇒ 该值；
+ *   ③ 否则（分属不同的组）⇒ `null`。
+ *
+ * ⚠️ 于是「**选中组节点本身**」**不算**（组节点没有 `parentId`）—— 源版如此：工具条的
+ *   「取消组」只在**选中组内成员**时出现；组自身那个按钮在 `GL.jsx:30`（`GroupNode`）。
+ */
+export function selectedGroupIdOf(nodes: readonly GroupNodeLike[]): string | null {
+  const parents = nodes.filter((n) => n.selected).map((n) => n.parentId ?? null);
+  const first = parents[0];
+  if (!first) return null;
+  return parents.every((p) => p === first) ? first : null;
+}
+
 export type GroupResult =
   | { ok: true; nodes: GroupNodeLike[]; groupId: string; count: number }
   | { ok: false; reason: 'need-2' };

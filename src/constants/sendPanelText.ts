@@ -176,13 +176,11 @@ export const GROUP_NODE_TEXT = {
   /** 取消组按钮文案（原 36） */
   ungroup: '取消组',
   /**
-   * ⚠️ **本工程未使用源版工具条上那句**（`_Component42.jsx:1558` 的「释放**组内**节点」）——
-   *   本工程的取消组**只**出现在组节点自身上（用 `ungroupTitle` 那句「释放**内部**节点」），
-   *   选择工具条只落「成组」（见 `SelectionToolbar`）。**不留没有落点的文案**（判据 B5）。
+   * ⚠️ **选择工具条上的「打组」/「取消组」文案不在这里** —— 它们（连同源版工具条那句
+   *   「释放**组内**节点」）已归 `SELECT_TOOLBAR_TEXT`（`SelectionToolbar` 的唯一文案源）。
+   *   本组只留**组节点自身**用到的文案（`ungroupTitle` 那句「释放**内部**节点」）。
+   *   **不留没有落点的文案**（判据 B5）。
    */
-  /** 选择工具条的「成组」（源版选择工具条里有对齐/分布/成组/取消组；本工程只落了这两个） */
-  group: '成组',
-  groupTitle: '把选中的节点收进一个组（至少 2 个）',
 } as const;
 
 /**
@@ -215,7 +213,7 @@ export const MATERIAL_NODE_TEXT = {
    *    （连同图片上的 `iL.jsx` 人脸遮罩层）—— 那是一整个独立功能，**尚未落地**。
    *    按钮**禁用**并把原因写在 `title` 里（判据 B4），同时**可见地**标出来。
    */
-  editImagePending: '「编辑图片」（遮脸 / 裁剪）尚未落地',
+  editImagePending: '「编辑图片」（遮脸 / 裁剪）尚未实现',
 } as const;
 
 /**
@@ -397,9 +395,10 @@ export const SEND_QUEUE_TEXT = {
  * 画廊面板（原 `_Component23.jsx` 605 行 = **单账号**画廊面板）
  *
  * ★ 源版它是**覆盖层模态**：`.login-backdrop` + `.lovart-gallery`，从账号面板打开。
- * ⚠️ 本工程落**最小可用**版：查看 / 单张移除 / 清空 / 按范围清理。
- *   ⛔ **未落地的能力**（逐条标注，判据 B4 —— 见 `pending*` 三句）：
- *     扫描画布取图 · 从磁盘导入 · 把画布选中的素材加进来 · 全选/反选 · 大图预览。
+ * ⚠️ 本工程落**最小可用**版：查看 / 单张移除 / 清空 / 从画布收藏 / **大图预览**（2026-10-11）。
+ *   ⛔ **仍未落地**（逐条标注，判据 B4 —— 见 `pending*` 两句）：
+ *     扫描画布取图 · 从磁盘导入 · 全选/反选 · **添加到画布 (N)**
+ *     （最后一条需 `addMaterialsBatch`：居中网格布局 + 远程图落盘外置 + library 去重，见 `GalleryPanel` 文件头）。
  */
 export const GALLERY_TEXT = {
   /** 标题（原 417：`🎨 Tapnow 画廊 · {账号名}`，**逐字**） */
@@ -434,8 +433,54 @@ export const GALLERY_TEXT = {
   addSelectedOk: (n: number) => `已从画布加入收藏 ${n} 张`,
   addSelectedDup: '这些素材已在画廊中（重复跳过）',
   /** ⛔ 未落地三条（按钮禁用时的 `title`，如实说明原因） */
-  pendingScan: '「扫描 Tapnow 画布」尚未落地：它走站点页内脚本读取画布节点（同 M11 剩余三项，属同一层）',
-  pendingImport: '「从磁盘导入」尚未落地',
+  pendingScan:
+    '「扫描 Tapnow 画布」尚未实现。可先在画布上框选素材，再点「加入选中素材」',
+  pendingImport: '「从磁盘导入」尚未实现。可把图片直接拖入资源库',
+
+  // ── 大图预览 lightbox（原 `_Component23.jsx:550-602` 的 `.tg-lightbox-*`）──
+  /** 缩略图上的预览按钮（原 504-509，`title` 逐字） */
+  preview: '⤢',
+  previewTitle: '预览大图（也可双击缩略图）',
+  /** 上一张 / 下一张（原 569 / 575，`title` 逐字） */
+  prev: '上一张（←）',
+  next: '下一张（→）',
+  /** 元信息一行（原 559-560，**逐字拼接**：`尺寸 · 大小 · 时间 · i/n`） */
+  lightboxMeta: (dims: string, size: string, at: string, i: number, n: number) =>
+    `${dims} · ${size} · ${at} · ${i}/${n}`,
+  /** 打开原始图片（原 590-594，逐字） */
+  openOriginal: '打开原始图片',
+  openOriginalTitle: (url: string) => `在浏览器打开：${url}`,
+  openOriginalNone: '这条没有记录来源地址（可能是从磁盘导入的）',
+  openOriginalOk: '已在浏览器打开原始图片',
+  openOriginalFailed: (msg: string) => `打开失败：${msg}`,
+  /** 从画廊移除（原 595-599） */
+  removeFromGallery: '从画廊移除',
+  /** lightbox 的勾选（原 583 的三目） */
+  checkImage: '勾选此图',
+  uncheckImage: '取消勾选',
+
+  // ── 画廊选择 / 添加到画布（原 `_Component23.jsx:427-435` + 537-548）──
+  /** 全选 / 反选 / 清空选择（原 427-435，`title` 逐字） */
+  selectAll: '全选',
+  invert: '反选',
+  clearSelection: '清空选择',
+  /** 勾选复选框的无障碍名（源版无文字标签） */
+  checkTitle: '勾选 / 取消勾选',
+  /** 底部提示（原 539，逐字） */
+  footHint: '添加后会以「居中网格」展开在画布，原始分辨率保留不变；显示尺寸自动缩到 ≤ 260px 长边。',
+  /** 底部「取消」（原 542-544） */
+  cancel: '取消',
+  /** 「添加到画布 (N)」（原 545-547，逐字） */
+  addToCanvas: (n: number) => `添加到画布 (${n})`,
+  addToCanvasNone: '先在画廊中勾选要添加的图片',
+  addToCanvasTitle: (n: number) => `添加 ${n} 张到画布`,
+  /** 大图确认（原 367-370，逐字；含**两处换行**） */
+  bigConfirm: (name: string, meta: string) =>
+    `「${name}」尺寸较大（${meta}）。\n添加到画布会保持原始分辨率与画质，仅显示尺寸自动缩放。\n\n继续添加该图吗？（点击「取消」将中止本次添加）`,
+  /** 添加结果（原 308，逐字） */
+  addOk: (n: number) => `已添加 ${n} 张到画布（无损，居中网格布局）`,
+  /** 加载更多（原 530-533，逐字） */
+  loadMore: (shown: number, total: number) => `加载更多（已显示 ${shown} / ${total}）`,
 } as const;
 
 /**
@@ -470,4 +515,287 @@ export const FP_SCAN_TEXT = {
   historyTitle: (n: number) => `历史（${n}）`,
   /** 历史一条的摘要（原 118，逐字：`· N 账号 / M 对`） */
   historyLine: (total: number, totalPairs: number) => `· ${total} 账号 / ${totalPairs} 对`,
+  /**
+   * ★ **工具条上的「实时隔离体检」状态按钮**（原 `OP.jsx:854-858`，逐字）
+   *
+   * ⚠️ 它不是新面板 —— 与工具条的「关联扫描」打开**同一个** `FingerprintScanPanel`；
+   *    区别只是这个入口**自带状态摘要**（🔴 / 🟡 / ✅ 三态）。
+   */
+  healthCrit: (n: number) => `🔴 隔离风险：${n} 对完全关联`,
+  healthWarn: (n: number) => `🟡 隔离提示：${n} 对高度相似`,
+  healthOk: '✅ 隔离体检：全部账号相互隔离',
+  healthTitle: '实时隔离体检：点击查看跨账号指纹关联扫描详情',
+} as const;
+
+/**
+ * 「按关键词拆分」弹窗 + 文本节点上的拆分按钮
+ * （原 `_Component42.jsx:1774-1813` 的 `.modal-*` + `CL.jsx:751-756` 的 `.split-md-btn`）
+ *
+ * ⚠️ 弹窗说明那段源版带 `<b>` 强调（三处）；本工程按**纯文本**渲染（同一句，只是不加粗）。
+ * ⚠️ **失败文案不在这里** —— 真源是 `core/rules/splitText.ts` 的 `SPLIT_FAIL_REASON_LABEL`
+ *    （带类型的 label，与 `COLLISION_LEVEL_LABEL` 同形态；且 `constants` 是 L0，不能 import `core`）。
+ */
+export const SPLIT_TEXT = {
+  title: '按关键词拆分',
+  /** 弹窗说明（原 1782-1786，逐字；源版的三处 `<b>` 未保留） */
+  sub: '输入关键词（多个用逗号 / 空格 / 换行分隔）。每个出现关键词的行将作为新片段的起点， 系统按原文顺序把文本切成多个文本框，前置内容不丢失、顺序保持不变。 关键词大小写不敏感；建议用能唯一标识每个片段起始的词（如「场景」「分镜」「提示词组」），避免使用正文中频繁出现的词以免过度切分。',
+  /** 文本域占位（原 1788，逐字） */
+  placeholder: '例如：场景, 分镜, 提示词组',
+  cancel: '取消',
+  /** 「用默认关键词」（原 1803-1806） */
+  useDefault: '用默认关键词',
+  useDefaultTitle: '未输入关键词时，使用默认关键词（提示词组/分镜/镜头/场景/Prompt）拆分',
+  /** 「按关键词拆分」（原 1808-1810） */
+  submit: '按关键词拆分',
+  /** 文本节点上的按钮（原 `CL.jsx:751` 的按钮文字；`title` 逐字） */
+  button: '拆分',
+  buttonTitle:
+    '按自定义关键词拆分：弹窗输入关键词，每个出现关键词的行作为新片段起点，按原文顺序生成文本框，内容不丢失',
+  /** 成功（本工程用 toast 报告 —— 源版是按钮上的瞬时态，且那档 `✓ 已拆分` 不可达） */
+  done: (n: number) => `已拆分为 ${n} 个文本框`,
+} as const;
+
+/**
+ * 「出新图」面板（原 `_Component26.jsx`）
+ *
+ * ⚠️ **文案逐字对源**（含源版拼写 `Tanpnow`、全角括号与「」）。
+ * ⚠️ 本工程落**最小可用**版：聚合列表 / 发送到画布 / 从列表移除 / 折叠 / 只留本画布。
+ *   ⛔ **未落地**（逐条标注，判据 B4 —— 见 `pendingFetch` 与 `pendingAuto`）：
+ *     手动抓取（`oe`：Lovart `wp` / Tapnow `xp` / 其它 `NR` 三条扫描链）· 自动值守轮询（`Ee` 循环）
+ *     · 长按拖出到系统（`startFileDrag`）· 状态机四阶段（`onStatus`）。
+ */
+export const NEW_IMAGES_TEXT = {
+  /** 面板标题（原 605） */
+  title: '出新图',
+  /** 自动值守中的小圆点 `title`（原 606，逐字） */
+  liveTitle: '自动值守中：Lovart / Tapnow 出新图会自动出现，无需手动抓取',
+  /** 聚合徽标 `title`（原 607，逐字） */
+  aggTitle: '聚合自以下账号',
+  /** 聚合徽标（原 607） */
+  aggLabel: (n: number) => `聚合 ${n} 个账号`,
+  /** 状态机文案（原 614 的三目） */
+  statusIdle: '待机',
+  statusScanning: '正在读取页面…',
+  statusWorking: '抓取中…',
+  /** 抓取按钮文案（原 `De` 599 的四路三目） */
+  fetch: '⟳ 立即抓取',
+  fetchCurrentPage: '⟳ 抓取本页图',
+  fetchAll: '⟳ 抓取全部',
+  fetchBusy: '抓取中…',
+  /** 抓取按钮 `title`（原 671，逐字 —— 含源版拼写 `Tanpnow`） */
+  fetchTitle: '立即抓取（当前活跃账号 / 全部 Lovart+Tanpnow）',
+  /** 「只留本画布」开关（原 668-669） */
+  onlyCurrent: '只留本画布',
+  onlyCurrentOn: '● 只留本画布',
+  onlyCurrentOnTitle: '当前仅显示当前账号画布图片，点击显示全部账号',
+  onlyCurrentOffTitle: '当前显示全部账号图片，点击仅显示当前账号画布',
+  onlyCurrentSwitchedOn: '已切换：只显示当前账号画布图片',
+  onlyCurrentSwitchedOff: '已切换：显示全部账号画布图片',
+  /** 缩略图 `title`（原 633，逐字；含**换行**） */
+  thumbTitle: (name: string, dims: string, from: string) =>
+    `点击发送到画布；长按拖拽可放入后台页面（Lovart / Tapnow / 其他网站）：${name}${dims ? `（${dims}）` : ''}\n来自：${from}`,
+  /** 缩略图悬停遮罩（原 636，逐字） */
+  overlay: '＋ 发送到画布 · 长按可拖入',
+  /** 「NEW」徽标（原 637） */
+  badgeNew: 'NEW',
+  /** 「已发送」徽标（原 638，逐字） */
+  badgeSent: '✓ 已发送',
+  /** 大图徽标 `title`（原 639，逐字） */
+  badgeBigTitle: '尺寸较大，发送前会确认',
+  /** 大图徽标字（原 640） */
+  badgeBig: '⚠',
+  /** 移除按钮 `title`（原 646，逐字） */
+  delTitle: '从列表移除（不影响画布）',
+  /** 移除成功（原 330，逐字） */
+  removed: '已从列表移除（不影响画布）',
+  /** 元信息 `title`（原 652-654，逐字；含**换行**） */
+  metaTitle: (name: string, host: string, acc: string) =>
+    `${name}${host ? `\n来自 ${host}` : ''}\n账号：${acc}`,
+  /** 折叠按钮 `title`（原 683，逐字） */
+  foldCollapse: '收起出新图面板',
+  foldExpand: '展开出新图面板',
+  /** 折叠按钮字（原 684：`f ? '∨' : '∧'`） */
+  foldExpandGlyph: '∨',
+  foldCollapseGlyph: '∧',
+  /** 大图确认（原 196-199，逐字；含**两处换行**） */
+  bigConfirm: (name: string, meta: string) =>
+    `「${name}」尺寸较大（${meta}）。\n发送到画布会保持原始分辨率与画质，仅显示尺寸自动缩放。\n\n继续发送吗？`,
+  /** 发送成功（原 217，逐字） */
+  sent: (name: string) => `已发送到画布 · ${name}`,
+  /** 发送失败（原 220，逐字） */
+  sendFailed: '发送失败：图片数据无效',
+  /** 空态提示（本工程新增：源版空态只有一个抓取按钮） */
+  emptyHint: '暂无新图。可先在「画廊」里把画布上的图收进来。',
+  /** ⛔ 抓取未落地的说明（禁用按钮的 `title`，判据 B4/B5） */
+  pendingFetch:
+    '「立即抓取」尚未接通：原 `_Component26` 的三条扫描链（Lovart `wp` / Tapnow `xp` / 其它 `NR`）在本工程尚未落地（见 docs/14 §5）',
+  /** ⛔ 自动值守未落地的说明 */
+  pendingAuto: '「自动值守」尚未接通：它的轮询驱动依赖上面那条扫描链',
+  /** 自动值守按钮文案（原 676 的**暂停**态；⚠️ 未接线 ⇒ 恒显示这一态） */
+  autoPaused: '已暂停',
+} as const;
+
+/**
+ * 画布选中工具条（原 `_Component42.jsx:1490-1562` 的 `.sel-toolbar`）
+ *
+ * ★ **2026-10-11 起有了真实消费者**：`ui/canvas/SelectionToolbar.tsx` 用它渲染
+ *   已选计数 / 打组 / 整齐排列（下拉）/ 取消组 —— 此前它**定义但零消费者**（判据 B5）。
+ * ⚠️ 与 `GROUP_NODE_TEXT` 的分工：本组是**工具条**文案；「取消组」工具条那句是
+ *   「释放**组内**节点」，而组节点自身那句是「释放**内部**节点」（`GROUP_NODE_TEXT.ungroupTitle`）——
+ *   源版两句不同，**不合并**。
+ */
+export const SELECT_TOOLBAR_TEXT = {
+  /** 计数（原 1491：`已选 {U.length}` —— 含组节点） */
+  selected: (n: number) => `已选 ${n}`,
+  /** 打组按钮文案（原 1495；⚠️ 源版就是「打组」，此前误写成「成组」，本轮改回） */
+  group: '打组',
+  /** 打组按钮 `title`（原 1492 三目的**可用**态） */
+  groupTitle: '把所选节点归入一个组（类文件夹）',
+  /** 打组按钮 `title`（原 1492 三目的**禁用**态） */
+  groupHint: '至少选中 2 个非组节点才能打组',
+  /** 整齐排列按钮（原 1504） */
+  arrange: '整齐排列',
+  /** 整齐排列 `title`（原 1498 三目的**可用**态） */
+  arrangeTitle: '整齐排列所选节点：对齐 / 等间距 / 智能网格',
+  /** 整齐排列 `title`（原 1498 三目的**禁用**态） */
+  arrangeDisabled: '至少选中 2 个非组节点才能整齐排列',
+  /** 取消组（原 1560） */
+  ungroup: '取消组',
+  /** 取消组 `title`（原 1558 逐字） */
+  ungroupHint: '取消组：释放组内节点，仅删除组容器',
+  /** 菜单首项（原 1510） */
+  smartArrange: '智能整齐排列（网格）',
+  /** 菜单分组头（原 1513 / 1534） */
+  headH: '水平',
+  headV: '垂直',
+  /** 菜单项（原 1517-1553，逐字）—— 键与 `core/rules/arrange.ts` 的 `ArrangeMode` 对应 */
+  mode: {
+    left: '左对齐',
+    hcenter: '水平居中',
+    right: '右对齐',
+    hdist: '水平等间距',
+    top: '顶对齐',
+    vcenter: '垂直居中',
+    bottom: '底对齐',
+    vdist: '垂直等间距',
+  } as Readonly<Record<string, string>>,
+} as const;
+
+/**
+ * 账号导入 / 导出（原 `OP.jsx:829-843` 的 `.account-tool-row` + `PP.jsx` 的导出弹窗）
+ *
+ * ⚠️ 逐字对齐源版（含 `导出选中 (N)` 的**半角空格**与括号）。
+ * ⚠️ **结果 / 失败文案**的真源在 `ACCOUNT_TRANSFER_TEXT`（`text.ts`）—— 本组只放**控件标签**。
+ */
+export const EXPORT_TEXT = {
+  /** 工具条：导入按钮（原 831 文案；`title` 原 830 逐字） */
+  importBtn: '导入',
+  importTitle: '从备份文件导入豆包账号（含登录状态）',
+  /** 工具条：导出按钮（原 838 文案；`title` 原 837 逐字） */
+  exportBtn: '导出',
+  exportTitle: '导出已登录账号（含登录凭证）',
+  /** 导出弹窗（原 `PP.jsx`） */
+  title: '导出账号',
+  selectAll: '全选',
+  deselectAll: '取消全选',
+  exporting: '导出中…',
+  exportSelected: (n: number) => `导出选中 (${n})`,
+  empty: '暂无已登录账号',
+} as const;
+
+/**
+ * Lovart 出口代理池面板（原 `LP.jsx`，2,648 B / 2 按钮 / 7 文案）
+ *
+ * ⚠️ 逐字对齐源版（含 `✓ 已保存 N 个出口…` 与 ` —— ` / 全角引号）。
+ * ★ **2026-10-11 从 `text.ts` 迁来**（同一分片先例）：`text.ts` 贴 `max-lines`，且本组此前
+ *   **零消费者** —— 本轮 `ui/panels/ProxyPoolPanel.tsx` 成为其唯一消费者。
+ */
+export const PROXY_TEXT = {
+  /** 标题（原 `LP.jsx:33`，逐字） */
+  title: 'Lovart 出口代理池',
+  /** 说明**前半**（原 42-43 的 `<code>` 段） */
+  hint: '每行一个代理（支持 http://host:port / socks5://host:port / host:port）',
+  /** 说明**后半**（原 43-47，逐字） */
+  hintRest:
+    '，留空则全部走直连。 保存后，新增 Lovart 账号会自动按序循环分配不同出口 IP，已登录账号也会立即重新分配 —— 对应 Firefox 容器 + Mozilla VPN「每个容器独立 IP」的效果，站点无法用「同 IP 多账号」判定关联。',
+  /** 文本域占位（原 50-52 三行，逐字） */
+  placeholder: 'http://127.0.0.1:7890\nsocks5://127.0.0.1:1080\nhttp://user:pass@proxy.example.com:8080',
+  /** 保存按钮（原 55，逐字） */
+  save: '保存并自动分配',
+  /** 保存结果（原 28，逐字） */
+  saved: (n: number) => `✓ 已保存 ${n} 个出口，Lovart 账号已自动重新分配`,
+  /** 清空结果（原 28，逐字） */
+  cleared: '✓ 已清空代理池，全部 Lovart 账号恢复直连',
+  /** 分配区标题（原 60，逐字） */
+  assignment: '当前 Lovart 账号出口分配',
+  /** 无 Lovart 账号（原 61，逐字） */
+  noLovart: '暂无 Lovart 账号',
+  /** 直连（原 67 的 `h || '直连'`） */
+  direct: '直连',
+  /** 工具条按钮（原 `OP.jsx:848` 文案；`title` 原 847 逐字） */
+  trigger: '🌐 出口代理',
+  triggerTitle:
+    '配置 Lovart 出口代理池：每个 Lovart 账号自动分配一个独立出口 IP（对应 Firefox 容器 + Mozilla VPN 的「每容器独立 IP」），仅需在此配置一次，无需每次登录手动设置',
+} as const;
+
+/**
+ * 分组管理（原 `OP.jsx:862-922` 的分组工具条 + `RP.jsx` 的分组区段）
+ *
+ * ⚠️ 自启动两条 `title` **逐字**取自 `RP.jsx:204`（含 `—` 与全角括号）。
+ * ⚠️ 与源的差异（留痕，见 `GroupManagerModal` 文件头）：源版分组**内联在账号列表**里
+ *   （`RP.jsx` 带虚拟滚动），本工程做成**独立弹窗**；移组用原生 `<select>`（`docs/17` §8 未收口的表单层）。
+ */
+export const GROUP_MANAGER_TEXT = {
+  /** 工具条按钮 */
+  trigger: '分组',
+  triggerTitle: '管理账号分组（新建 / 重命名 / 颜色 / 自启动 / 移组）',
+  title: '分组管理',
+  close: '关闭',
+  create: '新建分组',
+  /** 原 `OP.jsx:864` 的 placeholder（逐字） */
+  namePlaceholder: '输入分组名称',
+  noGroups: '暂无分组，先新建一个',
+  renameTitle: '双击重命名',
+  colorTitle: '设置分组颜色',
+  pickColor: '选择该颜色',
+  /** 原 `RP.jsx:235`，逐字 */
+  noColor: '无颜色',
+  deleteTitle: '删除分组',
+  deleteConfirm: (name: string) => `删除分组「${name}」？组内账号会回到「未分组」。`,
+  /** 自启动开关的两条 `title`（原 `RP.jsx:204`，逐字） */
+  autoOnTitle: '自启动：全开（组内账号在软件启动时自动加载）— 点击全部关闭',
+  autoOffTitle: '自启动：非全开 — 点击把组内全部账号设为开启',
+  autoLabel: '自启动',
+  /** 移组区（原 `OP.jsx:899-901` 的「未分组」分隔） */
+  assignTitle: '账号分组',
+  ungrouped: '未分组',
+  noAccounts: '暂无账号',
+} as const;
+
+/**
+ * 指纹诊断 / 重新生成指纹（原 `OP.jsx:751-765` 的账号行两个图标按钮 + 112 的 toast 前缀）
+ *
+ * ⚠️ **只放自由文案**：7 段摘要的**段标签**与 4 个**伪装状态**是带类型的真源，
+ *    住在 `core/rules/fingerprintDiagnosis.ts`（与 `COLLISION_LEVEL_LABEL` 同一形态/理由）。
+ * ⚠️ 两条 `title` 逐字对源（含全角括号与「」）。
+ * ⚠️ `diagTitle` 的按钮**只在 Windows 宿主显示**（源 `_P`，`shared.js:34202-34210`）——
+ *    见 `AccountPanel` 的 `canDiagnose`。
+ */
+export const FP_DIAG_TEXT = {
+  /** 🔍 按钮 `title`（原 751，逐字） */
+  diagTitle:
+    '指纹诊断：查看该账号页面实际生效的指纹身份与真实出口网络（排查「网络环境较差」风控误判用）',
+  /** 🔍 按钮标签（原 755 的按钮文本） */
+  diagLabel: '🔍',
+  /** ↻ 按钮 `title`（原 757，逐字） */
+  regenTitle: '重新生成该账号浏览器指纹（生成后后台以全新身份出现）',
+  /** ↻ 按钮标签（原 764） */
+  regenLabel: '↻',
+  /** ↻ 的确认框（原 759-760，逐字；含**换行**） */
+  regenConfirm: (name: string) =>
+    `确认为「${name}」重新生成浏览器指纹？\n生成后该账号将以全新虚拟身份出现，原指纹失效。`,
+  /** toast 前缀（原 112：`指纹诊断「${W.name}」：`） */
+  prefix: (name: string) => `指纹诊断「${name}」：`,
+  /** 段分隔（原 112 的 `$t.join(' · ')`） */
+  separator: ' · ',
 } as const;

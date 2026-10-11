@@ -49,7 +49,8 @@ export function createMockMedia(): MediaPort {
     // mock：浏览器里没有"拖出文件到系统"这回事 ⇒ `ok`（无副作用，不算失败）
     startFileDrag: () => ok(undefined),
 
-    clearBrowserCache: async () => ok(undefined),
+    // mock：浏览器里没有"主进程清缓存"这回事 ⇒ `ok`（无副作用，不算失败）；计数为 0
+    clearBrowserCache: async () => ok({ cleared: 0 }),
 
     /**
      * 多帧扫描：**浏览器里没有"主进程遍历 frame"这回事** ⇒ 明确 `notImplemented`，

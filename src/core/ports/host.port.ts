@@ -165,7 +165,14 @@ export interface MediaPort {
   showInFolder(ref: string): Promise<Result<void>>;
   /** 拖出文件（会失败：宿主缺失 / 拖拽被拒）⇒ 返 `Result`，不 throw */
   startFileDrag(payload: { dataUrl: string; name: string; thumbDataUrl?: string }): Result<void>;
-  clearBrowserCache(): Promise<Result<void>>;
+  /**
+   * 清理各账号分区的**纯缓存**（Cache / Code Cache 等，原 `clear-browser-cache`，`preload.js:81`）
+   *
+   * ⚠️ **保留登录态**（与 `clearSession` 不是一回事）；返回**清理计数** ——
+   *    源版 UI 要显示「已清理 N 个缓存目录（M 个被占用，下次启动会自动清理）」。
+   * ⚠️ 这是 `docs/14` §1.4 记的「端口早有、UI 未用」那一条（2026-10-11 接通）。
+   */
+  clearBrowserCache(): Promise<Result<{ cleared: number; failed?: number }>>;
   /**
    * **多帧扫描**：主进程遍历页面的全部 frame（含嵌套 / 跨域）执行同一脚本（原 `lovart-scan-frames`，`lovart-scan.js:83`）
    *

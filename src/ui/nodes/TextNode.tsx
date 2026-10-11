@@ -30,7 +30,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/state';
 import { TEXT_NODE_LABEL } from '@/stable/model/node';
-import { NODE_EDIT_TEXT, REF_TEXT } from '@/constants/text';
+import { NODE_EDIT_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
 import { parseRefChips } from '@/core/rules/refs';
 import { resolveRefMaterial, type RefNodeLike } from '@/core/rules/prompt';
 import { refChipHtml, textToEditorHtml } from '@/core/rules/richText';
@@ -44,6 +44,12 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   const patchNodeData = useStore((s) => s.patchNodeData);
   const library = useStore((s) => s.library);
   const nodes = useStore((s) => s.nodes);
+  /**
+   * ★ 「按关键词拆分」的入口（原 `CL.jsx:401-403` 的 `it()`）
+   *
+   * ⚠️ 只**打开弹窗**（弹窗由 `CanvasHost` 渲染 —— 拆分要删掉本节点，弹窗不能住在这里）。
+   */
+  const openSplitKeywordModal = useStore((s) => s.openSplitKeywordModal);
   const [editingName, setEditingName] = useState(false);
   const nameRef = useRef<HTMLSpanElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -239,6 +245,23 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
               {r.dataUrl ? r.label : REF_TEXT.previewMissing}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* ★ 「拆分」（原 `CL.jsx:751-756` 的 `.split-md-btn`）—— 只在有正文时出现 */}
+      {(data.text ?? '').trim().length > 0 && (
+        <div className={styles.splitFoot}>
+          <button
+            type="button"
+            className={`${styles.splitBtn} nodrag nopan`}
+            title={SPLIT_TEXT.buttonTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              openSplitKeywordModal(id);
+            }}
+          >
+            {SPLIT_TEXT.button}
+          </button>
         </div>
       )}
     </NodeShell>

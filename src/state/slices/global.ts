@@ -11,7 +11,15 @@
 
 import type { Account, AccountGroup, Fingerprint, PoolStrategy } from '@/stable/model/account';
 import type { Project } from '@/stable/model/project';
-import { createProject as makeProject } from '@/core/rules/project';
+import { createProject as makeProject, makeNodeId } from '@/core/rules/project';
+import {
+  addGroup as addGroupPure,
+  deleteGroup as deleteGroupPure,
+  moveAccountsToGroup as moveAccountsToGroupPure,
+  renameGroup as renameGroupPure,
+  setGroupAutoStart as setGroupAutoStartPure,
+  setGroupColor as setGroupColorPure,
+} from '@/core/rules/accountGroup';
 import {
   holdAccount as holdBusy,
   releaseAccount as releaseBusy,
@@ -57,6 +65,9 @@ export interface GlobalSliceDeps {
   };
 }
 
+/** `roster()` 的返回值 —— 指纹生成环境的形状（`fpEnv` 的入参） */
+type RosterEnv = ReturnType<GlobalSliceDeps['roster']>;
+
 export interface GlobalSlice {
   // ── 工程 ──
   projects: Project[];
@@ -87,6 +98,19 @@ export interface GlobalSlice {
   setSaveError: (e: SaveError | null) => void;
   setAccounts: (a: Account[]) => void;
   setGroups: (g: AccountGroup[]) => void;
+  /**
+   * ★ **分组 CRUD**（原 `shared.js:31937-32040`）
+   *
+   * 纯逻辑全在 **已测** 的 `core/rules/accountGroup.ts`；本片只把结果落到 store。
+   * ⚠️ 与源一致：`deleteGroup` / `moveAccountsToGroup` 会**重编号**（`vo`），`setGroupAutoStart` **不重编号**。
+   * ⚠️ 落盘由自动订阅覆盖（`pick()` 含 `accounts` / `groups`）⇒ 这里不显式 persist。
+   */
+  addGroup: (name: string) => string;
+  setGroupColor: (id: string, color: string | null) => void;
+  renameGroup: (id: string, name: string) => void;
+  deleteGroup: (id: string) => void;
+  moveAccountsToGroup: (accountIds: readonly string[], groupId: string | null) => void;
+  setGroupAutoStart: (groupId: string | null, value: boolean) => void;
   setProxyPool: (p: string[]) => void;
   setPoolStrategy: (s: PoolStrategy) => void;
   setAccountBusy: (map: BusyMap) => void;
@@ -128,6 +152,19 @@ export interface GlobalSlice {
    */
   removeAccount: (accountId: string) => void;
 
+  /**
+   * ★ **重新生成指纹**（原 `regenerateFingerprint` shared.js:30287-30303）
+   *
+   * `fpSalt + 1` 并用**新盐**重算指纹（`generateFingerprint(`${id}#${fpSalt}`)`）
+   * ⇒ 该账号以**全新身份**出现，原指纹失效。
+   *
+   * ⚠️ 与源一致：**不**调宿主 `ensureFingerprint`（源版也只改 store + 落盘）——
+   *    新身份在**下次「准备会话」**时生效（源版 UI 的 `title` 也正是这么写的：
+   *    「生成后**后台**以全新身份出现」）。
+   * ⚠️ 环境（真实窗口 / 真实 GPU）与 `addAccount` 同源（`deps.roster()`，判据 C1）。
+   */
+  regenerateFingerprint: (accountId: string) => void;
+
   /** ★ 新建项目（原「＋ 新建项目」）—— 返回新工程 id */
   createProject: () => string;
   /**
@@ -162,6 +199,17 @@ export function createGlobalSlice(
   /** 同毫秒内的序号（原 `Pt` 的计数） */
   let seq = 0;
 
+  /**
+   * 指纹生成环境（原 `Uc()` / `M$()` / `$$()`）
+   * ★ **判据 C1**：`addAccount` 与 `regenerateFingerprint` 共用这一处展开 —— 不写两份。
+   */
+  const fpEnv = (env: RosterEnv) => ({
+    os: env.os,
+    ...(env.chromeMajor === undefined ? {} : { chromeMajor: env.chromeMajor }),
+    ...(env.winScreens ? { winScreens: env.winScreens } : {}),
+    ...(env.winWebgl ? { winWebgl: env.winWebgl } : {}),
+  });
+
   return {
     projects: [],
     activeId: null,
@@ -179,6 +227,33 @@ export function createGlobalSlice(
     setSaveError: (saveError) => set({ saveError }),
     setAccounts: (accounts) => set({ accounts }),
     setGroups: (groups) => set({ groups }),
+
+    addGroup: (name) => {
+      const r = addGroupPure(get().groups, name, {
+        // 原 `` `grp_${Date.now().toString(36)}` `` —— 本工程复用 `makeNodeId('group', …)`
+        // （与 `canvas.groupSelected` 造组 id 同一处，前缀 `grp`）
+        idFactory: () => makeNodeId('group', deps.now(), ++seq),
+        now: deps.now(),
+      });
+      set({ groups: r.groups });
+      return r.id;
+    },
+
+    setGroupColor: (id, color) => set({ groups: setGroupColorPure(get().groups, id, color) }),
+
+    renameGroup: (id, name) => set({ groups: renameGroupPure(get().groups, id, name) }),
+
+    deleteGroup: (id) => {
+      const r = deleteGroupPure(get().groups, get().accounts, id);
+      set({ groups: r.groups, accounts: r.accounts });
+    },
+
+    moveAccountsToGroup: (accountIds, groupId) =>
+      set({ accounts: moveAccountsToGroupPure(get().accounts, accountIds, groupId) }),
+
+    setGroupAutoStart: (groupId, value) =>
+      set({ accounts: setGroupAutoStartPure(get().accounts, groupId, value) }),
+
     setProxyPool: (proxyPool) => set({ proxyPool }),
     setPoolStrategy: (poolStrategy) => set({ poolStrategy }),
     setAccountBusy: (accountBusy) => set({ accountBusy }),
@@ -203,13 +278,7 @@ export function createGlobalSlice(
         os: env.os,
         fingerprintVersion: FINGERPRINT_VERSION,
         // 指纹生成器（原 `zc`）—— 环境（真实窗口 / 真实 GPU）由 bootstrap 注入
-        generateFingerprint: (seed, os) =>
-          generateFingerprint(seed, {
-            os,
-            ...(env.chromeMajor === undefined ? {} : { chromeMajor: env.chromeMajor }),
-            ...(env.winScreens ? { winScreens: env.winScreens } : {}),
-            ...(env.winWebgl ? { winWebgl: env.winWebgl } : {}),
-          }),
+        generateFingerprint: (seed, os) => generateFingerprint(seed, { ...fpEnv(env), os }),
         proxyPool: s.proxyPool,
       });
       set({ accounts });
@@ -220,6 +289,23 @@ export function createGlobalSlice(
     removeAccount: (accountId) => {
       // ⚠️ 与源一致：`removeAccountFromList` 内部会 `vo()` 重编号（把空洞补齐）
       set({ accounts: removeAccountFromList(get().accounts, accountId) });
+    },
+
+    regenerateFingerprint: (accountId) => {
+      // ⚠️ **调用时**才读环境（与 `addAccount` 同：源版 `zc` 内部现读 `Uc()`/`M$()`/`$$()`）
+      const env = deps.roster();
+      set({
+        accounts: get().accounts.map((s) => {
+          if (s.id !== accountId) return s;
+          const fpSalt = (s.fpSalt || 0) + 1;
+          return {
+            ...s,
+            fpSalt,
+            // 原 `` zc(`${s.id}#${o}`) `` —— 新盐 ⇒ 新指纹
+            fingerprint: generateFingerprint(`${s.id}#${fpSalt}`, fpEnv(env)),
+          };
+        }),
+      });
     },
 
     releaseAccount: (accountId, opts = {}) => {

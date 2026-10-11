@@ -1,6 +1,7 @@
 /** 生成面板样式（原则 5：只用 var(--...)） */
 
 .panel {
+  composes: overlay from '../common/shared.module.css';
   position: absolute;
   right: var(--space-4);
   top: var(--space-4);
@@ -10,10 +11,6 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px var(--color-shadow);
   font-size: var(--font-size-sm);
 }
 
@@ -29,15 +26,26 @@
   gap: var(--space-2);
 }
 
+/**
+ * ⚠️ 元素选择器（`.row select`）⇒ `composes` 不支持（规范 §6 限制 #2），无法直接复用 `.field` 真源。
+ *    但**色值 / 圆角 / 字号 / 底色语义全部对齐 `--field-*`**（与真源同源：
+ *    将来改 `--field-border` 一处，两边同时变）。
+ *
+ * 形态差异是**有意的**，不是没收口：`<select>` 高度由内容决定，
+ * 不能照搬 `.field` 的固定高度 + 垂直居中 padding。
+ *
+ * ⚠️ 底色由 `--color-surface-raised`(白) 改为 `--field-bg`(浅灰内嵌底)，
+ *    与其余输入框统一 —— 不喜欢就改 `tokens.css` 的 `--field-bg` 一行。
+ */
 .row select,
 .row input {
   flex: 1;
   min-width: 0;
   padding: var(--space-half) var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-raised);
-  font-size: var(--font-size-sm);
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  background: var(--field-bg);
+  font-size: var(--field-font-size);
 }
 
 /**
@@ -46,33 +54,15 @@
  * ⚠️ `resize: vertical` 允许用户拉高，但**不横向拉**（面板只有 220px 宽）
  */
 .prompt {
+  composes: field textarea from '../common/shared.module.css';
   width: 100%;
-  min-height: 72px;
-  padding: var(--space-1);
-  color: var(--color-text-strong);
-  font: inherit;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  outline: none;
-  resize: vertical;
 }
 
-.prompt:focus {
-  border-color: var(--field-border-focus);
-}
-
+/* ★ 查 6：主按钮走共享真源
+   ★ 查 1：父容器 `.panel` 已有 `gap: --space-2` ⇒ 删掉重复的 `margin-top`
+          （同一段间距只许有一个来源） */
 .run {
-  margin-top: var(--space-1);
-  padding: var(--space-2);
-  background: var(--btn-primary-bg);
-  color: var(--color-surface-raised);
-  border-radius: var(--radius-sm);
-}
-
-.run:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  composes: btn btnPrimary from '../common/shared.module.css';
 }
 
 /** 提示词区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */
@@ -120,7 +110,7 @@
   width: 14px;
   height: 14px;
   object-fit: cover;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .promptEditor :global(.chip-name) {

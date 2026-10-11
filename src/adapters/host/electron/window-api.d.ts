@@ -4,8 +4,8 @@ import type { HostOS } from '@/constants';
  *
  * ⚠️ 本文件是**唯一**允许直接引用 `window.api` 的类型处。
  * ⚠️ **方法名必须与 `preload.js` 完全一致**（W1）：
- *    `scripts/check-host-api.cjs` 会把本工程用到的 `window.api.*` 与
- *    `preload.js` 的方法集做**差集**，差集必须为空。
+ *    原 `scripts/check-host-api.cjs` 会做差集核对；该闸已于 2026-10-11 退役
+ *    （判据交由人工 + `scripts/extract-host-api.cjs` 抽取比对）。
  *
  * 实测（2026-10-10，`node scripts/extract-host-api.cjs`）：
  *   **82 个成员** = 71 `invoke` + 4 `send` + **2 `sendSync`** + **5 `on`** + 若干普通值

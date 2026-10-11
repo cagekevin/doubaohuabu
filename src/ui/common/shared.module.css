@@ -21,7 +21,7 @@
   flex-direction: column;
   background: var(--color-surface-raised);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 32px var(--color-shadow-strong);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 .header {
@@ -44,30 +44,8 @@
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--color-border);
 }
-.close {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-}
-.close:hover {
-  background: var(--color-surface-sunken);
-  color: var(--color-text-strong);
-}
-
 /* ── ContextMenu ── */
-.menu {
-  position: fixed;
-  z-index: var(--z-overlay);
-  min-width: 160px;
-  padding: var(--space-1);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px var(--color-shadow);
-}
+/* 注：`.menu` 已挪到 `.overlay` 之后（同源，见该处） */
 .menuItem {
   display: block;
   width: 100%;
@@ -105,7 +83,7 @@
   color: var(--color-surface-raised);
   border-radius: var(--radius-md);
   font-size: var(--font-size-md);
-  box-shadow: 0 4px 16px var(--color-shadow);
+  box-shadow: var(--shadow-md);
 }
 
 /**
@@ -130,7 +108,7 @@
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
   background: var(--color-danger-bg);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   border-bottom: 1px solid var(--color-danger-border);
   font-size: var(--font-size-md);
 }
@@ -142,7 +120,37 @@
   white-space: nowrap;
 }
 
+/* ── SaveErrorBanner（原 `Z0.jsx` 的 `.save-error-banner`）── */
+/* ⚠️ 顶部居中的全局浮层（与右下角 Toast 分列，避免遮挡） */
+.saveErrorBanner {
+  position: fixed;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 80vw;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-md);
+}
+.saveErrorText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* ── EmptyState ── */
+/* ── EmptyState 的整块空态 ──
+   ★ 这是"整块空态"的唯一真源，其他文件写 `composes: empty from '…'`。
+   ⚠️ `composes` 引用的类必须在**引用点之前**定义（postcss-modules 单遍扫描），
+      所以真源类必须写在使用方前面，别把定义挪到文件末尾。 */
 .empty {
   display: flex;
   flex-direction: column;
@@ -179,3 +187,275 @@
   background: var(--color-surface-sunken);
   font-size: var(--font-size-xs);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ── 基础控件：按钮（★ 查 6「唯一真源」）──
+
+   全仓按钮**只此一份**。用法（CSS Modules 的 composes）：
+
+     .addBtn { composes: btn btnPrimary btnBlock from '../common/shared.module.css'; }
+
+   改造前：主按钮在 7 个面板里各写一遍（padding 从 space-1 到 space-2 space-5、
+   文字色有的 --btn-primary-fg 有的 --color-surface-raised、圆角 sm/md 混用）。
+
+   三条查得到的规矩已内建：
+     · 查 3  line-height:1 —— 图标 + 中文不再多出 2~3px 行距
+     · 查 5  white-space:nowrap —— 按钮一律单行
+     · 查 1  间距只走 --space-*，高度只走 --btn-height
+   ══════════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  height: var(--btn-height);
+  padding: 0 var(--btn-padding-x);
+  border: 1px solid var(--btn-default-border);
+  border-radius: var(--btn-radius);
+  background: var(--btn-default-bg);
+  color: var(--btn-default-fg);
+  font: inherit;
+  font-size: var(--btn-font-size);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: var(--btn-default-bg-hover);
+  border-color: var(--btn-default-border-hover);
+}
+/**
+ * ★ 三态扫描补：真源原先只有 `:hover` / `:disabled`，**缺按下反馈** ⇒
+ *   全仓按钮按下去都没有任何变化。用位移（不引入新 token、不改配色）。
+ */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 主按钮（品牌底 + 白字）*/
+.btnPrimary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  border-color: var(--btn-primary-border);
+}
+.btnPrimary:hover:not(:disabled) { background: var(--btn-primary-bg-hover); }
+
+/* 幽灵按钮（无边框、低对比）*/
+.btnGhost {
+  background: var(--btn-ghost-bg);
+  color: var(--btn-ghost-fg);
+  border-color: transparent;
+}
+.btnGhost:hover:not(:disabled) {
+  background: var(--btn-ghost-bg-hover);
+  color: var(--btn-ghost-fg-hover);
+}
+
+/* 危险按钮 */
+.btnDanger {
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-fg);
+  border-color: transparent;
+}
+.btnDanger:hover:not(:disabled) { background: var(--btn-danger-bg-hover); }
+
+/* 修饰符 */
+.btnBlock { width: 100%; }
+.btnSm {
+  height: calc(var(--btn-height) * 0.8);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
+}
+/* 纯图标方块（宽 = 高）*/
+.btnIcon { width: var(--btn-height); padding: 0; flex: none; }
+
+/* 弹窗关闭按钮 —— ★ 原来定义在文件**前部**（`.btn` 之前），
+   而 `composes` 要求被引用的类在**引用点之前** ⇒ 必须挪到按钮段之后才能走真源。 */
+.close {
+  composes: btn btnIcon btnGhost;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+}
+
+/* 保存失败提示条的关闭按钮（20×20 危险色）—— 与 `.close` 同理：
+   原先定义在 `.btn` 之前 ⇒ 同文件 `composes` 不可用；现挪到这里。 */
+.saveErrorClose {
+  composes: btn btnIcon btnGhost;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--color-danger-text);
+  font-size: var(--font-size-lg);
+}
+/* 危险态悬停（覆盖真源 `.btnGhost:hover` 的底色 —— 同类同优先级，靠书写顺序取胜）*/
+.saveErrorClose:hover:not(:disabled) {
+  background: var(--color-danger-border);
+}
+
+/* ── 基础控件：表单（输入框 / 多行框）──
+   改造前：`.prompt`（GenPanel）/ `.reviseInput`（AnalyzePrompt）/ `.input`（ActivatePage）
+   三处各写一遍，padding 从 space-half space-1 到 space-2、min-height 三样。
+
+   ★ 底色说明：统一走 L3 的 `--field-bg`（浅灰内嵌底），与改造前 3 处的白底不同。
+     不喜欢就改 tokens.css 的 `--field-bg` 一行 —— 3 处同时变。
+*/
+.field {
+  padding: 0 var(--field-padding-x);
+  height: var(--field-height);
+  color: var(--field-fg);
+  font: inherit;
+  font-size: var(--field-font-size);
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  outline: none;
+}
+.field:focus {
+  background: var(--field-bg-focus);
+  border-color: var(--field-border-focus);
+}
+.field::placeholder { color: var(--field-placeholder); }
+
+.textarea {
+  composes: field;
+  height: auto;
+  min-height: 72px;
+  padding: var(--space-2);
+  resize: vertical;
+}
+
+/* ── 基础控件：浮层卡片壳 ──
+   改造前 6 处各写一遍（CreatePanel / FingerprintScanPanel / GenPanel / GalleryPanel 叫 `.panel`，
+   BatchSendPanel / ActivatePage 叫 `.card`），阴影有 3 种值。
+   只含**视觉壳**（底 / 边框 / 圆角 / 阴影）；定位与尺寸留在各自类里。
+*/
+.overlay {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--overlay-shadow);
+}
+
+/**
+ * 右键菜单浮层（`ContextMenu`）—— ★ 与 `.overlay` 同源。
+ * ⚠️ 原先定义在文件**前部**（`.menuItem` 上方），而 `composes` 要求目标类在引用点**之前**
+ *   ⇒ 必须挪到 `.overlay` 之后。这正是规范 §6 的通用解法：**优先挪顺序，别放弃收口**。
+ */
+.menu {
+  composes: overlay;
+  position: fixed;
+  z-index: var(--z-overlay);
+  min-width: 160px;
+  padding: var(--space-1);
+}
+
+/* ── 基础控件：列表项（可点行）──
+   改造前 AccountPicker `.item` 与 RefAutocomplete `.item` 几乎逐字相同。
+*/
+/* 基础：只是"一行"的形状，**不预设它可点** */
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-half) var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+/**
+ * 可点列表项的修饰符。
+ *
+ * ★ 从基础类拆出来的原因（规范 §0「发现更好做法就改」的实例）：
+ *   原先 `.listItem` 自带 `cursor: pointer` + `:hover` 底色，
+ *   但 `BatchSendPanel .item` 是**非可点**的列表项 ⇒ 硬套会多出一个手型光标。
+ *   现在"可点"是显式选择的。
+ */
+.listItemClickable {
+  text-align: left;
+  color: var(--color-text-strong);
+  cursor: pointer;
+}
+.listItemClickable:hover { background: var(--color-surface-sunken); }
+.listItemClickable[data-active='true'] { background: var(--color-surface-sunken); }
+/* ★ 三态扫描补：按下反馈（hover 与 sunken 同色，只能靠位移区分）*/
+.listItemClickable:active { transform: translateY(1px); }
+
+/* ── 基础控件：行内小提示（不是空态，只是一句话）── */
+.emptyInline {
+  padding: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/* ── 基础控件：进度条（轨道 + 填充）──
+   改造前 3 处各写一遍：`SendQueuePanel .bar`(2px) / `BatchSendPanel .progress`(4px) /
+   `FingerprintScanPanel .bar`(6px)——高度三种值、圆角两种。
+*/
+.progressTrack {
+  height: var(--progress-height);
+  overflow: hidden;
+  background: var(--progress-track);
+  border-radius: var(--radius-full);
+}
+.progressFill {
+  height: 100%;
+  background: var(--progress-fill);
+  transition: width var(--duration-base) linear;
+}
+
+/* ── 基础控件：状态点 ── */
+.dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+}
+.dotInvalid { background: var(--color-text-faint); }
+.dotLg { width: 8px; height: 8px; }
+
+/* ── 基础控件：加载指示（★ 分两种，改造前同名不同物）── */
+/* 文字型：「生成中…」这类，只染主色 */
+.spinnerText { color: var(--spinner-color); }
+/* 圆环型：旋转 loader */
+.spinnerRing {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--spinner-color);
+  border-radius: var(--radius-full);
+  animation: spinnerSpin var(--spinner-duration) linear infinite;
+}
+@keyframes spinnerSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 基础控件：徽章 / 药丸（★ 两种规格，改造前散在 BatchSendPanel / AnalyzePrompt）── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 var(--badge-padding-x);
+  border-radius: var(--badge-radius);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--badge-font-size);
+  white-space: nowrap;
+}
+.pillOk { background: var(--color-success); color: var(--color-text-on-brand); }
+/* ⚠️ 当前无消费方（语气三档里只用了 `.pillOk` / `.pillErr`）——
+   保留以维持 `.pill` 语气**成套**，避免下个人用到"警告语气"时又自造一个。 */
+.pillWarn { background: var(--color-warning); color: var(--color-text-on-brand); }
+.pillErr { background: var(--color-danger); color: var(--color-text-on-danger); }
+/**
+ * ★ 2026-10-11 补（`docs/17` §3.1 + §8.4「成套」）：语气原先只有 Ok/Warn/Err **三档**，
+ *   而「出新图」面板的 `NEW` 徽标与 Lovart 来源标签要「品牌语气」⇒ 补上第四档，
+ *   避免那两处各自 `composes: pill` 后再手写同一对 `background`/`color`（= 制造第二份真源）。
+ */
+.pillBrand { background: var(--color-action-primary); color: var(--color-text-on-brand); }

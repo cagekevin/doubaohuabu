@@ -97,6 +97,10 @@ export interface Account {
 export interface AccountGroup {
   id: string;
   name: string;
+  /** 建组时间（原 `addGroup` 31942） */
+  createdAt?: number;
+  /** 颜色（原 `setGroupColor` 31952；`null` = 无颜色） */
+  color?: string | null;
   [k: string]: unknown;
 }
 

@@ -104,6 +104,52 @@ export const GPT_SEND_TIMEOUT_MS = 30000;
 export const SCAN_MAX_FRAMES = 12;
 /** 单 frame 扫描超时（ms） */
 export const SCAN_FRAME_TIMEOUT_MS = 8000;
+/**
+ * 指纹诊断的**页面探针超时**（ms，原 `OP.jsx:59-64` 的 `p(yt, AP, 2500)`）
+ *
+ * ⚠️ 探针是 **best-effort**：超时即放弃，回落账号里存的指纹配置（原版同）。
+ */
+export const FP_DIAG_TIMEOUT_MS = 2500;
+
+// ── 文本拆分（原 `splitDirect` shared.js:28584-28586 的三个内联字面量）──
+
+/** 拆出来的文本框宽度（px，原 `d = 600`） */
+export const SPLIT_NODE_WIDTH = 600;
+/** 拆出来的文本框高度（px，原 `f = 400`） */
+export const SPLIT_NODE_HEIGHT = 400;
+/** 相邻两个文本框的纵向间距（px，原 `p = 80`） */
+export const SPLIT_NODE_GAP = 80;
+
+// ── 画廊「添加到画布」的居中网格（原 `addMaterialsBatch` shared.js:29084-29160 的内联字面量）──
+
+/** 网格间距（px，原 `r.gap ?? 24`） */
+export const GALLERY_GRID_GAP = 24;
+/** 缩放系数（原 `r.scale || 1`） */
+export const GALLERY_GRID_SCALE = 1;
+/** 素材**显示**长边上限（px，原 `(r.scale||1) * 260`） */
+export const GALLERY_GRID_LONG_SIDE = 260;
+/** 素材节点**头部**高度（px，原 `h: R + 64` —— 图片高度之外还要加这一截） */
+export const GALLERY_NODE_HEADER_H = 64;
+/** 缺 `natW`/`natH` 时的兜底显示尺寸（px，原 `j || 200` / `I || 160`） */
+export const GALLERY_FALLBACK_W = 200;
+export const GALLERY_FALLBACK_H = 160;
+
+/**
+ * 「大图」判据（原 `i0` 34157-34163）：体积 **> 10 MB** 或任一边 **≥ 4096 px**
+ * ⚠️ 命中的图在「添加到画布」前会**先弹确认**（原 `De` 367-370）。
+ */
+export const GALLERY_BIG_BYTES = 10485760;
+export const GALLERY_BIG_SIDE = 4096;
+
+/** 画廊网格**首屏显示张数**（原 `Dd` 34156 = 60；「加载更多」每次再加这么多） */
+export const GALLERY_PAGE_SIZE = 60;
+
+// ── 「出新图」面板（原 `_Component26.jsx` 的内联字面量）──
+
+/** 「出新图」列表**最多显示张数**（原 `JR` shared.js:36676 = 48） */
+export const NEW_IMAGES_LIMIT = 48;
+/** 「NEW」徽标的时效窗口（ms，原 `_Component26.jsx:627` 的 `3600000` = 1 小时） */
+export const NEW_IMAGES_FRESH_MS = 3600000;
 /** 单张图下载超时（ms） */
 export const IMAGE_FETCH_TIMEOUT_MS = 25000;
 /** API 任务重试退避（ms） */

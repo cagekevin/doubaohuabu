@@ -1,6 +1,10 @@
 /** 资源库面板样式（原则 5：只用 var(--...)） */
 
-.panel {
+/**
+ * ★ 改名（原 `.panel`）：与「浮层卡片」**同名不同物** —— 本类是**栏容器**，没有视觉壳。
+ *   现在 `.panel` 只表示浮层（都 `composes: overlay`），栏容器统一叫 `.column`。
+ */
+.column {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -18,21 +22,15 @@
   color: var(--color-text-muted);
 }
 
-.head button {
-  padding: var(--space-half) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-raised);
-  font-size: var(--font-size-xs);
+/* ★ 查 6：原为元素选择器 `.head button`（`composes` 不支持）
+   ⇒ 给 TSX 的按钮加了 `styles.headBtn`，走共享真源 */
+.headBtn {
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
-.head button:hover:not(:disabled) {
-  background: var(--color-surface-sunken);
-}
-
-.head button:disabled {
+/* disabled 时文字变淡 —— `cursor` / `opacity` 由真源 `.btn:disabled` 提供，这里只叠加文字色 */
+.headBtn:disabled {
   color: var(--color-text-faint);
-  cursor: not-allowed;
 }
 
 .grid {
@@ -70,11 +68,16 @@
   padding: var(--space-half) var(--space-1);
 }
 
-.actions button {
+/* ★ 查 6：原为元素选择器 `.actions button`（`composes` 不支持）
+   ⇒ TSX 加了 `styles.actionBtn`。仍保持紧凑尺寸（`height:auto` + `padding:0`），
+     不硬套 `.btnSm` 的固定高度 —— 这是有意的形态差异。 */
+.actionBtn {
+  composes: btn btnGhost from '../common/shared.module.css';
+  height: auto;
+  padding: 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
-
-.actions button:hover {
+.actionBtn:hover:not(:disabled) {
   color: var(--color-text-strong);
 }

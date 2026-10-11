@@ -15,6 +15,7 @@ import {
   absolutePositionOf,
   groupBoxOf,
   groupSelectedNodes,
+  selectedGroupIdOf,
   ungroupNodes,
   type GroupNodeLike,
 } from '../group';
@@ -188,5 +189,49 @@ describe('ungroupNodes（原 31610）', () => {
     const r = ungroupNodes([...grouped(), node('grp_other', 0, 0, { type: 'group' }), otherChild], 'grp_1');
     if (!r.ok) throw new Error('应当成功');
     expect(r.nodes.find((n) => n.id === 'oc')?.parentId).toBe('grp_other');
+  });
+});
+
+describe('selectedGroupIdOf（原 `_Component42.jsx:112-129` 的 `H`）', () => {
+  it('没有选中节点 ⇒ null', () => {
+    expect(selectedGroupIdOf([node('a', 0, 0)])).toBeNull();
+  });
+
+  it('★ 第一个选中节点没有 parentId ⇒ null（**选中组节点本身不算**）', () => {
+    expect(selectedGroupIdOf([node('g', 0, 0, { type: 'group', selected: true })])).toBeNull();
+    // 组节点排在前面时，即便后面跟着组内成员也返回 null（源版只看 B[0]）
+    expect(
+      selectedGroupIdOf([
+        node('g', 0, 0, { type: 'group', selected: true }),
+        node('a', 1, 1, { parentId: 'g', selected: true }),
+      ]),
+    ).toBeNull();
+  });
+
+  it('全部选中节点同属一个组 ⇒ 返回该组 id', () => {
+    expect(
+      selectedGroupIdOf([
+        node('a', 1, 1, { parentId: 'g', selected: true }),
+        node('b', 2, 2, { parentId: 'g', selected: true }),
+      ]),
+    ).toBe('g');
+  });
+
+  it('分属不同的组 ⇒ null', () => {
+    expect(
+      selectedGroupIdOf([
+        node('a', 1, 1, { parentId: 'g1', selected: true }),
+        node('b', 2, 2, { parentId: 'g2', selected: true }),
+      ]),
+    ).toBeNull();
+  });
+
+  it('未选中的节点不参与判定', () => {
+    expect(
+      selectedGroupIdOf([
+        node('a', 1, 1, { parentId: 'g1', selected: true }),
+        node('b', 2, 2, { parentId: 'g2', selected: false }),
+      ]),
+    ).toBe('g1');
   });
 });

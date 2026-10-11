@@ -1,0 +1,53 @@
+/**
+ * 画廊大图预览（原 `.tg-lightbox-head` / `.tg-lightbox-stage` / `.tg-lightbox-nav`）
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 查 6：按钮走 `ui/common/shared.module.css` 真源，不自造。
+ */
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  font-weight: normal;
+}
+
+/* ── 舞台（`‹` / 图 / `›`）── */
+.stage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.img {
+  max-width: 70vw;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+
+.nav {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  flex: none;
+  font-size: var(--font-size-xl);
+}
+
+.btn {
+  composes: btn btnSm from '../common/shared.module.css';
+}
+
+.btnGhost {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}

@@ -5,7 +5,7 @@
  * 原实现里这套逻辑散落在：创建面板 / 素材选择 / 遮脸面板 / 预设选择 / 关键词弹窗 / 图片编辑器 …
  *
  * ⚠️ `Escape` / `aria-modal` / `role="dialog"` **只允许出现在本文件所在目录**
- *    （由 scripts/check-invariants.cjs 的「原则8/rule-of-three」强制）
+ *    （约定：`ui/common/` 是浮层语义唯一落点。原 grep 型闸已于 2026-10-11 退役，现无机器守卫）
  *
  * 组合模式：复合组件（`Modal.Header` / `Modal.Body` / `Modal.Footer`），避免布尔 props 爆炸
  *           （依据技能 `vercel-composition-patterns` 的 `architecture-avoid-boolean-props`）

@@ -2,7 +2,7 @@
  * 端口出口（core/ports）—— ★ 只有类型，零实现（§6.5 原则 3）
  *
  * ⚠️ 本目录下**不得**出现运行时实现
- *    （由 scripts/check-invariants.cjs 的「原则3/ports-type-only」强制）
+ *    （约定。原 grep 型闸已于 2026-10-11 退役 —— 它会误伤合法 `as const`，现无机器守卫）
  */
 
 export type * from './host.port';

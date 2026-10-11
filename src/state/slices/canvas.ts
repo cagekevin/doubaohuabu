@@ -21,8 +21,9 @@ import {
   edgeInsertPosition,
   type ConnectRequest,
 } from '@/core/rules/graph';
-import { makeNodeId } from '@/core/rules/project';
+import { makeLibraryId, makeNodeId } from '@/core/rules/project';
 import { defaultNodeData, nodeCreateSize } from '@/core/model/defaults';
+import { buildMaterialBatch, type MaterialBatchInput } from './materialBatch';
 // ⚠️ `按配方重跑` 反建出来的文本框默认名（SSOT，不内联中文）
 import { VIDEO_NODE_TEXT } from '@/constants/text';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
@@ -32,6 +33,9 @@ import {
   ungroupNodes as ungroupPure,
   type GroupNodeLike,
 } from '@/core/rules/group';
+import { planArrange, type ArrangeMode } from '@/core/rules/arrange';
+import { splitAuto, splitByKeywords, type SplitFailReason } from '@/core/rules/splitText';
+import { SPLIT_NODE_GAP, SPLIT_NODE_HEIGHT, SPLIT_NODE_WIDTH } from '@/constants';
 import {
   recipeTextNodePosition,
   RECIPE_TEXT_FALLBACKS,
@@ -60,6 +64,12 @@ export interface CanvasSliceDeps {
   now(): number;
   /** 新边的 id 生成（副作用，由 state 注入） */
   makeEdge(conn: ConnectRequest): Edge;
+  /**
+   * 把一张图**落成本地引用**（原 `Tn` 22578-22596）—— ⚠️ **不纯**（内部走
+   * `MediaPort.saveImageSync`，是个**同步 IPC**）⇒ 由 `bootstrap` 注入，`core` 不碰宿主。
+   * ⚠️ 与 `GallerySliceDeps.normalizeImage` 是**同一个东西**（同一处注入实现）。
+   */
+  persistImage(dataUrl: string): string;
 }
 
 export interface CanvasSlice {
@@ -182,6 +192,44 @@ export interface CanvasSlice {
   groupSelected: () => { ok: boolean; groupId?: string; reason?: string };
   /** ★ **取消组**（原 `ungroupNodes` 31610）：释放成员、只删容器 */
   ungroupNodes: (groupId: string) => void;
+  /**
+   * ★ **整齐排列**（原 `arrangeNodes` shared.js:31650-31844）
+   *
+   * 九种模式（源版菜单 `_Component42.jsx:1506-1555`）：`smart`（智能网格）+
+   * 水平 `left`/`hcenter`/`right`/`hdist` + 垂直 `top`/`vcenter`/`bottom`/`vdist`。
+   * 几何全在**已测**的 `core/rules/arrange.ts`（`planArrange`）。
+   * ⚠️ 少于 2 个非组节点 ⇒ `{ok:false, reason:'need-2'}`（源版同）。
+   * ⚠️ 撤销 key 用源版那个字面量 **`'arrange'`**（原 `commit('arrange')` 31811）。
+   */
+  arrangeNodes: (mode: ArrangeMode) => { ok: boolean; mode?: ArrangeMode; count?: number; reason?: string };
+  /**
+   * ★ **清空画布**（原 `clear` shared.js:29704-29710）
+   *
+   * ⚠️ 只清 `nodes` / `edges` —— **不动 `library`**（源版同）。
+   * ⚠️ 撤销 key 用源版那个字面量 **`'delete'`**（原 `commit('delete')`）。
+   */
+  clearCanvas: () => void;
+  /**
+   * ★ **按关键词拆分文本节点**（原 `splitDirect` shared.js:28552-28645）
+   *
+   * 顺序（**逐行对源**）：
+   *   ① 取源节点（不在 ⇒ `node-missing`）
+   *   ② 有关键词 ⇒ `splitByKeywords`；没有 ⇒ `splitAuto`（原 `l ? Ty(a,r) : $y(a)`）
+   *   ③ **片段数 < 2 ⇒ 不拆**（`no-keyword` / `not-splittable`）
+   *   ④ `commit('graph-add')` → 建 N 个文本框（**纵向堆叠**，同一 `x`）→ **串联成链**
+   *   ⑤ 删掉源节点与它的边，接上新节点与新链边
+   *
+   * ⚠️ 与源的两处如实差异：
+   *   **(a)** 源版在末尾调 `fitViewAction(newIds)`（视图能力）—— 本工程**不把视图能力塞进 store**
+   *       ⇒ 由 **UI**（`CanvasHost` 的 `useReactFlow().fitView`）拿 `newIds` 自己调；
+   *   **(b)** 源版把结果写进 `splitFeedback` 并让按钮显示 `✓ 已拆分` —— 本工程用 **toast**
+   *       （而且源版那档 `✓ 已拆分` **不可达**：源节点已被删、`TextNode` 已卸载）。
+   * @returns `newIds` = 新节点 id（顺序即片段顺序），供 UI 定位视图
+   */
+  splitTextNode: (
+    nodeId: string,
+    keywords: readonly string[],
+  ) => { ok: boolean; count?: number; newIds?: string[]; reason?: SplitFailReason };
   insertNodeOnEdge: (
     edgeId: string,
     type: NodeType,
@@ -192,6 +240,24 @@ export interface CanvasSlice {
     item: { id: string; name: string; dataUrl: string; w?: number; h?: number; natW?: number; natH?: number },
     position: { x: number; y: number },
   ) => string;
+  /**
+   * ★ **批量把素材加进画布**（原 `addMaterialsBatch` shared.js:29084-29242）
+   *
+   * 顺序（**逐行对源**）：
+   *   ① 排**居中网格**（纯层 `planMaterialGrid`；`snap` 为真时落点吸附 20 网格）
+   *   ② 逐张：**`data:` 图先落盘外置**（`deps.persistImage`，原 `Tn`）
+   *   ③ library **按 `dataUrl` 去重** —— 已有库条目直接复用；若该条目**已在画布上**，连节点也复用（跳过）
+   *   ④ 建素材节点（含新库条目）
+   *
+   * ⚠️ 与源的两处如实差异：**(a)** 源版末尾调 `fitViewAction(newIds)` —— 视图能力**不塞进 store**，
+   *    由 UI 自己调；**(b)** `autoPlace`（读 `nodes` 算落点）保留（`_Component26` 用），
+   *    但**画廊只传 `{gap, scale}`**（与源 `_Component23/24` 一致）。
+   * @returns 新节点 id（**顺序即入参顺序**）；已在画布上的那张返回**既有节点 id**
+   */
+  addMaterialsBatch: (
+    items: readonly MaterialBatchInput[],
+    opts?: { cols?: number; gap?: number; scale?: number; autoPlace?: boolean },
+  ) => string[];
   /** ★ 删除节点（连带删除其相关边与 `referenceOrder` 引用） */
   removeNodes: (ids: readonly string[]) => void;
   /** 更新单个节点的 `data`（局部合并） */
@@ -311,6 +377,23 @@ export function createCanvasSlice(
         ...(item.natH != null ? { natH: item.natH } : {}),
       }),
 
+    addMaterialsBatch: (items, opts = {}) => {
+      if (!Array.isArray(items) || items.length === 0) return [];
+      const s = get();
+      // ⚠️ 主体在 `./materialBatch.ts`（判据 C1 + `max-lines`）—— 本处只做「读 → 算 → 写」
+      const r = buildMaterialBatch({ nodes: s.nodes, library: s.library, snap: s.snap }, items, opts, {
+        persistImage: deps.persistImage,
+        nextNodeId: () => makeNodeId('material', deps.now(), ++nodeSeq),
+        nextLibId: () => makeLibraryId(deps.now(), ++nodeSeq),
+      });
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
+      set({
+        nodes: [...s.nodes, ...r.newNodes],
+        library: r.newLib.length > 0 ? [...s.library, ...r.newLib] : s.library,
+      });
+      return r.newIds;
+    },
+
     addScreenshotMaterial: (input) => {
       const s = get();
       if (!input.dataUrl) return null;
@@ -388,6 +471,63 @@ export function createCanvasSlice(
       if (!r.ok) return;
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'ungroup', deps.now()) });
       set({ nodes: r.nodes as unknown as CanvasNode[] });
+    },
+
+    arrangeNodes: (mode) => {
+      const s = get();
+      const r = planArrange(s.nodes as unknown as GroupNodeLike[], s.edges, mode);
+      if (!r.ok) return { ok: false, reason: r.reason };
+      // 变更前 commit（统一约定；key 用源版那个字面量）
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'arrange', deps.now()) });
+      set({ nodes: r.nodes as unknown as CanvasNode[] });
+      return { ok: true, mode, count: r.count };
+    },
+
+    clearCanvas: () => {
+      // 源版：先 `commit('delete')` 再清空（变更前快照，统一约定）
+      get().commit('delete');
+      set({ nodes: [], edges: [] });
+    },
+
+    splitTextNode: (nodeId, keywords) => {
+      const s = get();
+      const src = s.nodes.find((n) => n.id === nodeId);
+      if (!src) return { ok: false, reason: 'node-missing' };
+
+      const text = typeof src.data.text === 'string' ? src.data.text : '';
+      const hasKeywords = Array.isArray(keywords) && keywords.length > 0;
+      const parts = hasKeywords ? splitByKeywords(text, keywords) : splitAuto(text);
+      if (parts.length < 2) return { ok: false, reason: hasKeywords ? 'no-keyword' : 'not-splittable' };
+
+      const base = src.position;
+      const newIds: string[] = [];
+      const created = parts.map((part, i) => {
+        const id = makeNodeId('text', deps.now(), ++nodeSeq);
+        newIds.push(id);
+        return {
+          id,
+          type: 'text',
+          // 原 28595-28596：同一 `x`，`y` 按 `i × (高 + 间距)` 往下排
+          position: { x: base.x, y: base.y + i * (SPLIT_NODE_HEIGHT + SPLIT_NODE_GAP) },
+          width: SPLIT_NODE_WIDTH,
+          style: { width: SPLIT_NODE_WIDTH, height: SPLIT_NODE_HEIGHT },
+          selected: true,
+          data: { ...defaultNodeData('text'), label: part.title, text: part.content, linkOrder: [] },
+        } as CanvasNode;
+      });
+
+      // 原 28614-28622：新节点**按顺序串成一条链**
+      const chain: CanvasEdge[] = [];
+      for (let i = 0; i < newIds.length - 1; i++) {
+        chain.push(deps.makeEdge({ source: newIds[i] as string, target: newIds[i + 1] as string }));
+      }
+
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
+      set({
+        nodes: [...s.nodes.filter((n) => n.id !== nodeId), ...created],
+        edges: [...s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId), ...chain],
+      });
+      return { ok: true, count: parts.length, newIds };
     },
 
     insertNodeOnEdge: (edgeId, type, patch) => {

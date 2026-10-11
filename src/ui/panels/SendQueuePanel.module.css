@@ -5,6 +5,7 @@
  */
 
 .panel {
+  composes: overlay from '../common/shared.module.css';
   position: fixed;
   left: var(--space-2);
   bottom: var(--space-2);
@@ -16,10 +17,6 @@
   overflow: hidden;
   color: var(--color-text-strong);
   font-size: var(--font-size-xs);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 6px 20px var(--color-shadow);
 }
 
 /* 拖拽中关掉文本选中（否则会拖出一片蓝） */
@@ -43,7 +40,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
 }
 
 .conc {
@@ -58,22 +55,17 @@
 }
 
 .chevron {
-  color: var(--color-text-muted);
-  font: inherit;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
 }
 
-.bar {
-  height: 2px;
-  background: var(--color-surface-sunken);
+/* ★ 改名：原 `.bar`（实为轨道）/ `.progress`（实为填充）—— 名字与语义相反。
+   现在按语义命名（同步改了 TSX 的 `styles.track` / `styles.fill`）。 */
+.track {
+  composes: progressTrack from '../common/shared.module.css';
 }
 
-.progress {
-  height: 100%;
-  background: var(--progress-fill);
-  transition: width 0.2s;
+.fill {
+  composes: progressFill from '../common/shared.module.css';
 }
 
 .list {
@@ -87,8 +79,7 @@
 }
 
 .empty {
-  padding: var(--space-3);
-  color: var(--color-text-faint);
+  composes: emptyInline from '../common/shared.module.css';
   text-align: center;
 }
 
@@ -97,7 +88,8 @@
   flex-direction: column;
   gap: var(--space-half);
   padding-bottom: var(--space-1);
-  border-bottom: 1px solid var(--color-surface-sunken);
+  /* 分隔「上一条队列项 / 下一条」—— 原用 --color-surface-sunken（背景色当边框色），改回描边语义 */
+  border-bottom: 1px solid var(--color-border);
 }
 
 .itemTop {
@@ -133,7 +125,7 @@
 
 .attempt {
   flex: 0 0 auto;
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .note {
@@ -148,19 +140,9 @@
   gap: var(--space-1);
 }
 
+/* ★ 查 6：小按钮走共享真源 */
 .btn {
-  padding: 0 var(--space-1);
-  color: var(--color-text-strong);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.btn:hover {
-  border-color: var(--btn-default-border-hover);
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
 /* 原 `.sq-genrow` —— 成片状态行 */
@@ -186,7 +168,7 @@
 
 .gen_queued,
 .gen_unknown {
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .gen_generating {
@@ -194,11 +176,11 @@
 }
 
 .gen_done {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .gen_failed {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .genWait {

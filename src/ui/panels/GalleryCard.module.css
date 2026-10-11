@@ -1,0 +1,97 @@
+/**
+ * 画廊卡片（原 `.lovart-card` / `-check` / `-thumb-wrap` / `-thumb` / `-badge` / `-preview` / `-del` / `-meta`）
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 查 6：两个悬浮按钮走 `ui/common/shared.module.css` 真源，不自造。
+ */
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  cursor: pointer;
+}
+
+/* 选中态（原 `.lovart-card.selected`）—— 加在缩略图边框上 */
+.cardSelected .thumbWrap {
+  border-color: var(--node-selected-border);
+  box-shadow: 0 0 0 2px var(--node-selected-ring);
+}
+
+/* 原 `.lovart-card-check`（左上角复选框，独立于缩略图） */
+.check {
+  position: absolute;
+  top: var(--space-half);
+  left: var(--space-half);
+  z-index: var(--z-canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* 原 `.lovart-card-badge`（`⚠ 大图`，右下角） */
+.bigBadge {
+  position: absolute;
+  right: var(--space-half);
+  bottom: var(--space-half);
+  padding: 0 var(--space-1);
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.thumbWrap {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove {
+  composes: btn btnSm from '../common/shared.module.css';
+  position: absolute;
+  top: var(--space-half);
+  right: var(--space-half);
+  color: var(--color-text-on-danger);
+  background: var(--color-danger);
+  border: 0;
+}
+
+/* ★ 原 `.lovart-card-preview`（`⤢`）—— 悬停时出现在**左下角**（左上角让给勾选框） */
+.previewBtn {
+  composes: btn btnSm from '../common/shared.module.css';
+  position: absolute;
+  bottom: var(--space-half);
+  left: var(--space-half);
+  background: var(--color-surface-raised);
+  border: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+}
+
+.meta {
+  display: flex;
+  gap: var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}

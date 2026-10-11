@@ -19,6 +19,7 @@ import { createContainer } from './container';
 import { StoreProvider, usePorts, useStore } from '@/state';
 import { AppShell } from '@/ui/shell/AppShell';
 import { ErrorBoundary } from '@/ui/shell/ErrorBoundary';
+import { SaveErrorBanner } from '@/ui/common/SaveErrorBanner';
 import { StartPage } from '@/ui/pages/StartPage';
 import { CanvasHost } from '@/ui/canvas/CanvasHost';
 import { ActivatePage } from '@/ui/pages/ActivatePage';
@@ -103,10 +104,22 @@ function Root() {
   }
 
   // ③ 过了门 ⇒ 启动页 / 画布外壳
+  // ⚠️ **保存失败横幅（原 `Z0`）在这两个分支都挂** —— 源版即如此（它是 `.app` / 启动页
+  //    的**同级浮层**，不属于任何一页）；它是全局的，故挂在这里而非某一页内部。
   if (!started) {
-    return <StartPage />;
+    return (
+      <>
+        <SaveErrorBanner />
+        <StartPage />
+      </>
+    );
   }
-  return <AppShell canvas={<CanvasHost />} />;
+  return (
+    <>
+      <SaveErrorBanner />
+      <AppShell canvas={<CanvasHost />} />
+    </>
+  );
 }
 
 const container = createContainer();

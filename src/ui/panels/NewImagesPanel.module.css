@@ -1,0 +1,264 @@
+/*
+ * 「出新图」面板（原 `_Component26.jsx` 的 `.nip-*` / `.dvl-*`）
+ *
+ * ⚠️ 全部颜色 / 间距 / 字阶 / 圆角 / 动效走 token（`docs/17` §1.2）；只有**元素尺寸**
+ *    类像素值（缩略图边长 72px 等）与源版一致 —— 与 `GalleryCard`(20px) / `GenPanel`(14px) 同例。
+ * ⚠️ 未落地的原版类（`.nip-ghost` 拖拽幽灵 / `.nip-drop-active` 落点高亮）**不造** ——
+ *    它们属"长按拖出到系统"那条链（未落）。
+ */
+
+.wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+
+/*
+ * ⚠️ 名字是 `.strip`（条）而不是 `.panel` —— `docs/17` §1.3 明列「容器与浮层同名」为反例：
+ *    `.panel` 全仓只表示**浮层卡片**（`CreatePanel` / `GenPanel` / `GalleryPanel`），
+ *    而本类是**常驻的横条**（源版就叫 `.dv-lovart-strip`）。
+ */
+.strip {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-normal);
+}
+
+/* 「聚合 N 个账号」徽标（原 `.nip-agg-head`） */
+.agg {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/*
+ * 状态圆点 —— 复用真源 `.dot`（`shared.module.css`）而不是自造一个。
+ * ⚠️ 只覆盖**颜色**（§3.1「修饰符只写差异」）：无扫描链 ⇒ 恒「待机」= 灰点
+ *   （源版那套 `scanning/working` 的活动态随状态机一起未落，见 `NewImagesPanel.tsx` 文件头）。
+ * ⚠️ 名字不叫 `.spin` —— 它**不转**（`docs/17` §1.3：名字说形态，不说时机）。
+ */
+.statusDot {
+  composes: dot dotLg from '../common/shared.module.css';
+  background: var(--color-text-faint);
+}
+
+/* 折叠时只留头（原 `.nip-wrap.collapsed .nip-fold-body { display:none }`） */
+.foldBody {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.collapsed .foldBody {
+  display: none;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 空态 —— 复用真源 `.emptyInline`（`padding` / 字色 / 字号），只补**布局** */
+.empty {
+  composes: emptyInline from '../common/shared.module.css';
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.thumbs {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding-bottom: var(--space-half);
+}
+
+.thumb {
+  position: relative;
+  flex: none;
+  width: 72px;
+}
+
+/* 缩略图本体（可点 ⇒ 有 `:hover` 反馈，`docs/17` §8.2） */
+.thumbBtn {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.thumbBtn:hover {
+  border-color: var(--color-border-strong);
+}
+
+.thumbSent .thumbBtn {
+  border-color: var(--color-success);
+}
+
+/*
+ * 缩略图里的图 —— ⚠️ 名字是 `.thumbCover` 而不是 `.thumbImg`：
+ *   真源已有一个 `.thumbImg`（`object-fit: contain` + `max-height: 200px` 的**大图预览**），
+ *   与本类（`cover` 裁切填满 72px 方块）**同名不同物** ⇒ 按 §1.3 改名。
+ */
+.thumbCover {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 悬停说明条（原 `.dvl-thumb-overlay`）—— ⚠️ 名字不叫 `.overlay`：真源 `.overlay` 是浮层卡片壳 */
+.caption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: var(--space-half);
+  color: var(--color-text-on-brand);
+  background: var(--color-scrim);
+  font-size: var(--font-size-xs);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.thumbBtn:hover .caption {
+  opacity: 1;
+}
+
+/* 徽标 / 来源标签 —— 一律 `composes` 真源 `.pill`（`docs/17` §4 红线 4） */
+.badgeNew {
+  composes: pill pillBrand from '../common/shared.module.css';
+  position: absolute;
+  top: var(--space-half);
+  left: var(--space-half);
+}
+
+.badgeSent {
+  composes: pill pillOk from '../common/shared.module.css';
+  position: absolute;
+  top: var(--space-half);
+  right: var(--space-half);
+}
+
+/* 「大图」标记 —— 压在图上 ⇒ 垫一层 `--color-scrim` 才看得清 */
+.badgeBig {
+  composes: pill from '../common/shared.module.css';
+  position: absolute;
+  right: var(--space-half);
+  bottom: var(--space-half);
+  color: var(--color-text-on-brand);
+  background: var(--color-scrim);
+}
+
+/* 来源标签（原 `.nip-source-tag` 的 L / T / 网） */
+.sourceTag {
+  composes: pill from '../common/shared.module.css';
+  position: absolute;
+  bottom: var(--space-half);
+  left: var(--space-half);
+}
+
+.srcLovart {
+  composes: pillBrand from '../common/shared.module.css';
+}
+
+.srcTapnow {
+  composes: pillWarn from '../common/shared.module.css';
+}
+
+/*
+ * 缩略图右上角的「移除」—— 复用真源**危险按钮**（`btn btnSm btnDanger`）：
+ *   它自带 `:hover` / `:active` / `:disabled` 三态（`docs/17` §8.2），**不手搓状态**。
+ * ⚠️ 比 `GalleryCard.remove`（自己覆盖 3 个颜色属性）更贴规范 —— 那边是历史写法。
+ */
+.thumbDel {
+  composes: btn btnSm btnDanger from '../common/shared.module.css';
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.thumbMeta {
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.right {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+}
+
+.rightCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* 三个按钮全部走真源（`docs/17` 查 6） */
+.onlyCurrent {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+.onlyCurrentOn {
+  color: var(--color-accent-text);
+  background: var(--color-surface-hover);
+}
+
+.fetch {
+  composes: btn btnSm from '../common/shared.module.css';
+}
+
+.auto {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/* 折叠把手（原 `.nip-fold-toggle`） */
+.foldToggle {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  align-self: center;
+}

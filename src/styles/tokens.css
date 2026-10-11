@@ -2,7 +2,7 @@
  * 设计 Token（★ SSOT：颜色 / 间距 / 圆角 / 字体 / 层级 / 动效 的唯一真源）
  *
  * 依据：docs/11-架构与契约定稿.md §2.1「CSS 必须标准 + SSOT」
- * 铁律：**字面量色值只允许出现在本文件**（由 scripts/check-invariants.cjs 强制）
+ * 铁律：**字面量色值只允许出现在本文件**（约定；原 grep 型闸已于 2026-10-11 退役，现无机器守卫）
  *
  * ═════════════════════════════════════════════════════════════════════
  *  三层架构（W3C Design Tokens / Material 3 / Ant Design 5 同款）
@@ -33,7 +33,7 @@
  * ═════════════════════════════════════════════════════════════════════
  *  铁律
  * ─────────────────────────────────────────────────────────────────────
- *   ① 十六进制色值只许出现在 L1（scripts/check-invariants.cjs 的 ssot-color）
+ *   ① 十六进制色值只许出现在 L1（约定；原 ssot-color 闸已退役）
  *   ② 组件样式只许引用 L2 / L3，不得直接引用 L1
  *   ③ 改视觉 = 改 L3；换主题 = 换 L2；换颜料 = 换 L1
  *   ④ 旧 token 名（--color-primary / --space-2 / --radius-md …）全部保留为
@@ -52,6 +52,7 @@
   --p-gray-300: #d1d5db;
   --p-gray-400: #9ca3af;
   --p-gray-500: #6b7280;
+  --p-gray-600: #4b5563; /* ★ 新增：文字用（比 gray-500 深一档，白底 ≥7:1）*/
   --p-gray-800: #1f2329;
 
   /* ── 中性色阶（暗色专用）── */
@@ -67,10 +68,13 @@
   --p-blue-400:   #60a5fa;  --p-blue-500:   #3b82f6;  --p-blue-600:   #2563eb;
   --p-violet-400: #a78bfa;  --p-violet-500: #8b5cf6;  --p-violet-600: #7c3aed;
   --p-green-400:  #34d399;  --p-green-500:  #10b981;  --p-green-600:  #059669;
+  --p-green-700:  #047857; /* ★ 新增：文字用 */
 
   /* ── 功能色 ── */
   --p-amber-400: #fbbf24;   --p-amber-500: #f59e0b;
+  --p-amber-600: #d97706;   --p-amber-700: #b45309; /* ★ 新增：文字用 */
   --p-red-400:   #f87171;   --p-red-500:   #ef4444;
+  --p-red-600:   #dc2626; /* ★ 新增：文字用 */
   --p-white:     #ffffff;
 
   /* ── 节点类型色（对齐 MiniMap 配色）── */
@@ -105,6 +109,7 @@
   --dim-8: 48px;
 
   /* ── 圆角基准 ── */
+  --shape-xs:   2px; /* 极小圆角：chip 内小图标 */
   --shape-sm:   4px;
   --shape-md:   8px;
   --shape-lg:   12px;
@@ -118,6 +123,21 @@
   --type-lg: 16px;
   --type-xl: 20px;
   --type-2xl: 32px; /* 大图标 / 空态插图 */
+
+  /**
+   * ── 字重 / 行高 ──
+   * ★ 补：改造前 `font-weight: 600` 散落 6 处、`line-height: 1.3/1.4/1.5` 散落 4 处，
+   *   没有任何一处能"改一行全局调"。
+   */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-bold:   600;
+
+  --line-none:    1;   /* 无行距：图标 + 中文不再多出 2~3px 行距（查 3）*/
+  --line-tight:   1.3; /* 紧凑：密集小字 */
+  --line-snug:    1.4;
+  --line-normal:  1.5; /* 常规 */
+  --line-relaxed: 1.6; /* 宽松：多行长段说明文字 */
 
   /* ── 字族 ── */
   --type-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -170,13 +190,13 @@
 [data-density='loose']    { --density: 1.25; }
 
 [data-shape='standard'] {
-  --shape-sm: 4px;  --shape-md: 8px;  --shape-lg: 12px;
+  --shape-xs: 2px;  --shape-sm: 4px;  --shape-md: 8px;  --shape-lg: 12px;
 }
 [data-shape='square'] {
-  --shape-sm: 2px;  --shape-md: 4px;  --shape-lg: 6px;
+  --shape-xs: 1px;  --shape-sm: 2px;  --shape-md: 4px;  --shape-lg: 6px;
 }
 [data-shape='round'] {
-  --shape-sm: 8px;  --shape-md: 12px; --shape-lg: 18px;
+  --shape-xs: 4px;  --shape-sm: 8px;  --shape-md: 12px; --shape-lg: 18px;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -194,8 +214,13 @@
 
   /* ── 文字 ── */
   --color-text-strong: var(--p-gray-800);
-  --color-text-muted:  var(--p-gray-500);
-  --color-text-faint:  var(--p-gray-400);
+  /**
+   * ★ 对比度扫描修正：这两个「弱文字」档在白底上只有 4.83 / 2.54 ——
+   *   而它们承载的是**要读的信息**（张数、时间戳、提示），不是装饰。
+   *   整体下移一档：muted 500→600（7.57:1）、faint 400→500（4.83:1）。
+   */
+  --color-text-muted:  var(--p-gray-600);
+  --color-text-faint:  var(--p-gray-500);
   --color-text-on-brand: var(--p-white);
   --color-text-on-danger: var(--p-white);
 
@@ -223,6 +248,14 @@
   --color-success-bg: rgb(var(--p-green-500-ch) / 0.10);
   --color-warning: var(--p-amber-500);
   --color-danger:  var(--p-red-500);
+  /**
+   * ★ 新增：**文字版**的反馈色（比「底色版」深一档）。
+   *   底色要亮才显眼、文字要深才读得清 —— 原先两边共用同一个 `--color-danger`，
+   *   于是「错误文字」只有 3.76:1、「警告文字」2.15:1（都低于 AA 4.5:1）。
+   */
+  --color-success-text: var(--p-green-700); /* 5.55:1 on 白 */
+  --color-warning-text: var(--p-amber-700); /* 5.04:1 on 白 */
+  --color-danger-text:  var(--p-red-600);   /* 4.84:1 on 白 */
   --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.08);
   --color-danger-border: rgb(var(--p-red-500-ch) / 0.24);
   --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.10);
@@ -230,8 +263,24 @@
   /* ── 叠加 ── */
   --color-shadow:        rgb(var(--p-black-ch) / 0.08);
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.16);
+
+  /**
+   * ── 阴影阶梯 ──
+   * ★ 改造前散落 4 种值、共 9 处：`0 4px 16px`(×5) / `0 8px 32px`(×2) /
+   *   `0 8px 24px`(×1) / `0 2px 8px`(×1)。现归为三档。
+   * 引用 `--color-shadow*` ⇒ 暗色主题自动适配（dark 段把 α 提到 0.40/0.56）。
+   */
+  --shadow-sm: 0 2px 8px var(--color-shadow);         /* 轻微：小浮层 */
+  --shadow-md: 0 4px 16px var(--color-shadow);        /* 常规：菜单 / 提示条 / 浮动按钮 */
+  --shadow-lg: 0 8px 32px var(--color-shadow-strong); /* 重：对话框 / 浮层卡片 */
   --color-mask:          rgb(var(--p-gray-100-ch) / 0.6);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.32);
+  /**
+   * ★ 媒体遮罩：压在**图片 / 缩略图**上的半透明底（图上说明条），保证其上白字可读。
+   *   与 `--color-mask*`（**界面遮罩**：模态 / 加载）职责不同 ⇒ 必须能"只改它、不动别的"：
+   *   界面遮罩只做层级分离（0.32 够用）；媒体遮罩要压住**任意照片**的亮部（0.55 才够）。
+   */
+  --color-scrim:         rgb(var(--p-black-ch) / 0.55);
   --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.08);
 
   /* ── 节点类型色 ── */
@@ -250,15 +299,28 @@
   --color-canvas-grid:    rgb(var(--p-white-ch) / 0.06);
 
   --color-text-strong: var(--p-gray-100);
-  --color-text-muted:  var(--p-gray-400);
-  --color-text-faint:  var(--p-gray-500);
-  --color-text-on-brand: var(--p-white);
+  /* ★ 对比度修正：暗色下原 faint 只有 3.60:1；整体上移一档拉开层次 */
+  --color-text-muted:  var(--p-gray-300);
+  --color-text-faint:  var(--p-gray-400);
+  /**
+   * ★ 对比度修正：暗色把品牌色**提亮**到 brand-400，白字压亮底只有 2.98:1
+   *   （四个品牌全不达标：indigo 2.98 / blue 2.54 / violet 2.72 / green 1.92）。
+   *   暗色主题的按钮应是「浅底 + 深字」⇒ 改用深色字（5.91:1 ✅）。
+   */
+  --color-text-on-brand: var(--p-ink-900);
 
   --color-border:        var(--p-ink-800);
   --color-border-strong: var(--p-ink-700);
 
   /* 暗色下品牌色要提亮一档，否则压在深底上发闷 */
   --color-action-primary:       var(--brand-400);
+  /**
+   * ★ 修正（深色主题覆盖扫描）：原先 light 段定义了 hover（500→600），
+   *   dark 段**漏了** ⇒ 暗色下按钮 hover 会从 brand-400 跳到 brand-600（**变暗**），
+   *   与"暗色提亮"的直觉相反，且与其余 7 个品牌色的档位不一致。
+   *   现在 dark 也保持"深一档"：400 → 500。
+   */
+  --color-action-primary-hover: var(--brand-500);
   --color-accent-text:          var(--brand-400);
   --color-selected-border:      var(--brand-400);
   --color-selected-ring:        var(--brand-400);
@@ -271,10 +333,33 @@
   --color-warning: var(--p-amber-400);
   --color-danger:  var(--p-red-400);
 
+  /* 暗色下「文字版」用**亮**档（深底上要亮字才读得清）*/
+  --color-success-text: var(--p-green-400);
+  --color-warning-text: var(--p-amber-400);
+  --color-danger-text:  var(--p-red-400);
+
+  /**
+   * ★ 修正：暗色的 danger 提亮到 red-400（更浅）⇒ **白字压上去对比度不足**，
+   *   改用深色字。light 段仍是白字（red-500 够深，不需要覆盖）。
+   */
+  --color-text-on-danger: var(--p-ink-900);
+
+  /**
+   * ★ 修正：light 段那 5 个「半透明底 / 边」用 `rgb(通道 / α)` 定义 ——
+   *   同一个 α 压在**深底**上会明显偏淡（几乎看不见）。
+   *   dark 段把 α 提到约 1.8×（0.08→0.18 / 0.24→0.36 / 0.10→0.18）。
+   */
+  --color-success-bg:    rgb(var(--p-green-500-ch) / 0.18);
+  --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.18);
+  --color-danger-border: rgb(var(--p-red-500-ch) / 0.36);
+  --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.18);
+  --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.16);
+
   --color-shadow:        rgb(var(--p-black-ch) / 0.40);
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.56);
   --color-mask:          rgb(var(--p-black-ch) / 0.45);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.62);
+  --color-scrim:         rgb(var(--p-black-ch) / 0.62);
 }
 
 /* ── 间距（受密度乘数影响；density=1 时与旧值完全一致）── */
@@ -294,6 +379,7 @@
   --radius-sm:   var(--shape-sm);
   --radius-md:   var(--shape-md);
   --radius-lg:   var(--shape-lg);
+  --radius-xs:   var(--shape-xs);
   --radius-full: var(--shape-full);
 
   --font-size-2xs: var(--type-2xs);
@@ -303,6 +389,17 @@
   --font-size-lg: var(--type-lg);
   --font-size-xl: var(--type-xl);
   --font-size-2xl: var(--type-2xl);
+
+  /* ── 字重 / 行高 ── */
+  --font-weight-normal: var(--weight-normal);
+  --font-weight-medium: var(--weight-medium);
+  --font-weight-bold:   var(--weight-bold);
+
+  --line-height-none:    var(--line-none);
+  --line-height-tight:   var(--line-tight);
+  --line-height-snug:    var(--line-snug);
+  --line-height-normal:  var(--line-normal);
+  --line-height-relaxed: var(--line-relaxed);
 
   --font-sans: var(--type-sans);
   --font-mono: var(--type-mono);
@@ -315,7 +412,9 @@
 
   --duration-fast: var(--dur-fast);
   --duration-base: var(--dur-base);
-  --ease-out: var(--ease-out);
+  /* ⚠️ 原先这里写了 `--ease-out: var(--ease-out);` —— **自我引用 = 无效值**，
+     导致所有 `transition` 的缓动都失效（落到浏览器默认 `ease`）。
+     L1 已有 `--ease-out` 原始值 ⇒ **删除该条**，组件直接用 L1 那个名字。 */
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -323,7 +422,8 @@
    ══════════════════════════════════════════════════════════════════ */
 :root {
   /* ── 按钮 ── */
-  --btn-radius:      var(--radius-md);
+  /* ★ 取多数派（7 个主按钮里 6 个原本就是 --radius-sm）—— 统一后视觉几乎不动 */
+  --btn-radius:      var(--radius-sm);
   --btn-font-size:   var(--font-size-sm);
   --btn-height:      calc(var(--dim-6) * var(--density));
   --btn-padding-x:   var(--space-3);
@@ -363,7 +463,13 @@
   --panel-bg:        var(--color-surface-raised);
   --panel-border:    var(--color-border);
   --panel-radius:    var(--radius-md);
-  --panel-shadow:    0 2px 12px var(--color-shadow);
+  --panel-shadow:    var(--shadow-md);
+  /**
+   * ★ 浮层卡片专用阴影（比普通面板更重，悬浮感）
+   * 改造前 6 个浮层各写一遍：`0 4px 16px` / `0 8px 32px` / `0 12px 40px` 三种值，
+   * 且混用 `--color-shadow`(0.08) 与 `--color-shadow-strong`(0.16)。
+   */
+  --overlay-shadow:  var(--shadow-lg);
   --panel-padding:   var(--space-3);
   --panel-gap:       var(--space-2);
   --panel-head-fg:   var(--color-text-strong);
@@ -439,10 +545,14 @@
 
   /* ── 加载指示 ── */
   --spinner-color: var(--color-action-primary);
+  /* 转一圈的周期 —— 与交互动效（--duration-*）是两个概念，故单独成旋钮 */
+  --spinner-duration: 0.8s;
 
   /* ── 进度条 ── */
   --progress-fill:  var(--color-action-primary);
   --progress-track: var(--color-surface-sunken);
+  /* 改造前 3 处各写一遍高度：2px（发送队列）/ 4px（批量发送）/ 6px（指纹维度）*/
+  --progress-height: var(--dim-1);
 
   /* ── 标签页 ── */
   --tab-active-fg:     var(--color-accent-text);

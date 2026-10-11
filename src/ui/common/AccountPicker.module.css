@@ -23,6 +23,10 @@
 .trigger:hover {
   border-color: var(--btn-default-border-hover);
 }
+/* ★ 三态扫描补：按下反馈 */
+.trigger:active {
+  transform: translateY(1px);
+}
 
 /* 原 `.gp-caret`：菜单打开时翻转 */
 .caret {
@@ -32,7 +36,7 @@
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-top: 5px solid currentColor;
-  transition: transform 0.15s ease;
+  transition: transform var(--duration-fast) ease;
 }
 
 .caretOpen {
@@ -41,6 +45,7 @@
 
 /* 原 `.gp-acc-menu`（portal 到 body ⇒ 固定定位） */
 .menu {
+  composes: overlay from './shared.module.css';
   position: fixed;
   z-index: var(--z-overlay);
   min-width: 180px;
@@ -48,30 +53,14 @@
   max-height: 320px;
   overflow: auto;
   padding: var(--space-1);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px var(--color-shadow-strong);
 }
 
 /* 原 `.gp-acc-item` */
 .item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  width: 100%;
-  padding: var(--space-1);
-  text-align: left;
-  color: var(--color-text-strong);
+  composes: listItem listItemClickable from './shared.module.css';
   font: inherit;
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.item:hover:not(:disabled) {
-  background: var(--color-surface-sunken);
 }
 
 .itemOn {
@@ -108,15 +97,11 @@
 
 /* 原 `.gp-acc-dot`（登录态圆点） */
 .dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  background: var(--color-success);
-  border-radius: 50%;
+  composes: dot from './shared.module.css';
 }
 
 .dotGray {
-  background: var(--color-text-faint);
+  composes: dotInvalid from './shared.module.css';
 }
 
 /* 原 `.gp-acc-empty` */

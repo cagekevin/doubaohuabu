@@ -41,12 +41,7 @@
 .projectItem:hover { background: var(--color-surface-hover); }
 .projectMeta { color: var(--color-text-faint); font-size: var(--font-size-sm); }
 
-/* ★ 主按钮：走 L3 的 --btn-primary-*（原本内联拼了 4 个属性）*/
+/* ★ 查 6：主按钮走共享真源（原本内联拼了 4 个属性、又自造了 5 条规则）*/
 .newProject {
-  padding: var(--space-2) var(--space-5);
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
-  border: 1px solid var(--btn-primary-border);
-  border-radius: var(--btn-radius);
+  composes: btn btnPrimary from '../common/shared.module.css';
 }
-.newProject:hover { background: var(--btn-primary-bg-hover); }

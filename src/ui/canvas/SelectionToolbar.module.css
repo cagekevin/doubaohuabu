@@ -2,6 +2,8 @@
  * 选择工具条（原 `.sel-toolbar`）
  * ⚠️ 位置偏离：源版贴着选中节点的包围盒；本工程固定在画布**上中**（不引入视口数学）
  * ⚠️ 原则 5：色值只走 token
+ * ⚠️ **查 6（通用件真源表，AGENTS §五）**：按钮 / 浮层壳 / 菜单项一律 `composes`
+ *    `ui/common/shared.module.css` 的真源，**禁自造**（与 `AccountPicker` 同法）。
  */
 
 .bar {
@@ -11,24 +13,62 @@
   transform: translateX(-50%);
   z-index: var(--z-overlay);
   display: flex;
+  align-items: center;
   gap: var(--space-1);
   padding: var(--space-1);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px var(--color-shadow);
+  box-shadow: var(--shadow-md);
 }
 
+/* 已选计数（原 `.sel-toolbar-count`） */
+.count {
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+/* ★ 查 6：按钮走真源（工具条上要显眼，覆盖回 text-strong）*/
 .btn {
-  padding: var(--space-half) var(--space-2);
+  composes: btn btnGhost from '../common/shared.module.css';
   color: var(--color-text-strong);
+}
+
+/* ── 整齐排列下拉（原 `.sel-arrange-wrap` / `.sel-arrange-menu` / `.sel-arrange-item`）── */
+.arrangeWrap {
+  position: relative;
+}
+/* 浮层壳走真源 `overlay`（只含底/边框/圆角/阴影）；定位与尺寸留在这里 */
+.menu {
+  composes: overlay from '../common/shared.module.css';
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: var(--z-overlay);
+  min-width: 180px;
+  padding: var(--space-1);
+}
+/* 菜单项走真源 `listItem`；`<button>` 需清掉默认外观 */
+.menuItem {
+  composes: listItem from '../common/shared.module.css';
   font: inherit;
+  font-size: var(--font-size-md);
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
 }
-
-.btn:hover {
-  background: var(--color-surface-sunken);
+/* 首项（智能网格）—— 原 `.is-primary` */
+.menuItemPrimary {
+  color: var(--color-action-primary);
+}
+.menuSep {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-border);
+}
+.menuHead {
+  padding: var(--space-1) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }

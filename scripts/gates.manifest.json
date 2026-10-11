@@ -1,0 +1,49 @@
+{
+  "_comment": "门禁清单唯一真源。消费方：scripts/gates-run.mjs（npm run check 派生自本文件）+ scripts/check-gate-vitals.mjs（元层闸）。**新增闸必须在此登记**，并在 check-gate-vitals.mjs 的 GATES 表登记扫描根；禁止把闸手写在 npm script 里。",
+  "_design": {
+    "model": "单一阶段：所有代码闸在 npm run check 里各跑一次（fail-fast，首个失败即停）。",
+    "why": "本项目无 commit/push 钩子，npm run check 是唯一门禁入口。分成 check / health 两段只为给'非门禁体检项'留位（当前 healthOnly 为空）。",
+    "gateCost": "闸的成本守恒：任何闸的『合法通过成本』必须 ≤ 『绕行成本』，否则它在生产它本要禁止的行为。配套三条：① 每个**脚本**闸头部须有【申诉口】三问（锚点 `★闸的申诉口` + `Q1 守什么：`/`Q2 何时该改：`/`Q3 怎么改：`），由 check-gate-vitals 机器校验；② 扫描型闸必须有『扫到 0 即 fail-loud』的基数自检（治『扫 0 却绿灯』）；③ 闸拦住正确动作时【改闸不绕行】，改完用 scripts/probe.mjs 先红后绿验证。",
+    "cmdStyle": "脚本闸一律写**直接 node 命令**（不用 `npm run lint:xxx` 包一层）—— 元层闸要从 cmd 里解析出脚本文件来校验【申诉口】，包一层就解析不到。npm scripts 仍保留作便捷入口。"
+  },
+  "phases": ["check", "health"],
+  "gates": [
+    {
+      "id": "typecheck",
+      "cmd": "npm run typecheck",
+      "phase": "check",
+      "desc": "tsc --noEmit（类型 + 隐式 any）"
+    },
+    {
+      "id": "lint",
+      "cmd": "npm run lint",
+      "phase": "check",
+      "desc": "eslint（含 react-hooks + max-lines）"
+    },
+    {
+      "id": "boundaries",
+      "cmd": "npm run lint:boundaries",
+      "phase": "check",
+      "desc": "dependency-cruiser（分层方向 + 无环 + volatile 隔离）"
+    },
+    {
+      "id": "dead-code",
+      "cmd": "node scripts/check-dead-code.mjs",
+      "phase": "check",
+      "desc": "knip 死代码（基线「永不复涨」）"
+    },
+    {
+      "id": "gate-vitals",
+      "cmd": "node scripts/check-gate-vitals.mjs",
+      "phase": "check",
+      "desc": "元层（闸的闸）：扫描根存在 + 基数自检 + 【申诉口】三问"
+    },
+    {
+      "id": "test",
+      "cmd": "npm run test",
+      "phase": "check",
+      "desc": "vitest 全量单测"
+    }
+  ],
+  "healthOnly": []
+}

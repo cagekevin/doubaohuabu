@@ -52,12 +52,12 @@ export const FACE_MASK_JPEG_QUALITY = 0.92;
 /**
  * 圆点 / 网格 pattern 的填充色（原 `QD`）
  *
- * ⚠️ **这是「字面量色值」的唯一合法例外**：canvas 2D 的 `fillStyle`
- *    **不支持 `var(--...)`**（CSS 变量只在渲染 CSS 时解析）。
- *    因此 canvas 用色必须以**常量**形式落在 `constants/`（SSOT 层），
- *    由 `scripts/check-invariants.cjs` 单独放行。
+ * ⚠️ **为什么这里能有裸色**：canvas 2D 的 `fillStyle` **不解析 `var(--...)`**
+ *    （CSS 变量只在渲染 CSS 时解析）⇒ 该值必须以**常量**形式存在。
+ *    ⚠️ 2026-10-11：`原则5/ssot-color` 已**取消目录豁免**，改为**逐处显式豁免**
+ *    ⇒ 本行带 `ssot-color-ok:` 凭证（不再靠"住在 `constants/` 里"躲过检查）。
  */
-export const FACE_MASK_PATTERN_COLOR = 'rgb(0 0 0 / 0.85)';
+export const FACE_MASK_PATTERN_COLOR = 'rgb(0 0 0 / 0.85)'; // ssot-color-ok: canvas 2D fillStyle 不解析 var()
 
 /**
  * 遮脸的三条错误文案（原 `nL.jsx` 的 `throw new Error(...)`）

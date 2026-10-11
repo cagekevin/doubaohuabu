@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { assignProxyPool } from '../proxy';
+import { assignProxyPool, normalizeProxyPool } from '../proxy';
 import { isSiteType, normalizeAccountType, type Account, type SiteType } from '@/stable/model/account';
 
 const acc = (id: string, type: SiteType, partition: string | null = `persist:${id}`): Account => ({
@@ -109,5 +109,21 @@ describe('assignProxyPool（原 `reassignLovartProxies` 纯逻辑半）', () => 
     const r = assignProxyPool(accounts, ['p0']);
     expect(r.assignments).toEqual([]);
     expect(r.accounts).toEqual(accounts);
+  });
+});
+
+describe('normalizeProxyPool（原 `setProxyPool` 30321-30324 的纯半）', () => {
+  it('★ 字符串按**换行**拆 → trim → 滤掉空行', () => {
+    expect(normalizeProxyPool('  http://a:1 \n\n  socks5://b:2\n   ')).toEqual(['http://a:1', 'socks5://b:2']);
+  });
+
+  it('数组同样 trim + 滤空', () => {
+    expect(normalizeProxyPool([' p1 ', '', '   '])).toEqual(['p1']);
+  });
+
+  it('★ null / undefined / 空串 ⇒ 空数组（源版 `String(n || 空)` 同结果）', () => {
+    expect(normalizeProxyPool(null)).toEqual([]);
+    expect(normalizeProxyPool(undefined)).toEqual([]);
+    expect(normalizeProxyPool('')).toEqual([]);
   });
 });

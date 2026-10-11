@@ -20,6 +20,17 @@
 import type { Account } from '@/stable/model/account';
 import { normalizeAccountType } from '@/stable/model/account';
 
+/**
+ * 归一代理池输入（原 `setProxyPool` 30321-30324 的纯半）
+ *
+ * 规则（**逐字回源**）：字符串按**换行**拆 → 逐行 `trim` → **滤掉空行**；数组同样 `trim` + 滤空。
+ * ⚠️ `null` / `undefined` ⇒ `[]`（源版走 `String(n || '')` ⇒ 空串 ⇒ 过滤后也是 `[]`）。
+ */
+export function normalizeProxyPool(input: readonly string[] | string | null | undefined): string[] {
+  const list: readonly string[] = typeof input === 'string' ? input.split('\n') : input ?? [];
+  return list.map((s) => String(s).trim()).filter(Boolean);
+}
+
 /** 需要落到宿主的一条代理设置（原版 `window.api.setAccountProxy(partition, proxy)`） */
 export interface ProxyAssignment {
   accountId: string;

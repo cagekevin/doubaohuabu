@@ -36,6 +36,7 @@
   position: relative;
 }
 
+/** ⚠️ **未接线**：画布空态占位，样式已备好但 TSX 尚未引用（保留以便对齐）。 */
 .canvasPlaceholder {
   flex: 1;
   display: grid;
@@ -58,7 +59,7 @@
 /* 顶栏：项目名 / 节点数 —— 原为 inline style */
 .topbarName {
   font-size: var(--font-size-md);
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-strong);
 }
 .topbarCount {

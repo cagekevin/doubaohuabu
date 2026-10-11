@@ -1,0 +1,137 @@
+/**
+ * 分组管理（原 `OP.jsx` 的 `.group-toolbar` / `RP.jsx` 的 `.account-group` 子集）
+ * ⚠️ 原则 5：色值只走 token —— 分组颜色是**用户数据**，走内联 style（见 `constants/groupPalette.ts`）。
+ * ⚠️ 查 6：按钮 / 输入框 / 空态走 `ui/common/shared.module.css` 真源。
+ */
+
+.newRow {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.input {
+  composes: field from '../common/shared.module.css';
+  flex: 1;
+  min-width: 0;
+}
+
+.primaryBtn {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}
+
+.empty {
+  composes: emptyInline from '../common/shared.module.css';
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groupRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.colorDot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+/* ★ 三态扫描补：可点但无 hover 反馈 */
+.colorDot:hover {
+  border-color: var(--color-border-strong);
+}
+
+.colorDotNone {
+  background: transparent;
+  border-style: dashed;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-strong);
+}
+
+.count {
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.autoBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  color: var(--color-text-muted);
+}
+
+.autoBtn[data-on='true'] {
+  color: var(--color-success-text);
+}
+
+.delBtn {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  color: var(--color-danger-text);
+}
+
+.palette {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+/* ★ 三态扫描补：可点但无 hover 反馈 */
+.swatch:hover {
+  border-color: var(--color-border-strong);
+}
+
+.noColor {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+.sectionTitle {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.select {
+  composes: field from '../common/shared.module.css';
+  flex: none;
+  max-width: 55%;
+}
+
+.closeBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}

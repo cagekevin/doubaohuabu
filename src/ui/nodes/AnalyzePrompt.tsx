@@ -151,13 +151,25 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
             ) : (
               <>
                 <div className={styles.tabs}>
-                  <button type="button" className={tab === 'zh' ? styles.on : ''} onClick={() => setTab('zh')}>
+                  <button
+                    type="button"
+                    className={`${styles.tab} ${tab === 'zh' ? styles.on : ''}`}
+                    onClick={() => setTab('zh')}
+                  >
                     {ANALYZE_UI_TEXT.tabZh}
                   </button>
-                  <button type="button" className={tab === 'en' ? styles.on : ''} onClick={() => setTab('en')}>
+                  <button
+                    type="button"
+                    className={`${styles.tab} ${tab === 'en' ? styles.on : ''}`}
+                    onClick={() => setTab('en')}
+                  >
                     {ANALYZE_UI_TEXT.tabEn}
                   </button>
-                  <button type="button" className={tab === 'json' ? styles.on : ''} onClick={() => setTab('json')}>
+                  <button
+                    type="button"
+                    className={`${styles.tab} ${tab === 'json' ? styles.on : ''}`}
+                    onClick={() => setTab('json')}
+                  >
                     {ANALYZE_UI_TEXT.tabJson}
                   </button>
                   <span className={styles.tabsGap} />

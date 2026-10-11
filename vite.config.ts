@@ -25,5 +25,12 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/tests/**/*.test.ts'],
     globals: false,
+    // 复用 worker 跨文件（省去「每文件一个 worker」的 spawn + env 开销）。
+    // ⚠️ 前提：生产代码里**不得有跨文件共享的模块级可变状态**。
+    //    已清理：mock/api（jobSeq）· doubao/index（sentSessions）的工厂级状态。
+    //    有意保留（进程级资源 / 互斥，且不被 ≥2 个测试文件触达）：
+    //    hostEnv.gpuCache · media/faceDetect 单例 · lib/captureRegistry · core/usecases/sendQueue 批量闩。
+    //    新增模块级可变状态前，先清理再依赖本开关。
+    isolate: false,
   },
 });

@@ -21,6 +21,13 @@ const SECOND_CUTOFF = 1000000000000;
  *
  * ⚠️ 与源一致：**没有**"解析失败给当前时间"的兜底 —— 失败一律 `NaN`，
  *    由调用方（`matchVideosToNodes`）据此走"无时间戳"分支。
+ *
+ * @public 跨边界消费者：src/core/rules/media.ts
+ *   ⚠️ **为什么需要这行**（2026-10-11）：消费者 `core/rules/media.ts` 自己**尚未接线**
+ *   （它在死代码基线里）⇒ knip 看不到这条引用，会把本导出报成"新增死代码"。
+ *   本文件此前**整个**在基线里（文件级条目）；`ui/panels/GalleryLightbox.tsx` 开始用
+ *   `formatDateTimeMinute` 后文件变成可达 ⇒ 文件级条目消失、这两个导出被暴露出来。
+ *   ⇒ 它们**不是死代码**（有真实消费者 + 单测），按闸的正道打 `@public` 而非删。
  */
 export function parseSiteTimestamp(value: unknown): number {
   if (value == null) return NaN;
@@ -46,8 +53,26 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
  *    手写 `pad2` 的产物与 `zh-CN` + `hour12:false` 的标准形态**逐字相同**（`HH:MM:SS`）。
  *
  * ⚠️ 仍是**本地时区**语义（与原版一致）—— 时间戳由调用方注入（原则 4）。
+ *
+ * @public 跨边界消费者：src/core/usecases/applyApiJobEvent.ts
+ *   ⚠️ **为什么需要这行**：消费者 `core/usecases/applyApiJobEvent.ts` 自己**尚未接线**
+ *   （它在死代码基线里，见 `state/subscriptions.ts` 的"待接线"清单）⇒ knip 看不到这条引用。
+ *   详见 `parseSiteTimestamp` 的同一说明。
  */
 export function formatClockTime(ms: number): string {
   const d = new Date(ms);
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+/**
+ * 本地时刻 `YYYY-MM-DD HH:mm`（原 `l0` shared.js:34180-34195）
+ *
+ * ⚠️ 空 / `0` / 非法 ⇒ `''`（源版先 `if (!e) return ''`，再 `isNaN(getTime())` 兜底）
+ * ⚠️ **本地时区**（源版用 `new Date` 的本地 getter），与 `formatClockTime` 同法手写 `pad2`。
+ */
+export function formatDateTimeMinute(ms?: number | null): string {
+  if (!ms) return '';
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }

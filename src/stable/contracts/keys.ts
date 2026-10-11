@@ -5,7 +5,7 @@
  * 铁律：**键名与值格式冻结** —— 后端不改 ⇒ 老用户数据必须能直接读（docs/08 W2，P0）
  *
  * ⚠️ 本文件是**唯一**允许出现键名字符串字面量的地方
- *    （由 scripts/check-invariants.cjs 的「原则5/ssot-keys」强制）
+ *    （由 eslint 的 `no-restricted-syntax`（`doubao-*` 字面量选择器）强制）
  */
 
 /** 工程数组（全量 JSON） */

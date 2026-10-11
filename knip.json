@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/knip/schema-jsonc.json",
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 死代码闸配置 —— 由 scripts/check-dead-code.mjs 消费（禁手工当入口跑）。
+  //
+  // 【目标】让「**只被测试引用**」的生产导出 / 类型 / 文件 / 依赖判成死代码。
+  //
+  // 【官方三禁 + 唯一正道】（knip.dev/guides/configuring-project-files「Production Mode」节；
+  //   maomao 仓逐条实测均无效，本仓沿用结论）：
+  //   ① ignore 测试文件        —— 只**隐藏报告**，测试照样算消费者；
+  //   ② entry 加 "!**/*.test.ts" —— 无效：测试由 vitest 插件注入为 entry，全局覆盖不掉；
+  //   ③ project 加 "!**/*.test.ts" —— 无效：同上（它们本身就是 entry）。
+  //   ✅ 唯一正道 = 跑 `knip --production`（见 scripts/check-dead-code.mjs 的调用点）。
+  //
+  // 【production 模式下**文件模式必须带 `!` 后缀】**（官方原文）：漏了 `!` ⇒ 分析图近乎为空，
+  //   连"完全无人引用"的导出都不报（比不跑更糟）。
+  // ═══════════════════════════════════════════════════════════════════════════
+  "entry": ["src/bootstrap/main.tsx!"],
+  "project": ["src/**/*.ts!", "src/**/*.tsx!"],
+
+  // ignore 分两组，每条都写理由（读的人要能分清「产物不该看」与「有意排除但会消费 src」）。
+  "ignore": [
+    // ── A. 产物 / 非源码：分析它们只产生噪声 ──
+    "dist/**",
+    "public/**",
+    "packing/**",
+    "docs/**",
+    "daily/**",
+    ".codebuddy/**",
+    "tests/**",
+
+    // ── B. 非渲染层构建图（会消费 src 导出，但不在前端构建图内）──
+    //   ⚠️ 排除它们 ⇒ src 里若有导出**只**被它们消费，会被判成死代码（真·误报）⇒
+    //      处理办法不是放宽 ignore，而是在 src 声明处打 `@public 跨边界消费者：<路径>`，
+    //      由 scripts/check-dead-code.mjs 元层校验（句式 + 路径存在 + 真含符号名）。
+    "electron/**", // 宿主壳（独立工程；src 不 import 它）
+    "scripts/**" // 闸脚本以运行时拼路径读 src 导出（静态分析原理上解析不到）
+  ],
+
+  // 依赖豁免：**只准放"确实无法在 package.json 声明"的项**（否则就是拿豁免盖窟窿）。
+  "ignoreDependencies": [],
+  "ignoreBinaries": [],
+  "exclude": ["duplicates"],
+  // 同文件内被使用的导出不算死代码。
+  "ignoreExportsUsedInFile": true
+}

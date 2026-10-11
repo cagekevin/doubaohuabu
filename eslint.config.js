@@ -3,6 +3,22 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
+ * 冻结契约字符串（§6.5 原则 5）—— 只允许出现在 `src/stable/contracts/`。
+ * ⚠️ 提成常量：flat config 对**同名规则**是「后者覆盖前者」而非合并 ⇒ 多个块要各自带上
+ *    这批选择器，否则先设的块会被后设的块**静默覆盖**（实测过）。
+ */
+const SSOT_KEY_SELECTORS = [
+  {
+    selector: 'Literal[value=/^doubao-[a-z0-9-]+$/]',
+    message: '原则5：冻结契约字符串只能出现在 stable/contracts/（keys.ts / schemas.ts）',
+  },
+  {
+    selector: 'Literal[value="imggen_recurring_assets_v1"]',
+    message: '原则5：冻结契约字符串只能出现在 stable/contracts/',
+  },
+];
+
+/**
  * ESLint flat config
  *
  * 依据：docs/11-架构与契约定稿.md
@@ -68,6 +84,87 @@ export default tseslint.config(
     files: ['scripts/**/*.mjs'],
     languageOptions: { sourceType: 'module', globals: { ...globals.node } },
     rules: { '@typescript-eslint/no-unused-vars': 'off' },
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 以下块 = 从已退役的 grep 型不变量闸（scripts/check-invariants.cjs，2026-10-11 删）
+  // **迁来**的判据。为什么迁：grep 是**行级文本匹配**，系统性漏别名 / 多行 / 形态
+  // （TD-14-1 · 14-2 · 04-4 · 16-9 · 16-33 全是它）；eslint 是 **AST 级**、零误报。
+  // **判据不变，载体换成可靠的**。
+  //
+  // ⚠️ ESLint flat config 对**同名规则**是「后者覆盖前者」而非合并 ⇒ 多个块若都对同一
+  //    文件设 `no-restricted-syntax`，**只有最后一个生效**（实测：ports 块被后面的全仓块
+  //    覆盖 ⇒ 规则静默失效）。故此处**按目录切分、files 互不重叠**；重叠处用
+  //    `SSOT_KEY_SELECTORS` 常量把选择器带上，避免静默丢覆盖。
+  //
+  // 未能迁的（按「闸越少越好、只留非常可靠的」**丢弃**）：
+  //   · 原则3 ports-type-only —— 会打到 `export const X = [...] as const` 这个**合法 TS 形态**
+  //     （TD-04-4），逼人为过闸改写法 ⇒ 正是「为闸加 if」，弃；
+  //   · 原则5 ssot-color / W12 死宿主方法 / 原则8 Escape·aria-modal —— 主观或启发式，弃。
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  {
+    // ── §6.5 原则 4：纯的归 core（core 不得接触宿主 / 时间 / 随机 / 存储）──
+    // ⚠️ 排除 core/ports —— 端口**就是**用来声明这些能力的（方法名里必然出现 setTimeout）
+    files: ['src/core/**/*.{ts,tsx}'],
+    ignores: ['src/core/ports/**', '**/tests/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        { name: 'window', message: '原则4：core 不得接触宿主（经端口注入）' },
+        { name: 'document', message: '原则4：core 不得接触宿主（经端口注入）' },
+        { name: 'localStorage', message: '原则4：core 不得接触存储（经端口注入）' },
+        { name: 'sessionStorage', message: '原则4：core 不得接触存储（经端口注入）' },
+        { name: 'setTimeout', message: '原则4：core 不得自管时序（经 ClockPort 注入）' },
+        { name: 'setInterval', message: '原则4：core 不得自管时序（经 ClockPort 注入）' },
+      ],
+      'no-restricted-properties': [
+        'error',
+        { object: 'Date', property: 'now', message: '原则4：core 不得读时间（经 ClockPort 注入）' },
+        { object: 'Math', property: 'random', message: '原则4：core 不得用随机（注入）' },
+      ],
+    },
+  },
+
+  {
+    // ── §6.5 原则 5（冻结契约字符串）+ TD-05-1（不得直调 window.api）──
+    // 除冻结契约目录、宿主实现（electron adapter 是 window.api 的唯一合法处）、
+    // usecases（另设块）与测试外，全仓适用。
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/stable/contracts/**',
+      'src/adapters/host/electron/**',
+      'src/core/usecases/**',
+      '**/tests/**',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...SSOT_KEY_SELECTORS,
+        {
+          selector: "MemberExpression[object.name='window'][property.name='api']",
+          message: 'TD-05-1：不得直调 window.api —— 宿主能力必须经注入的 HostPort',
+        },
+      ],
+    },
+  },
+
+  {
+    // ── §6.5 原则 6：usecases 不得自造 message 字面量（只能转发上游 Result）──
+    // ⚠️ 本块**覆盖**上面全仓块（flat config 覆盖语义）⇒ **必须重带 `SSOT_KEY_SELECTORS`**，
+    //    否则 usecases 目录会静默丢掉 ssot-keys 覆盖。
+    files: ['src/core/usecases/**/*.ts'],
+    ignores: ['**/tests/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...SSOT_KEY_SELECTORS,
+        {
+          selector: "Property[key.name='message'] > Literal",
+          message: '原则6：usecases 不得自造 message 字面量（只能转发 e.message / 上游 Result）',
+        },
+      ],
+    },
   },
 
   {
