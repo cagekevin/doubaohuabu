@@ -25,9 +25,6 @@
 门禁基线：`npm run check` 全绿（**234 模块 / 765 依赖 / 0 违规 · 1200 tests**）。
 进度与落点：`docs/00-进度台账.md`（M0~M7）· `docs/16` §7（里程碑重排）· `docs/18-交接-HANDOFF.md`（最新交接）。
 
-> ⚠️ **M8 起仍有大量改动未提交**：动手前先看 `git status`，**别 `git add -A`**（会混入他人半成品）。
-> ⚠️ **有并发编辑**：另一条线在改 CSS / token（`src/styles/tokens.css` + `docs/mockup/`）—— **别改 `tokens.css` 的定义**。
-
 ### 已知缺口（勿当已完成）
 
 - 缺口登记：`docs/13`（UI 层）· `docs/14`（功能层）· `docs/15`（数据与持久化）。
