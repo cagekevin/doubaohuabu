@@ -18,51 +18,19 @@ import type { HostPort } from '@/core/ports/host.port';
 import type {
   ScanOptions,
   ScanResult,
-  ScannedImage,
   SendResult,
   SitePort,
   SiteProbe,
-  UnreadRoot,
 } from '@/core/ports/site.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { SCAN_CHAIN, nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
 import { SCAN_SCRIPT } from './scripts';
 import { requireWebview, webviewEval } from '../shared/webview';
-
-/** 单档执行结果（内部） */
-interface Attempt {
-  via: ScanStrategy;
-  ok: boolean;
-  count?: number;
-  error?: string;
-  items?: ScannedImage[];
-  href?: string;
-  skipped?: number;
-  /** ★ 读不到的 frame/root（原则 6：如实上报） */
-  unread?: UnreadRoot[];
-}
-
-/** 把宿主/脚本返回归一成内部形状（**只做形状收敛，不做业务判断**） */
-function normalizeAttempt(via: ScanStrategy, raw: unknown): Attempt {
-  const r = raw as
-    | { ok?: boolean; error?: string; images?: unknown[]; href?: string; skipped?: number; unread?: UnreadRoot[] }
-    | null;
-  if (!r) return { via, ok: false, error: '通道返回空' };
-  if (r.ok === false) return { via, ok: false, error: r.error ?? '通道返回失败' };
-  const images = Array.isArray(r.images) ? (r.images as ScannedImage[]) : [];
-  return {
-    via,
-    ok: true,
-    count: images.length,
-    items: images,
-    href: r.href,
-    skipped: r.skipped ?? 0,
-    unread: Array.isArray(r.unread) ? r.unread : [],
-  };
-}
+// ★ 单档归一 + **逐张落盘**（原先本文件自带一个同步 `normalizeAttempt`，现已提为两档共用 —— 判据 C1）
+import { scanAttemptFromRaw, type ScanAttempt } from '../shared/materializeScan';
 
 /** 跑一档（**不做自动重试**；重试是上层编排的事） */
-async function tryScan(host: HostPort, account: Account, via: ScanStrategy): Promise<Attempt> {
+async function tryScan(host: HostPort, account: Account, via: ScanStrategy): Promise<ScanAttempt> {
   let view;
   try {
     view = requireWebview(account.partition);
@@ -77,12 +45,14 @@ async function tryScan(host: HostPort, account: Account, via: ScanStrategy): Pro
     if (!wcId) return { via, ok: false, error: '无法取得 webview 的 webContentsId' };
     const r = await host.media.scanFrames({ webContentsId: wcId, script: SCAN_SCRIPT, maxFrames: 12 });
     if (!r.ok) return { via, ok: false, error: r.message }; // ★ 原样透传
-    return normalizeAttempt('frames', { ok: true, images: r.value.items, href: r.value.href });
+    // ⚠️ `scanFrames` 的形状是 `{items, href}`（**无 `ok`/`skipped`/`unread`**）
+    //    ⇒ 包成脚本形状，与 webview 那条路**共用同一处归一并落盘**
+    return scanAttemptFromRaw(host, via, { ok: true, images: r.value.items, href: r.value.href });
   }
 
   // 单页：webview 直接执行（只能扫顶层文档）
   try {
-    return normalizeAttempt('webview', await webviewEval(view, SCAN_SCRIPT));
+    return await scanAttemptFromRaw(host, via, await webviewEval(view, SCAN_SCRIPT));
   } catch (e) {
     return { via, ok: false, error: toMessage(e) };
   }
@@ -93,7 +63,7 @@ export function createLovartSite(host: HostPort): SitePort {
     kind: 'lovart',
 
     async scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>> {
-      const attempts: Attempt[] = [];
+      const attempts: ScanAttempt[] = [];
       const tried: ScanStrategy[] = [];
 
       // ★ 降级链：frames → webview（顺序由 `core/rules/scanChain` 决定，非本文件硬编码）
@@ -122,13 +92,15 @@ export function createLovartSite(host: HostPort): SitePort {
       const items = hit.items ?? [];
       const skipped = hit.skipped ?? 0;
       const unread = hit.unread ?? [];
+      // ★ 逐张落盘失败（原 `wp.failed`）—— 调用方据此报「已抓取 N 张，M 张失败」
+      const failed = hit.failed ?? 0;
 
       // ★ 读不到的 frame **如实上报**（原则 6：不静默 —— 否则"没扫到"会被误当成"页面上没有"）
       opts.onPhase?.({
         phase: 'done',
         message: unread.length > 0 ? `完成：新增 ${items.length} 张（${unread.length} 个 frame 未读到）` : `完成：新增 ${items.length} 张`,
       });
-      return ok({ items, skipped, href: hit.href, unread });
+      return ok({ items, skipped, href: hit.href, unread, failed });
     },
 
     async send(): Promise<Result<SendResult>> {

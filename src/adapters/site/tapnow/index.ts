@@ -27,53 +27,20 @@ import type { HostPort } from '@/core/ports/host.port';
 import type {
   ScanOptions,
   ScanResult,
-  ScannedImage,
   SendResult,
   SitePort,
   SiteProbe,
-  UnreadRoot,
 } from '@/core/ports/site.port';
 import { TAPNOW_MIN_SIDE } from '@/constants';
 import { TAPNOW_TEXT } from '@/constants/text';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
-import { isRecord } from '@/lib/object';
+// ★ 单档归一 + **逐张落盘**（原先本文件自带一个同步 `normalizeAttempt`，已提为两档共用 —— 判据 C1）
+import { scanAttemptFromRaw, type ScanAttempt } from '../shared/materializeScan';
 import { buildResultScanScript } from '../shared/scanScripts';
 import { findWebview, webviewEval } from '../shared/webview';
 import { tapnowCurrentHref } from './api';
 import { tapnowPageKind } from './pageKind';
-
-/** 单档执行结果（内部；与 `lovart/index.ts` 同形） */
-interface Attempt {
-  via: ScanStrategy;
-  ok: boolean;
-  count?: number;
-  error?: string;
-  items?: ScannedImage[];
-  href?: string;
-  skipped?: number;
-  unread?: UnreadRoot[];
-}
-
-/** 把宿主/脚本返回归一成内部形状（**只收敛形状，不做业务判断**） */
-function normalizeAttempt(via: ScanStrategy, raw: unknown): Attempt {
-  if (!isRecord(raw)) return { via, ok: false, error: '通道返回空' };
-  if (raw.ok === false) {
-    return { via, ok: false, error: typeof raw.error === 'string' ? raw.error : '通道返回失败' };
-  }
-  // ⚠️ 用**显式类型标注**而非 `as` 断言：`Array.isArray` 已把 `unknown` 收窄为数组
-  const images: ScannedImage[] = Array.isArray(raw.images) ? raw.images : [];
-  const unread: UnreadRoot[] = Array.isArray(raw.unread) ? raw.unread : [];
-  return {
-    via,
-    ok: true,
-    count: images.length,
-    items: images,
-    href: typeof raw.href === 'string' ? raw.href : undefined,
-    skipped: typeof raw.skipped === 'number' ? raw.skipped : 0,
-    unread,
-  };
-}
 
 /** 跑一档（**不自动重试** —— 重试是上层编排的事） */
 async function tryScan(
@@ -81,7 +48,7 @@ async function tryScan(
   account: Account,
   via: ScanStrategy,
   script: string,
-): Promise<Attempt> {
+): Promise<ScanAttempt> {
   // ⚠️ 与源一致（原 `Xn`）：**找不到页面返回 null 而不是抛**
   const view = findWebview({ id: account.id, partition: account.partition, type: account.type });
   if (!view) return { via, ok: false, error: TAPNOW_TEXT.pageNotFound };
@@ -92,14 +59,15 @@ async function tryScan(
     if (!wcId) return { via, ok: false, error: '无法取得 webview 的 webContentsId' };
     const r = await host.media.scanFrames({ webContentsId: wcId, script, maxFrames: 12 });
     if (!r.ok) return { via, ok: false, error: r.message }; // ★ 原样透传
-    return normalizeAttempt('frames', { ok: true, images: r.value.items, href: r.value.href });
+    // ⚠️ `scanFrames` 的形状是 `{items, href}` ⇒ 包成脚本形状，与 webview 那条路共用同一处理
+    return scanAttemptFromRaw(host, via, { ok: true, images: r.value.items, href: r.value.href });
   }
 
   if (typeof view.executeJavaScript !== 'function') {
     return { via, ok: false, error: TAPNOW_TEXT.webviewNotReady };
   }
   try {
-    return normalizeAttempt('webview', await webviewEval(view, script));
+    return await scanAttemptFromRaw(host, via, await webviewEval(view, script));
   } catch (e) {
     return { via, ok: false, error: toMessage(e) };
   }
@@ -112,7 +80,7 @@ export function createTapnowSite(host: HostPort): SitePort {
     async scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>> {
       // 脚本按 `minSide` 生成（原 `fP` 的 `{ light, minSide }` 入参；默认 `Kl` = 96）
       const script = buildResultScanScript(opts.minSide ?? TAPNOW_MIN_SIDE);
-      const attempts: Attempt[] = [];
+      const attempts: ScanAttempt[] = [];
       const tried: ScanStrategy[] = [];
 
       // ★ 降级链：frames → webview（顺序由 `core/rules/scanChain` 决定，不在此硬编码）
@@ -141,6 +109,8 @@ export function createTapnowSite(host: HostPort): SitePort {
       const items = hit?.items ?? [];
       const skipped = hit?.skipped ?? 0;
       const unread = hit?.unread ?? [];
+      // ★ 逐张落盘失败（原 `wp.failed`）—— 调用方据此报「已抓取 N 张，M 张失败」
+      const failed = hit?.failed ?? 0;
 
       // ★ 读不到的 frame **如实上报**（原则 6：不静默）
       opts.onPhase?.({
@@ -150,7 +120,7 @@ export function createTapnowSite(host: HostPort): SitePort {
             ? `完成：新增 ${items.length} 张（${unread.length} 个 frame 未读到）`
             : `完成：新增 ${items.length} 张`,
       });
-      return ok({ items, skipped, href: hit?.href, unread });
+      return ok({ items, skipped, href: hit?.href, unread, failed });
     },
 
     async send(): Promise<Result<SendResult>> {
