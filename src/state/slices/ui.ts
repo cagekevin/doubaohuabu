@@ -19,8 +19,11 @@ const TOAST_DURATION_MS = 3000;
 /**
  * 本片负责持久化的**布尔开关**（原 `zd(key,'0') === '1'` / `Fd(key, v?'1':'0')`）
  *
- * ⚠️ 只列**本片真的用**的键（判据 B5：不留没人读的开关）—— `doubao-newimages-autocap`
- *    与 `doubao-view-head-collapsed` 目前**无人用**，故不在此列。
+ * ⚠️ 只列**本片真的用**的键（判据 B5：不留没人读的开关）—— 故不在此列的有两个：
+ *    · `doubao-newimages-autocap` —— ★ **按裁定不接**：它开关的是**自动轮询抓取**，而
+ *      `docs/10` #11 + `electron/main.js:2749` 明确「默认关闭…每 3 秒执行页面脚本会被判机器人」
+ *      ⇒ 本项目**不开**（面板上那个按钮保留可见但**禁用**，`title` 说明是项目决定）。
+ *    · `doubao-view-head-collapsed` —— 后台视图头部折叠，本工程还没有那个头部控件。
  */
 export type UiFlagKey = typeof LS_NEWIMAGES_FOLDED | typeof LS_NEWIMAGES_CURRENT_ONLY;
 
