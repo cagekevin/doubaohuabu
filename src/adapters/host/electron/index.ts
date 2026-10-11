@@ -35,7 +35,8 @@ const createFile = (): FilePort => ({
 
   saveFile: async (content: string) => {
     const r = await guard((api) => api.saveFile(content));
-    return r.ok ? normalize<{ path?: string }>(r.value) : r;
+    // ⚠️ 与 `downloadFileAs` 同口径：主进程确实返回 `size`（见 `host.port.ts` 的注释）
+    return r.ok ? normalize<{ path?: string; size?: number }>(r.value) : r;
   },
 
   loadFile: async () => {
@@ -53,7 +54,8 @@ const createFile = (): FilePort => ({
 
   downloadFile: async (url: string, fileName?: string) => {
     const r = await guard((api) => api.downloadFile(url, fileName));
-    return r.ok ? normalize<{ path?: string }>(r.value) : r;
+    // ⚠️ 与 `downloadFileAs` 同口径：主进程确实返回 `size`（见 `host.port.ts` 的注释）
+    return r.ok ? normalize<{ path?: string; size?: number }>(r.value) : r;
   },
 
   downloadFileAs: async (url: string, defaultName?: string, filters?: unknown) => {

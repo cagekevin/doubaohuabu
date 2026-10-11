@@ -19,14 +19,72 @@ export type ApiJobStatus = (typeof API_JOB_STATUSES)[number];
 /** 未完成状态（重启时清理，见 `stable/migrations/resetStaleJobs`） */
 export const STALE_JOB_STATUSES: readonly ApiJobStatus[] = ['queued', 'submitting', 'running'];
 
-/** API 任务（原 `apj-<base36>-<seq>`） */
-export interface ApiJob {
-  id: string;
-  status: ApiJobStatus;
-  kind: 'image' | 'video';
-  providerId?: string;
-  error?: string;
+/**
+ * API 任务错误（原 `job-manager.js:392`：`{kind, message, advice?}`）
+ * ⚠️ 是**对象**，不是字符串（原 `ApiJobLite.error?: string` 是错的）
+ */
+export interface ApiJobError {
+  /** 分类（`quota` / `auth` / `fallback` / …） */
+  kind?: string;
+  message: string;
+  /** 处置建议（后端给的话术） */
+  advice?: string;
+}
+
+/** 单条生成结果（原 `publicSnapshot().results[]`） */
+export interface ApiJobResult {
+  type: 'image' | 'video';
+  /** 图片：dataUrl */
+  dataUrl?: string;
+  /** 视频：url */
+  url?: string;
   [k: string]: unknown;
+}
+
+/** 尝试记录（渲染层回写 `genHistory` 用；**不含密钥**） */
+export interface ApiJobAttempt {
+  id: string;
+  [k: string]: unknown;
+}
+
+/**
+ * API 任务事件 / 快照（★ 后端 `job-manager.js:57-76` 的 `publicSnapshot` **逐字**）
+ *
+ * ⚠️ **字段名是 `jobId`，不是 `id`** —— 这曾是一个**真 bug**：
+ *    原 `core/ports` 的 `ApiJobLite` 声明成 `id`，而 `upsertApiJob` 按 `id` 去重
+ *    ⇒ 真实事件里 `id === undefined` ⇒ **所有任务塌进同一条记录**（订阅等于失效）。
+ *    本形状取代 `ApiJobLite`（重复定义 + 字段名错），已登记项据此收口。
+ *
+ * ⚠️ `error` 是**对象**（`{kind, message, advice?}`），不是字符串。
+ */
+export interface ApiJobEvent {
+  jobId: string;
+  providerId?: string;
+  providerName?: string;
+  kind: 'image' | 'video';
+  /** 发起时的节点 id（**可空** —— 无节点来源的任务落资源库） */
+  nodeId: string | null;
+  status: ApiJobStatus;
+  progress?: number;
+  error: ApiJobError | null;
+  attempt: ApiJobAttempt | null;
+  results: ApiJobResult[];
+  params: Record<string, unknown>;
+  prompt: string;
+  taskId: string | null;
+  createdAt: number;
+  finishedAt: number | null;
+  /** 是否走了兜底 provider（原 `job._usedFallback`） */
+  usedFallback: boolean;
+}
+
+/** 批量提交结果（原 `job-manager.js:443-462` 的 `submitBatch`） */
+export interface ApiBatchResult {
+  /** 与 `matrix` 逐位对应；提交失败处为 `null` */
+  jobIds: Array<string | null>;
+  /** 与 `jobIds` 逐位对应；成功处为 `null` */
+  errors: Array<string | null>;
+  total: number;
 }
 
 /** provider 元信息（渲染层只读；密钥明文永不过桥） */

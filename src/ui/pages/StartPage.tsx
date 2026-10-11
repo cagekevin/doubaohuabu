@@ -8,6 +8,7 @@
 import { BRAND } from '@/constants/text';
 import { useStore } from '@/state';
 import { EmptyState } from '@/ui/common/EmptyState';
+import styles from './StartPage.module.css';
 
 export function StartPage() {
   const projects = useStore((s) => s.projects);
@@ -26,63 +27,32 @@ export function StartPage() {
   };
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 'var(--space-5)',
-      }}
-    >
-      <div style={{ textAlign: 'center' }}>
-        <h1 style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--font-size-xl)' }}>{BRAND.name}</h1>
-        <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{BRAND.tagline}</p>
+    <div className={styles.page}>
+      <div className={styles.brand}>
+        <h1 className={styles.brandName}>{BRAND.name}</h1>
+        <p className={styles.brandTagline}>{BRAND.tagline}</p>
       </div>
 
       {projects.length === 0 ? (
         <EmptyState title={BRAND.emptyHistory} />
       ) : (
-        <div style={{ minWidth: 320, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-          <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
-            {BRAND.openHistory}
-          </div>
+        <div className={styles.history}>
+          <div className={styles.historyLabel}>{BRAND.openHistory}</div>
           {projects.map((p) => (
             <button
               key={p.id}
               type="button"
+              className={styles.projectItem}
               onClick={() => openProject(p.id)}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 'var(--space-3)',
-                padding: 'var(--space-3) var(--space-4)',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                textAlign: 'left',
-              }}
             >
               <span>{p.name}</span>
-              <span style={{ color: 'var(--color-text-faint)', fontSize: 'var(--font-size-sm)' }}>
-                {p.data.nodes.length} 个节点
-              </span>
+              <span className={styles.projectMeta}>{p.data.nodes.length} 个节点</span>
             </button>
           ))}
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onNewProject}
-        style={{
-          padding: 'var(--space-2) var(--space-5)',
-          background: 'var(--color-primary)',
-          color: 'var(--color-surface)',
-          borderRadius: 'var(--radius-md)',
-        }}
-      >
+      <button type="button" className={styles.newProject} onClick={onNewProject}>
         {BRAND.newProject}
       </button>
     </div>

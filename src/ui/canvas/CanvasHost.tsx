@@ -13,7 +13,7 @@
  * ⚠️ 快捷键：Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z 重做（原实现行为）
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -35,9 +35,17 @@ import type { RFCanvasNode } from '@/ui/nodes/types';
 import { InteractiveEdge } from '@/ui/edges/InteractiveEdge';
 import { DRAG_MIME_MATERIAL, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
 import { CANVAS_TEXT } from '@/constants/text';
+import { CreatePanel, type CreatePanelState } from './CreatePanel';
+import { SelectionToolbar } from './SelectionToolbar';
 import styles from './CanvasHost.module.css';
 
 const edgeTypes = { interactive: InteractiveEdge };
+
+/**
+ * 边点击弹「建节点」浮层的防抖（ms，原 `_Component42.jsx:574` 的 `setTimeout(..., 220)`）
+ * ⚠️ 拖画布 / 框选也会触发 `onEdgeClick`，不防抖会误弹
+ */
+const EDGE_CLICK_DEBOUNCE_MS = 220;
 
 /** MiniMap 节点配色（CSS 变量，见 tokens.css） */
 const MINIMAP_COLOR: Record<string, string> = {
@@ -62,6 +70,8 @@ function Inner() {
   const library = useStore((s) => s.library);
   const addTextNode = useStore((s) => s.addTextNode);
   const addMaterialNode = useStore((s) => s.addMaterialNode);
+  /** ★ 建节点浮层（原 `Ae`）—— `null` = 不显示 */
+  const [createPanel, setCreatePanel] = useState<CreatePanelState | null>(null);
   /** ★ 删除必须走它（见 `onNodesChange` 的注释） */
   const removeNodes = useStore((s) => s.removeNodes);
 
@@ -201,6 +211,59 @@ function Inner() {
     }
   }, []);
 
+  /**
+   * ★ 建节点浮层（原 `_Component42.jsx:561-583` 的 `st` / 节点右键菜单）
+   *
+   * ⚠️ **边点击有 220ms 防抖**（原 `He.current = setTimeout(..., 220)`）——
+   *    因为拖动画布/框选时也会触发 `onEdgeClick`，不防抖会误弹。
+   */
+  const createTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onEdgeClick = useCallback(
+    (_e: React.MouseEvent, edge: CanvasEdge) => {
+      if (createTimer.current) clearTimeout(createTimer.current);
+      createTimer.current = setTimeout(() => {
+        setCreatePanel({
+          mode: 'edge',
+          x: _e.clientX,
+          y: _e.clientY,
+          edgeId: edge.id,
+          sourceId: edge.source,
+          targetId: edge.target,
+        });
+      }, EDGE_CLICK_DEBOUNCE_MS);
+    },
+    [],
+  );
+
+  /** 节点右键 → 「引用该节点生成」（原 `node-ctx-menu` 的入口；多选时带上全部选中项） */
+  const onNodeContextMenu = useCallback(
+    (e: React.MouseEvent, node: { id: string }) => {
+      e.preventDefault();
+      const selected = storeApi
+        .getState()
+        .nodes.filter((n) => n.selected)
+        .map((n) => n.id);
+      const sourceIds = selected.includes(node.id) ? selected : [node.id];
+      setCreatePanel({
+        mode: 'node',
+        x: e.clientX,
+        y: e.clientY,
+        flowPos: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+        sourceIds,
+      });
+    },
+    [screenToFlowPosition, storeApi],
+  );
+
+  // 卸载时清掉未触发的防抖（不留下悬空定时器 —— 原则 4 的"不自启常驻定时器"）
+  useEffect(
+    () => () => {
+      if (createTimer.current) clearTimeout(createTimer.current);
+    },
+    [],
+  );
+
   return (
     // ⚠️ 这些事件挂**外层容器**（原实现是 `div.canvas-wrap`）—— ReactFlow 自身不透传。
     //    `onDoubleClick` 用**捕获阶段**：ReactFlow 的 pane 会拦截冒泡（W15 实测抓到）
@@ -222,6 +285,9 @@ function Inner() {
         onEdgesChange={onEdgesChange}
         onNodeDragStart={onNodeDragStart}
         onConnect={onConnect}
+        // ★ 建节点入口（原 `st` 的边点击 + `node-ctx-menu` 的节点右键）
+        onEdgeClick={onEdgeClick}
+        onNodeContextMenu={onNodeContextMenu}
         // ★ 与源一致（`_Component42.jsx:1444`）：原版**显式设了两个删除键**。
         //   不设的话 xyflow 默认只有 `Backspace` ⇒ `Delete` 键删不掉节点（实测差距）
         deleteKeyCode={['Backspace', 'Delete']}
@@ -241,6 +307,12 @@ function Inner() {
           <div>{CANVAS_TEXT.emptyHint}</div>
         </div>
       )}
+
+      {/* ★ 选择工具条（原 `.sel-toolbar`）—— 成组的入口（`groupSelected` 此前没有调用方） */}
+      <SelectionToolbar />
+
+      {/* ★ 建节点浮层（原 `create-panel`）—— 8 类节点此前只有 2 类能建出来，这是补上的入口 */}
+      {createPanel && <CreatePanel state={createPanel} onClose={() => setCreatePanel(null)} />}
     </div>
   );
 }

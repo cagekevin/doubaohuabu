@@ -6,7 +6,7 @@
  * ⚠️ **快照时机 = 变更之前**（统一约定，见 `core/rules/undo.ts` 头部说明）
  */
 
-import type { CanvasNode } from '@/stable/model/node';
+import type { CanvasNode, NodeType } from '@/stable/model/node';
 import type { CanvasEdge, LibraryItem } from '@/stable/model/project';
 import {
   commitSnapshot,
@@ -15,9 +15,33 @@ import {
   undo as undoStack,
   type UndoStack,
 } from '@/core/rules/undo';
-import { applyConnection, detachConnection, type ConnectRequest } from '@/core/rules/graph';
+import {
+  applyConnection,
+  detachConnection,
+  edgeInsertPosition,
+  type ConnectRequest,
+} from '@/core/rules/graph';
 import { makeNodeId } from '@/core/rules/project';
-import { defaultNodeData } from '@/core/model/defaults';
+import { defaultNodeData, nodeCreateSize } from '@/core/model/defaults';
+// ⚠️ `按配方重跑` 反建出来的文本框默认名（SSOT，不内联中文）
+import { VIDEO_NODE_TEXT } from '@/constants/text';
+import type { LovartGalleries } from '@/core/rules/lovartGallery';
+import { screenshotNodePlacement, type ScreenshotAnchorLike } from '@/core/rules/capture';
+import {
+  groupSelectedNodes,
+  ungroupNodes as ungroupPure,
+  type GroupNodeLike,
+} from '@/core/rules/group';
+import {
+  recipeTextNodePosition,
+  RECIPE_TEXT_FALLBACKS,
+  type RecipeAnchorLike,
+} from '@/core/rules/recipe';
+import {
+  planMaterialRename,
+  type MaterialNodeLike,
+  type RenamableLibraryItem,
+} from '@/core/rules/materialRename';
 import type { CanvasEdge as Edge } from '@/stable/model/project';
 
 /** 被快照的状态（原 `Td` = `structuredClone({nodes,edges,library})`） */
@@ -85,6 +109,84 @@ export interface CanvasSlice {
 
   /** ★ 建文本节点（原「双击画布创建文本框」）—— 返回新节点 id */
   addTextNode: (position: { x: number; y: number }) => string;
+  /**
+   * ★ 建**任意类型**的节点（原 `_Component42.jsx` 的 `ye` 分派到的 `$`/`be`/`ie`/`Ne`/`$e` 的**建节点半**）
+   *
+   * ⚠️ 2026-10-10 补：此前只有 `addTextNode`/`addMaterialNode` ⇒ **8 类节点只有 2 类能建出来**
+   *    （文生图 / 文生视频 / 账号 / 下载 / 组 **零入口**）⇒ `GenPanel` 实际不可达。这是**未登记的断链**。
+   *
+   * 数据来自 `NODE_DEFAULTS`（8 类齐备）；`patch` 用于覆盖/补充（如 `accountId` / `folder` / `libId`）。
+   * @returns 新节点 id
+   */
+  addNode: (type: NodeType, position: { x: number; y: number }, patch?: Record<string, unknown>) => string;
+  /**
+   * ★ 在一条边上**插入**节点（原 `mode:'edge'`，`_Component42.jsx:783-794`）
+   *
+   * 语义（**逐字对齐**）：算两端中心的中点落点 → 建节点 → **删掉原边** → 补 `source→new` 与 `new→target`。
+   *
+   * ⚠️ 这里**不走** `connect()` 的环检测：性质上 `source→new→target` 是原 `source→target` 的细分，
+   *    **不可能**引入新环（源版 `w(...)` 也是直接连）。
+   * @returns 新节点 id；**边或端点不存在 ⇒ `null`**（原版会静默失败，这里让调用方可判）
+   */
+  /**
+   * ★ **素材节点改名**（原 `renameMaterialNode` shared.js:27549-27625）
+   *
+   * ★★ 要点是**多址一起改**：资源库同名项 + **所有指向同一来源的素材节点**
+   *   （同一个 `libId`，或两边都没 `libId` 而 `dataUrl` 相同）—— 否则"同一个素材会有两个名字"。
+   *
+   * ⚠️ 撤销 key 是 **`rename-${nodeId}`**（原 27570）⇒ 改 A 再改 B 是**两步撤销**。
+   * ⚠️ 源版还会同步 `lovartGalleries`（27571-27590）——**该字段本工程未落地**，
+   *   这一支**不实现也不假装**（见 `core/rules/materialRename.ts` 的跳过说明）。
+   * ⚠️ 空名/找不到节点 ⇒ **什么都不做**（源版同）。
+   */
+  renameMaterialNode: (nodeId: string, name: string) => void;
+  /**
+   * ★ **建截图素材节点**（原 `addScreenshotMaterial` shared.js:28312-28352）
+   *
+   * 几何：放在**视频右侧一列**（`x + 宽 + 40`）、每张下移 **26px**、**最多叠 8 层**
+   * （纯层 `screenshotNodePlacement`）。`label` 缺省「截图」。
+   * ⚠️ 源版还把新节点的 `width/height` 设成 **220×180**，而本工程的 `addNode` 不接受节点级尺寸
+   *   ⇒ 用该类型的默认尺寸（**观感差异一处，不假装**）。
+   * @returns 新素材节点 id；`dataUrl` 为空 / 找不到源视频 ⇒ `null`
+   */
+  addScreenshotMaterial: (input: {
+    sourceVideoId: string;
+    dataUrl: string;
+    label?: string;
+    sourceTime?: number;
+  }) => string | null;
+  /**
+   * ★ **按配方重跑**（原 `addTextNodeFromRecipe` shared.js:29450-29494）
+   *
+   * ★ 它**不是"再跑一次"**，而是**用一条配方反建一个文本框** —— 把配方里的
+   *   提示词/模型/时长/比例填进新节点，落在**锚点节点正下方**（`x` 不变、`y` 加高度 + 40）。
+   * ⚠️ 撤销 key 用源版那个 `'graph-add'`（由 `addNode` 统一给，不另立一个）。
+   * ⚠️ 与源一致：**没有锚点 ⇒ `{120,120}`**；`snap` 为真 ⇒ 吸附到 20 网格。
+   * @returns 新文本框的 id
+   */
+  addTextNodeFromRecipe: (input: {
+    prompt?: string;
+    model?: string;
+    duration?: number;
+    ratio?: string;
+    styleId?: string;
+    anchorNodeId?: string;
+    name?: string;
+  }) => string;
+  /**
+   * ★ **成组**（原 `groupSelectedNodes` shared.js:31497）：把选中的（**非组**）节点收进新组
+   *
+   * ⚠️ 少于 2 个 ⇒ `{ok:false, reason:'need-2'}`（源版同）。
+   * ⚠️ 撤销 key 用源版那两个字面量 `'group'` / `'ungroup'`（原 `commit('group')` / `commit('ungroup')`）。
+   */
+  groupSelected: () => { ok: boolean; groupId?: string; reason?: string };
+  /** ★ **取消组**（原 `ungroupNodes` 31610）：释放成员、只删容器 */
+  ungroupNodes: (groupId: string) => void;
+  insertNodeOnEdge: (
+    edgeId: string,
+    type: NodeType,
+    patch?: Record<string, unknown>,
+  ) => string | null;
   /** ★ 建素材节点（原「从资源库拖入」）—— 返回新节点 id */
   addMaterialNode: (
     item: { id: string; name: string; dataUrl: string; w?: number; h?: number; natW?: number; natH?: number },
@@ -98,7 +200,13 @@ export interface CanvasSlice {
 
 export function createCanvasSlice(
   set: (partial: Partial<CanvasSlice>) => void,
-  get: () => CanvasSlice,
+  /**
+   * ⚠️ **`get()` 的返回类型要与它实际读到的跨片字段相交** —— 运行期它就是**整个 store**，
+   *   只是切片工厂的类型只看得到自己那片。本切片要读 `lovartGalleries`（素材改名时同步改名，
+   *   原 27571-27604）⇒ 在这里显式声明（**同层 state → state，允许方向**），
+   *   比在调用处写一个"看起来像在骗类型系统"的 `as` 要好。
+   */
+  get: () => CanvasSlice & { lovartGalleries?: LovartGalleries; purgeLovartGallery?: (id: string) => void },
   deps: CanvasSliceDeps,
 ): CanvasSlice {
   /** 节点 id 序号（原 Pt 的计数） */
@@ -175,40 +283,143 @@ export function createCanvasSlice(
       set({ nodes: out.nodes, edges: out.edges });
     },
 
-    addTextNode: (position) => {
+    addNode: (type, position, patch) => {
       const s = get();
-      const id = makeNodeId('text', deps.now(), ++nodeSeq);
+      const id = makeNodeId(type, deps.now(), ++nodeSeq);
       const node = {
         id,
-        type: 'text',
+        type,
         position,
-        data: defaultNodeData('text'),
+        data: { ...defaultNodeData(type), ...patch },
       } as CanvasNode;
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
       set({ nodes: [...s.nodes, node] });
       return id;
     },
 
-    addMaterialNode: (item, position) => {
+    // ⚠️ 下面两个是 `addNode` 的**薄封装**（判据 C1：原先各写一份几乎相同的建节点体）
+    addTextNode: (position) => get().addNode('text', position),
+
+    addMaterialNode: (item, position) =>
+      get().addNode('material', position, {
+        name: item.name,
+        dataUrl: item.dataUrl,
+        libId: item.id,
+        ...(item.w != null ? { w: item.w } : {}),
+        ...(item.h != null ? { h: item.h } : {}),
+        ...(item.natW != null ? { natW: item.natW } : {}),
+        ...(item.natH != null ? { natH: item.natH } : {}),
+      }),
+
+    addScreenshotMaterial: (input) => {
       const s = get();
-      const id = makeNodeId('material', deps.now(), ++nodeSeq);
+      if (!input.dataUrl) return null;
+      const anchor = s.nodes.find((n) => n.id === input.sourceVideoId);
+      if (!anchor) return null;
+      // 该视频**已产出**的截图数（源 28330-28332：按 `data.sourceVideoId` 数）
+      const count = s.nodes.filter(
+        (n) => n.type === 'material' && (n.data as { sourceVideoId?: string }).sourceVideoId === input.sourceVideoId,
+      ).length;
+      const pos = screenshotNodePlacement(anchor as unknown as ScreenshotAnchorLike, count);
+      return get().addNode('material', pos, {
+        label: input.label || '截图',
+        dataUrl: input.dataUrl,
+        sourceVideoId: input.sourceVideoId,
+        ...(input.sourceTime === undefined ? {} : { sourceTime: input.sourceTime }),
+      });
+    },
+
+    addTextNodeFromRecipe: (input) => {
+      const s = get();
+      const anchor = input.anchorNodeId ? s.nodes.find((n) => n.id === input.anchorNodeId) : undefined;
+      const pos = recipeTextNodePosition((anchor ?? null) as unknown as RecipeAnchorLike | null, s.snap);
+      // ⚠️ 借 `addNode`（它已带 id 生成 + 撤销快照 + 默认数据）—— 不另写一份建节点体（判据 C1）
+      return get().addNode('text', pos, {
+        label: input.name || VIDEO_NODE_TEXT.rerunLabel,
+        text: input.prompt || '',
+        ...(input.model ? { model: input.model } : {}),
+        // ⚠️ 源版的兜底是 `|| 默认值 || 7` / `|| 默认值 || '16:9'`（原 29485-29486）
+        duration: input.duration || RECIPE_TEXT_FALLBACKS.duration,
+        aspectRatio: input.ratio || RECIPE_TEXT_FALLBACKS.ratio,
+        styleIds: input.styleId ? [input.styleId] : [],
+        linkOrder: [],
+      });
+    },
+
+    renameMaterialNode: (nodeId, name) => {
+      const s = get();
+      const plan = planMaterialRename({
+        nodes: s.nodes as unknown as MaterialNodeLike[],
+        library: s.library as unknown as RenamableLibraryItem[],
+        nodeId,
+        name,
+        // ★ 顺带同步 Lovart 画廊里的同名条目（原 27571-27604）—— 此前这里是**明确跳过的**
+        galleries: s.lovartGalleries ?? {},
+      });
+      // ⚠️ **空名 ⇒ 不 commit**（否则会往撤销栈塞一步"什么都没变"）
+      if (!plan) return;
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `rename-${nodeId}`, deps.now()) });
+      set({
+        nodes: plan.nodes as unknown as CanvasNode[],
+        library: plan.library as typeof s.library,
+        // ⚠️ 只有纯层真的改了才带这个字段（`undefined` ⇒ 不动画廊）
+        ...(plan.galleries === undefined ? {} : { lovartGalleries: plan.galleries }),
+      });
+    },
+
+    groupSelected: () => {
+      const s = get();
+      // 组序号：**已有组数 + 1**（原 31560-31562）
+      const labelIndex = s.nodes.filter((n) => n.type === 'group').length + 1;
+      const r = groupSelectedNodes(
+        s.nodes as unknown as GroupNodeLike[],
+        () => makeNodeId('group', deps.now(), ++nodeSeq),
+        labelIndex,
+      );
+      if (!r.ok) return { ok: false, reason: r.reason };
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'group', deps.now()) });
+      set({ nodes: r.nodes as unknown as CanvasNode[] });
+      return { ok: true, groupId: r.groupId };
+    },
+
+    ungroupNodes: (groupId) => {
+      const s = get();
+      const r = ungroupPure(s.nodes as unknown as GroupNodeLike[], groupId);
+      if (!r.ok) return;
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'ungroup', deps.now()) });
+      set({ nodes: r.nodes as unknown as CanvasNode[] });
+    },
+
+    insertNodeOnEdge: (edgeId, type, patch) => {
+      const s = get();
+      const edge = s.edges.find((e) => e.id === edgeId);
+      if (!edge) return null;
+      const source = s.nodes.find((n) => n.id === edge.source);
+      const target = s.nodes.find((n) => n.id === edge.target);
+      if (!source || !target) return null;
+
+      const size = nodeCreateSize(type);
+      const id = makeNodeId(type, deps.now(), ++nodeSeq);
       const node = {
         id,
-        type: 'material',
-        position,
-        data: {
-          ...defaultNodeData('material'),
-          name: item.name,
-          dataUrl: item.dataUrl,
-          libId: item.id,
-          ...(item.w != null ? { w: item.w } : {}),
-          ...(item.h != null ? { h: item.h } : {}),
-          ...(item.natW != null ? { natW: item.natW } : {}),
-          ...(item.natH != null ? { natH: item.natH } : {}),
-        },
+        type,
+        // 原 `lt(sourceId, targetId, {w,h})`：两端中心取中点，再减去新节点自身的一半（居中落点）
+        position: edgeInsertPosition(source, target, size),
+        width: size.w,
+        height: size.h,
+        data: { ...defaultNodeData(type), ...patch },
       } as CanvasNode;
+
+      // ★ 删原边 + 补两条（原 `v(edgeId)` + `w({source, target:new})` + `w({source:new, target})`）
+      const kept = s.edges.filter((e) => e.id !== edgeId);
+      const edges = [
+        ...kept,
+        deps.makeEdge({ source: edge.source, target: id }),
+        deps.makeEdge({ source: id, target: edge.target }),
+      ];
+
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
-      set({ nodes: [...s.nodes, node] });
+      set({ nodes: [...s.nodes, node], edges });
       return id;
     },
 

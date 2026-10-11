@@ -20,8 +20,8 @@ body {
   font-family: var(--font-sans);
   font-size: var(--font-size-md);
   line-height: 1.5;
-  color: var(--color-text);
-  background: var(--color-bg);
+  color: var(--color-text-strong);
+  background: var(--color-surface-base);
   -webkit-font-smoothing: antialiased;
   overflow: hidden; /* 桌面应用：不出现页面级滚动条 */
 }
@@ -48,7 +48,7 @@ video {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

@@ -1,0 +1,182 @@
+/**
+ * 画廊面板（原 `_Component23.jsx` 的 `.lovart-gallery-*`）
+ * ⚠️ 覆盖层模态：背板点击关闭、面板内点击不冒泡
+ * ⚠️ 原则 5：色值只走 token
+ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-mask);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 880px;
+  max-height: 80vh;
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 40px var(--color-shadow);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+/* 原 `.lovart-gallery-sub` */
+.sub {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.btn {
+  padding: var(--space-half) var(--space-2);
+  color: var(--color-text-strong);
+  font: inherit;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--btn-default-border-hover);
+}
+
+.btn:disabled {
+  color: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+.ghost {
+  color: var(--color-text-muted);
+}
+
+.danger:hover:not(:disabled) {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.sep {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+}
+
+.thumbWrap {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 0 var(--space-1);
+  color: var(--color-surface-raised);
+  font-size: var(--font-size-xs);
+  background: var(--color-danger);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+}
+
+.meta {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/* 原 `.lovart-gallery-empty*` */
+.empty {
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.emptyIcon {
+  font-size: var(--font-size-2xl);
+}
+
+.emptyTitle {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.emptyDesc {
+  margin-top: var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+/* 张数（原来是那个"禁用按钮当计数"的位置） */
+.count {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}

@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateImage, generateVideo, type GenDeps } from '../generate';
 // ⚠️ 从 **SSOT** 导入（`constants`），不从 `generate` 转手 —— TD-03-2
 import { FAILURE_MAX_RETRY } from '@/constants';
+import { ACCOUNT_PICK_TEXT } from '@/constants/text';
 import { ok, err } from '@/core/model/result';
 import type { Account } from '@/stable/model/account';
 import type { SitePort, SiteRegistry, SendPayload } from '@/core/ports/site.port';
@@ -65,35 +66,51 @@ function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0
   let i = 0;
   const api: ApiPort = {
     providersList: async () => ok([]),
-    configGet: async () => ok({}),
-    configSet: async () => ok(undefined),
-    configSetKey: async () => ok(undefined),
-    configSetSecret: async () => ok(undefined),
+    configGet: async () => ok({ providers: [], configs: {} }),
+    configSet: async () => ok({ config: {} }),
+    configSetKey: async () => ok({}),
+    configSetSecret: async () => ok({ hasSecret: true }),
     configTest: async () => ok({}),
     jobSubmit: async (payload) => {
       calls.push(payload);
       const step = script[Math.min(i, script.length - 1)];
       i += 1;
-      if (step && 'ok' in step) return ok({ id: 'job_1', status: 'queued', kind: 'image' });
+      // ★ 后端只回 `jobId`（不是任务对象）—— 见 `job-manager.js:430`
+      if (step && 'ok' in step) return ok({ jobId: 'apj-test-1' });
       return err(step!.reason, step!.message);
     },
-    jobBatch: async () => ok([]),
-    jobCancel: async () => ok(undefined),
+    jobBatch: async () => ok({ jobIds: [], errors: [], total: 0 }),
+    jobCancel: async () => ok({ status: 'cancelled' }),
     jobList: async () => ok([]),
-    setupGet: async () => ok({ imageProviderId: null, videoProviderId: null, fallbackProviderId: null, concurrency: 3 }),
-    setupSet: async () => ok(undefined),
+    setupGet: async () =>
+      ok({
+        setup: { imageProviderId: null, videoProviderId: null, fallbackProviderId: null, concurrency: 3 },
+        usage: {},
+      }),
+    setupSet: async () =>
+      ok({
+        setup: { imageProviderId: null, videoProviderId: null, fallbackProviderId: null, concurrency: 3 },
+      }),
     onJobEvent: () => () => undefined,
   };
   return { api, calls };
 }
 
-function makeDeps(site: SitePort | null, api: ApiPort): GenDeps {
+function makeDeps(
+  site: SitePort | null,
+  api: ApiPort,
+  over: Partial<Pick<GenDeps, 'holdAccount' | 'releaseAccount'>> = {},
+): GenDeps {
   const sites: SiteRegistry = site ? { doubao: site } : {};
   return {
     sites,
     host: { api } as Pick<HostPort, 'api'>,
     clock,
     stylePrefixOf: (ids) => (ids.length > 0 ? '水墨风，' : ''),
+    // ★ 占用 / 释放（原 `Fi` / `tn`）—— 默认"永远占得到、释放记一笔"
+    holdAccount: () => true,
+    releaseAccount: () => undefined,
+    ...over,
   };
 }
 
@@ -124,6 +141,79 @@ describe('generateImage · 网页通道（成功路径）', () => {
     });
     expect(calls[0]!.payload.text.startsWith('画一张：水墨风，一只猫')).toBe(true);
     expect(calls[0]!.payload.source).toBe('canvas-image-gen');
+  });
+});
+
+/**
+ * ★ 新增（2026-10-10）：**账号占用 / 释放**（原 `Fi` / `tn`）
+ *
+ * 这一组的存在理由 = `docs/14` §8「`setBusyAccounts` 零调用 ⇒ `all-busy` 排队永不触发」：
+ * 占用必须发生在「选号之后、发送之前」，而选号在用例内部 ⇒ 用例必须调注入的占用回调。
+ */
+describe('generateImage · 账号占用与释放（原 Fi / tn）', () => {
+  it('★ 成功路径：占用**在发送前**、释放**在发送后**（同一账号 id）', async () => {
+    const order: string[] = [];
+    const { site } = makeSite([{ ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    const deps = makeDeps(site, api, {
+      holdAccount: (id, nodeId) => {
+        order.push(`hold:${id}:${String(nodeId)}`);
+        return true;
+      },
+      releaseAccount: (id) => order.push(`release:${id}`),
+    });
+    await generateImage(deps, {
+      accounts: [acc('a')],
+      text: '猫',
+      channel: 'doubao',
+      sourceNodeId: 'ig_1',
+    });
+    expect(order).toEqual(['hold:a:ig_1', 'release:a']);
+  });
+
+  it('★ 占用失败 ⇒ `busy` + 源版文案，且**不发送、不释放**', async () => {
+    const released: string[] = [];
+    const { site, calls } = makeSite([{ ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    const r = await generateImage(
+      makeDeps(site, api, {
+        holdAccount: () => false,
+        releaseAccount: (id) => released.push(id),
+      }),
+      { accounts: [acc('a')], text: '猫', channel: 'doubao' },
+    );
+    expect(r).toEqual(err('busy', ACCOUNT_PICK_TEXT.holdFailed));
+    expect(calls).toHaveLength(0);
+    expect(released).toEqual([]);
+  });
+
+  it('★ 发送失败也要释放（原 `gS` 的 `finally`）', async () => {
+    const released: string[] = [];
+    const { site } = makeSite([{ reason: 'send-stuck', message: '卡住' }]);
+    const { api } = makeApi([{ ok: true }]);
+    const r = await generateImage(
+      makeDeps(site, api, { releaseAccount: (id) => released.push(id) }),
+      { accounts: [acc('a')], text: '猫', channel: 'doubao' },
+    );
+    expect(r.ok).toBe(false);
+    expect(released).toEqual(['a']);
+  });
+
+  it('★ 换号重试：每次都**先占后放**（两次尝试 ⇒ 两组占用/释放）', async () => {
+    const order: string[] = [];
+    const { site } = makeSite([{ reason: 'quota', message: '额度' }, { ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    await generateImage(
+      makeDeps(site, api, {
+        holdAccount: (id) => {
+          order.push(`hold:${id}`);
+          return true;
+        },
+        releaseAccount: (id) => order.push(`release:${id}`),
+      }),
+      { accounts: [acc('a'), acc('b')], text: '猫', channel: 'doubao', cursor: 0 },
+    );
+    expect(order).toEqual(['hold:a', 'release:a', 'hold:b', 'release:b']);
   });
 });
 
@@ -270,7 +360,8 @@ describe('generateImage / generateVideo · API 通道', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.via).toBe('api');
-    expect(r.value.jobs).toHaveLength(1);
+    // ★ 后端只回 `jobId`（结果经 `onJobEvent` 推送）—— 不是任务对象
+    expect(r.value.jobId).toBe('apj-test-1');
     expect(calls).toHaveLength(1);
   });
 

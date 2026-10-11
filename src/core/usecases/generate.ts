@@ -12,7 +12,7 @@
  */
 
 import type { Account, PoolStrategy } from '@/stable/model/account';
-import type { ApiJobLite, HostPort } from '@/core/ports/host.port';
+import type { HostPort } from '@/core/ports/host.port';
 import type { SiteRegistry } from '@/core/ports/site.port';
 import type { ClockPort } from '@/core/ports/clock.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
@@ -20,8 +20,9 @@ import { decideByReason } from '@/core/rules/failure';
 import type { SendFailKind } from '@/constants/failure';
 import { pickAccount } from '@/core/rules/accountPool';
 import { buildImagePayload, buildVideoPayload } from '@/core/rules/payload';
-import type { GenResult } from '@/stable/model/gen';
+import type { ApiBatchResult, GenResult } from '@/stable/model/gen';
 import { BATCH_RATIOS } from '@/constants/models';
+import { ACCOUNT_PICK_TEXT, SEND_TEXT } from '@/constants/text';
 
 /**
  * ⚠️ 原 `GEN_MAX_RETRY = 2` **已删**（2026-10-10，TD-03-2）——
@@ -40,17 +41,37 @@ export interface GenDeps {
   clock: ClockPort;
   /** `styleId[]` → 拼接后的风格前缀（来自 `constants/stylePresets`，由 state 提供） */
   stylePrefixOf: (styleIds: readonly string[]) => string;
+  /**
+   * ★ **占用账号**（原 `Fi` 34596）—— 写 store 的动作由 **state 注入**（判据 D1 / 原则 1）
+   *
+   * 为什么必须注入而不是在本层直接写：占用**必须发生在「选号之后、发送之前」**，
+   * 而选号就在本文件里 ⇒ 只有这里能给出正确的时序；但 `set()` 只能发生在 `state/**`。
+   * 这正是 `docs/16` §2.4「`setBusyAccounts` 零调用 ⇒ `all-busy` 排队永不触发」的修法。
+   *
+   * @returns `false` = 已被占用（原 `Fi` 的 `return false`）
+   */
+  holdAccount: (accountId: string, nodeId: string | null) => boolean;
+  /** ★ **释放**（原 `tn` 34614 的 `releaseBusy: true`） */
+  releaseAccount: (accountId: string) => void;
 }
 
-/** 生成结果（交给 state 层写入） */
+/**
+ * 生成结果（交给 state 层写入）
+ *
+ * ★ **2026-10-10 修**：原 `jobs?: ApiJobLite[]` 与后端实测不符 ——
+ *   `api-job:submit` **只回 `jobId`**（任务对象要等 `onJobEvent` 推送），
+ *   `api-job:batch` 回的是 `{jobIds, errors, total}`。故拆成 `jobId` / `batch` 两个字段。
+ */
 export interface GenOutcome {
   via: 'web' | 'api';
   /** 实际使用的账号（API 通道为空） */
   accountId?: string;
   /** 网页通道：生成结果 */
   results?: GenResult[];
-  /** API 通道：任务 */
-  jobs?: ApiJobLite[];
+  /** API 通道：单个任务 id（结果经 `onJobEvent` 回来） */
+  jobId?: string;
+  /** API 通道：批量提交结果（逐位 `jobIds` / `errors`） */
+  batch?: ApiBatchResult;
 }
 
 interface CommonInput {
@@ -129,11 +150,25 @@ async function sendViaWeb(
     const account = picked.account;
     const site = siteOf(deps, account);
     if (!site) {
-      // 站点适配器缺失：**原样报错**（不编造「网络异常」之类）
-      return err('unknown', `无 ${account.type} 站点适配器`);
+      // 站点适配器缺失：**明确报错**（不编造「网络异常」之类）
+      // ★ 文案取自 SSOT（判据 C1：同一句原先在本文件内联，`sendToSite` 是第 2 处）
+      return err('unknown', SEND_TEXT.noSiteAdapter(account.type));
     }
 
-    const res = await site.send(account, buildPayload(account));
+    // ★ 占用（原 `Fi`）—— 选号与占用之间可能被别的任务抢先 ⇒ 原版给 `hold-failed`
+    //   并在 `finally` 里释放（我们的 `SitePort.send` 是「发送 + 等结果」，
+    //   返回即已结束 ⇒ 与源版 `gS` 的 `finally` 同款；源版 `tO` 成功不释放是因为
+    //   它的发送是 fire-and-forget、结果靠轮询回来）
+    const res = await (async () => {
+      if (!deps.holdAccount(account.id, input.sourceNodeId ?? null)) return null;
+      try {
+        return await site.send(account, buildPayload(account));
+      } finally {
+        deps.releaseAccount(account.id);
+      }
+    })();
+    if (!res) return err('busy', ACCOUNT_PICK_TEXT.holdFailed);
+
     if (res.ok) {
       return ok({ accountId: account.id, results: res.value.results });
     }
@@ -172,7 +207,7 @@ export async function generateImage(deps: GenDeps, input: ImageGenInput): Promis
       images: input.images,
     });
     if (!res.ok) return res;
-    return ok({ via: 'api', jobs: [res.value] });
+    return ok({ via: 'api', jobId: res.value.jobId });
   }
 
   const web = await sendViaWeb(deps, input, (account) =>
@@ -214,11 +249,11 @@ export async function generateVideo(deps: GenDeps, input: VideoGenInput): Promis
       // 批量出片：三比例
       const res = await deps.host.api.jobBatch(base, { ratios: [...BATCH_RATIOS] });
       if (!res.ok) return res;
-      return ok({ via: 'api', jobs: res.value });
+      return ok({ via: 'api', batch: res.value });
     }
     const res = await deps.host.api.jobSubmit({ ...base, ratio: input.ratio });
     if (!res.ok) return res;
-    return ok({ via: 'api', jobs: [res.value] });
+    return ok({ via: 'api', jobId: res.value.jobId });
   }
 
   const web = await sendViaWeb(deps, input, (account) =>

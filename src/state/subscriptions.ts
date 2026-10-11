@@ -26,10 +26,17 @@ export interface Subscriptions {
 /**
  * 装配宿主事件订阅。**由 `bootstrap/container.ts` 调用一次**。
  *
- * **当前接线（M8）**：
- *   - `host.api.onJobEvent` → `settings.upsertApiJob`（API 任务状态进 store）
+ * **当前接线（M8 + 2026-10-10 修）**：
+ *   - `host.api.onJobEvent` → `settings.upsertApiJob`（API 任务状态进 store，**键 = `jobId`**）
+ *
+ * ★ **2026-10-10 修**：原先 `ApiPort.onJobEvent` 的载荷类型声明成 `ApiJobLite`（字段 `id`），
+ *   而后端事件字段名是 **`jobId`** ⇒ `upsertApiJob` 按 `id` 去重时恒拿到 `undefined`
+ *   ⇒ **所有任务塌进同一条记录**（订阅等于失效）。现已改用 `ApiJobEvent`（`jobId`）。
  *
  * **待接线（各自用例落地时补，仍只在本文件）**：
+ *   - ★ `onJobEvent` 的**落点生效**：`core/usecases/applyApiJobEvent.ts` 已给出决策，
+ *     但 `addVideoNode` / `attachImageResultToNode` / `pushImageGenFeed` 三个 state action
+ *     **尚未存在**（归 M13 面板批）⇒ 目前只记任务快照，产物落点待接。
  *   - `host.clipboard.onChanged` → 剪贴板图片（M11 `usecases`）
  *   - `host.media.onDolaMedia` → 无水印资源（**需先扩 `HostPort`**，见 `docs/16` §1.5）
  */

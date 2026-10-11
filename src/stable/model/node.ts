@@ -14,6 +14,46 @@ export interface XY {
   y: number;
 }
 
+/**
+ * 生成历史在节点 `data` 上的**键名**（原 `shared.js:25512` 的 `const Fs = 'genHistory'`）
+ * ⚠️ 是冻结键名（旧工程数据里就是这个字面量）⇒ SSOT 只此一处。
+ */
+export const GEN_HISTORY_KEY = 'genHistory';
+
+/**
+ * 提示词分析状态（节点 `data.analyzePrompt`）—— 原 `gS`/`yS` 往节点里写的那个对象
+ *
+ * ★ **为什么放 `stable/model`**：它是**写进节点数据的冻结形状**（原版逐处
+ *   `updateNodeData(id, {analyzePrompt: {...}})`），与 `GenHistory` 同类 ⇒ 真源在契约层；
+ *   `core/rules|usecases` 只**引用**它。
+ *   （2026-10-10 之前它只以 `AnalyzePatch` 之名存在于 `core/usecases/analyzePrompt.ts`，
+ *   于是 UI 读 `data.analyzePrompt` 只能拿到 `unknown`。）
+ *
+ * ⚠️ 带索引签名：源版在**各分支里展开旧值**（`{...o, …}`）⇒ 会有额外字段（如 `partial`），
+ *    必须能原样带过去。
+ */
+export interface AnalyzePromptState {
+  status: 'analyzing' | 'revising' | 'done' | 'error';
+  /** 写入时刻 */
+  at: number;
+  /** 阶段文案（`analyzing` / `revising` 期间） */
+  phase?: string | null;
+  /** 兜底信息（源 `yS` 的 catch 里显式清掉） */
+  partial?: unknown;
+  /** 失败原文（**已按源版加前缀**，如 `分析失败：…`） */
+  error?: string | null;
+  ok?: boolean;
+  zh_prompt?: string;
+  en_prompt?: string;
+  json_prompt?: unknown;
+  raw?: string;
+  /** 执行账号（源版每次写状态都带上这仨） */
+  accountId?: string;
+  accountName?: string;
+  accountType?: string;
+  [k: string]: unknown;
+}
+
 /** 生成历史（版本选择，原 31068 `selVer`） */
 export interface GenHistory {
   v: 1;
@@ -94,6 +134,14 @@ export interface MaterialNodeData extends NodeDataBase {
   h?: number;
   sourceVideoId?: string;
   sourceTime?: number;
+  /**
+   * 提示词分析结果（原 `fL.jsx:26` 的 `t.analyzePrompt`；由 `gS`/`yS` 写入）
+   *
+   * ★ **2026-10-10 补**：素材节点**也有**这套分析（源版「分析提示词」浮动按钮在
+   *   素材节点与生成节点上是**同一套**，见 `ui/nodes/AnalyzePrompt.tsx`）——
+   *   此前只在 `GenImageNodeData` 上类型化过，这里漏了 ⇒ UI 读它只能拿到 `unknown`。
+   */
+  analyzePrompt?: AnalyzePromptState;
 }
 export type MaterialNode = NodeBase & { type: 'material'; data: MaterialNodeData };
 
@@ -117,9 +165,18 @@ export interface VideoNodeData extends NodeDataBase {
 }
 export type VideoNode = NodeBase & { type: 'video'; data: VideoNodeData };
 
+/**
+ * 两个**节点默认标签**（既是数据默认值，也是批量列表里的兜底显示名）
+ * ⚠️ 原版 `v3` 41551 直接内联这两个字符串 —— 提为具名常量（原则 5），
+ *    与下面两个节点的 `label` 字段**同源**。
+ */
+export const GEN_VIDEO_LABEL = '文生视频';
+/** 文本节点兜底显示名（原 `v3` 的 `'文本框'`） */
+export const TEXT_NODE_LABEL = '文本框';
+
 /** 文生视频节点（原 29519-29531） */
 export interface GenVideoNodeData extends NodeDataBase {
-  label: '文生视频';
+  label: typeof GEN_VIDEO_LABEL;
   text: string;
   /** 默认 `'16:9'` */
   aspectRatio: string;
@@ -133,6 +190,8 @@ export interface GenVideoNodeData extends NodeDataBase {
   linkOrder: string[];
   genHistory?: GenHistory;
   selVer?: number;
+  /** 提示词分析结果（原 `gS`/`yS` 写入；`ZL.jsx:158` 读 `l.analyzePrompt`） */
+  analyzePrompt?: AnalyzePromptState;
   resultUrl?: string;
   resultPoster?: string;
   resultVid?: string;
@@ -166,12 +225,16 @@ export interface GenImageNodeData extends NodeDataBase {
   viewUrl?: string;
   generating?: boolean;
   /**
-   * 素材分析提示词（**真实样本里存在，原 `docs/03` 未记**）
+   * 提示词分析结果（原 `gS`/`yS` 写入；`ZL.jsx:158` 的 `l.analyzePrompt`）
    *
-   * ⚠️ 取自 `tests/fixtures/real-sample/doubao-projects.txt` 的 `ig_mv1ras1w_2` 节点 ——
-   *    判据是**真实数据**，不是文档（铁律 3：描述只是线索）。
+   * ★ **2026-10-10 修正（原声明为 `string`，是错的）**：真实样本
+   *   `tests/fixtures/real-sample/doubao-projects.txt` 的 `ig_mv1ras1w_2` 节点里，
+   *   该字段是**对象**：
+   *   `"analyzePrompt":{"status":"done","ok":true,"zh_prompt":"可爱橘色条纹小橘猫…",…}`
+   *   —— 与源码（`gS`/`yS` 逐处写 `{status, ok, zh_prompt, en_prompt, json_prompt, raw, at, …}`）
+   *   **完全一致**。原注释声称"依据真实样本"却写成 `string`，属于**形状与证据不符**（已修）。
    */
-  analyzePrompt?: string;
+  analyzePrompt?: AnalyzePromptState;
 }
 export type GenImageNode = NodeBase & { type: 'imggen'; data: GenImageNodeData };
 

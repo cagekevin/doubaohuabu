@@ -1,0 +1,85 @@
+/**
+ * `@` 引用候选浮层（原 `CL.jsx` 的 `.ref-menu` / `.ref-item` —— 源版无 CSS 可对，按同一族写）
+ * ⚠️ 原则 5：色值只走 token。
+ */
+
+.pop {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: var(--z-overlay);
+  /* ★ 查 5：菜单不写死宽度 —— 长素材名不折行，短名字不虚占 */
+  width: max-content;
+  min-width: 200px;
+  max-width: 360px;
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px var(--color-shadow-strong);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-half) var(--space-1);
+  text-align: left;
+  color: var(--color-text-strong);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.item:hover,
+.itemActive {
+  background: var(--color-surface-sunken);
+}
+
+.thumb {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.hint {
+  padding: var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.close {
+  position: absolute;
+  right: var(--space-1);
+  top: var(--space-1);
+  color: var(--color-text-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}

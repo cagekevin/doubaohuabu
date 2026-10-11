@@ -9,6 +9,23 @@
  */
 
 import type { Result } from '@/core/model/result';
+import type { LicenseStatus } from '@/core/model/license';
+import type { HostOS } from '@/constants';
+import type { Project } from '@/stable/model/project';
+import type {
+  ApiBatchResult,
+  ApiJobEvent,
+  ApiJobStatus,
+  ApiProviderMeta,
+  ApiSetup,
+  ApiUsage,
+} from '@/stable/model/gen';
+
+/**
+ * ★ SSOT 转出（2026-10-10）：授权状态的**形状与字面量联合**真源在 `core/model/license.ts`。
+ *    本文件原先内联了一份联合 ⇒ 两处表达式（改一处漏一处），已收口。
+ */
+export type { LicenseStatus, LicenseStatusKind } from '@/core/model/license';
 
 // ─────────────────────────── 子接口 ───────────────────────────
 
@@ -18,7 +35,15 @@ export interface FilePort {
   saveFile(content: string): Promise<Result<{ path?: string }>>;
   loadFile(): Promise<Result<{ name: string; content: string } | null>>;
   selectFolder(): Promise<Result<string | null>>;
-  downloadFile(url: string, fileName: string): Promise<Result<{ path?: string }>>;
+  /**
+   * 下载到**指定路径**（原 `window.api.downloadFile`）
+   *
+   * ⚠️ 2026-10-10 补 `size`：主进程的 `download-file` **本来就返回它**
+   *   （`electron/main.js:1786/1798/1810` 三条成功分支都带 `size`），
+   *   而这里原先只声明了 `path?` ⇒ 下载节点**算不出"已下载多少"**。
+   *   口径与同文件的 `downloadFileAs` 一致。
+   */
+  downloadFile(url: string, fileName: string): Promise<Result<{ path?: string; size?: number }>>;
   downloadFileAs(
     url: string,
     defaultName: string,
@@ -31,7 +56,21 @@ export interface FilePort {
 /** 剪贴板（★ 原则 6 注：内部保证 clear→writeText→await 顺序，对外只暴露一个 writeText） */
 export interface ClipboardPort {
   readImage(): Promise<Result<ClipboardImage | null>>;
-  writeImage(dataUrl: string): Promise<Result<void>>;
+  /**
+   * 把图片写进系统剪贴板（原 `window.api.copyImageToClipboard`）
+   *
+   * ★ **2026-10-10 修（三个 bug 一处）**：后端契约是 `copy-image-to-clipboard(img, webContentsId)`
+   *   （`main.js:1382`），其中
+   *     ① `img` 必须是 **`{dataUrl, label}` 对象**（`label` 还用来拼临时文件名，`main.js:1412`）
+   *        —— 原实现传的是**裸字符串** ⇒ `img.dataUrl` 为 `undefined` ⇒ 必然失败；
+   *     ② `webContentsId` 是**分层写剪贴板**的回落入口（`writeImageToPasteboard(ni, webContentsId)`，
+   *        `main.js:1424`：主进程原生 → **目标页面内 Async Clipboard API**）—— 原实现**没传**；
+   *     ③ 返回值 `{ok:false, error}`（如 `图片数据为空或格式不支持`）被**无视** ⇒ 吞错（原则 6）。
+   *
+   * @param img 图片（`dataUrl` 支持 `data:` 与 `img://` 两种引用）
+   * @param webContentsId 目标页面（用于页内剪贴板回落层；不给就只能走主进程那层）
+   */
+  writeImage(img: { dataUrl: string; label?: string }, webContentsId?: number): Promise<Result<void>>;
   /** 实现内部必须：clear() → writeText() → await（原 main.js:1591/1626-1627 的坑） */
   writeText(text: string): Promise<Result<void>>;
   pasteToWebview(webContentsId: number): Promise<Result<void>>;
@@ -45,7 +84,17 @@ export interface ClipboardPort {
 export interface ProjectPort {
   /** ⚠️ `sendSync`（同步）—— 保证 img:// 首帧就读对目录 */
   activateStorage(payload: ActivateProjectStoragePayload): Result<{ path?: string }>;
-  pickStorage(): Promise<Result<{ path?: string; canceled?: boolean }>>;
+  /**
+   * 选择保存路径（原 `window.api.pickProjectStorage`）
+   *
+   * ⚠️ 后端契约（`main.js:368-394`）：
+   *    成功 `{ok:true, path, migrated}` · 用户取消 `{ok:false, canceled:true}` · 失败 `{ok:false, error}`
+   *    ★ 2026-10-10 修：原实现**只读 `path/canceled`、丢掉 `ok:false`**（吞错，原则 6）
+   *      且**从不传 payload**（后端要靠 `payload.project` 做资源迁移与快照 ⇒ 迁移永不发生）。
+   */
+  pickStorage(
+    payload: PickStoragePayload,
+  ): Promise<Result<{ path?: string; canceled?: boolean; migrated?: AssetMigration }>>;
   /**
    * 备份工程 JSON（**同步** —— 底层是 `ipcRenderer.send` 的 fire-and-forget）
    *
@@ -58,8 +107,45 @@ export interface ProjectPort {
   saveSnapshot(project: unknown): Result<void>;
   /** 操作日志（同 `saveBackup`，同步 + 返 `Result`） */
   logOperation(event: OperationLogEvent): Result<void>;
-  revealStorage(storagePath: string): Promise<Result<void>>;
-  getStorageSize(storagePath: string): Promise<Result<number>>;
+  /**
+   * 在系统文件管理器里打开项目保存目录（原 `window.api.revealProjectStorage`）
+   *
+   * ⚠️ 后端契约（`main.js:408-428`）：成功 `{ok:true, path}` · 失败 `{ok:false, error}`
+   *    （`项目尚未设置保存路径` / `项目保存路径不存在` / shell 的 `openPath` 错误串）
+   */
+  revealStorage(storagePath: string): Promise<Result<{ path?: string }>>;
+  /**
+   * 统计项目保存目录占用（原 `window.api.getProjectStorageSize`）
+   *
+   * ⚠️ 后端契约（`main.js:435-503`）：成功 `{ok:true, bytes, files, partial, elapsedMs}` · 失败 `{ok:false, error}`
+   *    ★ 2026-10-10 修：原实现把返回当 `{size}` 读 ⇒ **恒为 0**（`bytes` 字段名对不上）。
+   */
+  getStorageSize(storagePath: string): Promise<Result<StorageUsage>>;
+}
+
+/**
+ * 会话准备载荷（原 `$P.jsx:77-80` / `_Component25.jsx:76-79`）
+ *
+ * ⚠️ `partition` 可为 `null`（真实样本里就有未设分区的账号）——
+ *    后端会回落到 `persist:lovart`，前端**如实传**、不替它编一个。
+ */
+export interface FingerprintSessionPayload {
+  id: string;
+  partition: string | null;
+  fingerprint?: unknown;
+}
+
+/** 普通会话载荷（同形，不带指纹） */
+export interface PlainSessionPayload {
+  id: string;
+  partition: string | null;
+}
+
+/** Lovart 容器载荷（多一个 `containerId` + 出口 `proxy`） */
+export interface LovartContainerPayload extends PlainSessionPayload {
+  containerId?: string;
+  /** 空串 = 直连（与 `setProxy` 同语义） */
+  proxy?: string;
 }
 
 /** 媒体（图片 / 视频外置存储） */
@@ -96,15 +182,70 @@ export interface MediaPort {
   }): Promise<Result<{ items: unknown[]; href?: string }>>;
 }
 
-/** 账号会话 / 指纹 / 代理 */
+/**
+ * 账号会话 / 指纹 / 代理 / 账号数据导入导出
+ *
+ * ★ **2026-10-10 契约更正（又一组"照文档抄"的签名）**：后端三个 `ensure*` 收的是
+ *   **账号对象**，不是 id 字符串 —— `preload.js:89/94/97` 原样转发 `acc`，而
+ *   `main.js:2692/2805` 读 `acc.partition` / `acc.proxy`，读不到就**回落到 `persist:lovart`**。
+ *   本工程原先传字符串 ⇒ `'abc'.partition === undefined` ⇒ **分区与指纹目录全错**（静默）。
+ *
+ * ⚠️ **约束 #5（`docs/10`）：cookie 由后端管理，前端一律不碰** ——
+ *    本端口**没有**、也**不得新增**「读/写 cookie」的方法（会话态由主进程的
+ *    `session.fromPartition` 持有）。唯一的例外是**账号数据导入导出**那组
+ *    （`exportCookies` / `importCookies`，它是后端主动提供的整包迁移能力）。
+ */
 export interface AccountPort {
-  ensureFingerprint(accountId: string): Promise<Result<{ preloadUrl?: string }>>;
-  ensurePlainSession(accountId: string): Promise<Result<{ userAgent?: string }>>;
-  ensureLovartContainer(accountId: string): Promise<Result<{ preloadUrl: string | null }>>;
+  /**
+   * 注入/更新环境指纹（原 `window.api.ensureFingerprint`）
+   * @param payload 后端要 `{id, partition, fingerprint}`（`$P.jsx:77-80`）
+   */
+  ensureFingerprint(
+    payload: FingerprintSessionPayload,
+  ): Promise<Result<{ preloadUrl?: string }>>;
+  /**
+   * 普通（非指纹）会话（原 `window.api.ensurePlainSession`）
+   * @param payload 后端要 `{id, partition}`（`$P.jsx:59-63` 同形）
+   */
+  ensurePlainSession(
+    payload: PlainSessionPayload,
+  ): Promise<Result<{ userAgent?: string; preloadUrl?: string }>>;
+  /**
+   * Lovart 专用容器（原 `window.api.ensureLovartContainer`）
+   * @param payload 后端要 `{id, partition, containerId, proxy}`（`$P.jsx:59-63`）
+   */
+  ensureLovartContainer(
+    payload: LovartContainerPayload,
+  ): Promise<Result<{ userAgent?: string; preloadUrl: string | null }>>;
   clearSession(partition: string): Promise<Result<void>>;
   /** 空串 = 直连 */
   setProxy(partition: string, proxy: string): Promise<Result<void>>;
   fpNetDiag(partition: string): Promise<Result<unknown>>;
+
+  // ── 账号数据导入 / 导出（原 `OP.jsx` / `PP.jsx`）──
+  /**
+   * 导出某分区的 cookie（原 `window.api.exportAccountCookies`）
+   *
+   * ⚠️ 后端契约：成功 `{ok:true, cookies, count}`，失败 `{ok:false, error}`。
+   *    失败时**必须**返 `Err`（原则 6）—— 源版 `PP.jsx:58-62` 是 `catch` + `console.warn` 吞掉，
+   *    重写改为**如实上报**，由用例决定「降级为空 cookie 继续导出」并记账。
+   */
+  exportCookies(partition: string | null): Promise<Result<{ cookies: unknown[] }>>;
+  /**
+   * 把 cookie 灌回某分区（原 `window.api.importAccountCookies`）
+   *
+   * ⚠️ 后端契约：成功 `{ok:true, restored, total}`；**单个 cookie 失败不中断**（后端已处理）。
+   */
+  importCookies(partition: string, cookies: readonly unknown[]): Promise<Result<{ restored: number }>>;
+  /**
+   * 保存账号导出文件（原 `window.api.saveAccountsFile`，**独立对话框**）
+   *
+   * ⚠️ 后端契约：成功 `{ok:true, path}`；取消 / 失败 `{ok:false, error}`
+   *    （取消时 `error` 就是 `'已取消'`）⇒ 实现**原样转发**，不擅自归类。
+   */
+  saveAccountsFile(content: string): Promise<Result<{ path?: string }>>;
+  /** 读账号导出文件（原 `window.api.loadAccountsFile`）；用户取消 ⇒ `null` */
+  loadAccountsFile(): Promise<Result<string | null>>;
 }
 
 /** 许可 */
@@ -115,23 +256,49 @@ export interface LicensePort {
   exportMachineCode(machineCode: string): Promise<Result<{ path?: string }>>;
 }
 
-/** 第三方 AI provider */
+/**
+ * 第三方 AI provider
+ *
+ * ★ **2026-10-10 契约收口**（原登记的重复定义项）：删掉 `ApiProviderMetaLite` /
+ *   `ApiJobLite` / `ApiSetupLite` 三个「线上形状」副本，**统一用 `stable/model/gen.ts`
+ *   的冻结形状**。依据 = 后端 `electron/main.js` 与 `electron/api/job-manager.js` 的**实测返回**：
+ *
+ *   | 方法 | 后端返回（实测） |
+ *   |---|---|
+ *   | `api-providers:list` | `{ok, providers}` |
+ *   | `api-config:get` | `{ok, providers, configs}`（**一次给两样**） |
+ *   | `api-config:set` | `{ok, config}` |
+ *   | `api-config:set-key` | `{ok, keyHint, maskedBy}` |
+ *   | `api-config:set-secret` | `{ok, hasSecret}` |
+ *   | `api-config:test` | `{ok:false, message}` 或适配器自身结果 |
+ *   | `api-job:submit` | `{ok, jobId}`（**只给 id，不是任务对象**） |
+ *   | `api-job:batch` | `{ok, jobIds, errors, total}` |
+ *   | `api-job:cancel` | `{ok, status}` |
+ *   | `api-job:list` | `{ok, jobs}` |
+ *   | `api-setup:get` | `{ok, setup, usage}` |
+ *   | `api-setup:set` | `{ok, setup}` |
+ *   | `api-job-event`（推送） | `publicSnapshot` = `ApiJobEvent`（字段名是 **`jobId`**） |
+ */
 export interface ApiPort {
-  providersList(): Promise<Result<ApiProviderMetaLite[]>>;
-  configGet(): Promise<Result<unknown>>;
-  configSet(providerId: string, patch: unknown): Promise<Result<void>>;
-  /** 密钥明文只进不出 */
-  configSetKey(providerId: string, key: string): Promise<Result<void>>;
-  configSetSecret(providerId: string, key: string): Promise<Result<void>>;
+  /** provider 元信息（**脱敏**：只有 `hasKey` / `keyHint`） */
+  providersList(): Promise<Result<ApiProviderMeta[]>>;
+  /** 配置原文 + provider 元信息（后端**一次**返回两者） */
+  configGet(): Promise<Result<{ providers: ApiProviderMeta[]; configs: unknown }>>;
+  configSet(providerId: string, patch: unknown): Promise<Result<{ config: unknown }>>;
+  /** 密钥明文只进不出；返回脱敏提示（`sk-****7890`） */
+  configSetKey(providerId: string, key: string): Promise<Result<{ keyHint?: string; maskedBy?: string }>>;
+  configSetSecret(providerId: string, key: string): Promise<Result<{ hasSecret: boolean }>>;
   configTest(providerId: string): Promise<Result<{ message?: string }>>;
-  jobSubmit(payload: unknown): Promise<Result<ApiJobLite>>;
-  jobBatch(basePayload: unknown, matrix: unknown): Promise<Result<ApiJobLite[]>>;
-  jobCancel(jobId: string): Promise<Result<void>>;
-  jobList(): Promise<Result<ApiJobLite[]>>;
-  setupGet(): Promise<Result<ApiSetupLite>>;
-  setupSet(patch: Partial<ApiSetupLite>): Promise<Result<void>>;
+  /** 提交单个任务 ⇒ 后端**只回 `jobId`**（结果经 `onJobEvent` 推送） */
+  jobSubmit(payload: unknown): Promise<Result<{ jobId: string }>>;
+  /** 批量提交 ⇒ 逐位 `jobIds` / `errors` */
+  jobBatch(basePayload: unknown, matrix: unknown): Promise<Result<ApiBatchResult>>;
+  jobCancel(jobId: string): Promise<Result<{ status: ApiJobStatus }>>;
+  jobList(): Promise<Result<ApiJobEvent[]>>;
+  setupGet(): Promise<Result<{ setup: ApiSetup; usage: ApiUsage }>>;
+  setupSet(patch: Partial<ApiSetup>): Promise<Result<{ setup: ApiSetup }>>;
   /** 订阅（只转发 —— 原则 2） */
-  onJobEvent(cb: (snap: ApiJobLite) => void): Unsubscribe;
+  onJobEvent(cb: (snap: ApiJobEvent) => void): Unsubscribe;
 }
 
 // ─────────────────────────── 端口主体 ───────────────────────────
@@ -142,7 +309,7 @@ export interface ApiPort {
  */
 export interface HostPort {
   /** ★ 真实宿主平台：来自 preload 的 `process.platform`，**不读 navigator**（docs/10 #59） */
-  readonly os: 'windows' | 'macos' | 'linux';
+  readonly os: HostOS;
 
   readonly file: FilePort;
   readonly clipboard: ClipboardPort;
@@ -190,6 +357,30 @@ export interface ActivateProjectStoragePayload {
   knownStoragePaths?: Array<{ path: string; name: string }>;
 }
 
+/**
+ * 选择保存路径的载荷（原 `_Component42.jsx:300-313` 传给 `pickProjectStorage` 的对象）
+ *
+ * ⚠️ 比 `activateStorage` 多一个 `project` —— 后端要靠它
+ *    **迁移已有资源**（`migrateProjectAssets`）并**写快照**（`writeProjectSnapshot`）。
+ */
+export interface PickStoragePayload extends ActivateProjectStoragePayload {
+  project?: Project;
+}
+
+/** 换目录时后端归档的既有资源数（原 `migrated.images` / `migrated.videos`） */
+export interface AssetMigration {
+  images?: number;
+  videos?: number;
+}
+
+/** 目录占用统计（原 `main.js:500` 的 `{bytes, files, partial, elapsedMs}`） */
+export interface StorageUsage {
+  bytes: number;
+  files: number;
+  /** 后端 30s 硬上限内**没扫完**（原 `partial`）⇒ UI 显示「（仍在统计）」 */
+  partial: boolean;
+}
+
 export interface OperationLogEvent {
   at: number;
   projectId: string;
@@ -204,34 +395,13 @@ export interface CaptureRect {
   height: number;
 }
 
-export interface LicenseStatus {
-  status: 'ok' | 'none' | 'invalid' | 'expired' | 'tampered';
-  expireAt?: number;
-  licenseKey?: string;
-}
-
-/** 宿主返回的 provider 元信息（结构未知处用 unknown 占位，接真实实现时回填） */
-export interface ApiProviderMetaLite {
-  id: string;
-  name: string;
-  capabilities: readonly string[];
-  enabled?: boolean;
-  hasKey?: boolean;
-  keyHint?: string;
-  hasSecret?: boolean;
-}
-
-export interface ApiJobLite {
-  id: string;
-  status: string;
-  kind: 'image' | 'video';
-  providerId?: string;
-  error?: string;
-}
-
-export interface ApiSetupLite {
-  imageProviderId: string | null;
-  videoProviderId: string | null;
-  fallbackProviderId: string | null;
-  concurrency: number;
-}
+/**
+ * ⚠️ **已删（2026-10-10 契约收口）**：`ApiProviderMetaLite` / `ApiJobLite` / `ApiSetupLite`
+ *
+ * 它们是「照文档抄的线上形状」副本，与后端**实测返回不符**：
+ *   · `ApiJobLite.id` —— 后端事件字段名是 **`jobId`** ⇒ `upsertApiJob` 按 `id` 去重时
+ *     拿到 `undefined`，**所有任务塌进同一条记录**（订阅等于失效）；
+ *   · `ApiJobLite.error?: string` —— 后端给的是**对象** `{kind, message, advice?}`；
+ *   · `ApiSetupLite` —— 与 `ApiSetup` 逐字相同（纯重复）。
+ * ⇒ 统一改用 `stable/model/gen.ts` 的冻结形状（`ApiProviderMeta` / `ApiJobEvent` / `ApiSetup`）。
+ */

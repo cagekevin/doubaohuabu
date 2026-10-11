@@ -5,7 +5,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { applyConnection, detachConnection, detectCycle } from '../graph';
+import {
+  applyConnection,
+  collectLinkedTexts,
+  detachConnection,
+  detectCycle,
+  edgeInsertPosition,
+} from '../graph';
+import { NODE_CREATE_SIZES, nodeCreateSize } from '@/core/model/defaults';
 import type { CanvasEdge } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
 import { CIRCULAR_REF_MESSAGE } from '@/constants/text';
@@ -159,5 +166,107 @@ describe('detachConnection（删除边时清理 referenceOrder）', () => {
     expect(out.edges).toHaveLength(0);
     const b = out.nodes.find((n) => n.id === 'B') as { data: { referenceOrder: string[] } };
     expect(b.data.referenceOrder).toEqual([]);
+  });
+});
+
+describe('edgeInsertPosition（原 `lt` `_Component42.jsx:543-560`）', () => {
+  const S = { w: 380, h: 300 };
+
+  it('★ 两端中心取中点，再减去新节点自身的一半（新节点居中）', () => {
+    // source 中心 (100+100, 0+90) = (200,90)；target 中心 (1000+100, 400+90) = (1100,490)
+    const pos = edgeInsertPosition(
+      { position: { x: 100, y: 0 }, width: 200, height: 180 },
+      { position: { x: 1000, y: 400 }, width: 200, height: 180 },
+      S,
+    );
+    expect(pos).toEqual({ x: (200 + 1100) / 2 - 190, y: (90 + 490) / 2 - 150 });
+  });
+
+  it('★ 没有 width/height ⇒ 用源版兜底 `200×180`', () => {
+    const pos = edgeInsertPosition({ position: { x: 0, y: 0 } }, { position: { x: 400, y: 400 } }, S);
+    // source 中心 (0+100, 0+90)=(100,90)；target 中心 (400+100, 400+90)=(500,490)
+    // 中点 (300,290)，减自身一半 (190,150) ⇒ (110,140)
+    expect(pos).toEqual({ x: (100 + 500) / 2 - 190, y: (90 + 490) / 2 - 150 });
+    expect(pos).toEqual({ x: 110, y: 140 });
+  });
+
+  it('★ 任一端缺失 ⇒ `{x:0,y:0}`（源版直接返回 0,0）', () => {
+    expect(edgeInsertPosition(null, { position: { x: 1, y: 2 } }, S)).toEqual({ x: 0, y: 0 });
+    expect(edgeInsertPosition({ position: { x: 1, y: 2 } }, undefined, S)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('尺寸表（原 create-panel 三个动作内联的 `w/h`）逐项对齐源版', () => {
+    expect(NODE_CREATE_SIZES).toEqual({
+      text: { w: 280, h: 150 },
+      genvideo: { w: 380, h: 240 },
+      imggen: { w: 380, h: 300 },
+      account: { w: 420, h: 220 },
+      download: { w: 280, h: 200 },
+    });
+  });
+
+  it('未列出的类型 ⇒ `nodeCreateSize` 回落 200×180', () => {
+    expect(nodeCreateSize('material')).toEqual({ w: 200, h: 180 });
+    expect(nodeCreateSize('group')).toEqual({ w: 200, h: 180 });
+    expect(nodeCreateSize('不存在的类型')).toEqual({ w: 200, h: 180 });
+  });
+});
+
+describe('collectLinkedTexts（原 d3 41179-41228）', () => {
+  const textNode = (id: string, text: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    type: 'text',
+    data: { text, ...extra },
+  });
+
+  it('★ 只收**入边**且源必须是 `text`', () => {
+    const nodes = [textNode('t1', '甲'), { id: 'm1', type: 'material', data: {} }];
+    const edges = [
+      { source: 't1', target: 'gv' },
+      { source: 'm1', target: 'gv' }, // 非 text ⇒ 忽略
+      { source: 'gv', target: 't1' }, // 出边 ⇒ 忽略
+    ];
+    expect(collectLinkedTexts('gv', nodes, edges).map((x) => x.id)).toEqual(['t1']);
+  });
+
+  it('★ `referenceOrder` 决定顺序（不在表里的排最后）', () => {
+    const nodes = [textNode('t1', '一'), textNode('t2', '二'), textNode('t3', '三')];
+    const edges = [
+      { source: 't1', target: 'gv' },
+      { source: 't2', target: 'gv' },
+      { source: 't3', target: 'gv' },
+    ];
+    const target = { id: 'gv', type: 'genvideo', data: { referenceOrder: ['t3', 't2'] } };
+    const out = collectLinkedTexts('gv', [...nodes, target], edges);
+    expect(out.map((x) => x.id)).toEqual(['t3', 't2', 't1']);
+  });
+
+  it('★ 空正文被丢弃（不留空条目）', () => {
+    const nodes = [textNode('t1', '   '), textNode('t2', '有')];
+    expect(collectLinkedTexts('gv', nodes, [{ source: 't1', target: 'gv' }, { source: 't2', target: 'gv' }]).map((x) => x.id)).toEqual(['t2']);
+  });
+
+  it('★ 同一源连两条边 ⇒ **按 id 去重**（保留首个）', () => {
+    const nodes = [textNode('t1', '甲')];
+    const edges = [
+      { source: 't1', target: 'gv' },
+      { source: 't1', target: 'gv' },
+    ];
+    expect(collectLinkedTexts('gv', nodes, edges)).toHaveLength(1);
+  });
+
+  it('正文过归一（`stripHtml` + 去生成痕迹）', () => {
+    const nodes = [textNode('t1', '<p>a&nbsp;b</p>请直接开始生成')];
+    const out = collectLinkedTexts('gv', nodes, [{ source: 't1', target: 'gv' }]);
+    expect(out[0]!.text).toBe('a b');
+  });
+
+  it('`label` 缺失 ⇒ 空串（调用方按它决定要不要就近替换）', () => {
+    const out = collectLinkedTexts('gv', [textNode('t1', '甲')], [{ source: 't1', target: 'gv' }]);
+    expect(out[0]!.label).toBe('');
+  });
+
+  it('没有入边 ⇒ 空数组', () => {
+    expect(collectLinkedTexts('gv', [textNode('t1', '甲')], [])).toEqual([]);
   });
 });

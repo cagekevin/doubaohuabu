@@ -6,7 +6,7 @@
  *    —— 它会**双调用**渲染与 Effect，暴露副作用 bug（本项目大量轮询/订阅/持久化）
  */
 
-import { StrictMode } from 'react';
+import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 // 样式加载顺序（docs/11 §2.1）：官方 → SSOT → 主题
@@ -16,20 +16,96 @@ import '@/styles/reset.css';
 import '@/styles/theme.css';
 
 import { createContainer } from './container';
-import { StoreProvider, useStore } from '@/state';
+import { StoreProvider, usePorts, useStore } from '@/state';
 import { AppShell } from '@/ui/shell/AppShell';
 import { ErrorBoundary } from '@/ui/shell/ErrorBoundary';
 import { StartPage } from '@/ui/pages/StartPage';
 import { CanvasHost } from '@/ui/canvas/CanvasHost';
+import { ActivatePage } from '@/ui/pages/ActivatePage';
+import { isLicenseUsable } from '@/core/rules/license';
+import type { LicenseStatus } from '@/core/model/license';
 
 /** 根组件：按 `started` 切换启动页 / 画布外壳 */
+/**
+ * 根组件：**授权门** → 启动页 → 画布外壳
+ *
+ * ★★ **2026-10-11 补上授权门** —— 它此前**完全不存在**：`LicensePort` 与纯层早就落地，
+ *   但没有任何页面把它接起来 ⇒ 授权状态对用户不可见、也没法激活（`docs/16` 的 M13 首项）。
+ *
+ * ★ **门的判据不是这里定的**：`core/rules/license.ts` 的 `isLicenseUsable` 写明了
+ *   **只有 `ok` 放行**（`none`/`invalid`/`expired`/`tampered` 一律落到激活页），
+ *   并说明了那是**有意为之**的 fail-close（「拿不到授权时宁可不进画布」）⇒ 此处只**执行**它。
+ *
+ * ⚠️ **这是一处用户可见的行为变化**：从今往后**开发/自用也需要一个有效授权**才能进画布。
+ *   若只想在正式版启用，把本段改成读一个开关即可（判据与页面都已就位，不必改别处）。
+ * ⚠️ **读失败（端口报错）也停在激活页** —— 与源一致（源 `W3` 的 catch 只显示
+ *   「获取授权信息失败：…」而**不放行**），且不静默（错误文案会显示在页内）。
+ */
 function Root() {
   const started = useStore((s) => s.started);
+  const ports = usePorts();
+  /** `undefined` = **还在查**（不渲染任何一边 —— 避免"先闪主界面再跳激活页"） */
+  const [license, setLicense] = useState<LicenseStatus | null | undefined>(undefined);
+  /**
+   * 读失败的**原文**（原则 6：**错误不可被吞** —— 端口异常必须显示出来，
+   *   而不是静默当成"没有授权"；`原则6/no-swallow` 正是这么拦下我第一版的）
+   */
+  const [licenseError, setLicenseError] = useState('');
 
+  const refreshLicense = useCallback(async () => {
+    try {
+      const r = await ports.host.license.getStatus();
+      setLicense(r.ok ? r.value : null);
+      // ⚠️ `r.ok === false` 也是失败（适配器把后端错误折进 `Result`）⇒ 原样带出来
+      setLicenseError(r.ok ? '' : r.message);
+    } catch (e) {
+      // ⚠️ 端口抛异常 ⇒ 当成"读不到"（`null`）⇒ 停在激活页（fail-close，见上），
+      //    **但不吞原因**（原则 6）
+      setLicense(null);
+      setLicenseError(e instanceof Error ? e.message : String(e));
+    }
+  }, [ports]);
+
+  /**
+   * ⚠️ 这里**不** `void refreshLicense()`（那样是"在 effect 体里直接调带 setState 的函数"，
+   *   `react-hooks/set-state-in-effect` 会拦 —— 本项目已因此改过三处）。
+   *   改成在 **`.then` 回调**里 setState（规则正是要这个形态），并带一个取消位。
+   */
+  useEffect(() => {
+    let alive = true;
+    ports.host.license
+      .getStatus()
+      .then((r) => {
+        if (alive) setLicense(r.ok ? r.value : null);
+      })
+      .catch((e: unknown) => {
+        if (!alive) return;
+        setLicense(null);
+        setLicenseError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [ports]);
+
+  // ① 还在查 ⇒ 什么都不渲染（这一闪通常只有几毫秒）
+  if (license === undefined) return null;
+
+  // ② **授权门**（判据在 core/rules/license.ts）
+  if (!license || !isLicenseUsable(license.status)) {
+    return (
+      <ActivatePage
+        initialStatus={license}
+        initialError={licenseError}
+        onActivated={() => void refreshLicense()}
+      />
+    );
+  }
+
+  // ③ 过了门 ⇒ 启动页 / 画布外壳
   if (!started) {
     return <StartPage />;
   }
-
   return <AppShell canvas={<CanvasHost />} />;
 }
 
@@ -46,7 +122,7 @@ createRoot(rootEl).render(
   <StrictMode>
     {/* 全局错误边界（docs/11 §9.9 的第一级） */}
     <ErrorBoundary area="应用">
-      <StoreProvider store={container.store} gen={container.gen}>
+      <StoreProvider store={container.store} gen={container.gen} analyze={container.analyze} accountOps={container.accountOps} batchSend={container.batchSend} sendQueue={container.sendQueue} capture={container.capture}>
         <Root />
       </StoreProvider>
     </ErrorBoundary>

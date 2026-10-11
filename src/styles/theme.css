@@ -12,37 +12,37 @@
 
 .xy-theme {
   /* ── 画布背景与网格 ── */
-  --xy-background-color: var(--color-canvas-bg);
-  --xy-background-pattern-color: var(--color-grid);
+  --xy-background-color: var(--color-canvas);
+  --xy-background-pattern-color: var(--color-canvas-grid);
 
   /* ── 连线 ── */
   --xy-edge-stroke: var(--color-edge);
   --xy-edge-stroke-width: 2;
-  --xy-edge-stroke-selected: var(--color-primary-hover);
+  --xy-edge-stroke-selected: var(--edge-stroke-selected);
 
   /* ── 节点 ── */
   --xy-node-border-radius: var(--radius-md);
-  --xy-node-background-color: var(--color-surface);
+  --xy-node-background-color: var(--color-surface-raised);
   --xy-node-border: 1px solid var(--color-border);
   --xy-node-boxshadow-hover: 0 2px 8px var(--color-shadow);
-  --xy-node-boxshadow-selected: 0 0 0 2px var(--color-primary);
+  --xy-node-boxshadow-selected: 0 0 0 2px var(--node-selected-ring);
 
   /* ── 连接点 ── */
-  --xy-handle-background-color: var(--color-primary);
-  --xy-handle-border-color: var(--color-surface);
+  --xy-handle-background-color: var(--handle-bg);
+  --xy-handle-border-color: var(--color-surface-raised);
 
   /* ── 控件（缩放/适配按钮）── */
-  --xy-controls-button-background-color: var(--color-surface);
-  --xy-controls-button-background-color-hover: var(--color-surface-alt);
-  --xy-controls-button-color: var(--color-text);
+  --xy-controls-button-background-color: var(--color-surface-raised);
+  --xy-controls-button-background-color-hover: var(--color-surface-sunken);
+  --xy-controls-button-color: var(--color-text-strong);
   --xy-controls-button-border-color: var(--color-border);
   --xy-controls-box-shadow: 0 1px 4px var(--color-shadow);
 
   /* ── MiniMap ── */
-  --xy-minimap-background-color: var(--color-surface);
+  --xy-minimap-background-color: var(--color-surface-raised);
   --xy-minimap-mask-background-color: var(--color-mask);
 
   /* ── 选择框 ── */
   --xy-selection-background-color: var(--color-selection-bg);
-  --xy-selection-border: 1px dashed var(--color-primary);
+  --xy-selection-border: 1px dashed var(--marquee-border);
 }

@@ -15,8 +15,16 @@ import { createLocalStorage } from '@/adapters/storage/local';
 import { createMockHost } from '@/adapters/host/mock';
 import { createElectronHost } from '@/adapters/host/electron';
 import { createSiteRegistry } from '@/adapters/site/registry';
+import { createBackendPage } from '@/adapters/site/shared/backendPage';
 import { hydrate, type HydrateResult } from './hydrate';
 import { createGenController, type GenController } from '@/state/generate';
+import { createAnalyzeController, type AnalyzeController } from '@/state/analyze';
+import { createAccountOps, type AccountOpsController } from '@/state/accountOps';
+import { createBatchSendController, type BatchSendController } from '@/state/batchSend';
+import { createSendQueueController, type SendQueueController } from '@/state/sendQueue';
+import { createCaptureController, type CaptureController } from '@/state/capture';
+import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/lib/hostEnv';
+import { filterWinScreens, filterWinWebgl } from '@/core/rules/fingerprintGenerator';
 import { createSubscriptions, type Subscriptions } from '@/state/subscriptions';
 
 /** 是否运行在 Electron 宿主里（有 `window.api` 即真实宿主） */
@@ -39,6 +47,8 @@ export function createPorts(): Ports {
     sites: createSiteRegistry(host),
     storage: createLocalStorage(),
     clock: createSystemClock(),
+    // ★ 后台页（账号 `<webview>` 的租约 / 就绪 / 命令）—— 原版是组件间注册表，本工程提成端口
+    backendPage: createBackendPage(),
   };
 }
 
@@ -47,6 +57,11 @@ export interface Container {
   ports: Ports;
   /** 生成控制器（state 层） */
   gen: GenController;
+  analyze: AnalyzeController;
+  accountOps: AccountOpsController;
+  batchSend: BatchSendController;
+  sendQueue: SendQueueController;
+  capture: CaptureController;
   /**
    * 启动加载（读键 + **启动归位** + 灌 store）
    * ⚠️ 注释更正（2026-10-10）：原写「+ 5 条迁移」—— 4 条已按 TD-16-2 删除，
@@ -61,8 +76,23 @@ export interface Container {
 
 export function createContainer(): Container {
   const ports = createPorts();
-  const store = createAppStore(ports);
+  // ⚠️ 先在前面解构 —— 下面的 `roster` 闭包要用 `host.os`（放在后面虽也能跑，
+  //    但"引用了尚未声明的绑定"读起来像 bug）
   const { host, storage, clock } = ports;
+  // ★ 账号新增所需的环境（**getter**：源版就是调用时才读 `Uc()`/`M$()`/`$$()`）
+  //   ‣ `os` 取 `host.os`（preload 的 `process.platform`，**不读 navigator**）
+  //   ‣ 其余三项是**渲染层自己的**读数（窗口尺寸 / 真实 GPU）⇒ 归 `lib/hostEnv`
+  const roster = () => {
+    const vp = readRealViewport();
+    return {
+      os: readHostOs(host.os),
+      chromeMajor: readChromeMajor(),
+      winScreens: filterWinScreens(vp.w, vp.h),
+      winWebgl: filterWinWebgl(readRealGpu()),
+    };
+  };
+
+  const store = createAppStore(ports, { roster });
 
   const persist = createPersistController({
     clock,
@@ -86,6 +116,9 @@ export function createContainer(): Container {
         groups: s.groups,
         proxyPool: s.proxyPool,
         poolStrategy: s.poolStrategy,
+        // ★ Lovart 画廊（同账号族：不接这一步就只在内存）
+        lovartGalleries: s.lovartGalleries,
+        scanHistory: s.scanHistory,
       };
     },
     // 原则 6：错误原样写入 saveError（不改写 message）
@@ -106,6 +139,9 @@ export function createContainer(): Container {
     s.groups,
     s.proxyPool,
     s.poolStrategy,
+    // ★ Lovart 画廊：变了也要安排落盘（否则加图/清理都不落盘）
+    s.lovartGalleries,
+    s.scanHistory,
   ];
   let last = pick(store.useStore.getState());
   store.useStore.subscribe((s) => {
@@ -124,6 +160,23 @@ export function createContainer(): Container {
     store,
     ports,
     gen: createGenController(store, ports),
+    analyze: createAnalyzeController(store, ports),
+    accountOps: createAccountOps(store, ports),
+    batchSend: createBatchSendController(store, ports),
+    capture: createCaptureController(store, ports, {
+      // ⚠️ 运行环境在这里读（`container` 是组合根）—— `state` 层不碰 `window`
+      dpr: () => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
+    }),
+    sendQueue: (() => {
+      const c = createSendQueueController(store, ports);
+      /**
+       * ★ **启动队列的泵**（原 `TS` 在进入队列工作台时被调一次）
+       * ⚠️ 只在**一次性**的装配处启动 —— 泵自己靠 `schedule()` 的 50ms 节流自触发，
+       *   不需要（也不该）由 UI 再起一個定时器。
+       */
+      c.start();
+      return c;
+    })(),
     hydrate: () => hydrate(store, ports),
     persist,
     subscriptions,

@@ -1,0 +1,212 @@
+/**
+ * 提示词分析（原 `mat-float-actions` / `mat-analyze-float` / `mat-prompt-pop` / `.mpp-*`）
+ * ⚠️ 原则 5：色值一律走 `var(--...)`（字面量只允许在 `styles/tokens.css`）
+ */
+
+/* ── 节点上的浮动按钮组（原 `.mat-float-actions.nodrag.nopan`）── */
+.floatActions {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: var(--space-1);
+  display: flex;
+  gap: var(--space-1);
+}
+
+.analyzeBtn {
+  padding: var(--space-half) var(--space-2);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px var(--color-shadow);
+}
+
+.analyzeBtn:hover:not(:disabled) {
+  border-color: var(--btn-default-border-hover);
+  color: var(--btn-ghost-fg-hover);
+}
+
+.analyzeBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── 结果浮层（原 `.mat-prompt-pop.nodrag.nopan.nowheel`）── */
+.pop {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: var(--space-1);
+  width: 300px;
+  z-index: var(--z-overlay);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px var(--color-shadow-strong);
+  font-size: var(--font-size-xs);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.badge {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+
+.badgeDone {
+  background: var(--color-success);
+  color: var(--color-surface-raised);
+}
+
+.badgeFailed {
+  background: var(--color-danger);
+  color: var(--color-surface-raised);
+}
+
+.title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.close {
+  color: var(--color-text-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.body {
+  padding: var(--space-2);
+}
+
+.error {
+  color: var(--color-danger);
+  word-break: break-word;
+}
+
+/* ── 等待态（原 `.mpp-wait` / `.mpp-spinner`）── */
+.wait {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.waitRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--spinner-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── tab 区（原 `.mpp-tabs` / `.mpp-content` / `.mpp-pre`）── */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.tabs button {
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tabs button.on {
+  color: var(--tab-active-fg);
+  border-color: var(--tab-active-border);
+}
+
+.tabsGap {
+  flex: 1;
+}
+
+.copy {
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.content {
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-1);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+}
+
+/* ── 调整区（原 `.mpp-revise` / `.mpp-revise-input` / `.mpp-revise-btn`）── */
+.revise {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.reviseInput {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-half) var(--space-1);
+  color: var(--color-text-strong);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.reviseInput:focus {
+  border-color: var(--field-border-focus);
+}
+
+.reviseBtn {
+  padding: var(--space-half) var(--space-2);
+  color: var(--color-surface-raised);
+  background: var(--btn-primary-bg);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.reviseBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

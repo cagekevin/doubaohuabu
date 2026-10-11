@@ -10,7 +10,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: 0 4px 16px var(--color-shadow);
@@ -33,22 +33,98 @@
 .row input {
   flex: 1;
   min-width: 0;
-  padding: 2px var(--space-1);
+  padding: var(--space-half) var(--space-1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   font-size: var(--font-size-sm);
+}
+
+/**
+ * 提示词输入（原 `_Component45.jsx:1211` 的 `.gp-prompt` contentEditable）
+ * ⚠️ 我们用 `<textarea>`（`@` 引用未落地 ⇒ 没有 chip 要渲染，见 `TextNode.tsx` 的偏离说明）
+ * ⚠️ `resize: vertical` 允许用户拉高，但**不横向拉**（面板只有 220px 宽）
+ */
+.prompt {
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-1);
+  color: var(--color-text-strong);
+  font: inherit;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+}
+
+.prompt:focus {
+  border-color: var(--field-border-focus);
 }
 
 .run {
   margin-top: var(--space-1);
   padding: var(--space-2);
-  background: var(--color-primary);
-  color: var(--color-surface);
+  background: var(--btn-primary-bg);
+  color: var(--color-surface-raised);
   border-radius: var(--radius-sm);
 }
 
 .run:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/** 提示词区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */
+.promptWrap {
+  position: relative;
+}
+
+/**
+ * 提示词编辑器（`contentEditable`）—— 原 `_Component45.jsx:1211` 的 `.gp-prompt`
+ * ⚠️ 与上面的 `.prompt`（`<textarea>` 版）**同尺寸约定**，差别是它装**药丸 + `<br>`**
+ */
+.promptEditor {
+  display: block;
+  min-height: 72px;
+  max-height: 40vh;
+  overflow: auto;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/** 空态占位（`contentEditable` 没有 `placeholder` 属性） */
+.promptEditor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-faint);
+  pointer-events: none;
+}
+
+/* ── gp 药丸（原 `X3` 生成的三段：`.ref-chip.gp-ref-chip` / `.chip-img` / `.chip-name`）── */
+.promptEditor :global(.ref-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+  margin: 0 var(--space-half);
+  padding: 0 var(--space-1);
+  color: var(--node-ref-chip-fg);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  user-select: none;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.promptEditor :global(.chip-img) {
+  width: 14px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.promptEditor :global(.chip-name) {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

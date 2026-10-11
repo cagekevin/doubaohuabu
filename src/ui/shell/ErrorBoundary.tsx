@@ -6,6 +6,7 @@
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import styles from './ErrorBoundary.module.css';
 
 interface Props {
   children: ReactNode;
@@ -40,21 +41,12 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
 
     return (
-      <div style={{ padding: 24, fontFamily: 'var(--font-sans)' }}>
-        <h2 style={{ margin: '0 0 8px', color: 'var(--color-danger)' }}>
+      <div className={styles.fallback}>
+        <h2 className={styles.title}>
           {this.props.area}渲染出错（已被错误边界捕获，未白屏）
         </h2>
         {/* ★ 原始错误原文，不改写 */}
-        <pre
-          style={{
-            maxHeight: 240,
-            overflow: 'auto',
-            background: 'var(--color-surface-alt)',
-            padding: 12,
-            borderRadius: 'var(--radius-md)',
-            fontSize: 'var(--font-size-sm)',
-          }}
-        >
+        <pre className={styles.stack}>
           {error.message}
           {info?.componentStack ?? ''}
         </pre>

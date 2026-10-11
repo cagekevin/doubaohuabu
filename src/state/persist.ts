@@ -13,8 +13,12 @@ import type { ClockPort } from '@/core/ports/clock.port';
 import type { Cancel } from '@/core/ports/clock.port';
 import type { Project } from '@/stable/model/project';
 import type { Account, AccountGroup, PoolStrategy } from '@/stable/model/account';
+import type { LovartGalleries } from '@/core/rules/lovartGallery';
+import type { ScanHistoryEntry } from '@/core/rules/scanHistory';
 import { persistProject, type PersistDeps } from '@/core/usecases/persistProject';
 import { persistAccounts } from '@/core/usecases/persistAccounts';
+import { persistLsKey } from '@/core/usecases/persistLsKey';
+import { LS_LOVART_GALLERIES, LS_SCAN_HISTORY } from '@/stable/contracts/keys';
 import { PERSIST_DEBOUNCE_MS } from '@/constants';
 
 /** 本控制器负责落盘的全部数据（工程 + 账号族） */
@@ -26,6 +30,13 @@ export interface PersistSnapshot {
   groups: AccountGroup[];
   proxyPool: string[];
   poolStrategy: PoolStrategy;
+  /**
+   * ★ Lovart 画廊（原 `Pk` 26629）—— 与账号族同理：**有 store 切片、有 `pick()`，
+   *   但没有写盘分支就只在内存**（重启即丢）。2026-10-11 接上。
+   */
+  lovartGalleries: LovartGalleries;
+  /** ★ 指纹体检历史（原 `jk` 26223）—— 同画廊：有切片与 `pick()` 就得有写盘分支 */
+  scanHistory: ScanHistoryEntry[];
 }
 
 export interface PersistControllerDeps {
@@ -80,6 +91,21 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
     if (!acc.ok) {
       // ★ 同样原样透传（原则 6）
       deps.onError(acc.message);
+      return;
+    }
+
+    // ③ ★ Lovart 画廊（与上面两族同法：失败即返回、错误原样透传）
+    //    ⚠️ 用**通用件** `persistLsKey`（判据 C1：单键落盘的第二处 ⇒ 抽出来，不复制一份）
+    const gal = persistLsKey(LS_LOVART_GALLERIES, s.lovartGalleries, { storage: deps.persist.storage });
+    if (!gal.ok) {
+      deps.onError(gal.message);
+      return;
+    }
+
+    // ④ ★ 指纹体检历史（同上）
+    const scan = persistLsKey(LS_SCAN_HISTORY, s.scanHistory, { storage: deps.persist.storage });
+    if (!scan.ok) {
+      deps.onError(scan.message);
       return;
     }
 

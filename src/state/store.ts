@@ -12,11 +12,14 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import type { Ports } from '@/core/ports';
 import { EDGE_MARKER, EDGE_STYLE } from '@/constants';
 import { createCanvasSlice, type CanvasSlice } from './slices/canvas';
-import { createGlobalSlice, type GlobalSlice } from './slices/global';
+import { createGlobalSlice, type GlobalSlice, type GlobalSliceDeps } from './slices/global';
 import { createUiSlice, type UiSlice } from './slices/ui';
+import { createQueueSlice, type QueueSlice } from './slices/queue';
+import { createGallerySlice, type GallerySlice } from './slices/gallery';
+import { createScanSlice, type ScanSlice } from './slices/scan';
 import { createSettingsSlice, type SettingsSlice } from './slices/settings';
 
-export type AppState = GlobalSlice & CanvasSlice & UiSlice & SettingsSlice;
+export type AppState = GlobalSlice & CanvasSlice & UiSlice & SettingsSlice & QueueSlice & GallerySlice & ScanSlice;
 
 /** zustand 的 store hook 类型 */
 export type AppStoreHook = UseBoundStore<StoreApi<AppState>>;
@@ -28,12 +31,27 @@ export interface AppStore {
 }
 
 /**
+ * 创建应用 store 所需的**额外注入**（除端口之外的宿主侧输入）
+ *
+ * ★ 为什么单独一个参数而不塞进 `Ports`：`roster()` 读的是**渲染层自己的**环境
+ *   （真实窗口尺寸 / 真实 GPU —— 原 `M$`/`$$` 的输入），它**不经 IPC**，
+ *   与「端口＝宿主能力」不是一回事。
+ */
+export interface AppStoreDeps {
+  /** 新增账号所需环境（**getter**：源版就是调用时才读，见 `slices/global.ts`） */
+  roster: GlobalSliceDeps['roster'];
+}
+
+/**
  * 创建应用 store
  * @param ports 由 `bootstrap/container.ts` 组装并注入
+ * @param deps 额外的宿主侧输入（见 `AppStoreDeps`）
  */
-export function createAppStore(ports: Ports): AppStore {
+export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
   /** 连线 id 序号（原实现用 `Pt('e')` 的计数；这里用闭包序号） */
   let edgeSeq = 0;
+  /** 画廊图 id 的序号（原 `Pt('lg')`） */
+  let lgSeq = 0;
 
   const useStore = create<AppState>()((set, get) => {
     /**
@@ -72,7 +90,7 @@ export function createAppStore(ports: Ports): AppStore {
     const getState = () => get() as AppState;
 
     return {
-      ...createGlobalSlice(setPartial, getState, { now: () => ports.clock.now() }),
+      ...createGlobalSlice(setPartial, getState, { now: () => ports.clock.now(), roster: deps.roster }),
       ...createCanvasSlice(setPartial, getState, {
         now: () => ports.clock.now(),
         makeEdge: (conn) => ({
@@ -85,6 +103,20 @@ export function createAppStore(ports: Ports): AppStore {
         }),
       }),
       ...createUiSlice(() => ports.clock.now())(setPartial, getState),
+      ...createQueueSlice(() => ports.clock.now())(setPartial, getState),
+      // ★ Lovart 画廊（独立成片，见 slices/gallery.ts 头注释）。
+      //   ⚠️ `normalizeImage` 走 `MediaPort.saveImageSync` —— 它是**同步 IPC**（W1 明列的两处
+      //      `sendSync` 之一，**不得 await**）⇒ 这里包成普通函数注入。
+      ...createGallerySlice({
+        now: () => ports.clock.now(),
+        idFactory: () => `lg_${ports.clock.now().toString(36)}_${++lgSeq}`,
+        normalizeImage: (url) => {
+          const r = ports.host.media.saveImageSync(url);
+          return r.ok ? r.value : url;
+        },
+      })(setPartial, getState),
+      // ★ 指纹体检历史（独立成片，见 slices/scan.ts 头注释）
+      ...createScanSlice(() => ports.clock.now())(setPartial, getState),
       // ★ settings：API 配置族（判据 C2 —— `global` 超 25 字段即按共享范围再分）
       ...createSettingsSlice(setPartial, getState),
     };

@@ -6,7 +6,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  background: var(--color-canvas-bg);
+  background: var(--color-canvas);
 }
 
 .emptyHint {
@@ -23,5 +23,5 @@
 
 .emptyTitle {
   font-size: var(--font-size-lg);
-  color: var(--color-text);
+  color: var(--color-text-strong);
 }

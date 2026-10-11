@@ -234,3 +234,147 @@ export function applyStylePrefix(body: string, stylePrefix: string): string {
   const prefix = String(stylePrefix ?? '').trim();
   return prefix ? `${prefix}${body}` : body;
 }
+
+/**
+ * 把一条 `@` 引用解析成**素材**（原 `fk` 24135-24203）
+ *
+ * 六级回落（**顺序即语义**，逐行对齐源）：
+ *   ① 资源库里 `id` 命中且有 `dataUrl`
+ *   ② 节点 `material` 自带 `dataUrl`
+ *   ③ 节点 `material` 自带 `libId` ⇒ 回资源库按 `libId` 找
+ *   ④ 节点 `material` 的 `dataUrl` ⇒ 回资源库**按 dataUrl 反查**
+ *   ⑤ 节点 `video` ⇒ 用 `poster` 当图、`url` 当视频（`mediaType: 'video'`）
+ *   ⑥ 节点 `imggen` 自带 `dataUrl`
+ *   **都没命中 ⇒ `{id, label: id, dataUrl: ''}`**（不抛、不返回 null —— 调用方按
+ *   `dataUrl` 是否为空决定要不要把它当参考图）
+ *
+ * ⚠️ 源版这个函数**被 3 处复用**（`jS` / `$L` / 素材拖拽），故归 `rules` 共享。
+ */
+export interface ResolvedRefMaterial {
+  id: string;
+  label: string;
+  dataUrl: string;
+  mediaType?: 'video';
+  videoUrl?: string;
+}
+
+/** 资源库条目的最小形状（本函数只读这四项） */
+export interface RefLibraryItem {
+  id: string;
+  name?: string;
+  dataUrl?: string;
+}
+
+/** 节点的最小形状（本函数只读 `type` / `data`） */
+export interface RefNodeLike {
+  id: string;
+  type: string;
+  data?: Record<string, unknown> | null;
+}
+
+export function resolveRefMaterial(
+  refId: string,
+  library: readonly RefLibraryItem[],
+  nodes: Readonly<Record<string, RefNodeLike>> | readonly RefNodeLike[],
+): ResolvedRefMaterial {
+  const lib = library || [];
+  const map: Readonly<Record<string, RefNodeLike>> = Array.isArray(nodes)
+    ? Object.fromEntries(nodes.map((n) => [n.id, n]))
+    : (nodes as Readonly<Record<string, RefNodeLike>>);
+
+  // ①
+  const libHit = lib.find((l) => l.id === refId);
+  if (libHit && libHit.dataUrl) {
+    return { id: refId, label: libHit.name || refId, dataUrl: libHit.dataUrl };
+  }
+
+  const node = map[refId];
+  const d = (node?.data ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+  // ②
+  if (node?.type === 'material' && text(d.dataUrl)) {
+    return { id: refId, label: text(d.label) || text(d.name) || refId, dataUrl: text(d.dataUrl) };
+  }
+  // ③
+  if (node?.type === 'material' && text(d.libId)) {
+    const hit = lib.find((l) => l.id === text(d.libId));
+    if (hit && hit.dataUrl) {
+      return {
+        id: refId,
+        label: hit.name || text(d.label) || text(d.name) || refId,
+        dataUrl: hit.dataUrl,
+      };
+    }
+  }
+  // ④
+  if (node?.type === 'material' && text(d.dataUrl)) {
+    const hit = lib.find((l) => l.dataUrl && l.dataUrl === text(d.dataUrl));
+    if (hit) {
+      // ⚠️ `hit.dataUrl` 在接口里是可选的（谓词不会把类型收窄到 find 的返回值）⇒ 用 `text()` 归一
+      return { id: refId, label: hit.name || text(d.label) || text(d.name) || refId, dataUrl: text(hit.dataUrl) };
+    }
+  }
+  // ⑤
+  if (node?.type === 'video') {
+    return {
+      id: refId,
+      label: text(d.label) || text(d.name) || '视频',
+      dataUrl: text(d.poster),
+      mediaType: 'video',
+      ...(text(d.url) ? { videoUrl: text(d.url) } : {}),
+    };
+  }
+  // ⑥
+  if (node?.type === 'imggen' && text(d.dataUrl)) {
+    return { id: refId, label: text(d.label) || text(d.name) || '文生图', dataUrl: text(d.dataUrl) };
+  }
+  return { id: refId, label: refId, dataUrl: '' };
+}
+
+/**
+ * 把**关联文本框**的正文并进主正文（原 `sR` 35486-35521）
+ *
+ * 规则（逐字对齐源）：
+ *   ① 每条关联文本：正文里若出现 `@<它的名字>` **或** `@[…|<它的名字>]` ⇒
+ *      **就地替换成它的正文**（内联）
+ *   ② 没出现 ⇒ 收进"追加组"
+ *   ③ 追加组非空时：主正文非空 ⇒ `主正文\n\n追加组`（空行分隔）；主正文为空 ⇒ 只留追加组
+ *
+ * ⚠️ 与源一致：名字里的正则元字符要转义（原 `u0`）。
+ * ⚠️ **源版这里有个隐患**：`l` 与 `c` 都是 `/g` 正则，先 `test` 再 `replace` ——
+ *    `/g` 的 `lastIndex` 会被 `test` 推进。`String.replace` 会重置 `lastIndex`，
+ *    故**实际行为正确**；本实现改用**每次新建正则**，避免依赖那个巧合。
+ */
+export function mergeLinkedTexts(
+  body: string,
+  linked: readonly { text?: string; label?: string }[],
+): string {
+  let out = String(body ?? '');
+  const append: string[] = [];
+
+  const escapeRe = (v: string): string => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  for (const item of linked || []) {
+    const text = String(item?.text ?? '').trim();
+    if (!text) continue;
+    const label = String(item?.label ?? '').trim();
+    if (!label) {
+      append.push(text);
+      continue;
+    }
+    const esc = escapeRe(label);
+    const shortRe = new RegExp(`@${esc}`, 'g');
+    const fullRe = new RegExp(`@\\[[^\\]|]+\\|${esc}\\]`, 'g');
+    if (shortRe.test(out) || fullRe.test(out)) {
+      out = out.replace(new RegExp(`@${esc}`, 'g'), text).replace(new RegExp(`@\\[[^\\]|]+\\|${esc}\\]`, 'g'), text);
+    } else {
+      append.push(text);
+    }
+  }
+
+  if (append.length) {
+    out = out.trim() ? `${out.trim()}\n\n${append.join('\n\n')}` : append.join('\n\n');
+  }
+  return out.trim();
+}

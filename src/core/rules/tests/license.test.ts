@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatLicenseRemaining, isLicenseExpired } from '../license';
+import { formatDateTime, formatLicenseRemaining, isLicenseExpired } from '../license';
 import { LICENSE_TEXT } from '@/constants/text';
 
 const DAY = 86400000;
@@ -56,5 +56,25 @@ describe('★ LICENSE_TEXT 字面量锁死（防与源漂移）', () => {
     expect(LICENSE_TEXT.permanent).toBe('永久'); // 不是「永久授权」
     expect(LICENSE_TEXT.remainingDays(3)).toBe('剩余约 3 天'); // 有「约」
     expect(LICENSE_TEXT.remainingHours(2)).toBe('剩余约 2 小时'); // 有「约」
+  });
+});
+
+describe('formatDateTime（原 `Zd` 42599）', () => {
+  it('★ 格式 `YYYY-MM-DD HH:mm`，月/日/时/分**补零**', () => {
+    // ⚠️ 用**本地时间**构造，避免时区把断言弄成 UTC 偏移
+    expect(formatDateTime(new Date(2026, 0, 5, 9, 7).getTime())).toBe('2026-01-05 09:07');
+    expect(formatDateTime(new Date(2026, 11, 31, 23, 59).getTime())).toBe('2026-12-31 23:59');
+  });
+
+  it('★ **秒与毫秒不显示**', () => {
+    expect(formatDateTime(new Date(2026, 5, 1, 12, 30, 45, 999).getTime())).toBe('2026-06-01 12:30');
+  });
+
+  it('★ 不是数字 / 假值 ⇒ `—`（**不是空串**）', () => {
+    expect(formatDateTime(undefined)).toBe('—');
+    expect(formatDateTime(null)).toBe('—');
+    expect(formatDateTime(0)).toBe('—');
+    expect(formatDateTime('2026-01-01')).toBe('—');
+    expect(formatDateTime(NaN)).toBe('—');
   });
 });

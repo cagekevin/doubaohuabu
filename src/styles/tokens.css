@@ -1,81 +1,461 @@
 /**
- * 设计 token（★ SSOT：颜色/间距/圆角/字体的唯一真源）
+ * 设计 Token（★ SSOT：颜色 / 间距 / 圆角 / 字体 / 层级 / 动效 的唯一真源）
  *
  * 依据：docs/11-架构与契约定稿.md §2.1「CSS 必须标准 + SSOT」
  * 铁律：**字面量色值只允许出现在本文件**（由 scripts/check-invariants.cjs 强制）
+ *
+ * ═════════════════════════════════════════════════════════════════════
+ *  三层架构（W3C Design Tokens / Material 3 / Ant Design 5 同款）
+ * ─────────────────────────────────────────────────────────────────────
+ *   L1  PRIMITIVE   原始值（颜料盒）。★ 全仓唯一允许出现十六进制 / px 的层
+ *   L1.5 BRAND      品牌槽位。指向 L1，可被 data-brand 整体换掉
+ *   L2  SEMANTIC    语义层（意图）。组件**只准引用这一层**
+ *   L3  COMPONENT   组件旋钮。每个控件自己的可调参数，指向 L2
+ *
+ * ═════════════════════════════════════════════════════════════════════
+ *  切法（都只动 <html> 上的一个属性，全局即时生效）
+ * ─────────────────────────────────────────────────────────────────────
+ *   换品牌色   data-brand="indigo | blue | violet | green"
+ *   换明暗     data-theme="light | dark"
+ *   换圆角风格 data-shape="square | standard | round"
+ *   换密度     data-density="compact | standard | loose"
+ *
+ * ═════════════════════════════════════════════════════════════════════
+ *  你想改什么 → 动哪一层 → 动几行
+ * ─────────────────────────────────────────────────────────────────────
+ *   整体换品牌（紫→蓝）        L1.5 的 --brand-500        1 行
+ *   换整套明暗                 L2 的语义块（已有两套）    0 行（切属性）
+ *   只改按钮不动选中框         L3 的 --btn-primary-bg     1 行
+ *   只改选中框不动按钮         L3 的 --node-selected-ring 1 行
+ *   切圆角风格（方正↔圆润）    切 data-shape              0 行（切属性）
+ *   切紧凑 / 宽松             切 data-density             0 行（切属性）
+ *
+ * ═════════════════════════════════════════════════════════════════════
+ *  铁律
+ * ─────────────────────────────────────────────────────────────────────
+ *   ① 十六进制色值只许出现在 L1（scripts/check-invariants.cjs 的 ssot-color）
+ *   ② 组件样式只许引用 L2 / L3，不得直接引用 L1
+ *   ③ 改视觉 = 改 L3；换主题 = 换 L2；换颜料 = 换 L1
+ *   ④ 旧 token 名（--color-primary / --space-2 / --radius-md …）全部保留为
+ *      L2 别名 ⇒ 现有 18 个 CSS 文件**零改动**
+ *      （可后续按切片逐个把旧名换成语义名，换完再删别名块）
  */
 
+/* ══════════════════════════════════════════════════════════════════
+   L1 · PRIMITIVE —— 原始值（唯一允许十六进制的地方）
+   ══════════════════════════════════════════════════════════════════ */
 :root {
-  /* ── 色板 ── */
-  --color-bg: #f7f8fa;
-  --color-surface: #ffffff;
-  --color-surface-alt: #f2f3f5;
-  --color-border: #e5e7eb;
-  --color-border-strong: #d1d5db;
+  /* ── 中性色阶 ── */
+  --p-gray-50:  #f7f8fa;
+  --p-gray-100: #f2f3f5;
+  --p-gray-200: #e5e7eb;
+  --p-gray-300: #d1d5db;
+  --p-gray-400: #9ca3af;
+  --p-gray-500: #6b7280;
+  --p-gray-800: #1f2329;
 
-  --color-text: #1f2329;
-  --color-text-muted: #6b7280;
-  --color-text-faint: #9ca3af;
+  /* ── 中性色阶（暗色专用）── */
+  --p-ink-950: #0f1115;
+  --p-ink-900: #171a21;
+  --p-ink-850: #1f232b;
+  --p-ink-800: #2a2f38;
+  --p-ink-700: #3a404b;
+  --p-ink-600: #4d5462;
 
-  --color-primary: #6366f1;
-  --color-primary-hover: #4f46e5;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
+  /* ── 品牌候选色阶 ── */
+  --p-indigo-400: #818cf8;  --p-indigo-500: #6366f1;  --p-indigo-600: #4f46e5;
+  --p-blue-400:   #60a5fa;  --p-blue-500:   #3b82f6;  --p-blue-600:   #2563eb;
+  --p-violet-400: #a78bfa;  --p-violet-500: #8b5cf6;  --p-violet-600: #7c3aed;
+  --p-green-400:  #34d399;  --p-green-500:  #10b981;  --p-green-600:  #059669;
 
-  /* ── 画布专属 ── */
-  --color-canvas-bg: #fbfbfc;
-  --color-grid: rgba(226, 230, 236, 0.4);
-  --color-edge: #6366f1;
+  /* ── 功能色 ── */
+  --p-amber-400: #fbbf24;   --p-amber-500: #f59e0b;
+  --p-red-400:   #f87171;   --p-red-500:   #ef4444;
+  --p-white:     #ffffff;
 
-  /* ── 节点类型色（对齐原实现 MiniMap 配色）── */
-  --color-node-material: #a5b4fc;
-  --color-node-account: #34d399;
-  --color-node-other: #fcd34d;
+  /* ── 节点类型色（对齐 MiniMap 配色）── */
+  --p-node-material: #a5b4fc;
+  --p-node-account:  #34d399;
+  --p-node-other:    #fcd34d;
 
-  /* ── 间距 ── */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+  /* ── 画布底 ── */
+  --p-canvas: #fbfbfc;
 
-  /* ── 圆角 ── */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-full: 9999px;
+  /**
+   * ── 通道值（`r g b`）──
+   * 供 `rgb(var(--x-ch) / α)` 使用 ⇒ L2 里**不出现任何 rgba 字面量**（查 4）。
+   */
+  --p-gray-100-ch:   240 240 240;
+  --p-gray-200-ch:   226 230 236;
+  --p-white-ch:      255 255 255;
+  --p-black-ch:      0 0 0;
+  --p-red-500-ch:    239 68 68;
+  --p-amber-500-ch:  245 158 11;
+  --p-indigo-500-ch: 99 102 241;
+  --p-green-500-ch:  16 185 129;
 
-  /* ── 字体 ── */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
-  --font-size-xs: 11px;
-  --font-size-sm: 12px;
-  --font-size-md: 14px;
-  --font-size-lg: 16px;
-  --font-size-xl: 20px;
+  /* ── 尺寸基准（px 字面量的唯一落点）── */
+  --dim-half: 2px; /* 半档：药丸内边距 / 紧凑 chip 间距 */
+  --dim-1: 4px;
+  --dim-2: 8px;
+  --dim-3: 12px;
+  --dim-4: 16px;
+  --dim-5: 24px;
+  --dim-6: 32px;
+  --dim-8: 48px;
 
-  /* ── 阴影 / 蒙层 / 选区（供 theme.css 与组件引用，避免字面量色值外泄）── */
-  --color-shadow: rgba(0, 0, 0, 0.08);
-  --color-shadow-strong: rgba(0, 0, 0, 0.16);
-  --color-mask: rgba(240, 240, 240, 0.6);
-  --color-mask-strong: rgba(0, 0, 0, 0.32);
-  --color-selection-bg: rgba(99, 102, 241, 0.08);
+  /* ── 圆角基准 ── */
+  --shape-sm:   4px;
+  --shape-md:   8px;
+  --shape-lg:   12px;
+  --shape-full: 9999px;
 
-  /* ── 危险态（错误横幅）── */
-  --color-danger-bg: rgba(239, 68, 68, 0.08);
-  --color-danger-border: rgba(239, 68, 68, 0.24);
+  /* ── 字阶 ── */
+  --type-2xs: 9px; /* 极小字：缩略图抓手 / 下拉箭头等符号 */
+  --type-xs: 11px;
+  --type-sm: 12px;
+  --type-md: 14px;
+  --type-lg: 16px;
+  --type-xl: 20px;
+  --type-2xl: 32px; /* 大图标 / 空态插图 */
+
+  /* ── 字族 ── */
+  --type-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --type-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
 
   /* ── 层级 ── */
-  --z-canvas: 1;
-  --z-panel: 100;
-  --z-overlay: 500;
-  --z-modal: 900;
-  --z-toast: 1000;
+  --layer-canvas:  1;
+  --layer-panel:   100;
+  --layer-overlay: 500;
+  --layer-modal:   900;
+  --layer-toast:   1000;
 
   /* ── 动效 ── */
-  --duration-fast: 120ms;
-  --duration-base: 200ms;
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   L1.5 · BRAND —— 品牌槽位（切 data-brand 即换掉这三行）
+   ══════════════════════════════════════════════════════════════════ */
+:root,
+[data-brand='indigo'] {
+  --brand-400: var(--p-indigo-400);
+  --brand-500: var(--p-indigo-500);
+  --brand-600: var(--p-indigo-600);
+}
+[data-brand='blue'] {
+  --brand-400: var(--p-blue-400);
+  --brand-500: var(--p-blue-500);
+  --brand-600: var(--p-blue-600);
+}
+[data-brand='violet'] {
+  --brand-400: var(--p-violet-400);
+  --brand-500: var(--p-violet-500);
+  --brand-600: var(--p-violet-600);
+}
+[data-brand='green'] {
+  --brand-400: var(--p-green-400);
+  --brand-500: var(--p-green-500);
+  --brand-600: var(--p-green-600);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   密度 / 圆角 —— 两个乘数开关
+   ══════════════════════════════════════════════════════════════════ */
+:root,
+[data-density='standard'] { --density: 1; }
+[data-density='compact']  { --density: 0.75; }
+[data-density='loose']    { --density: 1.25; }
+
+[data-shape='standard'] {
+  --shape-sm: 4px;  --shape-md: 8px;  --shape-lg: 12px;
+}
+[data-shape='square'] {
+  --shape-sm: 2px;  --shape-md: 4px;  --shape-lg: 6px;
+}
+[data-shape='round'] {
+  --shape-sm: 8px;  --shape-md: 12px; --shape-lg: 18px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   L2 · SEMANTIC —— 语义层（组件只准引用这一层）
+   ══════════════════════════════════════════════════════════════════ */
+:root,
+[data-theme='light'] {
+  /* ── 表面 ── */
+  --color-surface-base:   var(--p-gray-50);    /* 页面底 */
+  --color-surface-raised: var(--p-white);      /* 卡片 / 面板 / 节点 */
+  --color-surface-sunken: var(--p-gray-100);   /* 凹陷 / 输入框底 */
+  --color-surface-hover:  var(--p-gray-100);
+  --color-canvas:         var(--p-canvas);     /* 画布底 */
+  --color-canvas-grid:    rgb(var(--p-gray-200-ch) / 0.4);
+
+  /* ── 文字 ── */
+  --color-text-strong: var(--p-gray-800);
+  --color-text-muted:  var(--p-gray-500);
+  --color-text-faint:  var(--p-gray-400);
+  --color-text-on-brand: var(--p-white);
+  --color-text-on-danger: var(--p-white);
+
+  /* ── 描边 ── */
+  --color-border:        var(--p-gray-200);
+  --color-border-strong: var(--p-gray-300);
+
+  /* ── 动作（★ 原本这 6 个语义全挤在 --color-primary 一个变量里）── */
+  --color-action-primary:       var(--brand-500);  /* 主按钮底 */
+  --color-action-primary-hover: var(--brand-600);  /* 主按钮 hover */
+  --color-accent-text:          var(--brand-500);  /* 强调文字 / 图标 */
+  --color-selected-border:      var(--brand-500);  /* 选中框 */
+  --color-selected-ring:        var(--brand-500);  /* 选中光环 box-shadow */
+  --color-focus-ring:           var(--brand-500);  /* 键盘 focus 环 */
+  --color-marquee-border:       var(--brand-500);  /* 框选虚线 */
+  --color-handle:               var(--brand-500);  /* 连线端点 */
+  --color-edge:                 var(--brand-500);  /* 连线本体 */
+
+  /* ── 反馈 ── */
+  --color-success: var(--p-green-500);
+  /**
+   * 成功态底色 —— ★ 修正悬空：`ActivatePage.module.css` 一直在引用它，
+   * 但**从未有定义**（旧 `tokens.css` 里只有 `--color-danger-bg`，没有 success 版）。
+   */
+  --color-success-bg: rgb(var(--p-green-500-ch) / 0.10);
+  --color-warning: var(--p-amber-500);
+  --color-danger:  var(--p-red-500);
+  --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.08);
+  --color-danger-border: rgb(var(--p-red-500-ch) / 0.24);
+  --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.10);
+
+  /* ── 叠加 ── */
+  --color-shadow:        rgb(var(--p-black-ch) / 0.08);
+  --color-shadow-strong: rgb(var(--p-black-ch) / 0.16);
+  --color-mask:          rgb(var(--p-gray-100-ch) / 0.6);
+  --color-mask-strong:   rgb(var(--p-black-ch) / 0.32);
+  --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.08);
+
+  /* ── 节点类型色 ── */
+  --color-node-material: var(--p-node-material);
+  --color-node-account:  var(--p-node-account);
+  --color-node-other:    var(--p-node-other);
+}
+
+/* ── 暗色：只换 L2，L1 / L3 一行不动 ── */
+[data-theme='dark'] {
+  --color-surface-base:   var(--p-ink-950);
+  --color-surface-raised: var(--p-ink-900);
+  --color-surface-sunken: var(--p-ink-850);
+  --color-surface-hover:  var(--p-ink-800);
+  --color-canvas:         var(--p-ink-950);
+  --color-canvas-grid:    rgb(var(--p-white-ch) / 0.06);
+
+  --color-text-strong: var(--p-gray-100);
+  --color-text-muted:  var(--p-gray-400);
+  --color-text-faint:  var(--p-gray-500);
+  --color-text-on-brand: var(--p-white);
+
+  --color-border:        var(--p-ink-800);
+  --color-border-strong: var(--p-ink-700);
+
+  /* 暗色下品牌色要提亮一档，否则压在深底上发闷 */
+  --color-action-primary:       var(--brand-400);
+  --color-accent-text:          var(--brand-400);
+  --color-selected-border:      var(--brand-400);
+  --color-selected-ring:        var(--brand-400);
+  --color-focus-ring:           var(--brand-400);
+  --color-marquee-border:       var(--brand-400);
+  --color-handle:               var(--brand-400);
+  --color-edge:                 var(--brand-400);
+
+  --color-success: var(--p-green-400);
+  --color-warning: var(--p-amber-400);
+  --color-danger:  var(--p-red-400);
+
+  --color-shadow:        rgb(var(--p-black-ch) / 0.40);
+  --color-shadow-strong: rgb(var(--p-black-ch) / 0.56);
+  --color-mask:          rgb(var(--p-black-ch) / 0.45);
+  --color-mask-strong:   rgb(var(--p-black-ch) / 0.62);
+}
+
+/* ── 间距（受密度乘数影响；density=1 时与旧值完全一致）── */
+:root {
+  --space-half: calc(var(--dim-half) * var(--density));
+  --space-1: calc(var(--dim-1) * var(--density));
+  --space-2: calc(var(--dim-2) * var(--density));
+  --space-3: calc(var(--dim-3) * var(--density));
+  --space-4: calc(var(--dim-4) * var(--density));
+  --space-5: calc(var(--dim-5) * var(--density));
+  --space-6: calc(var(--dim-6) * var(--density));
+  --space-8: calc(var(--dim-8) * var(--density));
+}
+
+/* ── 圆角 / 字阶 / 字族 / 层级 / 动效 ── */
+:root {
+  --radius-sm:   var(--shape-sm);
+  --radius-md:   var(--shape-md);
+  --radius-lg:   var(--shape-lg);
+  --radius-full: var(--shape-full);
+
+  --font-size-2xs: var(--type-2xs);
+  --font-size-xs: var(--type-xs);
+  --font-size-sm: var(--type-sm);
+  --font-size-md: var(--type-md);
+  --font-size-lg: var(--type-lg);
+  --font-size-xl: var(--type-xl);
+  --font-size-2xl: var(--type-2xl);
+
+  --font-sans: var(--type-sans);
+  --font-mono: var(--type-mono);
+
+  --z-canvas:  var(--layer-canvas);
+  --z-panel:   var(--layer-panel);
+  --z-overlay: var(--layer-overlay);
+  --z-modal:   var(--layer-modal);
+  --z-toast:   var(--layer-toast);
+
+  --duration-fast: var(--dur-fast);
+  --duration-base: var(--dur-base);
+  --ease-out: var(--ease-out);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   L3 · COMPONENT —— 组件旋钮（改视觉只动这里）
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── 按钮 ── */
+  --btn-radius:      var(--radius-md);
+  --btn-font-size:   var(--font-size-sm);
+  --btn-height:      calc(var(--dim-6) * var(--density));
+  --btn-padding-x:   var(--space-3);
+  --btn-gap:         var(--space-1);
+
+  --btn-primary-bg:     var(--color-action-primary);
+  --btn-primary-bg-hover: var(--color-action-primary-hover);
+  --btn-primary-fg:     var(--color-text-on-brand);
+  --btn-primary-border: transparent;
+
+  --btn-default-bg:     var(--color-surface-raised);
+  --btn-default-bg-hover: var(--color-surface-hover);
+  --btn-default-fg:     var(--color-text-strong);
+  --btn-default-border: var(--color-border);
+
+  --btn-ghost-bg:       transparent;
+  --btn-ghost-bg-hover: var(--color-surface-hover);
+  --btn-ghost-fg:       var(--color-text-muted);
+
+  --btn-danger-bg:     var(--color-danger);
+  --btn-danger-bg-hover: var(--color-danger);
+  --btn-danger-fg:     var(--color-text-on-danger);
+
+  /* ── 输入控件 ── */
+  --field-bg:        var(--color-surface-sunken);
+  --field-bg-focus:  var(--color-surface-raised);
+  --field-fg:        var(--color-text-strong);
+  --field-border:    var(--color-border);
+  --field-border-focus: var(--color-action-primary);
+  --field-radius:    var(--radius-sm);
+  --field-height:    calc(var(--dim-6) * var(--density));
+  --field-padding-x: var(--space-2);
+  --field-font-size: var(--font-size-sm);
+  --field-placeholder: var(--color-text-faint);
+
+  /* ── 面板（左账号栏 / 右资源库 / 生成面板 / 浮层，共用一个壳）── */
+  --panel-bg:        var(--color-surface-raised);
+  --panel-border:    var(--color-border);
+  --panel-radius:    var(--radius-md);
+  --panel-shadow:    0 2px 12px var(--color-shadow);
+  --panel-padding:   var(--space-3);
+  --panel-gap:       var(--space-2);
+  --panel-head-fg:   var(--color-text-strong);
+  --panel-head-size: var(--font-size-sm);
+
+  /* ── 节点卡片 ── */
+  --node-bg:           var(--color-surface-raised);
+  --node-border:       var(--color-border);
+  --node-radius:       var(--radius-md);
+  --node-shadow:       0 1px 4px var(--color-shadow);
+  --node-shadow-hover: 0 2px 8px var(--color-shadow);
+  --node-selected-ring: var(--color-selected-ring);   /* ★ 独立于按钮色 */
+  --node-head-bg:      var(--color-surface-sunken);
+  --node-head-height:  calc(var(--dim-6) * var(--density));
+  --node-head-fg:      var(--color-text-muted);
+  --node-head-size:    var(--font-size-xs);
+  --node-body-padding: var(--space-2);
+  --node-min-width:    180px;
+
+  /* ── 连线 ── */
+  --edge-stroke:        var(--color-edge);
+  --edge-stroke-width:  2;
+  --edge-stroke-selected: var(--color-action-primary-hover);
+  --handle-bg:          var(--color-handle);
+  --handle-border:      var(--color-surface-raised);
+  --handle-size:        8px;
+
+  /* ── 药丸 / 徽章 ── */
+  --chip-bg:     var(--color-surface-sunken);
+  --chip-fg:     var(--color-text-strong);
+  --chip-border: var(--color-border);
+  --chip-radius: var(--radius-full);
+  --chip-padding-x: var(--space-2);
+  --chip-height: calc(var(--dim-5) * var(--density));
+
+  --badge-radius:   var(--radius-sm);
+  --badge-padding-x: var(--space-1);
+  --badge-font-size: var(--font-size-xs);
+
+  /* ── 顶栏 ── */
+  --topbar-height: calc(var(--dim-8) * var(--density));
+  --topbar-bg:     var(--color-surface-raised);
+  --topbar-border: var(--color-border);
+  --topbar-padding-x: var(--space-4);
+
+  /* ── 侧栏 ── */
+  --side-width: 240px;
+  --side-bg:    var(--color-surface-raised);
+  --side-border: var(--color-border);
+
+  /* ── 按钮（补充：悬停态）── */
+  --btn-default-border-hover: var(--color-action-primary);
+  --btn-ghost-fg-hover:       var(--color-accent-text);
+
+  /* ── 节点（补充）── */
+  --node-selected-border:  var(--color-selected-border);
+  --node-name-edit-border: var(--color-action-primary);
+  --node-chip-fg:          var(--color-accent-text);
+  --node-ref-ok-fg:        var(--color-success);
+  --node-ref-chip-fg:      var(--color-accent-text);
+  /**
+   * ★ 身份圆点：与 MiniMap 用**同一套类型色**。
+   *
+   * 修正前 `.materialDot` / `.videoDot` 写的是 `--color-primary`（紫）、
+   * `.downloadDot` 写的是 `--color-success`（绿）—— 而 MiniMap 用的是类型色
+   * （material `#a5b4fc` / account `#34d399` / other `#fcd34d`）⇒ **同一概念两套颜色**。
+   * 现统一到 `--color-node-*`，与 MiniMap 一致。
+   */
+  --node-dot-material: var(--color-node-material);
+  --node-dot-other:    var(--color-node-other);
+  --node-dot-account:  var(--color-node-account);
+  --node-dot-download: var(--color-success);
+
+  /* ── 加载指示 ── */
+  --spinner-color: var(--color-action-primary);
+
+  /* ── 进度条 ── */
+  --progress-fill:  var(--color-action-primary);
+  --progress-track: var(--color-surface-sunken);
+
+  /* ── 标签页 ── */
+  --tab-active-fg:     var(--color-accent-text);
+  --tab-active-border: var(--color-selected-border);
+
+  /* ── 焦点 / 框选 ── */
+  --focus-ring:     var(--color-focus-ring);
+  --marquee-border: var(--color-marquee-border);
+}
+
+/* ── 圆角风格联动：切 data-shape 时组件层自动跟随（无需改 L3）── */
+[data-shape='round'] {
+  --btn-radius: var(--radius-lg);
+  --field-radius: var(--radius-md);
+  --node-radius: var(--radius-lg);
 }

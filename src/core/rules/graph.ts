@@ -14,12 +14,113 @@
 import type { CanvasNode } from '@/stable/model/node';
 import type { CanvasEdge } from '@/stable/model/project';
 import { err, ok, type Result } from '@/core/model/result';
+// ⚠️ 文本归一（原 `Vk(In(...))`）—— `d3` 的正文清洗与提示词组装共用同一套
+import { stripHtml } from '@/lib/text';
+import { stripGeneratedArtifacts } from './prompt';
 import { CIRCULAR_REF_MESSAGE } from '@/constants/text';
 
 /** 一条待添加的连线 */
 export interface ConnectRequest {
   source: string;
   target: string;
+}
+
+/** 一条关联文本（原 `d3` 的产物元素） */
+export interface LinkedText {
+  id: string;
+  label: string;
+  text: string;
+}
+
+/**
+ * 收集**指向某节点的关联文本**（原 `d3` 41179-41228）
+ *
+ * ★ **它是什么**：把「连到本节点的文本框」的正文按顺序收集起来 ——
+ *   `jS` 靠它把多个文本框拼成最终提示词（原 `sR`），也是「文本 → 文生视频」这条常见流的实现。
+ *
+ * 顺序规则（**顺序即语义**）：
+ *   ① 取 `edges` 里 `target === nodeId` 的**入边**；
+ *   ② 若目标节点的 `data.referenceOrder` 是非空数组 ⇒ 按**源节点在其中出现的下标**排序
+ *      （不在里面的记为 `1e9` ⇒ 排到最后）；没有 `referenceOrder` ⇒ 保持 `edges` 的原序；
+ *   ③ 源节点**必须是 `text`**（其它类型忽略）；
+ *   ④ 正文取 `data.text || data.prompt`，过 `stripHtml` + 去生成痕迹后 trim，**空的丢弃**；
+ *   ⑤ 按 `id` **去重**（保留首个）。
+ *
+ * ⚠️ 与源一致：`referenceOrder` 只影响**排序**，不参与过滤 —— 没连边的文本节点不会被收集。
+ */
+export function collectLinkedTexts(
+  nodeId: string,
+  nodes: readonly { id: string; type: string; data?: unknown }[] = [],
+  edges: readonly { source: string; target: string }[] = [],
+): LinkedText[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = (edges || []).filter((e) => e.target === nodeId);
+
+  const target = byId.get(nodeId);
+  const data = (target?.data ?? {}) as Record<string, unknown>;
+  const order = Array.isArray(data.referenceOrder) ? (data.referenceOrder as unknown[]) : null;
+
+  let ordered = incoming;
+  if (order && order.length) {
+    const rank = new Map(order.map((id, i) => [String(id), i]));
+    ordered = [...incoming].sort(
+      (a, b) => (rank.get(a.source) ?? 1_000_000_000) - (rank.get(b.source) ?? 1_000_000_000),
+    );
+  }
+
+  const out: LinkedText[] = [];
+  for (const e of ordered) {
+    const src = byId.get(e.source);
+    if (!src || src.type !== 'text') continue;
+    const sd = (src.data ?? {}) as Record<string, unknown>;
+    const raw = typeof sd.text === 'string' ? sd.text : typeof sd.prompt === 'string' ? sd.prompt : '';
+    const body = stripGeneratedArtifacts(stripHtml(raw).trim());
+    if (!body) continue;
+    out.push({
+      id: src.id,
+      label: (typeof sd.label === 'string' ? sd.label : typeof sd.name === 'string' ? sd.name : '') || '',
+      text: body,
+    });
+  }
+
+  // ⑤ 按 id 去重（保留首个）—— 原版用 `Set` 的 `add` 返回值做 filter
+  const seen = new Set<string>();
+  return out.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
+}
+
+/** 参与「边上插入」定位所需的最小节点形状（只读） */
+export interface PositionedNode {
+  position: { x: number; y: number };
+  width?: number;
+  height?: number;
+}
+
+/**
+ * 在一条边上插入节点时的**落点**（原 `lt` `_Component42.jsx:543-560`）
+ *
+ * 算法（**逐字对齐**）：
+ *   ① 取 `source` / `target` 的**中心**（`position + (width || 200)/2`, `position + (height || 180)/2`）
+ *   ② 两端中心取**中点**
+ *   ③ 减去新节点自身尺寸的一半 ⇒ 新节点**居中落在中点**
+ *
+ * ⚠️ 与源一致的两个兜底：任一端**找不到** ⇒ 返回 `{x:0,y:0}`；
+ *    节点**没有 width/height** ⇒ 用 `200×180`（源里就是这个魔法值）。
+ * ⚠️ 源版只对 `width`/`height`（ReactFlow 量出来的尺寸）取兜底，**不看** `data.w/h`。
+ */
+export function edgeInsertPosition(
+  source: PositionedNode | null | undefined,
+  target: PositionedNode | null | undefined,
+  size: { w: number; h: number },
+): { x: number; y: number } {
+  if (!source || !target) return { x: 0, y: 0 };
+  const scx = source.position.x + (source.width ?? 200) / 2;
+  const scy = source.position.y + (source.height ?? 180) / 2;
+  const tcx = target.position.x + (target.width ?? 200) / 2;
+  const tcy = target.position.y + (target.height ?? 180) / 2;
+  return {
+    x: (scx + tcx) / 2 - size.w / 2,
+    y: (scy + tcy) / 2 - size.h / 2,
+  };
 }
 
 /**

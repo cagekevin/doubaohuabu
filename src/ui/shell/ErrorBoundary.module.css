@@ -1,0 +1,28 @@
+/**
+ * 全局错误边界的降级界面
+ *
+ * ⚠️ 原则 5（SSOT）：只引用 L2 / L3 token。
+ * ⚠️ 原实现是 inline style（含 `padding: 24` / `margin: '0 0 8px'` / `padding: 12` 三个裸 px），
+ *    现在收进 CSS Modules：间距走 `--space-*`，色值走语义变量。
+ */
+
+.fallback {
+  padding: var(--space-5);
+  font-family: var(--font-sans);
+}
+
+.title {
+  margin: 0 0 var(--space-2);
+  color: var(--color-danger);
+  font-size: var(--font-size-lg);
+}
+
+/* 原始 stack：★ 不做任何改写（原则 6 错误透传）*/
+.stack {
+  max-height: 240px; /* 尺寸约束，非间距 token */
+  overflow: auto;
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+}

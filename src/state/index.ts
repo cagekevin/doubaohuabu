@@ -3,9 +3,14 @@
  * 依据：docs/11 §二 §5
  */
 
-export { createAppStore, type AppState, type AppStore, type AppStoreHook } from './store';
-export { StoreProvider, usePorts, useStore, useGen, useStoreApi } from './context';
+export { createAppStore, type AppState, type AppStore, type AppStoreHook, type AppStoreDeps } from './store';
+export { StoreProvider, usePorts, useStore, useGen, useAnalyze, useAccountOps, useBatchSend, useCapture, useSendQueue, useStoreApi } from './context';
 export type { GenController } from './generate';
+export type { AnalyzeController } from './analyze';
+export type { AccountOpsController } from './accountOps';
+export type { BatchSendController } from './batchSend';
+export type { SendQueueController } from './sendQueue';
+export type { CaptureController } from './capture';
 export type { UiSlice, BannerError } from './slices/ui';
 export type { GlobalSlice, SaveError } from './slices/global';
 export type { CanvasSlice, CanvasSnapshot, CanvasSliceDeps } from './slices/canvas';

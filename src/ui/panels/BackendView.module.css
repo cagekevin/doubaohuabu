@@ -1,0 +1,37 @@
+/**
+ * 后台视图（原 `.doubao-view-webviews` / `.doubao-view-webview` / `.dv-wv-*`）
+ *
+ * ⚠️ 原版的 `.doubao-view-webviews` 是一个**铺满的隐藏层**（`_Component43` 里那个 3300 行的
+ *    组件是整页级容器）。本工程改成**只在账号栏里占位** —— 因为 `findWebview` 只按
+ *    DOM 查找（不要求全屏），账号栏里更直观，也不遮画布。
+ * ⚠️ 原则 5：色值只走 token。
+ */
+
+.webviews {
+  position: relative;
+  width: 100%;
+  /* 给可见的 webview 留出高度；隐藏的那些不占布局（position: absolute + 0 尺寸） */
+  min-height: 220px;
+}
+
+/* 隐藏态：仍在 DOM 里（后台任务要能用它跑脚本），但不可见、不占位 */
+.hidden {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 可见态：用户就在这个页面里登录 */
+.active {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 220px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}

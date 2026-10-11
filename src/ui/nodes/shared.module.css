@@ -3,17 +3,32 @@
  */
 
 .node {
+  /* ⚠️ 必须 relative：节点上的**浮层**（提示词分析浮层，原 `.mat-prompt-pop`）是 `position: absolute`，
+     没有它就会相对某个更远的祖先定位（见 `AnalyzePrompt.module.css`） */
+  position: relative;
   min-width: 120px;
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
+  /* 默认裁掉溢出 —— **素材节点的通栏缩略图靠它裁圆角**（`padded={false}`） */
   overflow: hidden;
 }
 
+/**
+ * 允许溢出（`NodeShell` 的 `overflowVisible`）
+ * ⚠️ **只有需要渲染"框外浮层"的节点才用**：源版生成节点把「分析提示词」浮动按钮与
+ *    提示词浮层都渲染在**节点根内、但位置在框外**（`ZL.jsx:256` 的 `bottom:100%` 与
+ *    `321` 的 `top:100%`）⇒ `overflow:hidden` 会把它们整块裁掉。
+ * ⚠️ 不给「缩略图要通栏」的节点开这个（那会露出直角）。
+ */
+.overflowVisible {
+  overflow: visible;
+}
+
 .selected {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary);
+  border-color: var(--node-selected-border);
+  box-shadow: 0 0 0 2px var(--node-selected-ring);
 }
 
 .header {
@@ -22,7 +37,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
-  background: var(--color-surface-alt);
+  background: var(--color-surface-sunken);
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
@@ -39,12 +54,56 @@
   overflow: auto;
 }
 
+/**
+ * 节点名**改名态**（原 `CL.jsx:732` 的 `.node-name-edit`）
+ * ⚠️ 只在改名时挂；平时是普通 `<span>`（源版也是两态切换）
+ */
+.nameEdit {
+  min-width: 40px;
+  padding: 0 var(--space-1);
+  color: var(--color-text-strong);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--node-name-edit-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+/**
+ * 正文编辑框（原 `CL.jsx:818` 的 `.text-edit.nodrag.nowheel`）
+ * ⚠️ `resize: none` —— 免得用户拖出浏览器原生缩放柄破坏节点布局
+ * ⚠️ `nodrag`/`nowheel` 由组件侧以**普通类名**挂上（ReactFlow 约定，非本 module）
+ */
+.textEdit {
+  width: 100%;
+  min-height: 64px;
+  max-height: 160px;
+  padding: var(--space-1);
+  color: inherit;
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: none;
+}
+
+.textEdit:hover {
+  border-color: var(--color-border);
+}
+
+.textEdit:focus {
+  background: var(--color-surface-raised);
+  border-color: var(--field-border-focus);
+}
+
 .thumb {
   display: block;
   max-width: 100%;
   max-height: 200px;
   object-fit: contain;
-  background: var(--color-surface-alt);
+  background: var(--color-surface-sunken);
 }
 
 .placeholder {
@@ -53,7 +112,7 @@
   min-height: 80px;
   padding: var(--space-3);
   color: var(--color-text-faint);
-  background: var(--color-surface-alt);
+  background: var(--color-surface-sunken);
 }
 
 /* 组节点 */
@@ -90,6 +149,657 @@
 
 /* 生成中 */
 .spinner {
-  color: var(--color-primary);
+  color: var(--spinner-color);
   font-size: var(--font-size-xs);
+}
+
+/** 正文编辑区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */
+.editWrap {
+  position: relative;
+}
+
+/**
+ * 引用预览行（**本工程新增**，源版靠 `.ref-chip` 药丸表达）
+ * ⚠️ 它存在的理由：我们在 textarea 里显示的是 `@[id|名]` 标记原文 ⇒
+ *    需要一行把它翻译成「参考图1 · 素材名」，用户才知道引了什么。
+ */
+.refPreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+}
+
+.refOk {
+  padding: 0 var(--space-1);
+  color: var(--node-ref-ok-fg);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.refMissing {
+  padding: 0 var(--space-1);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-sm);
+}
+
+/* ── 账号节点（原 `OL.jsx` 的 `.account-*` / `.foot-btn-account` / `.auto-send-toggle`）── */
+
+.accountBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* 原 `.auto-send-toggle`：源版是个滑块，这里用原生 checkbox（观感不同、语义相同） */
+.autoSend {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.accountPreview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  max-height: 96px;
+  overflow: auto;
+  font-size: var(--font-size-xs);
+}
+
+.accountPreviewTitle {
+  color: var(--color-text-faint);
+}
+
+.accountItem {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.accountEmpty {
+  color: var(--color-text-faint);
+}
+
+/* 原 `.account-feedback`（四态：sending / ok / err） */
+.accountFeedback {
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.st_sending {
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+}
+
+.st_ok {
+  color: var(--color-surface-raised);
+  background: var(--color-success);
+}
+
+.st_err {
+  color: var(--color-surface-raised);
+  background: var(--color-danger);
+}
+
+/* 原 `.account-send-btn` */
+.accountSend {
+  padding: var(--space-1);
+  color: var(--btn-primary-fg);
+  font: inherit;
+  background: var(--btn-primary-bg);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.accountSend:disabled {
+  background: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+/* 未接通说明（**本工程新增** —— 只写进 `title` 等于要悬停才知道按钮为何点不动） */
+.accountPending {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  line-height: 1.3;
+}
+
+/**
+ * 正文编辑器（`contentEditable`）—— 原 `CL.jsx:818` 的 `.text-edit.nodrag.nowheel`
+ * ⚠️ 与上面的 `.textEdit`（`<textarea>` 版，保留给其它用途）**同尺寸约定**，
+ *    差别是它装的是**药丸 + `<br>`** 而不是纯文本。
+ */
+.textEditor {
+  display: block;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/**
+ * 空态占位（`contentEditable` 没有 `placeholder` 属性 ⇒ 用 `:empty::before`）
+ * ⚠️ `pointer-events: none` 免得点击落在伪元素上导致光标进不去
+ */
+.textEditor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-faint);
+  pointer-events: none;
+}
+
+/* ── 引用药丸（原 `.ref-chip` / `.ref-missing`；原用 `P0` 生成 HTML 挂这三个类）── */
+.textEditor :global(.ref-chip),
+.textEditor :global(.ref-missing) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+  margin: 0 var(--space-half);
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  /* 药丸是**原子**（`contenteditable="false"`）⇒ 别让它在中间断开 */
+  white-space: nowrap;
+  user-select: none;
+}
+
+.textEditor :global(.ref-chip) {
+  color: var(--node-ref-chip-fg);
+  background: var(--color-surface-sunken);
+}
+
+.textEditor :global(.ref-missing) {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+}
+
+.textEditor :global(.chip-img) {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.textEditor :global(.chip-name) {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 组节点（原 `GL.jsx` 的 `.group-node` / `.group-node-head` / `.group-ungroup-btn`）── */
+.groupSelected {
+  /* 选中态（原 `group-node selected`）—— 只加描边，不改尺寸（不给布局加抖动） */
+  border-color: var(--node-selected-border);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  /* 组头高度与 `GROUP_HEADER_H = 34` 对齐（源版几何常量） */
+  height: 34px;
+  padding: 0 var(--space-2);
+  cursor: move;
+}
+
+.groupIcon {
+  display: inline-flex;
+  color: var(--color-text-faint);
+}
+
+.groupName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.groupCount {
+  flex: 0 0 auto;
+  padding: 0 var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.groupUngroup {
+  flex: 0 0 auto;
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.groupUngroup:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+/* ── 素材节点（原 `fL.jsx` 的 `.material-*` / `.node-head` / `.mat-float-actions`）── */
+
+.materialNode {
+  display: flex;
+  flex-direction: column;
+  /* ⚠️ 与 `.node` 的裁剪一致：素材缩略图要**通栏** ⇒ 圆角靠外层裁（不开 overflowVisible） */
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.materialHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* 原 `.dot.material-dot` —— 素材类型的状态点（用信息色，与发送状态的绿点区分） */
+.materialDot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--node-dot-material);
+  border-radius: 50%;
+}
+
+.materialTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  /* 双击改名是它的主要交互 ⇒ 鼠标给文本光标以外的暗示（源版靠 `title` 说明） */
+  cursor: default;
+}
+
+/* 原 `.video-rename-input`（素材节点复用了这个类名） */
+.materialRename {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--space-1);
+  color: var(--color-text-strong);
+  font: inherit;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--node-name-edit-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.materialImgWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* 通栏缩略图的下圆角（外层 `.materialNode` 已裁，这里只补内层） */
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.materialImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.materialPlaceholder {
+  padding: var(--space-3);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+/* 原 `.mat-float-actions`：贴在图片下沿的一行动作 */
+.matFloatActions {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border-top-right-radius: var(--radius-sm);
+  opacity: 0.92;
+}
+
+.matFloatBtn {
+  padding: 0 var(--space-1);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.matFloatBtn:hover:not(:disabled) {
+  color: var(--btn-ghost-fg-hover);
+  background: var(--color-surface-sunken);
+}
+
+.matFloatBtn:disabled {
+  color: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+/* ── 下载节点（原 `WL.jsx` 的 `.download-node` / `.dn-*`）── */
+
+.downloadNode {
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.downloadDot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--node-dot-download);
+  border-radius: 50%;
+}
+
+.downloadTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+}
+
+.downloadBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.downloadFolderRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+}
+
+.downloadFolderLabel {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+}
+
+.downloadFolderPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.downloadBtn {
+  flex: 0 0 auto;
+  padding: 0 var(--space-1);
+  color: var(--color-text-strong);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.downloadBtn:hover:not(:disabled) {
+  border-color: var(--btn-default-border-hover);
+}
+
+.downloadBtn:disabled {
+  color: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+.downloadList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  max-height: 120px;
+  overflow: auto;
+}
+
+.downloadItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+}
+
+.downloadItemName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.downloadItemStatus {
+  flex: 0 0 auto;
+}
+
+.downloadStatusBusy {
+  color: var(--color-text-faint);
+}
+
+.downloadStatusOk {
+  color: var(--color-success);
+}
+
+.downloadStatusErr {
+  color: var(--color-danger);
+}
+
+.downloadEmpty {
+  padding: var(--space-2) 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+.downloadActionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.downloadTotal {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/* ── 视频节点（原 `BL.jsx` 的 `.video-node-*` / `.vn-*`）── */
+
+.videoNode {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.videoDot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--node-dot-other);
+  border-radius: 50%;
+}
+
+/* 原 `.video-node-account` / `.video-node-dur` / `.video-node-res` —— 三处同款小字 */
+.videoMeta {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/* 原 `.vn-provenance` */
+.videoProvenance {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: var(--font-size-xs);
+}
+
+/* 原 `.vn-src-chip` / `.vn-recipe` */
+.videoChip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 var(--space-1);
+  color: var(--node-chip-fg);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-sunken);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.videoChip:hover {
+  background: var(--color-border);
+}
+
+/* 原 `.vn-norecipe` */
+.videoNoRecipe {
+  color: var(--color-text-faint);
+  cursor: help;
+}
+
+.videoBody {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 原 `.video-node-video` */
+.videoEl {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  background: var(--color-text-strong);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+/* 原 `.vn-panel`（配方面板） */
+.videoPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+
+.videoPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.videoPanelClose {
+  color: var(--color-text-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.videoPanelBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* 原 `.vn-prompt` */
+.videoPrompt {
+  max-height: 72px;
+  overflow: auto;
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 原 `.vn-specs` / `.vn-spec` */
+.videoSpecs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.videoSpec {
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+/* 原 `.vn-panel-foot` / `.vn-act` */
+.videoPanelFoot {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.videoAct {
+  flex: 1;
+  padding: var(--space-half) var(--space-1);
+  color: var(--color-text-strong);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.videoAct:hover:not(:disabled) {
+  border-color: var(--btn-default-border-hover);
+}
+
+.videoAct:disabled {
+  color: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+/* 原 `.video-node-fallback` / `.vnf-*` */
+.videoFallback {
+  padding: var(--space-3);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+.videoVid {
+  margin-top: var(--space-1);
+  color: var(--color-text-faint);
+  word-break: break-all;
 }

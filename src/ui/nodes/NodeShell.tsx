@@ -32,6 +32,14 @@ export interface NodeShellProps {
    * ⚠️ **素材节点传 `false`** —— 它的缩略图要**通栏**，被 `.body` 的 padding 一挤就不是通栏了
    */
   padded?: boolean;
+  /**
+   * 是否允许内容溢出到节点框**外**（默认 `false`）
+   *
+   * ⚠️ **只有"有框外浮层"的节点才传 `true`**：生成节点把「分析提示词」浮动按钮（在框上方）
+   *    与提示词浮层（在框下方）渲染在节点根内 ⇒ `.node` 的 `overflow: hidden` 会把它们**整块裁掉**。
+   * ⚠️ **素材节点绝不能开** —— 它的通栏缩略图正是靠这层 `hidden` 裁出圆角的。
+   */
+  overflowVisible?: boolean;
   /** 正文（功能区） */
   children?: ReactNode;
 }
@@ -43,10 +51,13 @@ export function NodeShell({
   selected = false,
   handles = true,
   padded = true,
+  overflowVisible = false,
   children,
 }: NodeShellProps) {
   return (
-    <div className={`${styles.node} ${selected ? styles.selected : ''}`}>
+    <div
+      className={`${styles.node} ${selected ? styles.selected : ''} ${overflowVisible ? styles.overflowVisible : ''}`}
+    >
       {handles && <NodeHandles />}
       <div className={styles.header}>
         <span>{title}</span>

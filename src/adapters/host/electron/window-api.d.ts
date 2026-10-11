@@ -1,3 +1,4 @@
+import type { HostOS } from '@/constants';
 /**
  * `window.api` 的类型声明（**冻结契约** —— 由 `electron/preload.js` 暴露）
  *
@@ -22,7 +23,7 @@ type UnusedHostMethod = (...args: unknown[]) => Promise<unknown>;
 export interface HostApi {
   // ── 普通值 ──
   /** 真实宿主平台（**不读 navigator** —— docs/10 #59） */
-  readonly hostOS: 'windows' | 'macos' | 'linux';
+  readonly hostOS: HostOS;
 
   // ── 文件 ──
   importFiles(): Promise<unknown>;
@@ -39,7 +40,8 @@ export interface HostApi {
 
   // ── 剪贴板 ──
   readClipboardImage(): Promise<unknown>;
-  copyImageToClipboard(dataUrl: string): Promise<unknown>;
+  /** ⚠️ 载荷是 **`{dataUrl, label}` 对象** + 目标 `webContentsId`（`main.js:1382`） */
+  copyImageToClipboard(img: unknown, webContentsId?: number): Promise<unknown>;
   copyTextToClipboard(text: string): Promise<unknown>;
   pasteToWebview(webContentsId: number): Promise<unknown>;
   attachImagesToWebview(webContentsId: number, imgs: unknown): Promise<unknown>;
@@ -70,12 +72,23 @@ export interface HostApi {
   clearBrowserCache(): Promise<unknown>;
 
   // ── 账号 / 会话 / 指纹 ──
-  ensureFingerprint(accountId: string): Promise<unknown>;
-  ensurePlainSession(accountId: string): Promise<unknown>;
+  /** ⚠️ 收的是**账号对象**（`{id, partition, fingerprint}`），不是 id 字符串（`preload.js:89`） */
+  ensureFingerprint(account: unknown): Promise<unknown>;
+  /** ⚠️ 同上（`preload.js:94`） */
+  ensurePlainSession(account: unknown): Promise<unknown>;
+  /** ⚠️ 同上，多 `containerId` / `proxy`（`preload.js:97`） */
   ensureLovartContainer(account: unknown): Promise<unknown>;
   clearAccountSession(partition: string): Promise<unknown>;
   setAccountProxy(partition: string, proxy: string): Promise<unknown>;
   fpNetDiag(partition: string): Promise<unknown>;
+  /** 导出某分区的 cookie（`preload.js:50`） */
+  exportAccountCookies(partition: string | null): Promise<unknown>;
+  /** 把 cookie 灌回某分区（`preload.js:51`） */
+  importAccountCookies(partition: string, cookies: readonly unknown[]): Promise<unknown>;
+  /** 保存账号导出文件（`preload.js:52`） */
+  saveAccountsFile(content: string): Promise<unknown>;
+  /** 读账号导出文件（`preload.js:53`） */
+  loadAccountsFile(): Promise<unknown>;
 
   // ── 许可 ──
   getMachineCode(): Promise<unknown>;

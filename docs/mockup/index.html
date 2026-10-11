@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-brand="indigo" data-theme="light" data-shape="standard" data-density="standard">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>豆包画布 · UI Mockup</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/mockup.css">
+</head>
+<body>
+
+<!-- ══════════ 切换器（mockup 独有，非产品界面）══════════ -->
+<div class="switcher-bar">
+<header class="switcher">
+  <div class="switcher-group">
+    <span class="switcher-label">品牌</span>
+    <button type="button" data-set="brand" data-value="indigo" aria-pressed="true">indigo</button>
+    <button type="button" data-set="brand" data-value="blue" aria-pressed="false">blue</button>
+    <button type="button" data-set="brand" data-value="violet" aria-pressed="false">violet</button>
+    <button type="button" data-set="brand" data-value="green" aria-pressed="false">green</button>
+  </div>
+
+  <div class="switcher-group">
+    <span class="switcher-label">明暗</span>
+    <button type="button" data-set="theme" data-value="light" aria-pressed="true">light</button>
+    <button type="button" data-set="theme" data-value="dark" aria-pressed="false">dark</button>
+  </div>
+
+  <div class="switcher-group">
+    <span class="switcher-label">圆角</span>
+    <button type="button" data-set="shape" data-value="square" aria-pressed="false">square</button>
+    <button type="button" data-set="shape" data-value="standard" aria-pressed="true">standard</button>
+    <button type="button" data-set="shape" data-value="round" aria-pressed="false">round</button>
+  </div>
+
+  <div class="switcher-group">
+    <span class="switcher-label">密度</span>
+    <button type="button" data-set="density" data-value="compact" aria-pressed="false">compact</button>
+    <button type="button" data-set="density" data-value="standard" aria-pressed="true">standard</button>
+    <button type="button" data-set="density" data-value="loose" aria-pressed="false">loose</button>
+  </div>
+
+  <div class="switcher-group">
+    <span class="switcher-label">★解耦演示</span>
+    <button type="button" id="splitBtn" aria-pressed="false">只把选中框改橙色</button>
+  </div>
+
+  <span class="switcher-note">以上全部只改 &lt;html&gt; 上的一个属性 · 源码零改动</span>
+</header>
+
+<nav class="switcher">
+  <div class="switcher-group">
+    <span class="switcher-label">屏幕</span>
+    <button type="button" data-screen="start" aria-pressed="true">① 启动页</button>
+    <button type="button" data-screen="workspace" aria-pressed="false">② 工作台</button>
+    <button type="button" data-screen="nodes" aria-pressed="false">③ 节点图鉴</button>
+    <button type="button" data-screen="overlays" aria-pressed="false">④ 浮层与反馈</button>
+    <button type="button" data-screen="backend" aria-pressed="false">⑤ 后台管理</button>
+    <button type="button" data-screen="panels" aria-pressed="false">⑥ 缺失面板</button>
+    <button type="button" data-screen="extras" aria-pressed="false">⑦ 补登组件</button>
+  </div>
+</nav>
+</div>
+
+<!-- ══════════ ① 启动页 · src/ui/pages/StartPage.tsx ══════════ -->
+<section class="screen" data-screen="start" data-active="true">
+  <div class="screen-head">
+    <h2>① 启动页</h2>
+    <code>src/ui/pages/StartPage.tsx</code>
+  </div>
+  <div class="screen-body">
+    <div class="start">
+      <div class="start-brand">
+        <h1>豆包画布</h1>
+        <p>无限画布 · 素材连线 · 智能创作</p>
+      </div>
+
+      <div class="start-list">
+        <div class="start-list-label">打开历史项目</div>
+        <button type="button" class="start-item">
+          <span>夏日产品图</span><small>12 个节点</small>
+        </button>
+        <button type="button" class="start-item">
+          <span>口播视频 · 0321</span><small>7 个节点</small>
+        </button>
+        <button type="button" class="start-item">
+          <span>未命名项目</span><small>0 个节点</small>
+        </button>
+      </div>
+
+      <button type="button" class="btn btn-primary">＋ 新建项目</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ② 工作台 · src/ui/shell/AppShell.tsx ══════════ -->
+<section class="screen" data-screen="workspace" data-active="false">
+  <div class="screen-head">
+    <h2>② 工作台（三栏外壳）</h2>
+    <code>src/ui/shell/AppShell.tsx</code>
+  </div>
+  <div class="screen-body">
+    <div class="shell">
+
+      <!-- ErrorBanner · src/ui/common/ErrorBanner.tsx -->
+      <div class="banner">
+        <span class="badge badge-danger">unknown</span>
+        <span class="banner-text">项目保存路径不可用，已暂时回退到应用默认存储：ENOENT: no such file or directory</span>
+        <button type="button" class="btn btn-ghost btn-sm">关闭此提示</button>
+        <button type="button" class="btn btn-ghost btn-sm">全部清除</button>
+      </div>
+
+      <div class="main-area">
+
+        <!-- 左 · AccountPanel · src/ui/panels/AccountPanel.tsx -->
+        <aside class="side">
+          <div class="panel" style="border:none; box-shadow:none; border-radius:0;">
+            <button type="button" class="btn btn-primary btn-block">＋ 添加账号</button>
+
+            <div class="backend-view">BackendView &lt;webview&gt; · 常驻不卸载</div>
+
+            <div class="account-list">
+              <div class="account-row" data-active="true">
+                <span class="dot"></span>
+                <span class="account-main">
+                  <span class="account-name">豆包00</span>
+                  <span class="account-meta">doubao · logged-in</span>
+                </span>
+                <span class="account-actions">
+                  <button type="button" class="btn btn-sm">检测登录</button>
+                  <button type="button" class="btn btn-sm btn-danger">移除</button>
+                </span>
+              </div>
+              <div class="account-row">
+                <span class="dot dot-invalid"></span>
+                <span class="account-main">
+                  <span class="account-name">Dola01</span>
+                  <span class="account-meta">dola · logged-out</span>
+                </span>
+                <span class="account-actions">
+                  <button type="button" class="btn btn-sm">检测登录</button>
+                  <button type="button" class="btn btn-sm btn-danger">移除</button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 中 · TopBar + CanvasHost -->
+        <div class="center-stage">
+          <div class="topbar">
+            <span class="topbar-name">夏日产品图</span>
+            <span class="topbar-meta">12 个节点</span>
+            <span class="topbar-spacer"></span>
+            <button type="button" class="btn btn-sm">导出工程</button>
+          </div>
+
+          <!-- CanvasHost · src/ui/canvas/CanvasHost.tsx -->
+          <div class="canvas-wrap">
+            <svg class="canvas-edges">
+              <path d="M 210 124 C 222 124, 222 81, 235 81" />
+              <path d="M 335 122 C 335 180, 335 190, 335 250" />
+              <path d="M 125 188 C 125 210, 125 220, 125 250" />
+              <path d="M 235 290 C 222 290, 222 290, 210 290" />
+            </svg>
+
+            <div class="canvas-nodes">
+              <!-- 素材节点 · src/ui/nodes/MaterialNode.tsx -->
+              <div class="node" style="left:40px; top:60px; width:170px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
+                <div class="node-head">
+                  <span class="node-title"><span class="dot"></span>素材</span>
+                  <span class="node-meta">2</span>
+                </div>
+                <div class="node-body" style="padding:0;">
+                  <div class="node-media ph-a">参考图 16:9</div>
+                </div>
+              </div>
+
+              <!-- 文本框 · src/ui/nodes/TextNode.tsx -->
+              <div class="node" style="left:235px; top:40px; width:200px;" data-selected="true">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
+                <div class="node-head">
+                  <span class="node-title"><span class="dot"></span>文本框</span>
+                  <span class="node-meta">已链接素材</span>
+                </div>
+                <div class="node-body">
+                  <div class="text-edit">
+                    一只戴墨镜的柯基在海边冲浪
+                    <span class="chip" style="margin-left:4px;">@图1 素材甲</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 文生图 · src/ui/nodes/GenImageNode.tsx -->
+              <div class="node" style="left:235px; top:250px; width:200px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
+                <div class="node-head">
+                  <span class="node-title"><span class="dot"></span>文生图</span>
+                  <span class="node-meta">16:9 · 2K</span>
+                </div>
+                <div class="node-body">
+                  <div class="node-media-empty">
+                    <span>正在生成 · 出图后展示在这里</span>
+                    <div class="node-progress" style="width:100%;"><i style="width:62%;"></i></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 账号节点 · src/ui/nodes/AccountNode.tsx -->
+              <div class="node" style="left:40px; top:250px; width:170px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
+                <div class="node-head">
+                  <span class="node-title"><span class="dot"></span>账号</span>
+                  <span class="node-meta">已登录</span>
+                </div>
+                <div class="node-body">
+                  <select class="field" style="width:100%;">
+                    <option>豆包00</option>
+                    <option>Dola01</option>
+                  </select>
+                  <button type="button" class="btn btn-primary btn-block" style="margin-top:var(--space-2);">发送</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- GenPanel · src/ui/panels/GenPanel.tsx -->
+            <div class="gen-panel">
+              <div class="panel-head">文生图</div>
+              <div class="field-row">
+                <span>提示词</span>
+                <div class="gen-prompt">一只戴墨镜的柯基在海边冲浪 <span class="chip">@图1</span></div>
+              </div>
+              <div class="field-row">
+                <span>执行账号</span>
+                <select class="field">
+                  <option>自动</option>
+                  <option>豆包00</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <span>画面比例</span>
+                <select class="field">
+                  <option>16:9</option><option>9:16</option><option>1:1</option><option>4:3</option><option>3:4</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <span>图片分辨率</span>
+                <select class="field">
+                  <option>1K</option><option selected>2K</option><option>4K</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <span>生成数量</span>
+                <input class="field" type="number" value="1" min="1" max="4">
+              </div>
+              <button type="button" class="btn btn-primary btn-block">生成</button>
+            </div>
+
+            <div class="canvas-controls">
+              <button type="button">＋</button>
+              <button type="button">－</button>
+              <button type="button">⤢</button>
+            </div>
+
+            <div class="minimap">
+              <i class="minimap-material" style="left:8px; top:10px; width:36px; height:24px;"></i>
+              <i class="minimap-other" style="left:52px; top:8px; width:44px; height:22px;"></i>
+              <i class="minimap-other" style="left:52px; top:36px; width:44px; height:26px;"></i>
+              <i class="minimap-account" style="left:8px; top:40px; width:36px; height:22px;"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右 · LibraryPanel · src/ui/panels/LibraryPanel.tsx -->
+        <aside class="side side-right">
+          <div class="panel" style="border:none; box-shadow:none; border-radius:0;">
+            <div class="panel-head">
+              <span>资源库（6）</span>
+              <button type="button" class="btn btn-sm">从文件选择</button>
+            </div>
+            <div class="lib-grid">
+              <div class="lib-item"><div class="lib-thumb ph-a"></div><div class="lib-actions"><button>★</button><button>✕</button></div></div>
+              <div class="lib-item"><div class="lib-thumb ph-b"></div><div class="lib-actions"><button>☆</button><button>✕</button></div></div>
+              <div class="lib-item"><div class="lib-thumb ph-c"></div><div class="lib-actions"><button>☆</button><button>✕</button></div></div>
+              <div class="lib-item"><div class="lib-thumb ph-d"></div><div class="lib-actions"><button>☆</button><button>✕</button></div></div>
+              <div class="lib-item"><div class="lib-thumb ph-e"></div><div class="lib-actions"><button>☆</button><button>✕</button></div></div>
+              <div class="lib-item"><div class="lib-thumb ph-f"></div><div class="lib-actions"><button>★</button><button>✕</button></div></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ③ 节点图鉴 · src/ui/nodes/* ══════════ -->
+<section class="screen" data-screen="nodes" data-active="false">
+  <div class="screen-head">
+    <h2>③ 8 类节点</h2>
+    <code>src/ui/nodes/*</code>
+  </div>
+  <div class="screen-body">
+    <div class="gap-flag" style="margin-bottom:var(--space-2);">
+      原版 8 类节点共 <b>34 个按钮</b>；重写实现 <b>0 个</b>。
+      ★ 本屏 DOM <b>逐字对照</b> <code>docs/豆包画布原版参考/expanded_components/*.jsx</code>：
+      类名与嵌套层级与原版一致 —— 例如 <code>mat-float-actions</code> 是<b>浮在图片上</b>的绝对定位组、
+      <code>gv-frame-actions</code> 在 <code>gv-meta</code> <b>之后</b>（卡片最下方）、
+      <code>auto-send-toggle</code> 在 <code>node-head</code> <b>内</b>。
+    </div>
+
+    <div class="banner" style="margin-bottom:var(--space-3);">
+      <span class="badge">★</span>
+      <span class="banner-text">
+        <b>「输入提示词」的真实位置</b>（回源 <code>ZL.jsx:240</code> / <code>YL.jsx:498</code>）：
+        生成节点上<b>没有</b>提示词输入框 —— 空态只有 <code>gv-preview-empty</code>
+        「文生图 · 在下方输入提示词」+「点击卡片打开生成面板，出图直接展示在这里」。
+        提示词的实际输入在<b>生成面板</b>（<code>Z3_1.jsx</code> / <code>_Component45.jsx</code>，见第⑥屏）。<br>
+        真正带输入框的是：<b>文本框</b>（<code>text-edit</code> contentEditable，占位「输入文字，输入 @ 从资源库引用素材…」）
+        与 <b>AI 提示词弹层的调整框</b>（<code>mpp-revise-input</code>，占位「想怎么改？如：改成夜景、换成俯拍镜头…」）。
+      </span>
+    </div>
+    <div class="node-gallery">
+      <!-- ── text（CL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="node">
+          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+          <!-- reply-notice：CL.jsx:713 —— Handle 之后、node-head 之前 -->
+          <div class="reply-notice">
+            <span class="reply-notice-icon">ℹ</span>
+            <span class="reply-notice-body">
+              <span class="reply-notice-title">豆包回复</span>
+              <span class="reply-notice-text">预计等待 3 分钟</span>
+            </span>
+            <span class="node-btn">×</span>
+          </div>
+          <!-- node-head：CL.jsx:730 —— 状态元素互斥，此处只显示 foot-send-status -->
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="node-name">文本框</span>
+            <span class="node-btn">自动匹配</span>
+            <span class="node-btn">拆分</span>
+            <span class="foot-send-status">⏳ 发送中</span>
+            <span class="head-actions"><span class="node-btn">保存预设</span></span>
+          </div>
+          <!-- text-body：CL.jsx:782 —— toolbar 在上，正文在下 -->
+          <div class="text-body">
+            <div class="text-toolbar">
+              <span class="node-btn">@ 引用素材</span>
+              <div class="mat-preview-bar">
+                <span class="mat-thumb"><span class="mat-thumb-img ph-a"></span><span class="mat-thumb-grip">⠿</span></span>
+                <span class="mat-thumb"><span class="mat-thumb-img ph-b"></span><span class="mat-thumb-grip">⠿</span></span>
+                <span class="mat-count">2</span>
+              </div>
+            </div>
+            <div class="text-edit">一只戴墨镜的柯基在海边冲浪 <span class="chip">@图1</span></div>
+          </div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>8</b> · 落在两个容器</div>
+          <ul>
+            <li><b>node-head 内</b>：<code>auto-match-btn</code> 自动匹配 · <code>split-md-btn</code> 拆分</li>
+            <li><b>head-actions 内</b>：<code>save-preset-btn</code> 保存预设</li>
+            <li><b>text-toolbar 内</b>：<code>at-ref-btn</code> @ 引用素材</li>
+            <li><b>reply-notice 内</b>：<code>reply-notice-close</code> ×</li>
+            <li><b>fuzzy-head 内</b>：<code>fuzzy-nav</code> ×2 ‹ ›</li>
+            <li><b>fuzzy-foot 内</b>：<code>fuzzy-ignore</code> 忽略此位置</li>
+          </ul>
+          <div class="spec-head">浮层（见第④屏）</div>
+          <ul>
+            <li><code>fuzzy-panel</code> 疑似匹配（text-edit 之后）</li>
+            <li><code>ref-menu</code> @ 引用下拉（text-body 之后）</li>
+            <li><code>_Component33</code> 素材面板（portal 到 body）</li>
+          </ul>
+        </div>
+        <div class="gallery-cap">text · CL.jsx 27,664B / 8 按钮 → TextNode.tsx 658B / 0（42.0×）</div>
+      </div>
+
+      <!-- ── material（fL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="node">
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="material-node-title">素材 · 柯基</span>
+          </div>
+          <!-- material-img-wrap：fL.jsx:157 —— float-actions 是 img-inner 的兄弟，浮在图上 -->
+          <div class="material-img-wrap">
+            <div class="material-img-inner"><div class="node-media ph-b">1920×1080</div></div>
+            <div class="mat-float-actions">
+              <span class="node-btn">✎ 编辑图片</span>
+              <span class="node-btn">✧ 分析提示词</span>
+            </div>
+          </div>
+          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+        </div>
+        <!-- mat-prompt-pop：fL.jsx:197 —— 节点外的兄弟弹层 -->
+        <div class="mat-prompt-pop">
+          <div class="mpp-head">
+            <span class="mpp-badge mpp-done">完成</span>
+            <span class="mpp-title">AI 提示词 · 豆包00</span>
+            <span class="node-btn">×</span>
+          </div>
+          <div class="mpp-body">
+            <div class="mpp-tabs">
+              <span class="node-tab" data-on="true">中文</span>
+              <span class="node-tab">英文</span>
+              <span class="node-tab">JSON</span>
+              <span class="mpp-tabs-gap"></span>
+              <span class="node-btn">⧉ 复制</span>
+            </div>
+            <div class="mpp-content"><pre class="mpp-pre">一只戴墨镜的柯基在海边冲浪，黄昏暖光，浅景深，8k</pre></div>
+          </div>
+          <div class="mpp-revise">
+            <input class="mpp-revise-input" placeholder="想怎么改？如：改成夜景、换成俯拍镜头…">
+            <span class="node-btn">调整</span>
+          </div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>5</b></div>
+          <ul>
+            <li><code>mat-edit-float</code> 编辑图片　<span class="gallery-cap">浮在图片左上</span></li>
+            <li><code>mat-analyze-float</code> 分析提示词 / 分析中…　<span class="gallery-cap">同上</span></li>
+            <li><code>mpp-close</code> ×　<code>mpp-tabs</code> 中文|英文|JSON</li>
+            <li><code>mpp-copy</code> 复制　<span class="gallery-cap">mpp-tabs 行尾（gap 撑开）</span></li>
+            <li><code>mpp-revise-btn</code> 调整　<span class="gallery-cap">弹层底部</span></li>
+          </ul>
+        </div>
+        <div class="gallery-cap">material · fL.jsx 10,045B / 5 按钮 → MaterialNode.tsx 731B / 0（13.7×）</div>
+      </div>
+
+      <!-- ── account（OL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="node">
+          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+          <!-- node-head：OL.jsx:412 —— 标题是纯文本，开关在 head 内最右 -->
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="node-name">发送节点</span>
+            <span class="timer-inline timer-yellow">05:12</span>
+            <label class="auto-send-toggle" data-on="true"><i></i><span class="auto-send-slider"></span></label>
+          </div>
+          <!-- account-body：OL.jsx:429 —— 下拉与发送按钮同一行 -->
+          <div class="account-body">
+            <div class="account-top-row">
+              <div class="foot-dropdown">
+                <span class="foot-btn">
+                  <span class="account-selector-label"><span class="grp-tint" style="background:var(--color-node-material);"></span>豆包00</span>
+                  <span class="account-dropdown-arrow">▾</span>
+                </span>
+              </div>
+              <span class="account-send-btn">↑ 发送</span>
+            </div>
+            <div class="account-feedback feedback-ok">
+              <span class="account-feedback-msg">已填入（仅填入，未发送）</span>
+            </div>
+            <div class="account-summary">已链接 2 张素材 · 1 个文本框</div>
+          </div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>1</b>（本节点几乎纯功能区）</div>
+          <ul>
+            <li><code>account-feedback-close</code> × —— <b>只在 err 时出现</b></li>
+          </ul>
+          <div class="spec-head">功能区</div>
+          <ul>
+            <li><b>head 内</b>：<code>timer-inline</code>（red ≥10min / yellow ≥5min）+ <code>auto-send-toggle</code></li>
+            <li><b>account-top-row</b>：<code>foot-btn-account</code> 下拉 ＋ <code>account-send-btn</code>（⟳发送中 / ↑发送）</li>
+            <li><b>其下</b>：<code>account-feedback</code> → <code>account-summary</code></li>
+            <li>下拉菜单是 <b>portal</b>：<code>foot-menu-grid</code>（未选择 / 分组 / 未分组 / 空态）</li>
+          </ul>
+        </div>
+        <div class="gallery-cap">account · OL.jsx 15,714B / 1 按钮 → AccountNode.tsx 1,268B / 0（12.4×）</div>
+      </div>
+
+      <!-- ── video（BL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="node">
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="node-name">视频</span>
+            <span class="node-meta">豆包00</span>
+            <span class="node-meta">8s</span>
+            <span class="node-meta">1080×1920</span>
+          </div>
+          <div class="node-media ph-c">8s · 16:9</div>
+          <!-- vn-provenance：BL.jsx:200 —— 在 node-head 之后、body 之前，全是 button 带 ico -->
+          <div class="vn-provenance">
+            <span class="vn-src-chip"><span class="vn-src-ico">↩</span><span>来自：文生视频 #2</span></span>
+            <span class="vn-recipe-chip"><span class="vn-recipe-ico">≡</span><span>查看配方</span></span>
+            <span class="vn-hist-chip">×3</span>
+            <span class="vn-pull-chip">可拉取</span>
+          </div>
+          <!-- vn-panel：BL.jsx:403 —— foot 左复制右重跑 -->
+          <div class="vn-panel">
+            <div class="vn-panel-head"><span>生成配方</span><span class="node-btn">✕</span></div>
+            <div class="vn-panel-body">
+              <div class="vn-prompt">一只柯基在海边冲浪</div>
+              <div class="vn-specs">
+                <span class="vn-spec">模型 Seedance 2.5</span>
+                <span class="vn-spec">8s</span>
+                <span class="vn-spec">16:9</span>
+                <span class="vn-spec">参考图×2</span>
+                <span class="vn-spec">引用文本×1</span>
+                <span class="vn-spec">豆包00</span>
+              </div>
+            </div>
+            <div class="vn-panel-foot">
+              <span class="vn-act">复制配方</span>
+              <span class="vn-act primary">按配方重跑</span>
+            </div>
+          </div>
+          <!-- video-controls：BL.jsx:468 —— vt-time 是 video-timeline 的兄弟 -->
+          <div class="video-controls">
+            <span class="vt-btn">▶</span>
+            <div class="video-timeline"><div class="vt-fill" style="width:40%;"></div><div class="vt-knob" style="left:40%;"></div></div>
+            <span class="vt-time">00:03 / 00:08</span>
+            <span class="vt-btn">📷</span>
+          </div>
+          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>7</b></div>
+          <ul>
+            <li><b>vn-provenance</b>：<code>vn-src-chip</code> · <code>vn-recipe-chip</code> · <code>vn-hist-chip</code> · <code>vn-pull-chip</code></li>
+            <li><b>vn-panel-head</b>：<code>vn-panel-close</code> ×2（配方 / 出片记录两面板）</li>
+            <li><b>vn-panel-foot</b>：<code>vn-act</code> 复制配方 ＋ <code>vn-act primary</code> 按配方重跑</li>
+            <li><b>video-controls</b>：<code>vt-btn</code> ▶ ＋ <code>vt-btn vt-shot</code> 📷（快捷键 S）</li>
+          </ul>
+          <div class="spec-head">★ 顺序</div>
+          <ul>
+            <li>controls = 播放 → 时间线(fill+knob) → <b>vt-time</b> → 📷</li>
+            <li>provenance 在 <b>node-head 之后</b>，不在 body 内</li>
+          </ul>
+        </div>
+        <div class="gallery-cap">video · BL.jsx 15,232B / 7 按钮 → VideoNode.tsx 936B / 0（16.3×）</div>
+      </div>
+
+      <!-- ── download（WL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="node">
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="node-name">下载节点</span>
+            <span class="node-meta">3</span>
+          </div>
+          <div class="dn-body">
+            <div class="dn-folder-row">
+              <span class="dn-folder-label">目录：</span>
+              <span class="dn-folder-path">Downloads</span>
+              <span class="node-btn">选择…</span>
+            </div>
+            <div class="dn-video-list">
+              <div class="dn-item"><span class="dn-item-name">视频 A</span><span class="dn-item-status dn-downloading">⬇</span></div>
+              <div class="dn-item"><span class="dn-item-name">视频 B</span><span class="dn-item-status dn-ok">✓ 12.4 MB</span></div>
+              <div class="dn-item"><span class="dn-item-name">视频 C</span><span class="dn-item-status dn-err">✗</span></div>
+            </div>
+            <div class="dn-action-row">
+              <span class="node-btn">全部下载 (3)</span>
+              <span class="dn-total-size">已下载 12.4 MB</span>
+            </div>
+          </div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>2</b></div>
+          <ul>
+            <li><code>dn-btn</code> 选择…　<span class="gallery-cap">与「目录：」同一行</span></li>
+            <li><code>dn-btn-download</code> 全部下载 (N)　<span class="gallery-cap">dn-action-row 左侧</span></li>
+          </ul>
+          <div class="spec-head">★ 细节</div>
+          <ul>
+            <li>「已下载 X」在 action-row <b>右侧</b>（<code>dn-total-size</code>）</li>
+            <li>错误态是 <b>✗</b>（<code>dn-err</code>），不是 ⚠</li>
+            <li>路径只显示<b>末段</b>，全路径在 title</li>
+          </ul>
+        </div>
+        <div class="gallery-cap">download · WL.jsx 5,128B / 2 按钮 → DownloadNode.tsx 622B / 0（8.2×）</div>
+      </div>
+
+      <!-- ── group（GL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="group-node">
+          <div class="group-head">
+            <span>▦</span>
+            <span class="group-name">组 1</span>
+            <span class="node-meta">3</span>
+            <span class="node-btn" style="margin-left:auto;">取消组</span>
+          </div>
+          <div style="padding:var(--space-2); display:flex; gap:var(--space-2);">
+            <div class="node" style="flex:1;"><div class="node-head"><span class="node-name">文本框</span></div></div>
+            <div class="node" style="flex:1;"><div class="node-head"><span class="node-name">素材</span></div></div>
+          </div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>1</b></div>
+          <ul>
+            <li><code>group-ungroup-btn</code> 取消组　<span class="gallery-cap">group-node-head 内最右</span></li>
+          </ul>
+          <div class="spec-head">★ 容器语义</div>
+          <ul>
+            <li>head 顺序：icon → name → count → 取消组</li>
+            <li><b>不挂 handle</b>（是容器不是卡片）</li>
+            <li><code>zIndex:-1001</code>；子节点 <code>parentId</code>/<code>extent</code></li>
+          </ul>
+        </div>
+        <div class="gallery-cap">group · GL.jsx 1,420B / 1 按钮 → GroupNode.tsx 437B / 0（3.2×）</div>
+      </div>
+
+      <!-- ── genvideo（YL.jsx）── -->
+      <div class="gallery-cell">
+        <div class="node">
+          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="node-name">文生视频</span>
+            <span class="gv-head-grow"></span>
+            <span class="node-btn">历史 3</span>
+          </div>
+          <div class="gv-stage">
+            <div class="node-media ph-c">8s · 16:9</div>
+            <span class="gv-play">❚❚</span>
+            <span class="gv-dur-badge">8s</span>
+            <span class="gv-dl">↧</span>
+            <div class="gv-tl">
+              <div class="gv-tl-track"><div class="gv-tl-fill" style="width:35%;"></div><span class="gv-tl-knob" style="left:35%;"></span></div>
+            </div>
+          </div>
+          <div class="gv-meta">已连接 2 个输入 · 16:9 · <span class="gv-dur">8s</span></div>
+          <!-- gv-frame-actions：YL.jsx:564 —— 在 gv-meta 之后 -->
+          <div class="gv-frame-actions">
+            <span class="node-btn">头帧→画布参考图</span>
+            <span class="node-btn">当前帧→画布参考图</span>
+            <span class="node-btn">尾帧→画布参考图</span>
+          </div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>4</b></div>
+          <ul>
+            <li><code>gv-hist-btn</code> 历史 N　<span class="gallery-cap">gv-head 最右（grow 之后）</span></li>
+            <li><code>gv-frame-btn</code> ×3　<span class="gallery-cap">★ 卡片最下方，gv-meta 之后</span></li>
+            <li><code>gv-dl</code> 下载　<span class="gallery-cap">stage 右下浮层</span></li>
+          </ul>
+          <div class="spec-head">★ stage 内浮层</div>
+          <ul>
+            <li><code>gv-play</code> 正中 · <code>gv-dur-badge</code> 右上 · <code>gv-dl</code> 右下 · <code>gv-tl</code> 时间线</li>
+          </ul>
+        </div>
+        <div class="gallery-cap">genvideo · YL.jsx 20,420B / 4 按钮 → GenVideoNode.tsx 1,115B / 0（18.3×）</div>
+      </div>
+
+      <!-- ── imggen（ZL.jsx）── 空态，展示「在下方输入提示词」 -->
+      <div class="gallery-cell">
+        <div class="node">
+          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+          <div class="node-head">
+            <span class="dot"></span>
+            <span class="node-name">文生图</span>
+            <span class="gv-head-grow"></span>
+            <span class="ig-chip-status">API 进行中</span>
+            <span class="node-btn">历史 3</span>
+          </div>
+          <div class="gv-stage">
+            <div class="node-media-empty">
+              <span class="gv-preview-title">文生图 · 在下方输入提示词</span>
+              <span class="gv-preview-sub">点击卡片打开生成面板，出图直接展示在这里</span>
+            </div>
+          </div>
+          <div class="gv-meta">已连接 2 个输入 · 豆包后台 · 16:9</div>
+        </div>
+        <div class="cell-spec">
+          <div class="spec-head">按钮 <b>6</b></div>
+          <ul>
+            <li><code>gv-hist-btn</code> 历史 N　<span class="gallery-cap">head 最右</span></li>
+            <li><code>ig-chip-status</code>（非按钮）　<span class="gallery-cap">grow 之后、历史之前</span></li>
+            <li><code>mpp-close</code> · <code>mpp-tabs</code> ×3 · <code>mpp-revise-btn</code>　<span class="gallery-cap">在 mpp-pop 弹层里</span></li>
+          </ul>
+          <div class="spec-head">★ 节点上无输入框</div>
+          <ul>
+            <li>空态只有 <code>gv-preview-empty</code>：主文案＋副文案</li>
+            <li>提示词实际输入在<b>生成面板</b>（见第⑥屏）</li>
+            <li>有图时 <code>mat-float-actions</code> 浮在图上（编辑／分析）</li>
+          </ul>
+        </div>
+        <div class="gallery-cap">imggen · ZL.jsx 15,552B / 6 按钮 → GenImageNode.tsx 1,320B / 0（11.8×）</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ④ 浮层与反馈 ══════════ -->
+<section class="screen" data-screen="overlays" data-active="false">
+  <div class="screen-head">
+    <h2>④ 浮层 · 反馈 · 后台</h2>
+    <code>src/ui/canvas/* · src/ui/common/* · src/ui/panels/*</code>
+  </div>
+  <div class="screen-body">
+    <div class="overlay-grid">
+
+      <div class="overlay-cell">
+        <div class="menu">
+          <div class="menu-head">引用该节点生成</div>
+          <button type="button" class="menu-item">文生图</button>
+          <button type="button" class="menu-item">文生视频</button>
+          <button type="button" class="menu-item">文字</button>
+        </div>
+        <div class="cap">CreatePanel.tsx · 点边 / 节点右键</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="sel-toolbar">
+          <span class="node-meta" style="padding:0 var(--space-1);">已选 3</span>
+          <button type="button" class="btn btn-sm">打组</button>
+        </div>
+        <div class="cap">SelectionToolbar.tsx</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="toast-stack">
+          <div class="toast" data-level="info"><span>已导出「夏日产品图」</span></div>
+          <div class="toast" data-level="warn"><span>豆包 / Dola 账号都在忙，请稍后再试</span></div>
+          <div class="toast" data-level="error"><span>分析失败：图片发送失败：未知原因</span></div>
+        </div>
+        <div class="cap">ToastHost.tsx · info / warn / error 三档</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="banner">
+          <span class="badge badge-danger">host</span>
+          <span class="banner-text">拖入的素材不在资源库中（libId=lib_x）</span>
+          <button type="button" class="btn btn-ghost btn-sm">关闭此提示</button>
+        </div>
+        <div class="cap">ErrorBanner.tsx · 原始 message 透传</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="ref-panel">
+          <div class="ref-item"><span class="ref-thumb ph-a"></span><span>素材甲</span></div>
+          <div class="ref-item"><span class="ref-thumb ph-b"></span><span>柯基 · 海边</span></div>
+          <div class="ref-item"><span class="ref-thumb ph-c"></span><span>产品图 03</span></div>
+        </div>
+        <div class="cap">RefAutocomplete.tsx · 输入 @ 触发</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="modal-mask">
+          <div class="modal">
+            <div class="modal-head"><span>移除账号</span><button type="button" class="btn btn-ghost btn-sm">✕</button></div>
+            <div class="modal-body">确定移除「豆包00」？其登录数据会一并清理。</div>
+            <div class="modal-foot">
+              <button type="button" class="btn btn-sm">取消</button>
+              <button type="button" class="btn btn-sm btn-danger">移除</button>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Modal.tsx</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="backend-view" style="height:150px;">BackendView · 豆包对话后台</div>
+        <div class="cap">BackendView.tsx · 豆包 / Dola / Lovart / Tapnow</div>
+      </div>
+
+      <div class="overlay-cell">
+        <div class="field-row">
+          <span>按钮（L3 旋钮）</span>
+          <div style="display:flex; gap:var(--space-2); flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary">主按钮</button>
+            <button type="button" class="btn">次按钮</button>
+            <button type="button" class="btn btn-ghost">幽灵</button>
+            <button type="button" class="btn btn-danger">危险</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <span>输入 / 药丸 / 徽章</span>
+          <div style="display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center;">
+            <input class="field" placeholder="描述想要画的内容…">
+            <span class="chip">@图1</span>
+            <span class="badge badge-success">完成</span>
+            <span class="badge badge-warning">生成中</span>
+            <span class="badge badge-danger">失败</span>
+          </div>
+        </div>
+        <div class="cap">基础件 · 全部走 L3 token</div>
+      </div>
+
+    </div>
+
+    <h3 style="margin-top:var(--space-6); font-size:var(--font-size-md);">Token 总览（切上面的开关，看这里同步变化）</h3>
+    <div class="panel" style="margin-top:var(--space-2);">
+      <div class="panel-head">L1 原始色板 — 十六进制只在这一层</div>
+      <div class="swatch-row">
+        <div class="swatch-cell"><div class="swatch" style="background:var(--p-indigo-500);"></div><span class="swatch-cap">indigo-500</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--p-blue-500);"></div><span class="swatch-cap">blue-500</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--p-violet-500);"></div><span class="swatch-cap">violet-500</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--p-green-500);"></div><span class="swatch-cap">green-500</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--p-amber-500);"></div><span class="swatch-cap">amber-500</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--p-red-500);"></div><span class="swatch-cap">red-500</span></div>
+      </div>
+
+      <div class="panel-head" style="margin-top:var(--space-4);">L2 语义 — 组件只准引用这一层</div>
+      <div class="swatch-row">
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-action-primary);"></div><span class="swatch-cap">action-primary</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-accent-text);"></div><span class="swatch-cap">accent-text</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-selected-border);"></div><span class="swatch-cap">selected-border</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-focus-ring);"></div><span class="swatch-cap">focus-ring</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-handle);"></div><span class="swatch-cap">handle</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-edge);"></div><span class="swatch-cap">edge</span></div>
+        <div class="swatch-cell"><div class="swatch" style="background:var(--color-marquee-border);"></div><span class="swatch-cap">marquee</span></div>
+      </div>
+      <p style="font-size:var(--font-size-sm); color:var(--color-text-muted); margin:var(--space-3) 0 0;">
+        上面这 7 个色，在改造前<b>全部是同一个 <code>--color-primary</code></b>（44 次引用 / 11 种属性）。
+        现在它们各自独立 —— 点「★解耦演示」把选中框改成橙色，主按钮 / 连线 / focus 环纹丝不动。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ⑤ 后台管理 · 原 _Component43 + 子面板 ══════════ -->
+<section class="screen" data-screen="backend" data-active="false">
+  <div class="screen-head">
+    <h2>⑤ 后台管理</h2>
+    <code>_Component43.jsx · RP.jsx · DP.jsx · SD.jsx · OP.jsx</code>
+  </div>
+  <div class="screen-body">
+    <div class="be-layout">
+
+      <!-- 后台视图主界面 · 原 _Component43.jsx（3304 行 / 5 按钮 / 78 文案）-->
+      <div>
+        <div class="gap-flag" style="margin-bottom:var(--space-2);">
+          原 <code>_Component43.jsx</code> 103,760 B · docs/13 §2.1 登记「完全没有」·
+          当前 <code>ui/panels/BackendView.tsx</code> 只落地了 webview 容器（视图半）
+        </div>
+        <div class="be-shell">
+          <div class="be-head">
+            <span class="be-title">豆包对话后台</span>
+            <span class="badge">dv-head-toggle</span>
+            <span class="be-actions">
+              <button type="button" class="btn btn-sm">刷新</button>
+              <button type="button" class="btn btn-sm">浏览器打开</button>
+              <button type="button" class="btn btn-sm">无水印资源（3）</button>
+              <button type="button" class="btn btn-sm btn-primary">返回画布</button>
+            </span>
+          </div>
+
+          <div class="be-tabs">
+            <span class="be-tab" data-active="true"><span class="dot"></span>豆包00</span>
+            <span class="be-tab"><span class="dot dot-invalid"></span>Dola01</span>
+            <span class="be-tab"><span class="dot"></span>Lovart02</span>
+          </div>
+
+          <div class="be-silent">
+            <span class="badge badge-warning">静默</span>
+            <span>「Dola01」处于静默状态 · 页面已暂停（不占用内存 / CPU）</span>
+          </div>
+
+          <div class="be-stage">
+            <div>
+              <div>&lt;webview&gt; · partition=persist:doubao · preload=指纹脚本</div>
+              <code>doubao-view-webviews — 隐藏态的 webview 仍在 DOM 里（后台任务要用）</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay-grid">
+
+        <!-- 账号分组管理 · RP.jsx -->
+        <div class="overlay-cell">
+          <div class="panel-head">账号分组管理</div>
+          <div class="grp-row">
+            <span class="grp-tint" style="background:var(--color-node-material);"></span>
+            <span class="grp-name">主力号</span>
+            <span class="grp-count">3</span>
+            <button type="button" class="btn btn-ghost btn-sm">设置分组颜色</button>
+          </div>
+          <div class="grp-row">
+            <span class="grp-tint" style="background:var(--color-node-account);"></span>
+            <span class="grp-name">备用号</span>
+            <span class="grp-count">2</span>
+            <button type="button" class="btn btn-ghost btn-sm">设置分组颜色</button>
+          </div>
+          <div class="grp-row">
+            <span class="grp-tint" style="background:var(--color-border-strong);"></span>
+            <span class="grp-name">未分组</span>
+            <span class="grp-count">1</span>
+            <button type="button" class="btn btn-ghost btn-sm">清除颜色（不分类）</button>
+          </div>
+          <div class="grp-empty">暂无未分组账号</div>
+          <div class="node-row">
+            <span class="node-meta">自启动：全开（组内账号在软件启动时自动加载）</span>
+            <button type="button" class="btn btn-sm">全部关闭</button>
+          </div>
+          <button type="button" class="btn btn-danger btn-sm">删除分组</button>
+          <div class="gap-flag">RP.jsx · 7,951 B · 缺口未落地</div>
+        </div>
+
+        <!-- 指纹诊断 · DP.jsx -->
+        <div class="overlay-cell">
+          <div class="panel-head">跨账号指纹关联扫描</div>
+          <div class="fp-pair">
+            <span class="badge badge-danger">完全关联</span>
+            <span>豆包00 ↔ Dola01</span>
+            <span class="node-meta" style="margin-left:auto;">全维重合</span>
+          </div>
+          <div class="fp-pair">
+            <span class="badge badge-warning">高度相似</span>
+            <span>豆包00 ↔ Lovart02</span>
+            <span class="node-meta" style="margin-left:auto;">≥70% 重合</span>
+          </div>
+          <div class="panel-head" style="margin-top:var(--space-2);">维度分布（不同值数量，越少越容易被关联）</div>
+          <div class="fp-dim"><span class="fp-dim-name">User-Agent</span><span class="fp-bar" data-level="bad"><i style="width:33%"></i></span><span class="fp-dim-val">1</span></div>
+          <div class="fp-dim"><span class="fp-dim-name">屏幕分辨率</span><span class="fp-bar" data-level="bad"><i style="width:33%"></i></span><span class="fp-dim-val">1</span></div>
+          <div class="fp-dim"><span class="fp-dim-name">时区</span><span class="fp-bar" data-level="warn"><i style="width:66%"></i></span><span class="fp-dim-val">2</span></div>
+          <div class="fp-dim"><span class="fp-dim-name">Canvas</span><span class="fp-bar" data-level="ok"><i style="width:100%"></i></span><span class="fp-dim-val">3</span></div>
+          <div class="fp-dim"><span class="fp-dim-name">WebGL</span><span class="fp-bar" data-level="ok"><i style="width:100%"></i></span><span class="fp-dim-val">3</span></div>
+          <button type="button" class="btn btn-sm">清除扫描结果</button>
+          <div class="gap-flag">DP.jsx · 4,971 B · 缺口未落地（文案真源在 core/rules/fingerprint.ts）</div>
+        </div>
+
+        <!-- 无水印资源 · SD.jsx -->
+        <div class="overlay-cell">
+          <div class="panel-head">无水印资源（3）</div>
+          <div class="wm-grid">
+            <div class="wm-item"><div class="wm-thumb ph-a"></div><span class="wm-tag">图片</span></div>
+            <div class="wm-item"><div class="wm-thumb ph-b"></div><span class="wm-tag">图片</span></div>
+            <div class="wm-item"><div class="wm-thumb ph-c"></div><span class="wm-tag">视频</span></div>
+          </div>
+          <div class="field-row">
+            <span>下载到：</span>
+            <select class="field"><option>系统默认</option><option>原链接</option></select>
+          </div>
+          <div class="node-row">
+            <span class="node-meta">设置中…</span>
+            <span style="display:flex; gap:var(--space-2);">
+              <button type="button" class="btn btn-sm">更改</button>
+              <button type="button" class="btn btn-sm btn-ghost">清空</button>
+            </span>
+          </div>
+          <div class="gap-flag">SD.jsx · 5,335 B · 缺口未落地</div>
+        </div>
+
+        <!-- 账号导入导出 · ACCOUNT_TRANSFER_TEXT 已有常量，UI 缺 -->
+        <div class="overlay-cell">
+          <div class="panel-head">账号导入 / 导出</div>
+          <button type="button" class="btn btn-block">从备份文件导入豆包账号（含登录状态）</button>
+          <button type="button" class="btn btn-block">导出已登录账号（含登录凭证）</button>
+          <div class="toast-stack" style="margin-top:var(--space-2);">
+            <div class="toast" data-level="info"><span>✓ 已导出 3 个账号</span></div>
+            <div class="toast" data-level="info"><span>✓ 导入 3 个账号 · 跳过 1 个（已存在）· 恢复 3 个登录凭证</span></div>
+            <div class="toast" data-level="warn"><span>获取 Dola01 的 cookie 失败: 会话已失效</span></div>
+          </div>
+          <div class="gap-flag">文案常量已落地（ACCOUNT_TRANSFER_TEXT）· UI 未落地</div>
+        </div>
+
+        <!-- 账号运维 · OP.jsx 的后台相关按钮 -->
+        <div class="overlay-cell">
+          <div class="panel-head">账号运维</div>
+          <button type="button" class="btn btn-block btn-sm">指纹诊断：查看该账号页面实际生效的指纹身份与真实出口网络</button>
+          <button type="button" class="btn btn-block btn-sm">重新生成该账号浏览器指纹</button>
+          <button type="button" class="btn btn-block btn-sm">跨账号指纹关联扫描</button>
+          <button type="button" class="btn btn-block btn-sm">配置 Lovart 出口代理池</button>
+          <button type="button" class="btn btn-block btn-sm">清理各账号页面的浏览器缓存（Cache / Code Cache 等）</button>
+          <button type="button" class="btn btn-block btn-sm">实时隔离体检</button>
+          <div class="field-row" style="margin-top:var(--space-2);">
+            <span>Lovart 出口代理池</span>
+            <textarea class="field" rows="3" placeholder="每行一个代理（支持 http://host:port / socks5://host:port / host:port）"></textarea>
+            <button type="button" class="btn btn-sm btn-primary">保存并自动分配</button>
+          </div>
+          <div class="gap-flag">OP.jsx 28,885 B / 17 按钮 · 本工程只落地了最小子集</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ⑥ 缺失面板（原版有、重写完全没有的 10 个）══════════ -->
+<section class="screen" data-screen="panels" data-active="false">
+  <div class="screen-head">
+    <h2>⑥ 缺失面板</h2>
+    <code>docs/12 §二 · docs/13 §2.1「完全没有（10 个）」</code>
+  </div>
+  <div class="screen-body">
+    <div class="be-layout">
+
+      <!-- 生成面板完整版 · Z3_1.jsx 16 按钮 + _Component45.jsx 18 按钮 -->
+      <div>
+        <div class="gap-flag" style="margin-bottom:var(--space-2);">
+          现状：<code>ui/panels/GenPanel.tsx</code> 只有「提示词 + 账号 + 比例 + 分辨率 + 数量 + 生成」6 项；
+          原版是 <b>Z3_1.jsx（16 按钮 / 53 文案）+ _Component45.jsx（18 按钮 / 51 文案）</b>两套 <code>gp-*</code>。
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <span>文生图 · 生成面板完整版</span>
+            <span class="node-btn">保存并关闭（Esc）</span>
+          </div>
+
+          <div class="field-row">
+            <span>提示词（contentEditable + 药丸）</span>
+            <div class="gen-prompt" style="width:100%;">一只戴墨镜的柯基在海边冲浪 <span class="chip">@图1</span></div>
+            <div class="node-btn-row">
+              <span class="node-btn">自动匹配</span>
+              <span class="node-btn">引用素材</span>
+              <span class="node-btn" style="width:28px; padding:0;">◇</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <span>风格库：发送时注入的修饰前缀（单选；「不使用风格」则不传）</span>
+            <div class="node-btn-row">
+              <span class="chip">◇ 不使用风格</span>
+              <span class="chip">◇ 国风二次元</span>
+              <span class="node-btn" style="margin-left:auto;">管理风格库</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <span>执行账号（gp-acc-item ×7）</span>
+            <div class="acc-list">
+              <div class="acc-item" data-on="true">全部账号（自动）</div>
+              <div class="acc-back">← 分组</div>
+              <div class="acc-item"><span class="grp-tint" style="background:var(--color-node-material);"></span>主力号（3）</div>
+              <div class="acc-item"><span class="grp-tint" style="background:var(--color-node-account);"></span>备用号（2）</div>
+              <div class="acc-item"><span class="dot"></span>豆包00<span class="node-meta" style="margin-left:auto;">可用</span></div>
+              <div class="acc-item"><span class="dot dot-invalid"></span>Dola01<span class="node-meta" style="margin-left:auto;">不可用</span></div>
+              <div class="acc-item">未分组</div>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:var(--space-2);">
+            <div class="field-row"><span>生成模型</span><select class="field"><option>Seedream 5.0 Flash</option><option>Seedream 5.0 Pro</option></select></div>
+            <div class="field-row"><span>画面比例</span><select class="field"><option>16:9</option><option>9:16</option><option>1:1</option></select></div>
+            <div class="field-row"><span>图片分辨率</span><select class="field"><option>1K</option><option selected>2K</option><option>4K</option></select></div>
+            <div class="field-row"><span>生成数量</span><input class="field" type="number" value="1" min="1" max="4"></div>
+          </div>
+
+          <div class="field-row">
+            <span>视频时长：8 秒（4–30 秒可调）</span>
+            <div class="slider-row"><span>时长</span><input type="range" min="4" max="30" value="8"><b>8s</b></div>
+          </div>
+
+          <div style="display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center;">
+            <button type="button" class="btn btn-primary">生成</button>
+            <button type="button" class="btn">批量出片</button>
+            <span class="node-meta">同一提示词 + 服务商，按 16:9 / 9:16 / 1:1 三个比例各出一片</span>
+            <span class="node-btn" style="margin-left:auto;" data-on="true">走 API 通道生成</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay-grid">
+
+        <!-- _Component46 · API 设置面板 -->
+        <div class="overlay-cell">
+          <div class="panel-head">API 设置面板<span class="node-btn" style="margin-left:auto;">关闭（Esc）</span></div>
+          <div class="field-row"><span>服务商</span><select class="field"><option>自定义 provider</option></select></div>
+          <div class="field-row"><span>密钥（明文不过桥）</span><input class="field" type="password" value="sk-••••••••••••"></div>
+          <div class="field-row"><span>并发</span><input class="field" type="number" value="3"></div>
+          <button type="button" class="btn btn-sm">先保存草稿，再向服务商发一次鉴权探测请求</button>
+          <button type="button" class="btn btn-sm btn-primary">保存</button>
+          <div class="gap-flag">_Component46.jsx · 12,798 B / 3 按钮 · 完全没有</div>
+        </div>
+
+        <!-- OP.jsx · 左栏账号面板（17 按钮）-->
+        <div class="overlay-cell">
+          <div class="panel-head">左栏账号面板</div>
+          <button type="button" class="btn btn-primary btn-block btn-sm">新增账号</button>
+          <div class="acc-list">
+            <div class="acc-item" data-on="true"><span class="dot"></span>豆包00<span class="node-meta" style="margin-left:auto;">已登录</span></div>
+            <div class="acc-item"><span class="dot dot-invalid"></span>Dola01<span class="node-meta" style="margin-left:auto;">未登录</span></div>
+          </div>
+          <div class="node-btn-row">
+            <span class="node-btn">登录</span>
+            <span class="node-btn">指纹诊断</span>
+            <span class="node-btn">重新生成指纹</span>
+            <span class="node-btn">Lovart 画廊</span>
+            <span class="node-btn">实时隔离体检</span>
+          </div>
+          <div class="node-btn-row">
+            <span class="node-btn">导入账号</span>
+            <span class="node-btn">导出账号</span>
+            <span class="node-btn">代理池</span>
+            <span class="node-btn">清缓存</span>
+            <span class="node-btn">返回首页</span>
+            <span class="node-btn">清空画布</span>
+            <span class="node-btn">取消所有选中</span>
+            <span class="node-btn btn-danger">移除账号</span>
+          </div>
+          <div class="gap-flag">OP.jsx · 28,885 B / <b>17 按钮</b> / 55 文案 · 完全没有</div>
+        </div>
+
+        <!-- G3.jsx · 图片编辑器 -->
+        <div class="overlay-cell">
+          <div class="panel-head">图片编辑器（遮脸 / 涂抹 / 裁剪）<span class="node-btn" style="margin-left:auto;">✕</span></div>
+          <div class="seg"><span data-on="true">遮脸</span><span>涂抹</span><span>裁剪</span></div>
+          <div class="ie-stage ph-d">检测到 3 张人脸 · 单击角标遮脸，双击设置参数</div>
+          <div class="seg"><span data-on="true">马赛克</span><span>模糊</span></div>
+          <div class="ie-tools">
+            <span class="node-btn">不依赖脸框，直接对整张图应用效果</span>
+            <span class="node-btn">－</span><span class="node-btn">适应</span><span class="node-btn">＋</span>
+          </div>
+          <div style="display:flex; gap:var(--space-2);"><button type="button" class="btn btn-sm btn-primary">应用</button><button type="button" class="btn btn-sm">取消</button></div>
+          <div class="gap-flag">G3.jsx · 30,229 B / <b>18 按钮</b> / 41 文案 · 完全没有</div>
+        </div>
+
+        <!-- _Component40 · 遮脸参数面板 -->
+        <div class="overlay-cell">
+          <div class="panel-head">遮脸参数<span class="node-btn" style="margin-left:auto;">关闭（Esc）</span></div>
+          <div class="field-row"><span>遮脸方式</span><select class="field"><option>马赛克（块状像素化，最常用）</option></select></div>
+          <div class="slider-row"><span>强度</span><input type="range" min="1" max="10" value="6"><b>6</b></div>
+          <div class="slider-row"><span>范围外扩</span><input type="range" min="0" max="40" value="12"><b>12</b></div>
+          <div class="node-meta">单击角标即按此参数遮脸（当前 3 张脸）</div>
+          <div class="gap-flag">_Component40.jsx · 3,249 B / 2 按钮 · 完全没有</div>
+        </div>
+
+        <!-- z3.jsx · 发送队列浮窗 -->
+        <div class="overlay-cell">
+          <div class="panel-head">发送队列<span class="node-meta" style="margin-left:auto;">位置持久化 doubao-sendqueue-pos-v2</span></div>
+          <div class="sq-item"><span class="badge badge-warning">排队</span><span>文本框 03 → 豆包00</span><span class="node-btn" style="margin-left:auto;">取消这一条</span></div>
+          <div class="sq-item"><span class="badge">发送中</span><span>文本框 01 → Dola01</span><span class="node-btn" style="margin-left:auto;">定位到画布上的出片结果</span></div>
+          <div class="sq-item"><span class="badge badge-danger">失败</span><span>文本框 02 → 豆包00</span><span class="node-btn" style="margin-left:auto;">重新入队</span></div>
+          <div class="field-row">
+            <span>账号选取策略</span>
+            <select class="field"><option>顺序轮转（每个账号轮流）</option><option>按负载（派发条数最少的优先）</option></select>
+          </div>
+          <div class="gap-flag">z3.jsx · 8,901 B / 7 按钮 · 完全没有</div>
+        </div>
+
+        <!-- L3.jsx · 批量发送面板 -->
+        <div class="overlay-cell">
+          <div class="panel-head">批量发送</div>
+          <div class="node-meta">已选 3 个文本框 / 文生视频节点</div>
+          <button type="button" class="btn btn-block btn-sm">加入右下角发送队列</button>
+          <div class="node-meta">可暂停 / 取消单条 / 失败重跑，适合大批量</div>
+          <div style="display:flex; gap:var(--space-2);">
+            <button type="button" class="btn btn-sm btn-primary">开始</button>
+            <button type="button" class="btn btn-sm btn-danger">中止</button>
+          </div>
+          <div class="gap-flag">L3.jsx · 7,830 B / 5 按钮 · 完全没有</div>
+        </div>
+
+        <!-- W3.jsx · 激活页 -->
+        <div class="overlay-cell">
+          <div class="panel-head">激活页</div>
+          <div class="act-code">机器码　A3F9-2K7B-8Q1Z-5M4X</div>
+          <div style="display:flex; gap:var(--space-2);"><button type="button" class="btn btn-sm">复制机器码</button><button type="button" class="btn btn-sm btn-ghost">导出机器码</button></div>
+          <div class="field-row"><span>激活码</span><input class="field" placeholder="粘贴激活码"></div>
+          <button type="button" class="btn btn-primary btn-block">激活</button>
+          <div class="node-meta">有效期展示：永久 / 已过期 / 剩余约 N 天 / 剩余约 N 小时</div>
+          <div class="gap-flag">W3.jsx · 5,989 B / 4 按钮 / 30 文案 · 完全没有</div>
+        </div>
+
+        <!-- _Component37 · 组连线结束菜单 -->
+        <div class="overlay-cell">
+          <div class="panel-head">组连线结束菜单（onGroupConnectEnd）</div>
+          <div class="menu">
+            <div class="menu-head">连线落到组上</div>
+            <button type="button" class="menu-item">连到组容器</button>
+            <button type="button" class="menu-item">连到组内最近的节点</button>
+          </div>
+          <div class="node-meta">0 按钮 / 1 文案 · 完全没有</div>
+          <div class="gap-flag">_Component37.jsx · 4,977 B</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ⑦ 补登组件（docs/13 §2.3：带 UI 但未被 docs/12 收录的 17 个）══════════ -->
+<section class="screen" data-screen="extras" data-active="false">
+  <div class="screen-head">
+    <h2>⑦ 补登组件</h2>
+    <code>docs/13 §2.3 · _ui-inventory.json 显示「带中文文案 / 按钮」但不在 docs/12 §二 MAP 里</code>
+  </div>
+  <div class="screen-body">
+    <div class="overlay-grid">
+
+      <!-- _Component26 · 新图面板 -->
+      <div class="overlay-cell">
+        <div class="panel-head">新图面板（全账号自动抓取 / 聚合画廊）</div>
+        <div class="node-row"><span class="badge badge-success">已开启全账号自动抓取</span><span class="node-btn">待机</span></div>
+        <div class="node-meta">聚合自以下账号：豆包00 · Lovart02 · Tapnow03</div>
+        <div class="wm-grid">
+          <div class="wm-item"><div class="wm-thumb ph-a"></div><span class="wm-tag">已发送到画布 · 3</span></div>
+          <div class="wm-item"><div class="wm-thumb ph-b"></div><span class="wm-tag">从列表移除</span></div>
+          <div class="wm-item"><div class="wm-thumb ph-c"></div><span class="wm-tag">移除</span></div>
+        </div>
+        <button type="button" class="btn btn-sm btn-block">立即抓取（当前活跃账号 / 全部 Lovart+Tapnow…）</button>
+        <div class="node-meta">已切换：只显示当前账号画布图片</div>
+        <div class="gap-flag">_Component26.jsx · 20,097 B / 5 按钮 / 29 文案</div>
+      </div>
+
+      <!-- _Component23 · Tapnow 画廊 -->
+      <div class="overlay-cell">
+        <div class="panel-head">Tapnow 画廊面板</div>
+        <div class="node-meta">通过 Tapnow 内部接口读取画布列表与节点，取回其中的原图</div>
+        <div class="wm-grid">
+          <div class="wm-item"><div class="wm-thumb ph-d"></div></div>
+          <div class="wm-item"><div class="wm-thumb ph-e"></div></div>
+          <div class="wm-item"><div class="wm-thumb ph-f"></div></div>
+        </div>
+        <div class="node-btn-row">
+          <span class="node-btn">从磁盘导入图片</span>
+          <span class="node-btn">加入选中素材</span>
+          <span class="node-btn">← 上一张</span>
+          <span class="node-btn">下一张 →</span>
+          <span class="node-btn">预览大图</span>
+          <span class="node-btn btn-danger">清空画廊</span>
+        </div>
+        <div class="gap-flag">_Component23.jsx · 19,360 B / <b>21 按钮</b> / 57 文案</div>
+      </div>
+
+      <!-- _Component24 · Lovart 画廊 -->
+      <div class="overlay-cell">
+        <div class="panel-head">Lovart 画廊面板</div>
+        <div class="node-meta">在当前账号的 Lovart 页面里扫描已加载的图片（含历史图）</div>
+        <div class="wm-grid">
+          <div class="wm-item"><div class="wm-thumb ph-a"></div><span class="wm-tag">✓</span></div>
+          <div class="wm-item"><div class="wm-thumb ph-c"></div><span class="wm-tag">✓</span></div>
+          <div class="wm-item"><div class="wm-thumb ph-e"></div></div>
+        </div>
+        <div class="node-btn-row">
+          <span class="node-btn">全选</span><span class="node-btn">反选</span><span class="node-btn">清空选择</span>
+          <span class="node-btn btn-danger">清空此画廊全部图片</span>
+        </div>
+        <div class="node-meta">已添加 12 张到画布（无损，居中网格布局）</div>
+        <div class="gap-flag">_Component24.jsx · 14,382 B / 12 按钮 / 41 文案</div>
+      </div>
+
+      <!-- _Component25 · 真实 Chrome 集成 -->
+      <div class="overlay-cell">
+        <div class="panel-head">Lovart 会话 / 真实 Chrome 集成</div>
+        <div class="banner"><span class="badge badge-warning">提示</span><span class="banner-text">真实 Chrome 已开 · 登录后点「同步会话到画布」</span></div>
+        <div class="node-btn-row">
+          <span class="node-btn">打开真实 Chrome</span>
+          <span class="node-btn">在真实 Chrome 登录</span>
+          <span class="node-btn">同步会话到画布</span>
+          <span class="node-btn btn-danger">关闭 Chrome</span>
+        </div>
+        <div class="node-meta">当前环境不支持真实 Chrome 集成（IPC 未就绪）</div>
+        <div class="gap-flag">_Component25.jsx · 10,879 B / 3 按钮 / 13 文案</div>
+      </div>
+
+      <!-- US.jsx · 风格库管理 -->
+      <div class="overlay-cell">
+        <div class="panel-head">风格库管理面板</div>
+        <div class="acc-list">
+          <div class="acc-item">◇ 不使用风格</div>
+          <div class="acc-item" data-on="true">◇ 国风二次元<span class="node-btn" style="margin-left:auto;">编辑</span><span class="node-btn">删除</span></div>
+          <div class="acc-item">◇ 赛博霓虹<span class="node-btn" style="margin-left:auto;">编辑</span><span class="node-btn">删除</span></div>
+        </div>
+        <div class="field-row"><span>风格名称，如：国风二次元</span><input class="field" value="国风二次元"></div>
+        <div class="node-btn-row">
+          <span class="node-btn">新建风格</span><span class="node-btn">上传封面</span><span class="node-btn">恢复默认</span>
+        </div>
+        <div class="node-meta">风格库为空。点「新建风格」添加，或点「恢复默认」载入内置风格集。</div>
+        <div class="gap-flag">US.jsx · 8,633 B / 12 按钮 / 23 文案</div>
+      </div>
+
+      <!-- $P.jsx · 自定义网站登录弹窗 -->
+      <div class="overlay-cell">
+        <div class="panel-head">自定义网站登录弹窗</div>
+        <div class="modal" style="width:100%;">
+          <div class="modal-head"><span>打开自定义网站</span><span class="node-btn">✕</span></div>
+          <div class="modal-body">
+            <div class="field-row"><span>网址</span><input class="field" placeholder="https://…"></div>
+            <div class="node-meta">请先输入要打开的网址</div>
+            <div class="field-row" style="margin-top:var(--space-2);"><span>验证链接</span><input class="field" placeholder="粘贴邮箱里的验证链接（https://…）"></div>
+            <div class="node-meta">粘贴邮箱里的验证链接（https://…），确认后自动登录</div>
+            <div class="node-meta">验证通过，已保存登录状态</div>
+          </div>
+          <div class="modal-foot"><span class="node-btn">在浏览器打开</span><button type="button" class="btn btn-sm btn-primary">确认进入</button></div>
+        </div>
+        <div class="gap-flag">$P.jsx · 9,631 B / 6 按钮 / 20 文案</div>
+      </div>
+
+      <!-- _Component33 · 引用素材面板 -->
+      <div class="overlay-cell">
+        <div class="panel-head">引用素材面板</div>
+        <div class="node-meta">选择要引用的素材 · 点击素材即插入引用芯片并关闭面板</div>
+        <input class="field" placeholder="搜索素材名称…" style="width:100%;">
+        <div class="acc-list">
+          <div class="acc-item"><span class="ref-thumb ph-a"></span>素材甲</div>
+          <div class="acc-item"><span class="ref-thumb ph-b"></span>柯基 · 海边</div>
+          <div class="acc-item"><span class="ref-thumb ph-c"></span>产品图 03<span class="node-meta" style="margin-left:auto;">无预览</span></div>
+        </div>
+        <div style="display:flex; gap:var(--space-2);"><button type="button" class="btn btn-sm btn-primary">引用素材到文本框</button><button type="button" class="btn btn-sm">完成</button></div>
+        <div class="gap-flag">_Component33.jsx · 4,590 B / 1 按钮 / 10 文案</div>
+      </div>
+
+      <!-- iL.jsx · 遮脸角标覆盖层 -->
+      <div class="overlay-cell">
+        <div class="panel-head">遮脸角标 / 人脸检测覆盖层</div>
+        <div class="ie-stage ph-d" style="position:relative;">
+          检测到 3 张人脸 · 单击角标遮脸，双击设置参数
+          <span style="position:absolute; left:20%; top:25%; width:28px; height:28px; border:2px solid var(--color-warning); border-radius:var(--radius-sm);"></span>
+          <span style="position:absolute; left:55%; top:30%; width:24px; height:24px; border:2px solid var(--color-success); border-radius:var(--radius-sm);"></span>
+        </div>
+        <div class="node-btn-row">
+          <span class="node-btn">识别人脸…</span><span class="node-btn">遮脸中…</span>
+          <span class="node-btn" data-on="true">已遮脸</span>
+          <span class="node-btn btn-danger">图片保存失败</span>
+        </div>
+        <div class="gap-flag">iL.jsx · 4,918 B / 0 按钮 / 9 文案（挂在图片上，不在 fL.jsx 里）</div>
+      </div>
+
+      <!-- PP.jsx · 导出账号数据 -->
+      <div class="overlay-cell">
+        <div class="panel-head">导出账号数据弹窗</div>
+        <div class="acc-list">
+          <div class="acc-item"><input type="checkbox" checked> 豆包00</div>
+          <div class="acc-item"><input type="checkbox" checked> Lovart02</div>
+          <div class="acc-item"><input type="checkbox"> Dola01</div>
+        </div>
+        <div class="node-btn-row"><span class="node-btn">全选</span><span class="node-btn">取消全选</span></div>
+        <button type="button" class="btn btn-sm btn-block btn-primary">导出选中 (2)</button>
+        <div class="toast" data-level="warn" style="margin-top:var(--space-2);"><span>获取 Dola01 的 cookie 失败: 会话已失效</span></div>
+        <div class="node-meta">暂无已登录账号</div>
+        <div class="gap-flag">PP.jsx · 4,092 B / 4 按钮 / 17 文案</div>
+      </div>
+
+      <!-- LP.jsx · Lovart 出口代理池 -->
+      <div class="overlay-cell">
+        <div class="panel-head">Lovart 出口代理池</div>
+        <div class="field-row">
+          <span>每行一个代理</span>
+          <textarea class="field" rows="3" placeholder="http://host:port / socks5://host:port / host:port"></textarea>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary">保存并自动分配</button>
+        <div class="panel-head" style="margin-top:var(--space-2);">当前 Lovart 账号出口分配</div>
+        <div class="acc-item">Lovart02<span class="node-meta" style="margin-left:auto;">直连</span></div>
+        <div class="node-meta">暂无 Lovart 账号</div>
+        <div class="gap-flag">LP.jsx · 2,648 B / 2 按钮 / 7 文案</div>
+      </div>
+
+      <!-- TP.jsx · 选择账号类型 -->
+      <div class="overlay-cell">
+        <div class="panel-head">选择账号类型弹窗</div>
+        <div class="acc-list">
+          <div class="acc-item" data-on="true">豆包</div>
+          <div class="acc-item">Dola</div>
+          <div class="acc-item">Lovart</div>
+          <div class="acc-item">Tapnow</div>
+          <div class="acc-item">其他<span class="node-meta" style="margin-left:auto;">手动输入网址</span></div>
+        </div>
+        <div class="node-meta">其他 = 进入任意网站（仅浏览，独立会话）</div>
+        <div class="gap-flag">TP.jsx · 2,499 B / 1 按钮 / 9 文案</div>
+      </div>
+
+      <!-- DT.jsx · 更换素材 -->
+      <div class="overlay-cell">
+        <div class="panel-head">更换素材弹窗</div>
+        <div class="node-meta">从资源库选择素材进行更换 · 选择素材节点绑定的素材</div>
+        <div class="wm-grid">
+          <div class="wm-item"><div class="wm-thumb ph-a"></div></div>
+          <div class="wm-item"><div class="wm-thumb ph-b"></div></div>
+          <div class="wm-item"><div class="wm-thumb ph-c"></div></div>
+        </div>
+        <div class="node-meta">资源库为空，请先从右侧资源库或文件添加素材。</div>
+        <div style="display:flex; gap:var(--space-2);"><button type="button" class="btn btn-sm btn-primary">更换</button><button type="button" class="btn btn-sm">从文件选择</button></div>
+        <div class="gap-flag">DT.jsx · 1,577 B / 2 按钮 / 5 文案</div>
+      </div>
+
+      <!-- 小提示类 -->
+      <div class="overlay-cell">
+        <div class="panel-head">小提示组件（3 个）</div>
+        <div class="banner"><span class="badge">Z0</span><span class="banner-text">背景 / 装饰层提示</span><span class="node-btn" style="margin-left:auto;">关闭提示</span></div>
+        <div class="banner"><span class="badge badge-danger">_Component27</span><span class="banner-text">视频加载失败，可点「原链接」查看</span></div>
+        <div class="banner"><span class="badge badge-danger">J3</span><span class="banner-text">读取图片失败 / 解析图片失败</span></div>
+        <div class="gap-flag">Z0.jsx 745 B · _Component27.jsx 899 B · J3.jsx 992 B</div>
+      </div>
+
+      <!-- 抽取盲区 -->
+      <div class="overlay-cell">
+        <div class="panel-head">⚠ 抽取盲区（6 个未抽到，无法机械对照）</div>
+        <div class="node-meta">
+          <code>_Component44.jsx</code> —— 隐形桥（shared.js 41013-41057）：把画布与外部能力对接。
+          <b>未实现、也未被抽取 ⇒ 实现前必须回读源码</b>
+        </div>
+        <div class="node-meta">
+          抽取器 <code>extract-ui-inventory.cjs</code> 未覆盖：<br>
+          <code>_Component36</code> / <code>_Component38</code> / <code>_Component39</code> /
+          <code>_Component41</code> / <code>_Component44</code> / <code>_Component49</code>
+        </div>
+        <div class="node-meta">
+          <code>_ui-inventory.json</code> 只有 101 个，而 <code>docs/03</code> §1.1 提到 104 个应用组件 ⇒
+          <b>盲区里的 UI 不能靠清单兜底</b>
+        </div>
+        <div class="gap-flag">docs/13 §2.4</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var root = document.documentElement;
+
+  // 四个切换器
+  document.querySelectorAll('[data-set]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      root.setAttribute('data-' + btn.dataset.set, btn.dataset.value);
+      document.querySelectorAll('[data-set="' + btn.dataset.set + '"]').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+    });
+  });
+
+  // 解耦演示：只改 L3 的 --node-selected-ring
+  var splitBtn = document.getElementById('splitBtn');
+  splitBtn.addEventListener('click', function () {
+    var on = root.getAttribute('data-split') === 'on';
+    if (on) root.removeAttribute('data-split');
+    else root.setAttribute('data-split', 'on');
+    splitBtn.setAttribute('aria-pressed', String(!on));
+  });
+
+  // 屏幕切换
+  document.querySelectorAll('[data-screen]').forEach(function (btn) {
+    if (!btn.classList.contains('btn') && btn.tagName === 'BUTTON' && !btn.dataset.set) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.screen').forEach(function (s) {
+          s.dataset.active = String(s.dataset.screen === btn.dataset.screen);
+        });
+        document.querySelectorAll('nav [data-screen]').forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b === btn));
+        });
+      });
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

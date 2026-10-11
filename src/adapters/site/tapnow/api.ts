@@ -15,6 +15,7 @@ import { TAPNOW_API_TIMEOUT_MS, TAPNOW_HREF_TIMEOUT_MS } from '@/constants';
 import { TAPNOW_TEXT } from '@/constants/text';
 import { err, ok, type Result } from '@/core/model/result';
 import { withTimeout } from '@/lib/async';
+import { isRecord } from '@/lib/object';
 import { findWebview, type WebviewAccountRef } from '../shared/webview';
 import { tapnowFetchScript } from './scripts';
 
@@ -44,11 +45,6 @@ interface PageFetchResult {
 
 /** 画布 id 的路径正则（原 `Yl` 33401 内联） */
 const CANVAS_ID_PATH_RE = /^\/canvas\/([0-9a-f-]{8,})/i;
-
-/** `unknown` → 普通对象：**类型谓词**（不是 `as` 断言 —— 避开 `TD-08-1`） */
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v);
-}
 
 /** 页内 fetch 结果判定（同上，用谓词） */
 function isPageFetchResult(v: unknown): v is PageFetchResult {

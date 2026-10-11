@@ -1,0 +1,142 @@
+/**
+ * 账号面板（原 `OP.jsx` 的 `.account-panel` / `.account-actions` / `.account-row` 子集）
+ * ⚠️ 原则 5：色值只走 token。
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  height: 100%;
+  overflow: auto;
+}
+
+/* ── 「＋ 添加账号」（原 `OP.jsx:822-827` 的 `.account-actions` 主按钮）── */
+.addBtn {
+  width: 100%;
+  padding: var(--space-2);
+  color: var(--color-surface-raised);
+  background: var(--btn-primary-bg);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* ── 选平台（源版是 `_ComponentTP` 弹窗；这里做成内联展开，省一个弹窗件）── */
+.pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.pickTitle {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.pickItem {
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  color: var(--color-text-strong);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.pickItem:hover {
+  background: var(--color-surface-sunken);
+}
+
+.pickCancel {
+  position: absolute;
+  right: var(--space-1);
+  top: var(--space-1);
+  color: var(--color-text-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+/* ── 账号列表（原 `.account-row`）── */
+.empty {
+  padding: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.rowActive {
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--space-1);
+  color: var(--color-text-strong);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.rowBtn,
+.rowBtnDanger {
+  flex: 0 0 auto;
+  padding: var(--space-half) var(--space-1);
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.rowBtn {
+  color: var(--color-text-muted);
+}
+
+.rowBtnDanger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.rowBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -159,3 +159,106 @@ export function resolveSendAccount(input: SendAccountPickInput): SendAccountPick
     nextCursor: picked.nextCursor,
   };
 }
+
+// ─────────────────────────── 账号选择器（作者侧 UI 的纯半）───────────────────────────
+
+/** 账号选择器用的一个分组（原 `_Component45.jsx:601-621` 的 `T` 元素） */
+export interface AccountPickerGroup {
+  /** `null` = 未分组（原 `gid: null`）；`'ungrouped'` 是**筛选入参**的哨兵，两者不同 */
+  gid: string | null;
+  label: string;
+  list: Account[];
+}
+
+/** 分组名缺失时的兜底（原 `_Component45.jsx:607` 的 `ye.name || '未命名分组'`） */
+const UNNAMED_GROUP = '未命名分组';
+/** 未分组的显示名（原 `616` 的 `label: '未分组'`） */
+const UNGROUPED_LABEL = '未分组';
+
+/**
+ * 构造账号选择器的分组列表（原 `_Component45.jsx:601-621`）
+ *
+ * 规则（**顺序即语义**）：
+ *   ① 按 `groups` 的顺序输出，只保留**至少有一个账号**的组（空组**不显示**）
+ *   ② 组名取 `group.name`，空则 `未命名分组`
+ *   ③ **「未分组」永远排在最后**，且也只在非空时出现（原 `gid: null`）
+ *
+ * ⚠️ 与 `filterPoolAccounts` 的分工：那个是**筛选**（给定 gid 取列表），这个是**分桶**
+ *    （一次把所有组列出来）—— 前者按 `groupId === 'ungrouped'` 判定，后者按 `groupId ?? null` 分桶。
+ */
+export function buildAccountGroups(
+  accounts: readonly Account[],
+  groups: readonly { id: string; name?: string }[],
+): AccountPickerGroup[] {
+  const byGroup = new Map<string | null, Account[]>();
+  for (const a of accounts || []) {
+    const gid = a.groupId ?? null;
+    const bucket = byGroup.get(gid);
+    if (bucket) bucket.push(a);
+    else byGroup.set(gid, [a]);
+  }
+
+  const out: AccountPickerGroup[] = [];
+  for (const g of groups || []) {
+    const list = byGroup.get(g.id) ?? [];
+    if (list.length) out.push({ gid: g.id, label: g.name || UNNAMED_GROUP, list });
+  }
+  const ungrouped = byGroup.get(null) ?? [];
+  if (ungrouped.length) out.push({ gid: null, label: UNGROUPED_LABEL, list: ungrouped });
+  return out;
+}
+
+/** 可走网页后台的站点类型（原 `nf`）—— 分组内**一个都没有**时「自动选择」按钮要禁用 */
+const WEB_EXECUTABLE_TYPES: readonly string[] = ['doubao', 'dola', 'gpt'];
+
+/**
+ * 从一组账号**推出该走哪个通道**（原 `K` `_Component45.jsx:622-634`）
+ *
+ * 规则：取该组账号的 `type` 集合 —— **恰好只有 1 种** ⇒ 用它；否则 ⇒ `'doubao'`。
+ * ⚠️ 与源一致：计的是**全部**账号的类型（**不筛**登录态）。
+ */
+export function deriveChannelFromGroup(list: readonly Account[]): SiteType {
+  // ⚠️ 显式 `Set<string>`：`SiteType` 的 Set 不接受 string 查表
+  const types = new Set<string>((list || []).map((a) => a.type || 'doubao'));
+  const hit = WEB_EXECUTABLE_TYPES.filter((t) => types.has(t));
+  return (hit.length === 1 ? hit[0] : 'doubao') as SiteType;
+}
+
+/** 该分组内是否**有可用**（已登录）+ **可执行**（豆包/Dola/GPT）的账号（原 `_Component45.jsx:1347-1349` 的 `be`） */
+export function hasExecutableAccount(list: readonly Account[]): boolean {
+  return (list || []).some((a) => isAccountUsable(a) && WEB_EXECUTABLE_TYPES.includes(a.type || 'doubao'));
+}
+
+/**
+ * 账号选择器按钮上的**文案**（原 `Se` `_Component45.jsx:685-711`）
+ *
+ * 五档（**逐字对齐**）：
+ *   | 取值 | 显示 |
+ *   |---|---|
+ *   | `channel === 'api'` | `API` |
+ *   | `sendAccount === 'auto'` | `自动` |
+ *   | `auto:group:ungrouped` | `未分组 · 自动` |
+ *   | `auto:group:<id>` | `{组名} · 自动`（组不存在 ⇒ `分组 · 自动`） |
+ *   | 显式账号 id | 账号名；**找不到 ⇒ 回落 `自动`** |
+ *
+ * ⚠️ `auto:<type>`（如 `auto:dola`）会落到**最后一档** —— 源版就是如此（它不是账号 id，
+ *    找不到就显示 `自动`）。**照抄**。
+ */
+export function accountPickerLabel(input: {
+  channel?: string;
+  sendAccount?: string;
+  accounts?: readonly Account[];
+  groups?: readonly { id: string; name?: string }[];
+}): string {
+  if (input.channel === 'api') return 'API';
+  const v = input.sendAccount ?? 'auto';
+  if (v === 'auto') return '自动';
+  if (v.startsWith('auto:group:')) {
+    const gid = v.slice('auto:group:'.length);
+    if (gid === UNGROUPED) return `${UNGROUPED_LABEL} · 自动`;
+    const g = (input.groups || []).find((x) => x.id === gid);
+    return `${g?.name || '分组'} · 自动`;
+  }
+  const hit = (input.accounts || []).find((a) => a.id === v);
+  return hit ? hit.name : '自动';
+}

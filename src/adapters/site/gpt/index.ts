@@ -33,6 +33,9 @@ import { GPT_SEND_TIMEOUT_MS } from '@/constants';
 import { GPT_TEXT } from '@/constants/text';
 import { err, ok, type Result } from '@/core/model/result';
 import { withTimeout } from '@/lib/async';
+// ★ 判据 C1：`isRecord`/`asRecord` 原先在本文件、`tapnow/api.ts`、`tapnow/index.ts` 各写一遍
+//   ⇒ 第 3 次出现即抽出到 `lib/object.ts`
+import { asRecord } from '@/lib/object';
 // ★ 复用既有 SSOT 的内容指纹（`doubao/index.ts` 自带一个局部 `hash32`，
 //   按 C1 三振出局：GPT 是第 2 处 ⇒ 先用现成的；到第 3 处时把 `doubao` 也收口过来）
 import { contentFingerprint } from '@/core/rules/sendGuard';
@@ -46,16 +49,6 @@ const ATTACH_RETRY_DELAY_MS = 1500;
 const ATTACH_SETTLE_MS = 2000;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** `unknown` → 普通对象（**类型谓词**，不是 `as` 断言 —— 避开 `TD-08-1`） */
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v);
-}
-
-/** 安全取 `unknown` 成对象（免 `as`；非对象给空表） */
-function asRecord(v: unknown): Record<string, unknown> {
-  return isRecord(v) ? v : {};
-}
 
 export function createGptSite(host: HostPort): SitePort {
   return {

@@ -37,6 +37,7 @@ import { TAPNOW_MIN_SIDE } from '@/constants';
 import { TAPNOW_TEXT } from '@/constants/text';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
+import { isRecord } from '@/lib/object';
 import { buildResultScanScript } from '../shared/scanScripts';
 import { findWebview, webviewEval } from '../shared/webview';
 import { tapnowCurrentHref } from './api';
@@ -52,11 +53,6 @@ interface Attempt {
   href?: string;
   skipped?: number;
   unread?: UnreadRoot[];
-}
-
-/** `unknown` → 普通对象（**类型谓词**，不是 `as` 断言） */
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
 /** 把宿主/脚本返回归一成内部形状（**只收敛形状，不做业务判断**） */

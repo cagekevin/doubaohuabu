@@ -38,7 +38,14 @@
 export const createRefChipRe = (): RegExp => /@\[([^\]|]+)\|([^\]]+)\]/g;
 
 /** 新建 `@图N` 编号形式正则（原 `Ks` 40795）—— 模块私有（无外部消费者，避免多余导出） */
-const createRefMarkRe = (): RegExp => /@图(\d{1,3})/g;
+/**
+ * `@图N` 的匹配正则（原 `Ks` shared.js:40795 **逐字**：`/@图(\d{1,3})/g`）
+ *
+ * ⚠️ **每次返回新正则**（源版是个**模块级** `/g` 正则，靠 `lastIndex = 0` 手动复位 —— 那是个
+ *   隐患：任何一处忘记复位就会从上次的位置继续匹配）⇒ 这里不共享实例。
+ * ⚠️ 2026-10-10 起**对外导出**：它有 2 处消费者（本文件的报文改写 + `richText.ts` 的 gp 编辑器渲染）。
+ */
+export const createRefMarkRe = (): RegExp => /@图(\d{1,3})/g;
 
 /**
  * `参考图N` 的**唯一**格式化处（原 `Ja`/`KL`/`Qc` 各自硬编码过这个 token）
@@ -186,4 +193,62 @@ export function renumberRefs(
   });
 
   return { text: out, refs: nextRefs, changed: true };
+}
+
+// ─────────────────────────── 作者侧（`@` 自动补全）───────────────────────────
+
+/**
+ * 输入 `@` 的**触发正则**（**逐字**抄 `CL.jsx:521`）
+ * ⚠️ 只匹配「**光标左侧紧邻**」的那个 `@`（`$` 锚定）—— 所以正文中间的 `@` 不会误触发。
+ * ⚠️ 查询词只认 `\w` 与中文（源版如此）；其它字符（空格/标点）即视为"查询结束"。
+ */
+const REF_TRIGGER_RE = /@([\w\u4e00-\u9fa5]*)$/;
+
+export interface RefTriggerMatch {
+  /** 命中的整段（含 `@`）在文本里的**起始下标** */
+  start: number;
+  /** `@` 后面的查询词（**可能为空串** —— 刚敲下 `@`） */
+  query: string;
+}
+
+/**
+ * 从「光标左侧的文本」里找一次引用触发（原 `CL.jsx:521`）
+ * @param beforeCaret 光标**之前**的全部文本
+ */
+export function matchRefTrigger(beforeCaret: string): RefTriggerMatch | null {
+  const m = REF_TRIGGER_RE.exec(beforeCaret);
+  if (!m) return null;
+  return { start: beforeCaret.length - m[0].length, query: m[1] ?? '' };
+}
+
+/**
+ * 拼一条引用标记（原 `kL.jsx:5`）
+ *
+ * ⚠️ 名字里的 `"` 换成 `&quot;`（源版为 HTML 属性准备；纯文本里同样无害且必须照抄，
+ *    否则与老数据里的既有标记**形态不一致**）。
+ */
+export function toRefMarker(id: string, name: string): string {
+  return `@[${id}|${String(name).replace(/"/g, '&quot;')}]`;
+}
+
+/** 资源库条目的最小形状（只读这两项） */
+export interface RefCandidateItem {
+  id: string;
+  name: string;
+}
+
+/**
+ * 按查询词筛候选（作者侧下拉用）
+ *
+ * ⚠️ **名称包含即命中**（大小写不敏感）；空查询 ⇒ **全给**（刚敲下 `@` 时应当列全库）。
+ * ⚠️ 与源版一致：候选**封顶**（源下拉也不会把整库铺开）。
+ */
+export function filterRefCandidates<T extends RefCandidateItem>(
+  library: readonly T[],
+  query: string,
+  max = 8,
+): T[] {
+  const q = query.trim().toLowerCase();
+  const hit = q ? library.filter((it) => (it.name || '').toLowerCase().includes(q)) : [...library];
+  return hit.slice(0, max);
 }

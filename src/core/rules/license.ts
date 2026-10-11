@@ -18,6 +18,7 @@
  */
 
 import { LICENSE_TEXT } from '@/constants/text';
+import type { LicenseStatusKind } from '@/core/model/license';
 
 const DAY_MS = 86400000;
 const HOUR_MS = 3600000;
@@ -34,6 +35,16 @@ export function isLicenseExpired(expireAt: number, now: number): boolean {
   return expireAt - now <= 0;
 }
 
+/**
+ * 放行判定（**fail-close**）—— 原 `_Component48.jsx:140` 的 `m.status !== 'ok'`
+ *
+ * ⚠️ **只有 `ok` 放行**：`none` / `invalid` / `expired` / `tampered` 一律落到激活页。
+ *    这是**有意为之**的 fail-close —— 拿不到授权时宁可不进画布。
+ */
+export function isLicenseUsable(status: LicenseStatusKind): boolean {
+  return status === 'ok';
+}
+
 /** 有效期文案（原 `H3` 42609） */
 export function formatLicenseRemaining(expireAt: number, now: number): string {
   if (isLicenseExpired(expireAt, now)) return LICENSE_TEXT.expired;
@@ -44,4 +55,18 @@ export function formatLicenseRemaining(expireAt: number, now: number): string {
   if (days >= 1) return LICENSE_TEXT.remainingDays(days);
 
   return LICENSE_TEXT.remainingHours(Math.max(Math.floor(left / HOUR_MS), 1));
+}
+
+/**
+ * 时间戳 → `YYYY-MM-DD HH:mm`（**本地时区**）—— 原 `Zd` 42599-42608
+ *
+ * ⚠️ 与源逐字一致：**不是数字 / 假值** ⇒ `'—'`（**不是空串** —— 它是显示给用户看的占位）；
+ *   月/日/时/分**补零到 2 位**；**秒与毫秒不显示**。
+ * ⚠️ 用**本地**时区（`getFullYear` 等）而不是 `toISOString()`（那是 UTC —— 会差 8 小时）。
+ */
+export function formatDateTime(ts: unknown): string {
+  if (!ts || typeof ts !== 'number') return '—';
+  const d = new Date(ts);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

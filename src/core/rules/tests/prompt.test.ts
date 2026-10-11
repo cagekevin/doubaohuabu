@@ -12,9 +12,11 @@ import {
   composeImagePrompt,
   composeVideoPrompt,
   isPreformatted,
+  mergeLinkedTexts,
   normalizeModelLabel,
   normalizeResolution,
   resolveReferences,
+  resolveRefMaterial,
   stripGeneratedArtifacts,
   videoParamsSuffix,
 } from '../prompt';
@@ -242,5 +244,98 @@ describe('composeBody 通用组装', () => {
 
   it('空正文 → 空串', () => {
     expect(composeBody({ body: '', mediaType: 'video' })).toBe('');
+  });
+});
+
+describe('resolveRefMaterial（原 fk 24135-24203）—— 六级回落', () => {
+  const lib = [
+    { id: 'lib_1', name: '素材甲', dataUrl: 'img://lib1.png' },
+    { id: 'lib_2', name: '素材乙', dataUrl: 'img://lib2.png' },
+  ];
+  const nodeMap = {
+    // ② material 自带 dataUrl
+    n_mat: { id: 'n_mat', type: 'material', data: { dataUrl: 'img://mat.png', name: '节点图' } },
+    // ③ material 带 libId
+    n_lib: { id: 'n_lib', type: 'material', data: { libId: 'lib_2', name: '库里图' } },
+    // ⑤ video
+    n_vid: { id: 'n_vid', type: 'video', data: { label: '片子', poster: 'img://poster.png', url: 'vid://x.mp4' } },
+    // ⑥ imggen
+    n_ig: { id: 'n_ig', type: 'imggen', data: { dataUrl: 'img://ig.png', label: '文生图' } },
+    // 无
+    n_gv: { id: 'n_gv', type: 'genvideo', data: {} },
+  };
+
+  it('★ ① 资源库 id 命中优先', () => {
+    expect(resolveRefMaterial('lib_1', lib, nodeMap)).toEqual({
+      id: 'lib_1',
+      label: '素材甲',
+      dataUrl: 'img://lib1.png',
+    });
+  });
+
+  it('★ ② material 自带 dataUrl', () => {
+    expect(resolveRefMaterial('n_mat', lib, nodeMap)).toMatchObject({ label: '节点图', dataUrl: 'img://mat.png' });
+  });
+
+  it('★ ③ material 的 libId 回查资源库', () => {
+    expect(resolveRefMaterial('n_lib', lib, nodeMap)).toMatchObject({ label: '素材乙', dataUrl: 'img://lib2.png' });
+  });
+
+  it('★ ⑤ video 用 poster 当图、带上 videoUrl 与 mediaType', () => {
+    expect(resolveRefMaterial('n_vid', lib, nodeMap)).toEqual({
+      id: 'n_vid',
+      label: '片子',
+      dataUrl: 'img://poster.png',
+      mediaType: 'video',
+      videoUrl: 'vid://x.mp4',
+    });
+  });
+
+  it('★ ⑥ imggen 自带 dataUrl', () => {
+    expect(resolveRefMaterial('n_ig', lib, nodeMap)).toMatchObject({ label: '文生图', dataUrl: 'img://ig.png' });
+  });
+
+  it('★ 全不命中 ⇒ `{id, label: id, dataUrl: ""}`（**不抛、不 null**）', () => {
+    expect(resolveRefMaterial('n_gv', lib, nodeMap)).toEqual({ id: 'n_gv', label: 'n_gv', dataUrl: '' });
+    expect(resolveRefMaterial('不存在', lib, nodeMap)).toEqual({ id: '不存在', label: '不存在', dataUrl: '' });
+  });
+
+  it('`nodes` 也接受数组形状（两种入参等价）', () => {
+    const arr = Object.values(nodeMap);
+    expect(resolveRefMaterial('n_ig', lib, arr)).toEqual(resolveRefMaterial('n_ig', lib, nodeMap));
+  });
+});
+
+describe('mergeLinkedTexts（原 sR 35486-35521）', () => {
+  it('★ 正文里出现 `@<名字>` ⇒ **就地替换成该文本的正文**', () => {
+    expect(mergeLinkedTexts('请参考 @甲 的风格', [{ label: '甲', text: '赛博朋克' }])).toBe('请参考 赛博朋克 的风格');
+  });
+
+  it('★ 正文里出现 `@[...|<名字>]` ⇒ 同样就地替换', () => {
+    expect(mergeLinkedTexts('看 @[t_1|甲] 的写法', [{ label: '甲', text: '水墨' }])).toBe('看 水墨 的写法');
+  });
+
+  it('★ 正文里**没出现** ⇒ 空行分隔**追加**到末尾', () => {
+    expect(mergeLinkedTexts('主正文', [{ label: '甲', text: '补充一' }, { label: '乙', text: '补充二' }])).toBe(
+      '主正文\n\n补充一\n\n补充二',
+    );
+  });
+
+  it('★ 无 `label` ⇒ **一律进追加组**（不做就地替换）', () => {
+    expect(mergeLinkedTexts('主', [{ text: '补' }])).toBe('主\n\n补');
+  });
+
+  it('★ 主正文为空 ⇒ 只留追加组（不留前导空行）', () => {
+    expect(mergeLinkedTexts('', [{ text: 'a' }, { text: 'b' }])).toBe('a\n\nb');
+  });
+
+  it('空文本条目被忽略', () => {
+    expect(mergeLinkedTexts('主', [{ label: '甲', text: '   ' }])).toBe('主');
+  });
+
+  it('★ 名字里的正则元字符要转义（否则 `@a.b` 的 `.` 会当通配）', () => {
+    expect(mergeLinkedTexts('用 @a.b 风格', [{ label: 'a.b', text: 'X' }])).toBe('用 X 风格');
+    // 未转义时 `@a.b` 会匹配 `@axb` —— 这里验证**不该**匹配
+    expect(mergeLinkedTexts('用 @axb 风格', [{ label: 'a.b', text: 'X' }])).toBe('用 @axb 风格\n\nX');
   });
 });

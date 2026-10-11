@@ -55,6 +55,54 @@ export type FaceMaskOpts = Readonly<Record<string, unknown>>;
 // ─────────────────────────── 键 → 值 ───────────────────────────
 
 /**
+ * ⚠️ 类型从 `core/rules/scanHistory` **反向**引入是不允许的（`stable` 是底层）⇒
+ *   这里只声明**结构等价**的最小形状（字段与那张表逐字一致，注释里指向真源）。
+ *   两处必须同步：`LsValueMapIsExhaustive` 与 `core/rules/scanHistory.ts` 的 `ScanHistoryEntry`。
+ */
+export interface ScanHistoryPair {
+  /** 参与撞车的一方（账号 id）；⚠️ `a`/`b`/`level` 的确切语义待"指纹体检"转写时校正 */
+  a: string;
+  b: string;
+  /** 告警级别 */
+  level: string;
+}
+
+export interface ScanHistoryEntry {
+  ts: number;
+  sig: string;
+  total: number;
+  totalPairs: number;
+  critical: number;
+  warn: number;
+  pairs: ScanHistoryPair[];
+}
+
+/**
+ * Lovart 画廊里的一张图（原 `addLovartImages` 29267-29278 逐字段写出的形状）
+ *
+ * ★ **2026-10-11 定形**：`LsValueMap` 此前把它标成 `[待确认]`（`docs/15` §1 #7 ——
+ *   当时只证明了「有读」）。源实现的**写侧**（29267-29278）给出了完整字段表 ⇒ 现在定形。
+ * ⚠️ 放 `stable/contracts` 而不是 `core/rules`：**持久化形状是契约**，
+ *   而 `stable` 是底层（`core` 可以 import 它，反过来不行）。
+ */
+export interface LovartGalleryImage {
+  id: string;
+  name: string;
+  /** ⚠️ 已归一（源版 `Tn` 会把远程图落成本地引用） */
+  dataUrl: string;
+  natW: number;
+  natH: number;
+  sizeBytes: number;
+  source: string;
+  sourceUrl: string;
+  scope: string;
+  addedAt: number;
+}
+
+/** 画廊：`账号 id → 图片列表`（原 29285-29288 的 `{...galleries, [accountId]: [...]}`） */
+export type LovartGalleriesMap = Record<string, LovartGalleryImage[]>;
+
+/**
  * 键 → 值形状。
  *
  * ⚠️ 键名必须是**字面量**（不能写成 `[K in LsKey]`）—— 本文件靠它与 `LsKey` 做**双向穷尽断言**。
@@ -66,10 +114,17 @@ export interface LsValueMap {
   'doubao-presets': GraphPreset[];
   'doubao-styles': readonly StylePreset[];
   'doubao-canvas-defaults': CanvasDefaults;
-  /** ⚠️ 形状 `[待确认]`（`docs/15` §1 #7；原 `Pk` 26629 / `ET` 26637 只证明有读） */
-  'doubao-lovart-galleries': unknown[];
-  /** ⚠️ 形状 `[待确认]`（`docs/15` §1 #8；原 `jk` 26223 / `Fy` 26225） */
-  'doubao-scan-history': unknown[];
+  /**
+   * ★ **2026-10-11 定形**（原 `Pk` 26629 / `ET` 26637 读、`addLovartImages` 29285 写）
+   * —— 此前是 `unknown[]` + `[待确认]`（`docs/15` §1 #7），现按源实现的写侧定形。
+   */
+  'doubao-lovart-galleries': LovartGalleriesMap;
+  /**
+   * ★ **2026-10-11 定形**（原 `jk` 26223 读 / `Fy` 26225 写 / `recordScan` 30362 写侧）
+   * —— 此前是 `unknown[]` + `[待确认]`（`docs/15` §1 #8）。
+   * ⚠️ 它是**指纹撞车体检**的历史，**不是**画廊扫描（两者别混）。
+   */
+  'doubao-scan-history': ScanHistoryEntry[];
   'doubao-proxy-pool': string[];
   'doubao-auto-video-detect': FlagValue;
   'doubao-face-mask-opts': FaceMaskOpts;

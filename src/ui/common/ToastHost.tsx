@@ -23,7 +23,12 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
   }, [item.id, item.duration, onDismiss]);
 
   return (
-    <div className={styles.toast} role="status" onClick={() => onDismiss(item.id)}>
+    <div
+      // 语气 → 样式（原 `showToast(text, level)`）；`info` 是默认态，不加额外类
+      className={`${styles.toast} ${item.level === 'warn' ? styles.toastWarn : item.level === 'error' ? styles.toastError : ''}`}
+      role="status"
+      onClick={() => onDismiss(item.id)}
+    >
       {item.message}
     </div>
   );

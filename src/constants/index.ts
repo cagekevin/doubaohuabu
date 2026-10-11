@@ -110,8 +110,72 @@ export const IMAGE_FETCH_TIMEOUT_MS = 25000;
 export const API_RETRY_BACKOFF_MS = [2000, 8000, 30000] as const;
 /** API 轮询连续网络失败次数上限 */
 export const API_POLL_NETWORK_FAIL_LIMIT = 5;
+/** 失败提示停留（ms，原 `applyApiJobEvent` 30831 的 `5000`） */
+export const API_TOAST_ERROR_MS = 5000;
+/** 额度异常提示停留（ms，原 `applyApiJobEvent` 30831 的 `7000` —— 额度问题要用户看更久） */
+export const API_TOAST_QUOTA_MS = 7000;
 /** 域名冷却时长（ms） */
 export const DOMAIN_COOLDOWN_MS = 5 * 60 * 1000;
+
+// ── 宿主环境 ──
+
+/**
+ * 宿主操作系统（原 `Uc` shared.js:25080 的三个取值）
+ *
+ * ★ **2026-10-10 收口（原则 5）**：这个联合原先在**三处**各写一遍 ——
+ *   `Fingerprint.hostOS`（`stable/model/account.ts:31`）· `HostPort.os`
+ *   （`core/ports/host.port.ts:303`）· `window.api.hostOS`（`window-api.d.ts:25`）。
+ *   三者必须一致（指纹复用判定要拿 `Fingerprint.hostOS` 与当前 OS 比），
+ *   各写一遍迟早会漂 ⇒ 提到 L0 只留一处。
+ */
+export const HOST_OS = ['windows', 'macos', 'linux'] as const;
+export type HostOS = (typeof HOST_OS)[number];
+
+// ── 后台页（豆包 / Dola / Lovart 的后台 `<webview>`）──
+
+/**
+ * 后台页加载的默认超时（ms，原 `vr` 的 `q$` shared.js:25834 = 30000）
+ * ⚠️ 与「页面无响应超时 `PAGE_TIMEOUT_LONG_MS`」**不是一回事**：
+ *    后者等的是单帧加载，本项等的是**后台账号页就绪**（含一次自动重载）。
+ */
+export const BACKEND_LOAD_TIMEOUT_MS = 30000;
+/**
+ * 后台页租约 TTL（ms，原 `vr` 的 `Y$` shared.js:25836 = 3600000）
+ * ⚠️ 与 `ACCOUNT_BUSY_TIMEOUT_MS` **同值但不同义**：那个管「账号忙」，
+ *    这个管「后台页被某个任务独占」——两者是不同生命周期，**不合并**（改一个不该动另一个）。
+ */
+export const BACKEND_LEASE_TTL_MS = 3600000;
+/**
+ * 首次失败后**只自动重载一次**的阈值（ms，原 `vr` 逐字：`Date.now() - l >= 7000`）
+ * ⚠️ 源版把它**写在内联表达式里**（`26085`），此处提为具名常量（原则 5）。
+ */
+export const BACKEND_RELOAD_AFTER_MS = 7000;
+
+// ── 附参考图（原 `hS` shared.js:38893-38947）──
+
+/** CDP 直喂的重试次数（原 `hS` 的 `for (let s = 0; s < 3; s++)`，每次间隔 `fr(1500)`） */
+export const ATTACH_IMAGE_ATTEMPTS = 3;
+/** 两次 CDP 直喂之间的间隔（ms，原 `hS` 38915 的 `fr(1500)`） */
+export const ATTACH_IMAGE_RETRY_MS = 1500;
+/** 剪贴板粘贴后的静置（ms，原 `hS` 38930 的 `fr(2500)`） */
+export const ATTACH_IMAGE_PASTE_SETTLE_MS = 2500;
+/**
+ * 发送图片后到「开始等回复」之间的静置（ms，原 `gS` 39173 / `yS` 39375 的 `fr(1200)`）
+ * ⚠️ 给页面时间把气泡渲染出来，否则回复轮询会读到"还没出现"直接空转
+ */
+export const ASK_IMAGE_SETTLE_MS = 1200;
+/** 「读回复」轮询的间隔（ms，原 `mS` 39022 的 `fr(3000)`） */
+export const ASK_REPLY_POLL_MS = 3000;
+/** 「读回复」轮询的最大轮数（原 `mS` 39021 的 50 轮 ⇒ 最长 150s） */
+export const ASK_REPLY_MAX_POLLS = 50;
+/** 回复「连续稳定」判定所需的次数（原 `mS` 39028 的 `d >= 2`） */
+export const ASK_REPLY_STABLE_READS = 2;
+/** 点发送的重试次数（原 `mS` 39003 的 3 次，间隔 `fr(800)`） */
+export const ASK_SEND_CLICK_ATTEMPTS = 3;
+/** 点发送重试间隔（ms，原 `mS` 39009 的 `fr(800)`） */
+export const ASK_SEND_CLICK_RETRY_MS = 800;
+/** 填文本后到「校验输入框非空」之间的静置（ms，原 `MD` 38956 的 `fr(600)`） */
+export const FILL_TEXT_SETTLE_MS = 600;
 
 // ─────────────────────────── 去重 / 有效性 ───────────────────────────
 // ⚠️ 真源在 `./dedupe`（SSOT：同一常量不得定义两次）

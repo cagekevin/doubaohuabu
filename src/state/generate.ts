@@ -12,6 +12,7 @@ import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
 import { generateImage, generateVideo, type GenDeps } from '@/core/usecases/generate';
 import { pickAccount } from '@/core/rules/accountPool';
+import { busyIdsOf } from '@/core/rules/accountBusy';
 import { DEFAULT_IMAGE_RESOLUTION } from '@/constants/models';
 import { DEFAULT_STYLE_PRESETS } from '@/constants/stylePresets';
 
@@ -27,6 +28,14 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
     clock: ports.clock,
     // 风格前缀：从工程内 styleIds 查预设（M7 先用内置表；M5 的 usecase 只依赖这个函数）
     stylePrefixOf: (ids) => stylePrefixOf(ids),
+    // ★ 占用 / 释放（原 `Fi` / `tn`）—— **真正的 `set` 发生在 state**（原则 1）；
+    //   注入给用例是因为「占用」必须在「用例内部选号之后、发送之前」发生。
+    //   这是 `docs/14` §8「`setBusyAccounts` 零调用」的修法。
+    holdAccount: (accountId, nodeId) =>
+      store.useStore.getState().holdAccount(accountId, { itemId: null, nodeId }),
+    releaseAccount: (accountId) => {
+      store.useStore.getState().releaseAccount(accountId);
+    },
   };
 
   return {
@@ -53,9 +62,10 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
       }
 
       // ★ 选号（W11 的池调度）—— 全忙 ⇒ 排队提示；无可用 ⇒ 明确报错
+      //   ⚠️ 忙账号**按 TTL 实时推导**（`busyIdsOf`），不把"过期"状态写进 store
       const picked = pickAccount(s.accounts, {
         strategy: s.poolStrategy,
-        busy: s.busyAccountIds,
+        busy: busyIdsOf(s.accountBusy, ports.clock.now()),
       });
       if (!picked.account && picked.reason === 'no-account') {
         // 无可用账号时仍允许走 API 通道
@@ -145,7 +155,8 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
  * ⚠️ **纯前缀拼接、按 `styleIds[]` 顺序依次拼**（W8）
  * ⚠️ 未知 id **跳过**（不抛、不造前缀）
  */
-function stylePrefixOf(ids: readonly string[]): string {
+/** ★ 导出以便 `state/batchSend.ts` 复用（同一套风格前缀，避免第二份实现） */
+export function stylePrefixOf(ids: readonly string[]): string {
   if (!ids || ids.length === 0) return '';
   const table = new Map(DEFAULT_STYLE_PRESETS.map((p) => [p.id, p.prefix]));
   return ids.map((id) => table.get(id) ?? '').join('');

@@ -39,13 +39,13 @@ export function TopBar() {
 
   return (
     <div className={styles.topbar}>
-      <button type="button" onClick={onRename} title={PROJECT_TEXT.renameHint}>
+      <button type="button" className={styles.topbarName} onClick={onRename} title={PROJECT_TEXT.renameHint}>
         {project?.name ?? '—'}
       </button>
-      <span style={{ color: 'var(--color-text-faint)', fontSize: 'var(--font-size-xs)' }}>
+      <span className={styles.topbarCount}>
         {project ? `${project.data.nodes.length} 个节点` : ''}
       </span>
-      <span style={{ flex: 1 }} />
+      <span className={styles.topbarSpacer} />
       <button type="button" onClick={() => void onExport()}>
         {PROJECT_TEXT.export}
       </button>

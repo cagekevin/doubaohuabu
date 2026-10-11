@@ -23,6 +23,7 @@ import type { SendPayload, SendResult, SitePort, SiteProbe, ScanResult } from '@
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { GEN_POLL_MS, GEN_SILENT_MS, GEN_TIMEOUT_MS } from '@/constants';
 import { buildClickSendScript } from './scripts';
+import { createDoubaoAskWithImage } from './analyze';
 import { requireWebview, webviewEval } from '../shared/webview';
 import { buildResultScanScript } from '../shared/scanScripts';
 
@@ -109,9 +110,24 @@ async function toGenResult(
   });
 }
 
+/**
+ * 会话页地址（原 `aS` = `'https://www.doubao.com/chat/'` · `iS` = `'https://www.dola.com/chat/'`
+ * shared.js:38717-38718）
+ *
+ * ⚠️ **站点细节 ⇒ 只能住在这里**（`core` 不得出现站点 URL）。后台页导航目标由
+ *    `SitePort.chatUrl` 对外声明，`core/usecases/sendToSite` 只消费不认得。
+ */
+const CHAT_URL: Readonly<Record<'doubao' | 'dola', string>> = {
+  doubao: 'https://www.doubao.com/chat/',
+  dola: 'https://www.dola.com/chat/',
+};
+
 export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SitePort {
   return {
     kind,
+    chatUrl: CHAT_URL[kind],
+    // ★ 提示词分析 / 调整的页内半（原 `hS` + `mS`）—— 只有豆包 / Dola 有这条链
+    askWithImage: createDoubaoAskWithImage(host),
 
     async send(account: Account, payload: SendPayload): Promise<Result<SendResult>> {
       const partition = account.partition;

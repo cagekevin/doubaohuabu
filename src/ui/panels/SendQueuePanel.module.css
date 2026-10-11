@@ -1,0 +1,232 @@
+/**
+ * 发送队列面板（原 `z3.jsx` 的 `.sq-*`）
+ * ⚠️ 原则 5：色值只走 token
+ * ⚠️ 位置由 JS 给（拖拽 + localStorage），这里只兜底"没存过位置时贴左下"
+ */
+
+.panel {
+  position: fixed;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: 260px;
+  overflow: hidden;
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px var(--color-shadow);
+}
+
+/* 拖拽中关掉文本选中（否则会拖出一片蓝） */
+.dragging {
+  user-select: none;
+}
+
+/* 原 `.sq-head` —— 它是**拖动把手** */
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  cursor: move;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.conc {
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.statusline {
+  color: var(--color-text-faint);
+}
+
+.chevron {
+  color: var(--color-text-muted);
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.bar {
+  height: 2px;
+  background: var(--color-surface-sunken);
+}
+
+.progress {
+  height: 100%;
+  background: var(--progress-fill);
+  transition: width 0.2s;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-1) var(--space-2);
+}
+
+.empty {
+  padding: var(--space-3);
+  color: var(--color-text-faint);
+  text-align: center;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-surface-sunken);
+}
+
+.itemTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.idx {
+  flex: 0 0 auto;
+  min-width: 14px;
+  color: var(--color-text-faint);
+  text-align: right;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acc {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+/* 原 `.sq-acc.pending` —— 还没分配账号 */
+.accPending {
+  color: var(--color-text-faint);
+}
+
+.attempt {
+  flex: 0 0 auto;
+  color: var(--color-warning);
+}
+
+.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+}
+
+.acts {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.btn {
+  padding: 0 var(--space-1);
+  color: var(--color-text-strong);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--btn-default-border-hover);
+}
+
+/* 原 `.sq-genrow` —— 成片状态行 */
+.genRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.genLabel {
+  color: var(--color-text-faint);
+}
+
+.gen {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.gen_idle,
+.gen_na {
+  color: var(--color-text-faint);
+}
+
+.gen_queued,
+.gen_unknown {
+  color: var(--color-warning);
+}
+
+.gen_generating {
+  color: var(--tab-active-fg);
+}
+
+.gen_done {
+  color: var(--color-success);
+}
+
+.gen_failed {
+  color: var(--color-danger);
+}
+
+.genWait {
+  color: var(--color-text-muted);
+}
+
+.genNote {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.footHint {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+  text-align: right;
+}

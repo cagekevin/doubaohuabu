@@ -9,9 +9,25 @@
  *   `accountConcurrency`/`presets` ⇒ 必然超 25 字段上限，故「API 配置族」先独立成片。
  */
 
-import type { Account, AccountGroup, PoolStrategy } from '@/stable/model/account';
+import type { Account, AccountGroup, Fingerprint, PoolStrategy } from '@/stable/model/account';
 import type { Project } from '@/stable/model/project';
 import { createProject as makeProject } from '@/core/rules/project';
+import {
+  holdAccount as holdBusy,
+  releaseAccount as releaseBusy,
+  type BusyMap,
+} from '@/core/rules/accountBusy';
+import {
+  addAccountToList,
+  removeAccountFromList,
+  type NewAccountInput,
+} from '@/core/rules/accountRoster';
+import {
+  FINGERPRINT_VERSION,
+  generateFingerprint,
+  type ScreenSpec,
+  type WebglSpec,
+} from '@/core/rules/fingerprintGenerator';
 
 /** 保存错误（★ 保留原始 message —— 原则 6） */
 export interface SaveError {
@@ -22,6 +38,23 @@ export interface SaveError {
 /** slice 需要的注入依赖 */
 export interface GlobalSliceDeps {
   now(): number;
+  /**
+   * 新增账号所需的**环境**（原则 4：`core` 只收值，不收宿主）
+   *
+   * ★ **为什么必须注入**：`addAccount` 要产出指纹，而指纹生成器的两个输入
+   *   `os`（原 `Uc()`）与 win 分支的**真实窗口尺寸 / 真实 GPU**（原 `M$()` / `$$()`）
+   *   都是**读宿主**的 ⇒ 只能在 bootstrap（adapter 层）读好再传进来。
+   * ⚠️ **是 getter 而不是快照** —— 源版就是**调用时**才读 `Uc()`/`M$()`/`$$()`
+   *   （窗口大小会变、GPU 上下文要现建）⇒ 改成快照会让"启动时的窗口尺寸"被冻结。
+   * ⚠️ `accounts` 一写进 store，`bootstrap/container.ts` 的订阅就会自动安排落盘
+   *   （`pick()` 里含 `s.accounts`）⇒ **本 slice 不需要显式调 persist**。
+   */
+  roster(): {
+    os: Fingerprint['hostOS'];
+    chromeMajor?: number;
+    winScreens?: readonly ScreenSpec[];
+    winWebgl?: readonly WebglSpec[];
+  };
 }
 
 export interface GlobalSlice {
@@ -36,8 +69,16 @@ export interface GlobalSlice {
   groups: AccountGroup[];
   proxyPool: string[];
   poolStrategy: PoolStrategy;
-  /** ★ 正在忙的账号（W11：选号时跳过；全忙 ⇒ 排队） */
-  busyAccountIds: string[];
+  /**
+   * ★ **正在忙的账号**（W11：选号时跳过；全忙 ⇒ 排队）
+   *
+   * ★ **2026-10-10 修**：原字段是 `busyAccountIds: string[]`，配一个 `setBusyAccounts`
+   *   —— 而 `docs/14` §8 实测它 **零调用** ⇒ `all-busy` 排队分支**永不触发**。
+   *   现在换成**带 TTL 与占用者的** `BusyMap`（原 `Fi`/`tn` 的语义），
+   *   并由下面的 `holdAccount` / `releaseAccount` 提供**写入方**。
+   * ⚠️ 不持久化（20 个 `LsKey` 里没有它）—— 重启即视为全空闲，与源版一致。
+   */
+  accountBusy: BusyMap;
 
   // ── actions ──
   setProjects: (projects: Project[]) => void;
@@ -48,7 +89,44 @@ export interface GlobalSlice {
   setGroups: (g: AccountGroup[]) => void;
   setProxyPool: (p: string[]) => void;
   setPoolStrategy: (s: PoolStrategy) => void;
-  setBusyAccounts: (ids: string[]) => void;
+  setAccountBusy: (map: BusyMap) => void;
+  /**
+   * 占用账号（原 `Fi` 34596）
+   *
+   * ⚠️ 这是 `setBusyAccounts` 那个**零调用缺口**的修法：写入方必须在**发送编排**里
+   *    （选号之后、发送之前），故它由 `core/usecases/generate` 经注入调用、
+   *    真正的 `set` 发生在这里（原则 1：只有 state 写 store）。
+   *
+   * @returns `false` = 已被占用（调用方报 `holdFailed`）—— 对应原 `Fi` 的 `return false`
+   */
+  holdAccount: (accountId: string, opts?: { itemId?: string | null; nodeId?: string | null }) => boolean;
+  /** 释放（原 `tn` 34614）；`itemId` 不符 ⇒ 不动，返回 `false` */
+  releaseAccount: (accountId: string, opts?: { itemId?: string | null }) => boolean;
+
+  /**
+   * ★ **新增账号**（原 `addAccount` 30159-30217）
+   *
+   * ⚠️ 这是链上第 4 环那个断点的修法：此前本工程**只有 `setAccounts`（批量覆盖）**、
+   *    `ui/` 里**没有任何账号界面** ⇒ 选号池永远为空 ⇒ `generate` 必然报
+   *    「未配置已登录的豆包 / Dola 账号」。
+   *
+   * 纯逻辑在 `core/rules/accountRoster.ts`（**已测**）：本 action 只做
+   * 「按注入环境生成 → 追加 → 重编号 → `set`」。
+   *
+   * ⚠️ **会话清理不在本 action**：源 `removeAccount` 里那步是 fire-and-forget（见 `state/accountOps.ts`）。
+   * @returns 新账号 id
+   */
+  addAccount: (input: NewAccountInput) => string;
+  /**
+   * ★ **移除账号**（原 `removeAccount` 30218-30247 的**列表半**）
+   *
+   * 源版顺序：先 fire-and-forget 清会话（`clearAccountSession`，`try{}catch{}` 吞），
+   * **再**过滤 + `vo()` 重编号 + 落盘。会话那半在 `state/accountOps.ts`（需要 await 宿主），
+   * 本 action 只负责列表（**同步、必定成功**）—— 这样"删号"永远不会被宿主失败卡住。
+   *
+   * ⚠️ 源版还会清 `lovartGalleries[id]`；本工程**该字段尚未落地**（见本文件头部待办），故略。
+   */
+  removeAccount: (accountId: string) => void;
 
   /** ★ 新建项目（原「＋ 新建项目」）—— 返回新工程 id */
   createProject: () => string;
@@ -93,7 +171,7 @@ export function createGlobalSlice(
     groups: [],
     proxyPool: [],
     poolStrategy: 'round-robin',
-    busyAccountIds: [],
+    accountBusy: {},
 
     setProjects: (projects) => set({ projects }),
     setActiveId: (activeId) => set({ activeId }),
@@ -103,7 +181,54 @@ export function createGlobalSlice(
     setGroups: (groups) => set({ groups }),
     setProxyPool: (proxyPool) => set({ proxyPool }),
     setPoolStrategy: (poolStrategy) => set({ poolStrategy }),
-    setBusyAccounts: (busyAccountIds) => set({ busyAccountIds }),
+    setAccountBusy: (accountBusy) => set({ accountBusy }),
+
+    holdAccount: (accountId, opts = {}) => {
+      const next = holdBusy(get().accountBusy, accountId, {
+        itemId: opts.itemId ?? null,
+        nodeId: opts.nodeId ?? null,
+        now: deps.now(),
+      });
+      if (!next) return false;
+      set({ accountBusy: next });
+      return true;
+    },
+
+    addAccount: (input) => {
+      const s = get();
+      // ⚠️ **调用时**才读环境（源版 `Uc()`/`M$()`/`$$()` 就是现读）—— 见 deps.roster 的注释
+      const env = deps.roster();
+      const accounts = addAccountToList(s.accounts, input, {
+        now: deps.now(),
+        os: env.os,
+        fingerprintVersion: FINGERPRINT_VERSION,
+        // 指纹生成器（原 `zc`）—— 环境（真实窗口 / 真实 GPU）由 bootstrap 注入
+        generateFingerprint: (seed, os) =>
+          generateFingerprint(seed, {
+            os,
+            ...(env.chromeMajor === undefined ? {} : { chromeMajor: env.chromeMajor }),
+            ...(env.winScreens ? { winScreens: env.winScreens } : {}),
+            ...(env.winWebgl ? { winWebgl: env.winWebgl } : {}),
+          }),
+        proxyPool: s.proxyPool,
+      });
+      set({ accounts });
+      // ⚠️ `addAccountToList` 是「追加 + 重编号」，重编号**不重排** ⇒ 新账号恒在末尾
+      return accounts[accounts.length - 1]?.id ?? '';
+    },
+
+    removeAccount: (accountId) => {
+      // ⚠️ 与源一致：`removeAccountFromList` 内部会 `vo()` 重编号（把空洞补齐）
+      set({ accounts: removeAccountFromList(get().accounts, accountId) });
+    },
+
+    releaseAccount: (accountId, opts = {}) => {
+      const { map, released } = releaseBusy(get().accountBusy, accountId, {
+        itemId: opts.itemId ?? null,
+      });
+      if (released) set({ accountBusy: map });
+      return released;
+    },
 
     createProject: () => {
       const now = deps.now();

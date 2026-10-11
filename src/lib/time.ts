@@ -34,3 +34,20 @@ export function parseSiteTimestamp(value: unknown): number {
   const ms = new Date(String(value)).getTime();
   return ms > 0 ? ms : NaN;
 }
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/**
+ * 本地时钟时刻 `HH:MM:SS`（原 `applyApiJobEvent` 的
+ * `new Date().toLocaleTimeString('zh-CN', { hour12: false })`）
+ *
+ * ⚠️ 为什么手写而不用 `toLocaleTimeString`：后者的输出**受 ICU 数据与 locale 实现影响**，
+ *    同一段代码在 Node（单测）与 Chromium（运行）里可能给出不同形态 ⇒ 无法断言。
+ *    手写 `pad2` 的产物与 `zh-CN` + `hour12:false` 的标准形态**逐字相同**（`HH:MM:SS`）。
+ *
+ * ⚠️ 仍是**本地时区**语义（与原版一致）—— 时间戳由调用方注入（原则 4）。
+ */
+export function formatClockTime(ms: number): string {
+  const d = new Date(ms);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}

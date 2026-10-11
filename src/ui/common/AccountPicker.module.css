@@ -1,0 +1,127 @@
+/**
+ * 执行账号选择器（原 `.gp-btn.igp-acc-btn` / `.gp-caret` / `.gp-acc-menu` / `.gp-acc-item` / `.gp-acc-dot`）
+ *
+ * ⚠️ 源版**没有 CSS 可对**（参考目录里只有 JS）⇒ 全部按同类 token 写。
+ * ⚠️ 菜单 portal 到 `document.body` ⇒ 用**固定定位**（`position: fixed`，坐标由组件算的 `left/bottom`）。
+ * ⚠️ 原则 5：色值只走 token。
+ */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-strong);
+  font: inherit;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.trigger:hover {
+  border-color: var(--btn-default-border-hover);
+}
+
+/* 原 `.gp-caret`：菜单打开时翻转 */
+.caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 0.15s ease;
+}
+
+.caretOpen {
+  transform: rotate(180deg);
+}
+
+/* 原 `.gp-acc-menu`（portal 到 body ⇒ 固定定位） */
+.menu {
+  position: fixed;
+  z-index: var(--z-overlay);
+  min-width: 180px;
+  max-width: 260px;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px var(--color-shadow-strong);
+}
+
+/* 原 `.gp-acc-item` */
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-1);
+  text-align: left;
+  color: var(--color-text-strong);
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.item:hover:not(:disabled) {
+  background: var(--color-surface-sunken);
+}
+
+.itemOn {
+  color: var(--tab-active-fg);
+}
+
+.itemOff {
+  opacity: 0.6;
+}
+
+.item:disabled {
+  cursor: not-allowed;
+}
+
+/* 原 `.gp-acc-back` */
+.back {
+  color: var(--color-text-muted);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 原 `.gp-acc-count`（`可用/总数`） */
+.count {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/* 原 `.gp-acc-dot`（登录态圆点） */
+.dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--color-success);
+  border-radius: 50%;
+}
+
+.dotGray {
+  background: var(--color-text-faint);
+}
+
+/* 原 `.gp-acc-empty` */
+.empty {
+  padding: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}

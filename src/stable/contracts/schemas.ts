@@ -60,6 +60,18 @@ export const LEGACY_PROJECT_NAME = '导入的项目';
 
 /** 工程 id 前缀（原 `Pt('p')` → `p_<base36>_<计数>`） */
 export const PROJECT_ID_PREFIX = 'p_';
+
+/**
+ * 账号导出文件格式版本（原 `PP.jsx:76` 的 `version: 1`）
+ * ⚠️ 导入侧同时接受「带 `accounts` 的对象」与「裸数组」两种历史格式（原 `OP.jsx:607`）。
+ */
+export const ACCOUNTS_EXPORT_VERSION = 1;
+
+/**
+ * 导入账号时补的会话分区前缀（原 `OP.jsx:636` 的 `persist:import_`）
+ * ⚠️ 分区名会**落进账号数据**（`doubao-accounts`）⇒ 属冻结契约。
+ */
+export const IMPORTED_PARTITION_PREFIX = 'persist:import_';
 /** 账号 id 前缀（原 `acc_<base36>`） */
 export const ACCOUNT_ID_PREFIX = 'acc_';
 /** 预设 id 前缀（原 `pre_...`） */

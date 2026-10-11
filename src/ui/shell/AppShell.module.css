@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--color-bg);
+  background: var(--color-surface-base);
 }
 
 .mainArea {
@@ -19,7 +19,7 @@
   width: 260px;
   flex-shrink: 0;
   overflow: auto;
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border-right: 1px solid var(--color-border);
 }
 
@@ -44,13 +44,26 @@
 }
 
 .topbar {
-  height: 40px;
+  height: var(--topbar-height);
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-4);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--topbar-padding-x);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* 顶栏：项目名 / 节点数 —— 原为 inline style */
+.topbarName {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+.topbarCount {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+/* 右侧弹性占位（原 `style={{ flex: 1 }}`）*/
+.topbarSpacer { flex: 1; }

@@ -92,13 +92,15 @@ const createClipboard = (): ClipboardPort => ({
 const createProject = (): ProjectPort => ({
   // ⚠️ 同步（真实实现是 sendSync）
   activateStorage: (_p: ActivateProjectStoragePayload): Result<{ path?: string }> => ok({}),
+  // 「用户没挑目录」是**如实**结果（与真实宿主取消时同形）
   pickStorage: async () => ok({ canceled: true }),
   // ⚠️ 三者是**同步**且必须返 `Result`（TD-04-2）。mock 里确实无副作用 ⇒ `ok`
   saveBackup: () => ok(undefined),
   saveSnapshot: () => ok(undefined),
   logOperation: (_e: OperationLogEvent) => ok(undefined),
   revealStorage: async () => notImplemented('revealStorage'),
-  getStorageSize: async () => ok(0),
+  // mock 无真实目录 ⇒ 空统计（**不是**假成功：0 字节 0 文件是事实）
+  getStorageSize: async () => ok({ bytes: 0, files: 0, partial: false }),
 });
 
 const createAccount = (): AccountPort => ({
@@ -108,12 +110,18 @@ const createAccount = (): AccountPort => ({
   clearSession: async () => ok(undefined),
   setProxy: async () => ok(undefined),
   fpNetDiag: async () => ok({}),
+  // ⚠️ cookie 读写必须有**真实 session 分区**（mock 没有）⇒ 明确报错，**不假装成功**
+  exportCookies: async () => notImplemented('exportCookies'),
+  importCookies: async () => notImplemented('importCookies'),
+  saveAccountsFile: async () => notImplemented('saveAccountsFile'),
+  // 「用户没选文件」是**如实**的结果（不是假成功）⇒ 与真实宿主取消时同形
+  loadAccountsFile: async () => ok(null),
 });
 
 const createLicense = (): LicensePort => ({
   getMachineCode: async () => ok('DBPC-DEV0-DEV0-DEV0-DEV0'),
   getStatus: async (): Promise<Result<LicenseStatus>> =>
-    ok({ status: 'ok', licenseKey: 'DEV-MOCK', expireAt: Date.UTC(2100, 0, 1) }),
+    ok({ status: 'ok', machineCode: 'DBPC-DEV0-DEV0-DEV0-DEV0', expireAt: Date.UTC(2100, 0, 1) }),
   activateWithCode: async (): Promise<Result<LicenseStatus>> => ok({ status: 'ok' }),
   exportMachineCode: async () => notImplemented('exportMachineCode'),
 });

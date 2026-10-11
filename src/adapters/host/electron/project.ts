@@ -10,10 +10,13 @@
 
 import type {
   ActivateProjectStoragePayload,
+  AssetMigration,
   OperationLogEvent,
+  PickStoragePayload,
   ProjectPort,
 } from '@/core/ports/host.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
+import { PROJECT_TEXT } from '@/constants/text';
 import { getHostApi, HOST_MISSING } from './host-api';
 
 export function createElectronProjectPort(): ProjectPort {
@@ -35,13 +38,24 @@ export function createElectronProjectPort(): ProjectPort {
       }
     },
 
-    pickStorage: async () => {
+    pickStorage: async (payload: PickStoragePayload) => {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = await api.pickProjectStorage({});
-        const r = raw as { path?: string; canceled?: boolean };
-        return ok({ path: r?.path, canceled: r?.canceled });
+        const raw = (await api.pickProjectStorage(payload)) as {
+          ok?: boolean;
+          path?: string;
+          canceled?: boolean;
+          error?: string;
+          migrated?: AssetMigration;
+        } | null;
+        // 用户取消：**如实**返回 canceled（不是错误，也不是成功）
+        if (raw?.canceled) return ok({ canceled: true });
+        // ★ 修（原则 6）：原先无视 `ok:false` 直接 `ok({path})` ⇒ 失败被吞成成功
+        if (!raw || raw.ok === false) {
+          return err('unknown', raw?.error || PROJECT_TEXT.unknownReason);
+        }
+        return ok({ path: raw.path, migrated: raw.migrated });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -86,8 +100,12 @@ export function createElectronProjectPort(): ProjectPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        await api.revealProjectStorage(storagePath);
-        return ok(undefined);
+        const raw = (await api.revealProjectStorage(storagePath)) as
+          | { ok?: boolean; path?: string; error?: string }
+          | null;
+        // ★ 修（原则 6）：原先无视 `ok:false` 直接 `ok(undefined)` ⇒ 打不开目录也报成功
+        if (raw && raw.ok === false) return err('unknown', raw.error || PROJECT_TEXT.unknownReason);
+        return ok({ path: raw?.path });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }
@@ -97,9 +115,16 @@ export function createElectronProjectPort(): ProjectPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        const raw = await api.getProjectStorageSize(storagePath);
-        const n = typeof raw === 'number' ? raw : Number((raw as { size?: number })?.size ?? 0);
-        return ok(Number.isFinite(n) ? n : 0);
+        const raw = (await api.getProjectStorageSize(storagePath)) as
+          | { ok?: boolean; bytes?: number; files?: number; partial?: boolean; error?: string }
+          | null;
+        // ★ 修（原则 6）：原先把返回当 `{size}` 读 ⇒ **恒为 0**；实际字段是 `bytes/files/partial`
+        if (!raw || raw.ok === false) return err('unknown', raw?.error || PROJECT_TEXT.unknownReason);
+        return ok({
+          bytes: typeof raw.bytes === 'number' ? raw.bytes : 0,
+          files: typeof raw.files === 'number' ? raw.files : 0,
+          partial: raw.partial === true,
+        });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }

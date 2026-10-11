@@ -4,7 +4,7 @@
  * 归属说明：数据形状属 `stable`（L1）—— 见 `./node.ts` 头部说明
  */
 
-import { FINGERPRINT_VERSION } from '@/constants';
+import { FINGERPRINT_VERSION, type HostOS } from '@/constants';
 
 /** 站点类型（原 `bT` 26399） */
 export const SITE_TYPES = ['doubao', 'dola', 'lovart', 'tapnow', 'gpt', 'other'] as const;
@@ -28,7 +28,7 @@ export interface ScreenFingerprint {
 export interface Fingerprint {
   /** 指纹版本号（当前 FINGERPRINT_VERSION = 3） */
   ver: number;
-  hostOS: 'windows' | 'macos' | 'linux';
+  hostOS: HostOS;
   userAgent: string;
   appVersion: string;
   platform: string;
@@ -45,8 +45,27 @@ export interface Fingerprint {
   uaArchitecture?: string;
   uaBitness?: string;
   uaWow64?: boolean;
-  uaClientHints?: unknown;
-  userAgentData?: unknown;
+  /** Sec-CH-UA 系列请求头（原 `P$` 25372）—— ⚠️ 会**逐字**进 `<id>.js` ⇒ 冻结形状 */
+  uaClientHints?: SecChUaHints;
+  /** `navigator.userAgentData` 的伪装值（原 `R$` 25380） */
+  userAgentData?: UserAgentDataLike;
+}
+
+/** Sec-CH-UA 请求头组（原 `P$` 25372-25379 的四个键） */
+export interface SecChUaHints {
+  'Sec-CH-UA': string;
+  'Sec-CH-UA-Mobile': string;
+  'Sec-CH-UA-Platform': string;
+  'Sec-CH-UA-Full-Version': string;
+}
+
+/** `navigator.userAgentData` 的冻结形状（原 `R$` 25380-25396） */
+export interface UserAgentDataLike {
+  brands: Array<{ brand: string; version: string }>;
+  mobile: boolean;
+  platform: string;
+  /** ⚠️ 带下划线前缀 —— 源版就写作 `_fullVersion`（内部字段，照抄） */
+  _fullVersion: string;
 }
 
 /** 账号（原 30184-30196） */
@@ -85,6 +104,19 @@ export interface AccountGroup {
 export const ACCOUNT_STATUS = {
   loggedIn: '已登录',
   invalid: '已失效',
+  /**
+   * ★ **新增（源版没有这个值）**：`未登录`
+   *
+   * 源版的建号**必然发生在登录成功之后**（`$P.jsx` 先在 `<webview>` 里登录、再 `addAccount`），
+   * 所以它只需要 `已登录`/`已失效`。
+   * 本工程的建号是**先建号、再登录**（登录要在 `BackendView` 的 `<webview>` 里真人操作）
+   * ⇒ 中间必然存在"建了但还没登录"的账号。
+   *
+   * ⚠️ **它的意义正是被 `isAccountUsable` 排除** —— 这样未登录的账号**不会**被选号池选中，
+   *    于是用户看到的是"没有可用账号"而不是"发送到未登录的账号后失败"。
+   *    （反过来说：**不能**给新建账号填 `已登录` —— 那是撒谎，且会让选号池选中一个必然失败的账号。）
+   */
+  loggedOut: '未登录',
 } as const;
 
 /** 账号可用性统一判定（原实现：`(status || '已登录') === '已登录'`） */

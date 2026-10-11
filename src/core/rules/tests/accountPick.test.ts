@@ -5,7 +5,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { filterPoolAccounts, resolveSendAccount, UNGROUPED } from '../accountPick';
+import {
+  accountPickerLabel,
+  buildAccountGroups,
+  deriveChannelFromGroup,
+  filterPoolAccounts,
+  hasExecutableAccount,
+  resolveSendAccount,
+  UNGROUPED,
+} from '../accountPick';
 import { siteDisplayName } from '@/constants/text';
 import type { Account, SiteType } from '@/stable/model/account';
 
@@ -170,5 +178,124 @@ describe('resolveSendAccount —— ②③ 池选号', () => {
     const accounts = [acc('a'), acc('b'), acc('c')];
     const r = resolveSendAccount({ accounts, type: 'doubao', sendAccount: 'auto', cursor: 2 });
     expect(r.account?.id).toBe('c');
+  });
+});
+
+describe('buildAccountGroups（原 _Component45.jsx:601-621 的 `T`）', () => {
+  const groups = [
+    { id: 'g1', name: '主力' },
+    { id: 'g2', name: '副号' },
+    { id: 'g3', name: '' }, // 空名 ⇒ 未命名分组
+  ];
+  const mk = (id: string, groupId: string | null, type: SiteType = 'doubao', status = '已登录'): Account =>
+    ({ id, name: id, type, status, partition: null, addedAt: 0, groupId, autoStart: false, fpSalt: 0 }) as Account;
+
+  it('★ 只列出**非空**分组，且按 `groups` 的顺序', () => {
+    const out = buildAccountGroups([mk('a', 'g2'), mk('b', 'g1'), mk('c', null)], groups);
+    expect(out.map((g) => g.gid)).toEqual(['g1', 'g2', null]);
+  });
+
+  it('★ **空分组不显示**（原版 `if (Ne.length)`）', () => {
+    const out = buildAccountGroups([mk('a', 'g1')], groups);
+    expect(out.map((g) => g.gid)).toEqual(['g1']);
+  });
+
+  it('★ 「未分组」**永远排最后**（即使它在 `accounts` 里最先出现）', () => {
+    const out = buildAccountGroups([mk('a', null), mk('b', 'g1')], groups);
+    expect(out.map((g) => g.gid)).toEqual(['g1', null]);
+    expect(out[1]!.label).toBe('未分组');
+  });
+
+  it('★ 组名为空 ⇒ `未命名分组`（原 607）', () => {
+    const out = buildAccountGroups([mk('a', 'g3')], groups);
+    expect(out[0]!.label).toBe('未命名分组');
+  });
+
+  it('★ 分组 id 存在但**不在 `groups` 里** ⇒ 不显示（原版按 groups 迭代）', () => {
+    const out = buildAccountGroups([mk('a', 'ghost')], groups);
+    expect(out).toEqual([]);
+  });
+
+  it('空账号 ⇒ 空数组', () => {
+    expect(buildAccountGroups([], groups)).toEqual([]);
+  });
+});
+
+describe('deriveChannelFromGroup（原 `K` 622-634）', () => {
+  const mk = (type: SiteType): Account => ({ id: type, name: type, type, status: '已登录' }) as Account;
+
+  it('★ 组内**只有一种**可执行类型 ⇒ 用它', () => {
+    expect(deriveChannelFromGroup([mk('dola'), mk('dola')])).toBe('dola');
+    expect(deriveChannelFromGroup([mk('gpt')])).toBe('gpt');
+  });
+
+  it('★ 多种类型 / 含不可执行类型 ⇒ 回落 `doubao`', () => {
+    expect(deriveChannelFromGroup([mk('dola'), mk('gpt')])).toBe('doubao');
+    expect(deriveChannelFromGroup([mk('lovart')])).toBe('doubao');
+    expect(deriveChannelFromGroup([mk('doubao'), mk('lovart')])).toBe('doubao');
+  });
+
+  it('空组 ⇒ `doubao`', () => {
+    expect(deriveChannelFromGroup([])).toBe('doubao');
+  });
+
+  it('★ 只看**类型**，不看登录态（源版如此）', () => {
+    expect(deriveChannelFromGroup([{ id: 'x', name: 'x', type: 'dola', status: '已失效' } as Account])).toBe('dola');
+  });
+});
+
+describe('hasExecutableAccount（原 1347-1349 的 `be`）', () => {
+  const mk = (type: SiteType, status: string): Account => ({ id: `${type}-${status}`, name: 'x', type, status }) as Account;
+
+  it('★ 必须**同时**满足「可用」与「可执行类型」', () => {
+    expect(hasExecutableAccount([mk('doubao', '已登录')])).toBe(true);
+    expect(hasExecutableAccount([mk('doubao', '已失效')])).toBe(false);
+    expect(hasExecutableAccount([mk('lovart', '已登录')])).toBe(false);
+  });
+
+  it('列表里只要有一条满足就为真', () => {
+    expect(hasExecutableAccount([mk('lovart', '已登录'), mk('dola', '已登录')])).toBe(true);
+  });
+
+  it('空列表 ⇒ false', () => {
+    expect(hasExecutableAccount([])).toBe(false);
+  });
+});
+
+describe('accountPickerLabel（原 `Se` 685-711）', () => {
+  const groups = [{ id: 'g1', name: '主力' }];
+
+  it('★ 五档逐字对齐', () => {
+    expect(accountPickerLabel({ channel: 'api' })).toBe('API');
+    expect(accountPickerLabel({ sendAccount: 'auto' })).toBe('自动');
+    expect(accountPickerLabel({ sendAccount: 'auto:group:ungrouped' })).toBe('未分组 · 自动');
+    expect(accountPickerLabel({ sendAccount: 'auto:group:g1', groups })).toBe('主力 · 自动');
+    expect(accountPickerLabel({ sendAccount: 'acc_1', accounts: [{ id: 'acc_1', name: '豆包01' } as Account] })).toBe(
+      '豆包01',
+    );
+  });
+
+  it('★ `channel === api` **优先于** `sendAccount`（源版第一分支）', () => {
+    expect(accountPickerLabel({ channel: 'api', sendAccount: 'acc_1' })).toBe('API');
+  });
+
+  it('★ 组不存在 ⇒ `分组 · 自动`（源版对 `ye?.name || 分组` 取兜底）', () => {
+    expect(accountPickerLabel({ sendAccount: 'auto:group:不存在', groups })).toBe('分组 · 自动');
+  });
+
+  it('★ 显式 id **找不到** ⇒ 回落 `自动`（`auto:<type>` 因此也显示 `自动`，源版如此）', () => {
+    expect(accountPickerLabel({ sendAccount: 'acc_不存在' })).toBe('自动');
+    expect(accountPickerLabel({ sendAccount: 'auto:dola' })).toBe('自动');
+  });
+
+  it('缺省值 ⇒ `自动`', () => {
+    expect(accountPickerLabel({})).toBe('自动');
+  });
+
+  it('`UNGROUPED` 哨兵与分组 `id` **不会混**（前者优先当未分组）', () => {
+    // 即便真有个分组 id 恰好叫 ungrouped，源版也先按未分组处理
+    expect(accountPickerLabel({ sendAccount: `auto:group:${UNGROUPED}`, groups: [{ id: UNGROUPED, name: 'X' }] })).toBe(
+      '未分组 · 自动',
+    );
   });
 });

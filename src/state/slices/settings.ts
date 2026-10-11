@@ -9,37 +9,39 @@
  * ⚠️ 原则 1：只有 state 能写 store；本片**只做编排**，不含业务规则（组装报文/解析 provider 都在 core/rules）
  * ⚠️ 原则 5（SSOT）：默认并发引用 `constants`，不在本文件写魔法数
  *
- * ⚠️ **形状来源说明（如实记录）**：`apiProvidersMeta` / `apiJobs` 存的是**宿主线上形状**
- *    （`ApiProviderMetaLite` / `ApiJobLite`，见 `core/ports/host.port.ts`）；
- *    而 `stable/model/gen.ts` 另有**冻结形状** `ApiProviderMeta` / `ApiJob`（`status` 收窄为 `ApiJobStatus`）。
- *    两者**当前是重复定义**（`ApiJobLite.status: string` 无法赋给 `ApiJobStatus`）⇒ 已登记待收口，
- *    不在 M8 里顺手改端口（避免扩大改动面）。
+ * ★ **2026-10-10 形状收口**：原先这里用的是 `core/ports` 的「线上形状副本」
+ *   （`ApiProviderMetaLite` / `ApiJobLite`），与后端**实测不符** ——
+ *   最要命的是 `ApiJobLite.id` 而后端事件字段名是 **`jobId`**
+ *   ⇒ `upsertApiJob` 按 `id` 去重时拿到 `undefined`，**所有任务塌进同一条记录**。
+ *   现统一用 `stable/model/gen.ts` 的冻结形状（`ApiProviderMeta` / `ApiJobEvent` / `ApiSetup` / `ApiUsage`）。
+ *
+ * ⚠️ `apiJobs` 是**按 jobId 索引的映射**（原版 `{[jobId]: snapshot}`）—— 不是数组。
+ *    数组形态没法在"同一任务多次状态推送"下原地覆盖。
  */
 
-import type { ApiJobLite, ApiProviderMetaLite } from '@/core/ports';
-import type { ApiSetup, ApiUsage } from '@/stable/model/gen';
+import type { ApiJobEvent, ApiProviderMeta, ApiSetup, ApiUsage } from '@/stable/model/gen';
 import { DEFAULT_API_CONCURRENCY } from '@/constants';
 
 export interface SettingsSlice {
   // ── state ──
   /** provider 元信息（**脱敏**：只有 `hasKey`/`keyHint`，密钥明文永不过桥） */
-  apiProvidersMeta: ApiProviderMetaLite[];
+  apiProvidersMeta: ApiProviderMeta[];
   /** 配置原文（宿主返回什么就是什么 —— 判据 D1：适配器不解释，state 也不解释） */
   apiConfigs: unknown;
   /** 通道选择（图 / 视频 / 兜底 provider + 并发） */
   apiSetup: ApiSetup;
-  /** 任务快照（★ 由 `state/subscriptions.ts` 的 `onJobEvent` 订阅写入） */
-  apiJobs: ApiJobLite[];
+  /** 任务快照（★ 由 `state/subscriptions.ts` 的 `onJobEvent` 订阅写入；键 = `jobId`） */
+  apiJobs: Record<string, ApiJobEvent>;
   /** 用量（按本地日期 `YYYY-MM-DD`） */
   apiUsage: ApiUsage;
 
   // ── actions（只编排，不做业务）──
-  setApiProviders: (list: ApiProviderMetaLite[]) => void;
+  setApiProviders: (list: ApiProviderMeta[]) => void;
   setApiConfigs: (configs: unknown) => void;
   setApiSetup: (setup: ApiSetup) => void;
-  setApiJobs: (jobs: ApiJobLite[]) => void;
-  /** ★ 事件回灌用：按 `id` 覆盖或追加（订阅是**唯一写入点**，见 `state/subscriptions.ts`） */
-  upsertApiJob: (job: ApiJobLite) => void;
+  setApiJobs: (jobs: Record<string, ApiJobEvent>) => void;
+  /** ★ 事件回灌用：按 `jobId` 覆盖或追加（订阅是**唯一写入点**，见 `state/subscriptions.ts`） */
+  upsertApiJob: (job: ApiJobEvent) => void;
   setApiUsage: (usage: ApiUsage) => void;
 }
 
@@ -61,7 +63,7 @@ export function createSettingsSlice(
     apiProvidersMeta: [],
     apiConfigs: null,
     apiSetup: defaultApiSetup(),
-    apiJobs: [],
+    apiJobs: {},
     apiUsage: {},
 
     setApiProviders: (apiProvidersMeta) => set({ apiProvidersMeta }),
@@ -70,9 +72,8 @@ export function createSettingsSlice(
     setApiJobs: (apiJobs) => set({ apiJobs }),
 
     upsertApiJob: (job) => {
-      const cur = get().apiJobs;
-      const i = cur.findIndex((j) => j.id === job.id);
-      set({ apiJobs: i >= 0 ? cur.map((j) => (j.id === job.id ? job : j)) : [...cur, job] });
+      // ★ 键是 `jobId`（后端事件字段名）—— 用 `id` 会让所有任务塌成一条
+      set({ apiJobs: { ...get().apiJobs, [job.jobId]: job } });
     },
 
     setApiUsage: (apiUsage) => set({ apiUsage }),

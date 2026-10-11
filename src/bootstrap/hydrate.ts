@@ -22,7 +22,13 @@ import type { Project } from '@/stable/model/project';
 import type { Ports } from '@/core/ports';
 import { PERSIST, type AppStore } from '@/state';
 import { resetStaleJobs } from '@/stable/migrations';
-import { LS_ACCOUNTS, LS_PROJECTS, LS_STYLES } from '@/stable/contracts/keys';
+import {
+  LS_ACCOUNTS,
+  LS_LOVART_GALLERIES,
+  LS_PROJECTS,
+  LS_SCAN_HISTORY,
+  LS_STYLES,
+} from '@/stable/contracts/keys';
 import { DEFAULT_STYLE_PRESETS } from '@/constants/stylePresets';
 
 export interface HydrateResult {
@@ -42,6 +48,10 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   //    ⚠️ 一律走 `state/persistKeys` 的 `PERSIST`（**键的唯一落点**；用 `LS_*` 常量下标 ⇒ 类型精确）
   const projects = PERSIST[LS_PROJECTS].read(storage) ?? [];
   const accounts = PERSIST[LS_ACCOUNTS].read(storage) ?? [];
+  // ★ Lovart 画廊（原 `ET` 26637：读不到 / 坏数据 ⇒ **`{}`** ⇒ 这里 `?? {}` 与它同义）
+  const lovartGalleries = PERSIST[LS_LOVART_GALLERIES].read(storage) ?? {};
+  // ★ 指纹体检历史（源 `fT` 26232：读不到 ⇒ 空数组）
+  const scanHistory = PERSIST[LS_SCAN_HISTORY].read(storage) ?? [];
 
   // ── 2. 启动归位：清在途任务状态（每次启动都要；不是迁移）──
   const reset = resetStaleJobs<Project>(projects);
@@ -61,6 +71,8 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   set({
     projects: reset.value,
     accounts,
+    lovartGalleries,
+    scanHistory,
     activeId: reset.value[0]?.id ?? null,
   });
 

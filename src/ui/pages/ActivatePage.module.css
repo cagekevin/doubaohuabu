@@ -1,0 +1,199 @@
+/**
+ * 授权激活页（原 `W3.jsx` 的 `.license-*`）
+ * ⚠️ 原则 5：色值只走 token
+ */
+
+.screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-4);
+  background: var(--color-surface-base);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 460px;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px var(--color-shadow);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 原 `.license-brand` */
+.brand {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+/* 原 `.license-sub` */
+.sub {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* 原 `.license-banner`（三态：ok / warn / err） */
+.banner {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.ok {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.warn {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.err {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.icon {
+  flex: 0 0 auto;
+}
+
+.bTitle {
+  font-weight: 600;
+}
+
+.bDesc {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
+/* 原 `.btn.ghost.block`（重新检测） */
+.recheck {
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-strong);
+  font: inherit;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.recheck:hover {
+  border-color: var(--btn-default-border-hover);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* 原 `.license-label` */
+.label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* 原 `.machine-code-box` */
+.codeBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.codeText {
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.codeActions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.sm {
+  padding: 0 var(--space-1);
+  color: var(--color-text-strong);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.ghost:hover,
+.sm:hover:not(:disabled) {
+  border-color: var(--btn-default-border-hover);
+}
+
+.sm:disabled {
+  color: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+/* 原 `.license-hint` */
+.hint {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
+/* 原 `.license-input` */
+.input {
+  min-height: 72px;
+  padding: var(--space-2);
+  color: var(--color-text-strong);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  resize: vertical;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/* 原 `.btn.primary.block.lg` */
+.primary {
+  padding: var(--space-2);
+  color: var(--color-surface-raised);
+  font: inherit;
+  background: var(--btn-primary-bg);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.primary:disabled {
+  background: var(--color-text-faint);
+  cursor: not-allowed;
+}
+
+/* 原 `.license-msg` */
+.msg {
+  font-size: var(--font-size-sm);
+}
+
+/* 原 `.license-foot` */
+.foot {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
