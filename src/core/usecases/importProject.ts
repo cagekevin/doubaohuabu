@@ -23,7 +23,7 @@
 
 import type { ClockPort } from '@/core/ports/clock.port';
 import type { ActivateProjectStoragePayload, FilePort, ProjectPort } from '@/core/ports/host.port';
-import type { GraphPreset, Project } from '@/stable/model/project';
+import type { Preset, Project } from '@/stable/model/project';
 import { err, ok, type Result } from '@/core/model/result';
 import {
   createProject,
@@ -45,7 +45,7 @@ export interface ImportProjectInput {
    * 已有预设（用于按 `id` 判重合并）
    * ⚠️ 由 **state** 传入 —— 用例**不读 store**（原则 1）
    */
-  existingPresets: readonly GraphPreset[];
+  existingPresets: readonly Preset[];
   /** 已有工程的存储路径（原版 `knownStoragePaths`；调用方**已过滤掉空值**） */
   knownStoragePaths: readonly { path: string; name: string }[];
   /** 同毫秒内的自增序号（与 `createProject` 同源，由 state 的计数器提供） */
@@ -59,7 +59,7 @@ export type ImportProjectOutcome =
       /** 新工程（**尚未入 store**） */
       project: Project;
       /** 本次并入的预设（空数组 = 无新增） */
-      addedPresets: GraphPreset[];
+      addedPresets: Preset[];
       /**
        * 项目存储目录激活失败的原因（**原始 message**）
        * ⚠️ 非 null 表示「已回退到应用默认存储」—— 由 state 提示，**不阻断导入**

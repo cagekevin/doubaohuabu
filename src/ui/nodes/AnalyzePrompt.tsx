@@ -17,12 +17,12 @@
  *   | 调整区 | 389-407 | 输入 + 「调整」按钮；**Enter 提交**；成功才清空输入 |
  *
  * ⚠️ 原则 1：本组件**不写 store** —— 分析/调整走 `useAnalyze()`（state 控制器）；
- *    复制走 `ports.host.clipboard.writeText` + `pushToast`。
+ *    复制走 `useHostOps()` 的 `copyText`（`ui` 不得直持 `Ports` —— TD-16-8）+ `pushToast`。
  * ⚠️ 与源版一致：面板**只在已有 `analyzePrompt` 且已展开时**才渲染。
  */
 
 import { useState } from 'react';
-import { useAnalyze, usePorts, useStore } from '@/state';
+import { useAnalyze, useHostOps, useStore } from '@/state';
 import type { AnalyzePromptState } from '@/stable/model/node';
 // ⚠️ 纯函数放 `core/rules`（判据 E1：`ui/` 下不得有测试 ⇒ 留在组件里就永远没有单测）
 import { formatJsonPrompt } from '@/core/rules/analyzePrompt';
@@ -43,7 +43,7 @@ export interface AnalyzePromptProps {
 
 export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePromptProps) {
   const analyze = useAnalyze();
-  const ports = usePorts();
+  const hostOps = useHostOps();
   const pushToast = useStore((s) => s.pushToast);
 
   /** 面板是否展开（原 `A`/`D`） */
@@ -82,7 +82,7 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
           : state?.json_prompt
             ? JSON.stringify(state.json_prompt, null, 2)
             : '';
-    void ports.host.clipboard.writeText(text).then((r) => {
+    void hostOps.copyText(text).then((r) => {
       pushToast(
         r.ok ? ANALYZE_UI_TEXT.copied : ANALYZE_UI_TEXT.copyFailed,
         undefined,

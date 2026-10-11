@@ -12,6 +12,8 @@
  */
 
 import type { SiteType } from '@/stable/model/account';
+// ★ 容器 DOM 钩子类名走 SSOT（2026-10-11：此前这里写字面量、而 BackendView 挂 CSS-module 类 ⇒ 定位恒失效）
+import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
 
 /** 我们用到的最小 webview 能力集（Electron `<webview>` 的子集） */
 export interface WebviewElement extends HTMLElement {
@@ -87,8 +89,14 @@ export function findWebview(
 
   let views: WebviewElement[] = [];
   try {
-    const host = document.querySelector('.doubao-view-webviews');
-    views = Array.from((host || document).querySelectorAll<WebviewElement>('webview'));
+    // ★ 2026-10-11 修正（假定位 + 静默兜底）：
+    //   ① 类名改走 **SSOT**（`stable/contracts/schemas.ts` 的 `WEBVIEWS_HOST_CLASS`）—— 此前这里
+    //      是**字面量**，而 `BackendView` 挂的是 **CSS-module 哈希类** ⇒ `querySelector` **恒 null**。
+    //   ② **去掉 `|| document`** —— 那是**静默兜底**：容器找不到时会把搜索范围悄悄扩到**整个文档**，
+    //      于是"定位失效"被掩盖成"能用"。容器由 `BackendView` **常驻渲染**（见该文件头），
+    //      找不到 ⇒ 就是**没有 webview**（如实返回 0 个，由 `findWebview` 返回 `null` 上报调用方）。
+    const host = document.querySelector(`.${WEBVIEWS_HOST_CLASS}`);
+    views = host ? Array.from(host.querySelectorAll<WebviewElement>('webview')) : [];
   } catch (e: unknown) {
     // ⚠️ 与源一致：查询本身失败按「没有视图」处理（最终返回 null 已把失败上报给调用方）
     void e;

@@ -9,7 +9,7 @@
  *   |---|---|---|
  *   | **1 秒 tick** | 58-66 | 只要有 `sending` 或"还在生成中"的项 ⇒ 每秒 bump 一次 state，**让等待时长刷新**（`tc` 只算到调用那一刻） |
  *   | 拖动 | 90-140 | `pointerdown` 记起点 ⇒ `pointermove` 算位移 ⇒ **`clampPanelPosition` 夹进视口** ⇒ `pointerup` 落 `localStorage` |
- *   | 位置持久化 | `U3`/`Pp` | 键是 `LS_SENDQUEUE_POS`（**冻结契约字符串，走 `stable/contracts`**） |
+ *   | 位置持久化 | `U3`/`Pp` | 键是 `LS_SENDQUEUE_POS`（**冻结契约字符串，走 `stable/contracts`**）；读写**经 `SendQueueController`** |
  *   | 折叠 | 196-206 | `.sq-chevron` |
  *   | 进度条 | 209-215 | 完成数 / 总数 |
  *   | 列表 | 216-269 | 序号 + 名称 + 账号（未分配 ⇒ 待分配）+ 第N次 + note + 两个动作 + **成片行** |
@@ -22,12 +22,12 @@
  *   `queueProgress` 的写入方属**发送适配器**那一层，已登记。
  * ⚠️ **一处有意省略**：源版点队列项能 `fitViewAction([nodeId])` 把画布定位过去（80-89）。
  *   本工程的 `CanvasHost` 还没暴露 fitView（属另一件事）⇒ **不做**（不做一个没反应的按钮）。
- * ⚠️ **原则 1**：本组件只调 `useSendQueue()` 与 store action，不写 store。
+ * ⚠️ **原则 1 + 铁律 2**：本组件只调 `useSendQueue()` 与 store action，不写 store、**也不持 `Ports`**
+ *   —— 原先两处 `ports.storage`（读/写面板位置）已收口到控制器（TD-16-8，2026-10-11）。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePorts, useSendQueue, useStore } from '@/state';
-import { LS_SENDQUEUE_POS } from '@/stable/contracts/keys';
+import { useSendQueue, useStore } from '@/state';
 import {
   clampPanelPosition,
   deriveGenView,
@@ -36,8 +36,6 @@ import {
 } from '@/core/rules/sendQueuePanel';
 import { queueStats } from '@/core/rules/sendQueueOps';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
-import { PERSIST } from '@/state/persistKeys';
-import type { StoragePort } from '@/core/ports';
 import styles from './SendQueuePanel.module.css';
 
 /** 面板假想尺寸（原 `Qd(e, t, n, r)` 的 `n`/`r`）—— 用于把坐标夹进视口 */
@@ -46,32 +44,8 @@ const PANEL_H = 260;
 /** tick 间隔（原 61-65 的 `setTimeout(…, 1000)`） */
 const TICK_MS = 1000;
 
-/**
- * 读回面板位置（原 `U3` 42570-42585）—— 解析失败/字段不是有限数 ⇒ `null`
- *
- * ★ **2026-10-11 修正**：原先这里**直接读写 `localStorage`**（绕过 `StoragePort`）——
- *   那是「`ui` 直接碰宿主」：一旦换成 mock 宿主（或跑测试）这条持久化就失效，
- *   而本仓的规矩是**能力经端口**（`ui` 经 `usePorts()` 拿端口，与 `BackendView` 同法）。
- *   ⚠️ 仍然**保留"字段必须是有限数"的校验**：端口只负责取回值，坏形状得自己挡。
- */
-function readPanelPos(storage: StoragePort): { x: number; y: number } | null {
-  const v = PERSIST[LS_SENDQUEUE_POS].read(storage) as { x?: unknown; y?: unknown } | null;
-  if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return { x: v.x as number, y: v.y as number };
-  return null;
-}
-
-function writePanelPos(storage: StoragePort, pos: { x: number; y: number }): void {
-  try {
-    PERSIST[LS_SENDQUEUE_POS].write(storage, pos);
-  } catch {
-    // ⚠️ 存不进去（配额/隐私模式）也**不影响使用**，只影响"下次记住位置"
-  }
-}
-
 export function SendQueuePanel() {
   const q = useSendQueue();
-  // ★ 面板位置走 StoragePort（不直接碰 localStorage —— 见 `readPanelPos` 的注释）
-  const ports = usePorts();
   const queue = useStore((s) => s.sendQueue);
   const concurrency = useStore((s) => s.accountConcurrency);
   const nodes = useStore((s) => s.nodes);
@@ -93,7 +67,8 @@ export function SendQueuePanel() {
    *   与 `BackendView` 那次被拦下的是同一条规则）—— 读盘时就把它夹进视口。
    */
   const [pos, setPos] = useState(() => {
-    const p = readPanelPos(ports.storage);
+    // ★ 位置读写**经控制器**（`ui` 不再持 `StoragePort` —— TD-16-8）
+    const p = q.readPanelPos();
     if (!p) return null;
     return clampPanelPosition(p.x, p.y, PANEL_W, PANEL_H, {
       w: window.innerWidth || 1280,
@@ -161,7 +136,7 @@ export function SendQueuePanel() {
       setDragging(false);
       dragRef.current = null;
       setPos((cur) => {
-        if (cur) writePanelPos(ports.storage, cur);
+        if (cur) q.writePanelPos(cur);
         return cur;
       });
     };
@@ -174,10 +149,9 @@ export function SendQueuePanel() {
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
-    // ⚠️ `ports.storage` 必须进依赖（`up` 里用它写位置）—— `ports` 来自 context ⇒ 是稳定引用，
-    //    加进来**不会**导致重复绑定（这是刚才那条第 177 行 eslint warning 的正确修法：
-    //    改**代码**，不是去放宽门禁）
-  }, [dragging, ports.storage]);
+    // ⚠️ 控制器必须进依赖（`up` 里用它写位置）—— 它来自 context ⇒ 是**稳定引用**，
+    //    加进来**不会**导致重复绑定（这是当初那条 eslint warning 的正确修法：改**代码**，不是放宽门禁）
+  }, [dragging, q]);
 
   if (items.length === 0 && collapsed) return null;
 

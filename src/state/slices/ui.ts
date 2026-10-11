@@ -11,7 +11,11 @@ import type { BackendErrorKind } from '@/constants/failure';
 import type { ToastLevel } from '@/constants/text';
 // ⚠️ 形状真源在用例层（`sendQueue.ts`）—— state 依赖 core 是允许方向
 import type { NodeSendState } from '@/core/usecases/sendQueue';
-import { LS_NEWIMAGES_CURRENT_ONLY, LS_NEWIMAGES_FOLDED } from '@/stable/contracts/keys';
+import {
+  LS_NEWIMAGES_AUTOCAP,
+  LS_NEWIMAGES_CURRENT_ONLY,
+  LS_NEWIMAGES_FOLDED,
+} from '@/stable/contracts/keys';
 
 /** 默认 toast 时长（ms） */
 const TOAST_DURATION_MS = 3000;
@@ -19,14 +23,17 @@ const TOAST_DURATION_MS = 3000;
 /**
  * 本片负责持久化的**布尔开关**（原 `zd(key,'0') === '1'` / `Fd(key, v?'1':'0')`）
  *
- * ⚠️ 只列**本片真的用**的键（判据 B5：不留没人读的开关）—— 故不在此列的有两个：
- *    · `doubao-newimages-autocap` —— ⏳ **未接（欠账）**：它是**自动值守**的总开关（原 `u`；
- *      `zd(y0,'0')==='1'`），与上面两个同族。⚠️ **不是「裁定不接」** —— 裁定只覆盖 **Lovart**
- *      （`docs/10` #11 · `main.js:2749` 只点名 Lovart），**Tapnow 等站点要做** ⇒ 自动值守落地时
- *      把它并入本片（届时 `UiFlagKey` 加这一项，`readFlag/writeFlag` 无需改动）。
+ * ⚠️ 只列**本片真的用**的键（判据 B5：不留没人读的开关）—— 故不在此列的是：
  *    · `doubao-view-head-collapsed` —— 后台视图头部折叠，本工程还没有那个头部控件。
+ *
+ * ★ **2026-10-11 并入 `doubao-newimages-autocap`**（原 `u` = **自动值守**总开关；`zd(y0,'0')==='1'`）：
+ *   它曾被我标成「按裁定不接」，是**误读**（裁定只覆盖 **Lovart** —— `docs/10` #11 / `main.js:2749`
+ *   只点名 Lovart；其余站点**要做**）⇒ 随「非 Lovart 值守」落地一并接线。
  */
-export type UiFlagKey = typeof LS_NEWIMAGES_FOLDED | typeof LS_NEWIMAGES_CURRENT_ONLY;
+export type UiFlagKey =
+  | typeof LS_NEWIMAGES_FOLDED
+  | typeof LS_NEWIMAGES_CURRENT_ONLY
+  | typeof LS_NEWIMAGES_AUTOCAP;
 
 /** 本片的注入（`state` 不碰 `localStorage` —— 键的读写在 `persistKeys` 的唯一落点上） */
 export interface UiSliceDeps {
@@ -98,8 +105,16 @@ export interface UiSlice {
   newImagesFolded: boolean;
   /** 只留本画布（原 `m`，键 `doubao-newimages-current-only`） */
   newImagesCurrentOnly: boolean;
+  /**
+   * ★ **自动值守**总开关（原 `u`，键 `doubao-newimages-autocap`）
+   *
+   * ⚠️ 这里**只存"用户想不想开"**；**真的开**由 `accountOps.setAutoWatch(on)` 落到定时器上
+   *    （谁参与 / 什么节奏 → 由 adapter 的 `SitePort.autoWatch` 决定）。UI 只负责把开关传下去。
+   */
+  newImagesAutoWatch: boolean;
   setNewImagesFolded: (value: boolean) => void;
   setNewImagesCurrentOnly: (value: boolean) => void;
+  setNewImagesAutoWatch: (value: boolean) => void;
 
   // ── actions（只做编排，不做业务）──
   /**
@@ -146,9 +161,10 @@ export function createUiSlice(deps: UiSliceDeps) {
     activeAccountId: null,
     splitKeywordModal: null,
     nodeSendStates: {},
-    // ★ 初值**读盘**（原 `_Component26.jsx:30-45` 的 `zd(v0/w0, '0') === '1'`）
+    // ★ 初值**读盘**（原 `_Component26.jsx:30-45` 的 `zd(y0/v0/w0, '0') === '1'`）
     newImagesFolded: deps.readFlag(LS_NEWIMAGES_FOLDED),
     newImagesCurrentOnly: deps.readFlag(LS_NEWIMAGES_CURRENT_ONLY),
+    newImagesAutoWatch: deps.readFlag(LS_NEWIMAGES_AUTOCAP),
 
     pushToast: (message, duration = TOAST_DURATION_MS, level = 'info') => {
       set({ toasts: [...get().toasts, { id: nextId('toast'), message, duration, level }] });
@@ -185,6 +201,11 @@ export function createUiSlice(deps: UiSliceDeps) {
     setNewImagesCurrentOnly: (value) => {
       deps.writeFlag(LS_NEWIMAGES_CURRENT_ONLY, value);
       set({ newImagesCurrentOnly: value });
+    },
+    setNewImagesAutoWatch: (value) => {
+      // ⚠️ 与源一致（原 `he`：`d(le); Fd(y0, …)`）—— **先写盘再改状态**
+      deps.writeFlag(LS_NEWIMAGES_AUTOCAP, value);
+      set({ newImagesAutoWatch: value });
     },
 
     setNodeSendState: (nodeId, patch) => {

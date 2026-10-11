@@ -9,8 +9,6 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  cancelApiJob,
-  listApiJobs,
   loadApiProviders,
   loadApiSetup,
   saveApiSetup,
@@ -28,7 +26,7 @@ function makeDeps(over: Partial<ApiPort> = {}) {
   const calls: Array<[string, ...unknown[]]> = [];
   const api: ApiPort = {
     providersList: async () => ok([]),
-    configGet: async () => ok({ providers: [], configs: { a: 1 } }),
+    configGet: async () => ok({ providers: [], configs: {} }),
     configSet: async (id, patch) => {
       calls.push(['configSet', id, patch]);
       return ok({ config: { id } });
@@ -67,7 +65,7 @@ function makeDeps(over: Partial<ApiPort> = {}) {
 describe('apiConfig · 读', () => {
   it('loadApiProviders 走 `configGet`（一次拿 providers + configs）', async () => {
     const { deps } = makeDeps();
-    expect(await loadApiProviders(deps)).toEqual(ok({ providers: [], configs: { a: 1 } }));
+    expect(await loadApiProviders(deps)).toEqual(ok({ providers: [], configs: {} }));
   });
 
   it('loadApiSetup 走 `setupGet`', async () => {
@@ -77,10 +75,6 @@ describe('apiConfig · 读', () => {
     if (r.ok) expect(r.value.setup.concurrency).toBe(3);
   });
 
-  it('listApiJobs 走 `jobList`', async () => {
-    const { deps } = makeDeps();
-    expect(await listApiJobs(deps)).toEqual(ok([]));
-  });
 });
 
 describe('apiConfig · 写（原 UI 直调宿主的那几处）', () => {
@@ -109,11 +103,6 @@ describe('apiConfig · 写（原 UI 直调宿主的那几处）', () => {
     expect(await testProvider(deps, 'vidu')).toEqual(ok({ message: '通' }));
   });
 
-  it('cancelApiJob 转发任务 id 与状态', async () => {
-    const { deps, calls } = makeDeps();
-    expect(await cancelApiJob(deps, 'apj-1')).toEqual(ok({ status: 'cancelled' }));
-    expect(calls).toEqual([['jobCancel', 'apj-1']]);
-  });
 });
 
 describe('apiConfig · 原则 6（失败原样转发，不吞不改）', () => {
@@ -137,8 +126,6 @@ describe('apiConfig · 原则 6（失败原样转发，不吞不改）', () => {
     expect(await saveApiSetup(deps, {})).toEqual(fail);
     expect(await loadApiSetup(deps)).toEqual(fail);
     expect(await loadApiProviders(deps)).toEqual(fail);
-    expect(await listApiJobs(deps)).toEqual(fail);
     expect(await testProvider(deps, 'x')).toEqual(err('unknown', '该服务商不支持测试连接'));
-    expect(await cancelApiJob(deps, 'apj-1')).toEqual(err('unknown', '任务不存在'));
   });
 });

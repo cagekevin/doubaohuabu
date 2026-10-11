@@ -18,6 +18,25 @@
 export const SCAN_CHAIN = ['frames', 'webview'] as const;
 export type ScanStrategy = (typeof SCAN_CHAIN)[number];
 
+/**
+ * 抓取阶段机（原 `onStatus`）—— ★ **2026-10-11 从 `core/ports/site.port.ts` 迁到本文件**
+ *
+ * ⚠️ **为什么搬**：`site.port.ts` 是**端口**，原则 3 要求它**只有类型、零运行时值** ——
+ *    而这两个 `as const` 数组是**运行时值**（TD-04-4）。更要命的是：它们住在端口里
+ *    **诱导了第二份** —— `adapters/site/shared/materializeScan.ts` 曾把 4 个 scope 字面量
+ *    又抄一遍（**同一真相抄两份**，母体 M3 / TD-16-24）。
+ *    搬到本文件与 `SCAN_CHAIN` 同族（同属「扫描协议」的三个枚举）⇒ **端口改为 `import type`**，
+ *    运行时真源**只此一份**。
+ * ⚠️ 消费方：`adapters/site/shared/materializeScan.ts`（`SCAN_SCOPES` 做校验）；
+ *    端口 `site.port.ts` 只 `import type` 这两个类型再转发（见该文件）。
+ */
+export const SCAN_PHASES = ['scanning', 'found', 'working', 'done'] as const;
+export type ScanPhase = (typeof SCAN_PHASES)[number];
+
+/** 外部页面区域作用域（原 `hp` 22664-22669）—— ⚠️ 这是**外部页面**的区域，不是应用画布 */
+export const SCAN_SCOPES = ['canvas', 'panel', 'feed', 'site'] as const;
+export type ScanScope = (typeof SCAN_SCOPES)[number];
+
 /** 已废弃的档位（**保留常量仅供兼容读取**，不得作为可选档位） */
 export const DEPRECATED_SCAN_STRATEGY = 'chrome-cdp';
 

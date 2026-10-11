@@ -28,6 +28,19 @@ export const INNER_FOLDER_NAME = '资源';
 /** 工程文件名（new-file 布局：`wrapper/<项目名>.json`） */
 export const PROJECT_FILE_SUFFIX = '.json';
 
+/**
+ * ★ **后台 webview 容器的 DOM 钩子类名**（原 `_Component43.jsx:3272` 的 `doubao-view-webviews`）
+ *
+ * ⚠️ 它是**跨层契约**：`ui/panels/BackendView` **挂**它、`adapters/site/shared/webview.ts`
+ *    的 `findWebview` **找**它 ⇒ **必须唯一**（两处各写一份字面量正是母体 M3 的老路）。
+ * ⚠️ 住这里的原因：`^doubao-[a-z0-9-]+$` 形态的字符串被 eslint「原则5」限定只能出现在
+ *    `stable/contracts/`（它是**冻结契约串**，与 `PROTOCOL_IMG` 同族）。
+ * ⚠️ **2026-10-11 修正**：此前 `BackendView` 挂的是 **CSS-module 哈希类**，而 `webview.ts`
+ *    找的是**字面量** ⇒ 该定位**恒为 `null`**，只靠 `|| document` 的静默兜底才"看起来能用"
+ *    （**假定位 + 静默兜底**；已登记并清偿）。
+ */
+export const WEBVIEWS_HOST_CLASS = 'doubao-view-webviews';
+
 /** 自定义协议前缀（原 `img://` / `vid://` / `appasset://`） */
 export const PROTOCOL_IMG = 'img://';
 /**

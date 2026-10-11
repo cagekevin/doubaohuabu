@@ -11,7 +11,17 @@
 // 文案只依赖 L0（constants）内的 kind 联合，不依赖 core（分层：L0 不得依赖 L2）
 export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure';
 // ⚠️ 发送/面板文案的**分片转发**（定义在 `sendPanelText.ts`，见那里的头注释）
-export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_PANEL_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, NEW_IMAGES_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
+export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
+// ⚠️ 以下三处分片由 eslint `max-lines`(400) 触发 —— **该规则已于 2026-10-11 关闭**（分片的"各组彼此内聚"理由仍成立，但不再有"必须 <400 行"的硬约束）。
+// ⚠️ 2026-10-11：从 `sendPanelText.ts` **拆出**（那个文件代码行越过 eslint `max-lines`(400)）——
+//    「出新图」那一族彼此内聚，独立成 `newImagesText.ts`。**公开入口不变**（仍从 `@/constants/text` 取）。
+export { NEW_IMAGES_TEXT } from './newImagesText';
+// ⚠️ 2026-10-11：从 `text.ts` **拆出**（本文件又撞 `max-lines`：432 > 400）——
+//    「API 服务」面板那一族彼此内聚，独立成 `apiSettingsText.ts`。**公开入口不变**。
+export { API_SETTINGS_TEXT } from './apiSettingsText';
+// ★ 2026-10-11 从本文件拆出（`max-lines` 同先例）：项目**保存路径**那一族 ⇒ `PROJECT_STORAGE_TEXT`
+//   独立成 `projectStorageText.ts`（它刻意不反向 import 本文件，避免成环）。**公开入口不变**。
+export { PROJECT_STORAGE_TEXT } from './projectStorageText';
 
 /**
  * toast 语气（原 `showToast(text, 'info' | 'warn' | 'err')`）
@@ -22,8 +32,13 @@ export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_
  * ⚠️ **放 `constants/` 而不是 `state/`**：`core/usecases`（如 `analyzePrompt`）要产出这个语气，
  *   而 core **不得向上依赖 state** ⇒ 与 `BackendErrorKind`（在 `constants/failure`）同法收口。
  * ⚠️ 源版第三档写作 `'err'`，本工程统一为 `'error'`（与 `BackendErrorKind` 的命名一致）。
+ * ★ **2026-10-11 补 `'success'`**：源 `showToast` 的 `type` 实测有 **5 档**
+ *   （`info`/`warn`/`err`/`error`/`success`，全仓 14 处用 `'success'`），而本工程此前**漏了 `'success'`**
+ *   ⇒ API 回灌的「API 图片已存入资源库」这类成功提示**传不进来**（类型不认）。
+ *   ⚠️ 诚实标注：`ui/common/ToastHost` 给 `warn` / `error` / **`success`** 各上一色
+ *   （`success` 用 `--color-success`，2026-10-11 补）—— 与源 `.app-toast-${type}` 四档对齐。
  */
-export const TOAST_LEVELS = ['info', 'warn', 'error'] as const;
+export const TOAST_LEVELS = ['info', 'warn', 'error', 'success'] as const;
 export type ToastLevel = (typeof TOAST_LEVELS)[number];
 
 /**
@@ -176,21 +191,9 @@ export const CANVAS_TEXT = {
  */
 export const CIRCULAR_REF_MESSAGE = '这样连会形成循环引用，已阻止';
 
-/** 项目 / 顶栏 */
+/** 项目 / 顶栏（⚠️ 保存路径那一族已拆到 `PROJECT_STORAGE_TEXT` —— 见本文件末的转发） */
 export const PROJECT_TEXT = {
   renameHint: '双击重命名项目',
-  storageHint: '设置当前项目保存路径；工程、数据、操作记录、缓存、图片和视频会分类保存',
-  setStoragePath: '设置保存路径',
-  openStorageDir: '打开项目保存目录',
-  counting: '统计占用…',
-  storageBusy: '占用空间：统计中…',
-  /**
-   * 保存路径不可用（原 `openProject` 29904）—— `：` 后接**原始错误原文**
-   * ⚠️ 原版是 `'项目保存路径不可用，已暂时回退到应用默认存储：' + (f.error || '')`
-   *    ⇒ 无原因时**不带冒号**，故做成函数（原则 6：不覆盖原始 message，只拼接）。
-   */
-  storageFallback: (reason?: string) =>
-    `项目保存路径不可用，已暂时回退到应用默认存储${reason ? `：${reason}` : ''}`,
   deleteConfirm: (name: string) => `删除项目「${name}」？此操作不可撤销。`,
   /** 原 `_Component47.jsx:39` 的 `alert('项目文件解析失败')` */
   parseFailed: '项目文件解析失败',
@@ -423,6 +426,14 @@ export const REF_TEXT = {
   pickHint: '点一条插入引用（也可用 ↑↓ 选择 / Enter 确认 / Esc 取消）',
   /** 收起 */
   close: '收起',
+  /** ★ 「@ 引用素材」按钮（原 `CL.jsx:789`，逐字） */
+  atRef: '@ 引用素材',
+  /** 它的 `title`（原 `CL.jsx:786`，逐字） */
+  atRefTitle: '从资源库选择素材，以 @ 引用形式插入到文本框（单击即插入）',
+  /** 素材缩略条空态（原 `CL.jsx:793`，逐字） */
+  stripHint: '尚未连接素材 · 点左侧「@」引用素材',
+  /** 缩略图 `title`（原 `CL.jsx:802`，逐字含「（拖拽调整顺序）」） */
+  thumbDragTitle: (name: string) => `${name}（拖拽调整顺序）`,
   /** 引用预览行的前缀（`参考图1` 由 `formatReferenceLabel` 给，这里只给分隔符） */
   previewSep: ' · ',
   /** 引用指向的素材**找不到**时的标注（原 `CL.jsx` 用 `.ref-missing` 样式表达，没有文案） */

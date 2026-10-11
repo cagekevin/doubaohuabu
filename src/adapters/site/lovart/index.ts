@@ -61,6 +61,11 @@ async function tryScan(host: HostPort, account: Account, via: ScanStrategy): Pro
 export function createLovartSite(host: HostPort): SitePort {
   return {
     kind: 'lovart',
+    // ⛔ **刻意不声明 `autoWatch`**（= 本站点**不参与无人值守**）—— 这不是遗漏：
+    //   `docs/10` #11 · `electron/main.js:2749`「默认关闭 **Lovart** 自动抓取，避免每 3 秒执行
+    //   一次页面脚本被判定为机器人」（那段就叫「Lovart 容器隔离」，讲的是 Lovart 的多账号检测）。
+    //   ⚠️ 该约束**只点名 Lovart** —— 其余站点照常声明（见 `tapnow/index.ts` 的 `autoWatch`）。
+    //   ⚠️ 注意区分：`scan` **仍在**（**手动**「立即抓取」可用）；被去掉的只是「**自动反复**抓」。
 
     async scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>> {
       const attempts: ScanAttempt[] = [];

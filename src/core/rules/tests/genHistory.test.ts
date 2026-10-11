@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { patchGenHistoryAttempt } from '../genHistory';
+import { appendGenHistoryAttempt, patchGenHistoryAttempt } from '../genHistory';
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
 
 const withHistory = (attempts: unknown[]): Record<string, unknown> => ({
@@ -67,5 +67,49 @@ describe('patchGenHistoryAttempt（原 Uy）', () => {
     const out = patchGenHistoryAttempt(data, 'a1', { status: 'failed', note: 'API 生成失败' });
     const h = out[GEN_HISTORY_KEY] as { attempts: Array<Record<string, unknown>> };
     expect(h.attempts[0]).toEqual({ id: 'a1', status: 'failed', keep: 1, note: 'API 生成失败' });
+  });
+});
+
+describe('appendGenHistoryAttempt（原 U$）', () => {
+  const attemptsOf = (out: Record<string, unknown>): unknown[] =>
+    (out[GEN_HISTORY_KEY] as { attempts: unknown[] }).attempts;
+
+  it('没有 genHistory ⇒ 建 `{v:1, attempts:[新]}`；其它字段保留', () => {
+    const out = appendGenHistoryAttempt({ text: 't' }, { id: 'a1' });
+    expect(out.text).toBe('t');
+    expect(out[GEN_HISTORY_KEY]).toEqual({ v: 1, attempts: [{ id: 'a1' }] });
+  });
+
+  it('★ 追加在**末尾**（不是插到最前）', () => {
+    const out = appendGenHistoryAttempt(withHistory([{ id: 'a1' }]), { id: 'a2' });
+    expect(attemptsOf(out)).toEqual([{ id: 'a1' }, { id: 'a2' }]);
+  });
+
+  it('★ 假值 attempt（null / undefined / 0 / 空串）⇒ **原样返回同一引用**', () => {
+    const data = withHistory([{ id: 'a1' }]);
+    for (const bad of [null, undefined, 0, '']) {
+      expect(appendGenHistoryAttempt(data, bad)).toBe(data);
+    }
+  });
+
+  it('★ 只留最后 20 条（源 `slice(-20)`）—— 最早的被丢掉', () => {
+    let data: Record<string, unknown> = {};
+    for (let i = 0; i < 21; i++) data = appendGenHistoryAttempt(data, { id: `a${i}` });
+    const attempts = attemptsOf(data) as Array<{ id: string }>;
+    expect(attempts).toHaveLength(20);
+    expect(attempts[0]?.id).toBe('a1'); // a0 已被挤掉
+    expect(attempts[19]?.id).toBe('a20');
+  });
+
+  it('genHistory 在但 attempts 不是数组 ⇒ 视作空表（只放新条目）', () => {
+    const out = appendGenHistoryAttempt({ [GEN_HISTORY_KEY]: { v: 1, attempts: 'nope' } }, { id: 'a1' });
+    expect(attemptsOf(out)).toEqual([{ id: 'a1' }]);
+  });
+
+  it('★ 不改原对象（不可变）', () => {
+    const data = withHistory([{ id: 'a1' }]);
+    const out = appendGenHistoryAttempt(data, { id: 'a2' });
+    expect(out).not.toBe(data);
+    expect(attemptsOf(data)).toEqual([{ id: 'a1' }]);
   });
 });

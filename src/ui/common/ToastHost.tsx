@@ -8,7 +8,18 @@
 import { useEffect } from 'react';
 // ★ 数据形状由 state 拥有（分层：state 不得依赖 ui，所以类型定义放 state）
 import type { ToastItem } from '@/state/slices/ui';
+import type { ToastLevel } from '@/constants/text';
 import styles from './shared.module.css';
+
+/**
+ * 语气 → 样式类（原 `.app-toast-${type}`）
+ * ⚠️ `info` 是默认态 ⇒ **不给类**（与原先的写法一致，避免多一个无差别类）
+ */
+const TOAST_LEVEL_CLASS: Partial<Record<ToastLevel, string>> = {
+  warn: styles.toastWarn,
+  error: styles.toastError,
+  success: styles.toastSuccess,
+};
 
 export interface ToastHostProps {
   toasts: readonly ToastItem[];
@@ -25,7 +36,7 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
   return (
     <div
       // 语气 → 样式（原 `showToast(text, level)`）；`info` 是默认态，不加额外类
-      className={`${styles.toast} ${item.level === 'warn' ? styles.toastWarn : item.level === 'error' ? styles.toastError : ''}`}
+      className={`${styles.toast} ${TOAST_LEVEL_CLASS[item.level] ?? ''}`}
       role="status"
       onClick={() => onDismiss(item.id)}
     >

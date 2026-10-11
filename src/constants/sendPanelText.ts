@@ -1,13 +1,17 @@
 /**
  * 发送 / 面板相关的 UI 文案（★ SSOT 的**分片**，由 `constants/text.ts` 转发导出）
  *
- * ★ **2026-10-10 拆出来**：`text.ts` 撞上 `eslint` 的 `max-lines`（405 > 400）。
+ * ★ **2026-10-10 拆出来**：`text.ts` 撞上 `eslint` 的 `max-lines`（405 > 400）——〔⚠️ **该规则已于 2026-10-11 关闭**；本文件内所有 `max-lines` 提及同此〕。
  *   它的头写着「文案只允许出现在本文件」，**但同一文件早已 re-export `./failure`**
  *   （`FAIL_LABEL` / `BACKEND_ERROR_LABEL`）⇒ 按**同一先例**分片：
  *   定义住在这里，`constants/text.ts` 转发导出 ⇒ 调用方 `@/constants/text` **零改动**。
  *
  * ⚠️ 铁律的**本意**是「面向用户的字符串不得散落在 store/core/ui」—— 本文件仍在 `constants/`，
  *   符合本意；真正的违规是"在组件里内联中文"，不是"SSOT 分片"。
+ *
+ * ★ **2026-10-11 再拆一次（同一先例）**：本文件又被 `max-lines` 拦（代码行 402 > 400，落完
+ *   「自动值守 + 长按拖出」的文案之后）⇒ 把**彼此内聚**的「出新图」那一族（`NEW_IMAGES_TEXT`）
+ *   挪到 `newImagesText.ts`。公开入口不变（`constants/text.ts` 转发）。
  */
 
 /**
@@ -256,6 +260,72 @@ export const DOWNLOAD_NODE_TEXT = {
  * ★ 语义：一条**成片**（`url` 指向本地/远程视频），带**来源**（哪个节点产出的）与
  *   **配方**（`recipe`：产出它的提示词与参数）。
  */
+/**
+ * `auto:<channel>` 的频道显示名（原 `YL.jsx:93-99` 的**内联字面量映射**）
+ *
+ * ⚠️ 与 `ACCOUNT_TYPE_LABEL`（`豆包后台` / `自定义网站`）、`SITE_DISPLAY_NAME`（无 `lovart`/`tapnow`）
+ *    **都不是同一张表** —— 源在这里另写了一份 ⇒ 逐字保留，不合并。
+ */
+const GEN_VIDEO_CHANNEL_LABELS: Readonly<Record<string, string>> = {
+  doubao: '豆包',
+  dola: 'Dola',
+  lovart: 'Lovart',
+  tapnow: 'Tapnow',
+  other: '其他',
+};
+
+/**
+ * 文生视频节点（`type: 'genvideo'` —— 原 `YL.jsx` 的 `gv-*`）
+ *
+ * ★ **2026-10-11 补** `gv-stage` + `gv-waiting` + `gv-preview-empty` + `gv-media-fallback`
+ *   （原 `YL.jsx:485-530`），并**修正** `gv-meta` 第 2 项（原误用 `aspectRatio`，
+ *   源实为 `y` = **执行账号标签** —— 见 `core/rules/genVideo.nodeAccountLabel`）。
+ *
+ * ⚠️ 仍未落：`gv-dl` / `gv-tl` / `gv-play` / `gv-dur-badge` / `gv-apijob` / `gv-hist-btn` /
+ *    `gv-frame-btn`×3（整块，见 TD-16-79）；`gv-waiting` 的**后两态**（`p` = `nodeNotices`
+ *    的 `generation-confirm`）**无数据源** —— 见 TD-16-81。
+ */
+export const GEN_VIDEO_TEXT = {
+  /** 节点标题（原 `YL.jsx`；此前是 `GenVideoNode.tsx` 里的裸字面量 —— 原则 5） */
+  title: '文生视频',
+  /** `gv-meta` 的「已连接 N 个输入」（原 558，逐字） */
+  metaInputs: (n: number) => `已连接 ${n} 个输入`,
+  /** meta 各项之间的分隔（原 558 的 ` · `，逐字） */
+  metaSep: ' · ',
+
+  // ── `gv-meta` 第 2 项：执行账号标签（原 `y`，`YL.jsx:62-109`）──────────────────
+  /** 空 / `'auto'`（与 `ACCOUNT_PICKER_TEXT.allAccounts` 逐字相同，但**分属两处源**） */
+  accountAll: '全部账号（自动）',
+  /** `auto:group:ungrouped` */
+  accountUngrouped: '未分组（自动）',
+  /** `auto:group:<id>` 命中组 */
+  accountInGroup: (name: string) => `${name}（自动）`,
+  /** `auto:group:<id>` 组名缺失时的兜底（原 `'分组'`） */
+  accountGroupFallback: '分组',
+  /** `auto:<channel>` */
+  accountAutoChannel: (label: string) => `${label}账号（自动）`,
+  /** 显式账号 id 查不到时的兜底（原 `'豆包账号（自动）'`） */
+  accountFallback: '豆包账号（自动）',
+  /** 频道显示名表（原 93-99 的内联映射，逐字） */
+  channelLabels: GEN_VIDEO_CHANNEL_LABELS,
+
+  // ── `gv-stage` / `gv-waiting` / `gv-preview-empty` / `gv-media-fallback`（原 485-530）──
+  /** 等待浮层 `aria-label`（原 488；源另一支 `'等待后台确认'` 属**无数据源**的那两态 —— TD-16-81） */
+  waitingAria: '正在生成',
+  /** 等待文案 —— 已有结果时（原 492 的 `h` 支，逐字） */
+  waitingRegenerate: '正在生成新的一条…',
+  /** 等待文案 —— 首次生成时（原 492，逐字） */
+  waitingFirst: '正在生成 · 出片后展示在这里',
+  /** 空舞台标题（原 498，逐字） */
+  stageEmptyTitle: '文生视频 · 在下方输入提示词',
+  /** 空舞台副标题（原 500，逐字） */
+  stageEmptySub: '点击卡片打开生成面板，出片直接展示在这里',
+  /** 有结果但既无 `resultUrl` 也无 `resultPoster`（原 498 的 `gv-media-fallback`，逐字） */
+  mediaFallback: '视频已生成',
+  /** 缩略图/海报的按需宽度（原 `Xt(d.resultPoster, 480)` 的 `480`） */
+  posterThumbWidth: 480,
+} as const;
+
 export const VIDEO_NODE_TEXT = {
   /** 名称兜底（原 `BL.jsx:14`） */
   fallbackName: '视频',
@@ -553,105 +623,6 @@ export const SPLIT_TEXT = {
     '按自定义关键词拆分：弹窗输入关键词，每个出现关键词的行作为新片段起点，按原文顺序生成文本框，内容不丢失',
   /** 成功（本工程用 toast 报告 —— 源版是按钮上的瞬时态，且那档 `✓ 已拆分` 不可达） */
   done: (n: number) => `已拆分为 ${n} 个文本框`,
-} as const;
-
-/**
- * 「出新图」面板（原 `_Component26.jsx`）
- *
- * ⚠️ **文案逐字对源**（含源版拼写 `Tanpnow`、全角括号与「」）。
- * ⚠️ 本工程落：聚合列表 / 发送到画布 / 从列表移除 / 折叠 / 只留本画布 / **立即抓取（四阶段状态机）**。
- *   ⏳ **未落（欠账）两项**：
- *     · **自动值守轮询**（`Ee` 循环 428-592：抖动 / 退避 / 空转上限）—— ⚠️ **只有 Lovart 不做**：
- *       `docs/10` #11 · `electron/main.js:2749`「默认关闭 **Lovart** 自动抓取，避免每 3 秒执行页面
- *       脚本被判定为机器人」（**它只点名 Lovart**，且就写在「Lovart 容器隔离」章节里）；
- *       **其余站点（Tapnow 等）要做** —— 源版自动值守本就覆盖两者（`Ee` 按 `ho(acc)` 分派
- *       `wp`/`xp`），用户 2026-10-11 明确「其他平台需要的」。⇒ 面板按钮现为**禁用占位**（见 `autoOff`）。
- *     · 长按拖出到系统（`se` 152-192 —— 走 `startFileDrag`，`MediaPort` 未用，见 `docs/14` §1.4）。
- *   ⛔ **不落的一条（分支不可达）**：「正在抓取中，请稍候」（原 336）—— 源版有**模块级并发锁**
- *     （`Jy()`/`o0()`），本工程只有本面板会发起、且按钮忙时**禁用** ⇒ 该分支不可达（判据 B5）。
- */
-export const NEW_IMAGES_TEXT = {
-  /** 面板标题（原 605） */
-  title: '出新图',
-  /** 自动值守中的小圆点 `title`（原 606，逐字） */
-  liveTitle: '自动值守中：Lovart / Tapnow 出新图会自动出现，无需手动抓取',
-  /** 聚合徽标 `title`（原 607，逐字） */
-  aggTitle: '聚合自以下账号',
-  /** 聚合徽标（原 607） */
-  aggLabel: (n: number) => `聚合 ${n} 个账号`,
-  /** 状态机文案（原 614 的三目） */
-  statusIdle: '待机',
-  statusScanning: '正在读取页面…',
-  statusWorking: '抓取中…',
-  /** 抓取按钮文案（原 `De` 599 的四路三目） */
-  fetch: '⟳ 立即抓取',
-  fetchCurrentPage: '⟳ 抓取本页图',
-  fetchAll: '⟳ 抓取全部',
-  fetchBusy: '抓取中…',
-  /** 抓取按钮 `title`（原 671，逐字 —— 含源版拼写 `Tanpnow`） */
-  fetchTitle: '立即抓取（当前活跃账号 / 全部 Lovart+Tanpnow）',
-  /** 「只留本画布」开关（原 668-669） */
-  onlyCurrent: '只留本画布',
-  onlyCurrentOn: '● 只留本画布',
-  onlyCurrentOnTitle: '当前仅显示当前账号画布图片，点击显示全部账号',
-  onlyCurrentOffTitle: '当前显示全部账号图片，点击仅显示当前账号画布',
-  onlyCurrentSwitchedOn: '已切换：只显示当前账号画布图片',
-  onlyCurrentSwitchedOff: '已切换：显示全部账号画布图片',
-  /** 缩略图 `title`（原 633，逐字；含**换行**） */
-  thumbTitle: (name: string, dims: string, from: string) =>
-    `点击发送到画布；长按拖拽可放入后台页面（Lovart / Tapnow / 其他网站）：${name}${dims ? `（${dims}）` : ''}\n来自：${from}`,
-  /** 缩略图悬停遮罩（原 636，逐字） */
-  overlay: '＋ 发送到画布 · 长按可拖入',
-  /** 「NEW」徽标（原 637） */
-  badgeNew: 'NEW',
-  /** 「已发送」徽标（原 638，逐字） */
-  badgeSent: '✓ 已发送',
-  /** 大图徽标 `title`（原 639，逐字） */
-  badgeBigTitle: '尺寸较大，发送前会确认',
-  /** 大图徽标字（原 640） */
-  badgeBig: '⚠',
-  /** 移除按钮 `title`（原 646，逐字） */
-  delTitle: '从列表移除（不影响画布）',
-  /** 移除成功（原 330，逐字） */
-  removed: '已从列表移除（不影响画布）',
-  /** 元信息 `title`（原 652-654，逐字；含**换行**） */
-  metaTitle: (name: string, host: string, acc: string) =>
-    `${name}${host ? `\n来自 ${host}` : ''}\n账号：${acc}`,
-  /** 折叠按钮 `title`（原 683，逐字） */
-  foldCollapse: '收起出新图面板',
-  foldExpand: '展开出新图面板',
-  /** 折叠按钮字（原 684：`f ? '∨' : '∧'`） */
-  foldExpandGlyph: '∨',
-  foldCollapseGlyph: '∧',
-  /** 大图确认（原 196-199，逐字；含**两处换行**） */
-  bigConfirm: (name: string, meta: string) =>
-    `「${name}」尺寸较大（${meta}）。\n发送到画布会保持原始分辨率与画质，仅显示尺寸自动缩放。\n\n继续发送吗？`,
-  /** 发送成功（原 217，逐字） */
-  sent: (name: string) => `已发送到画布 · ${name}`,
-  /** 发送失败（原 220，逐字） */
-  sendFailed: '发送失败：图片数据无效',
-  /** 空态提示（本工程新增：源版空态只有一个抓取按钮） */
-  emptyHint: '暂无新图。可点下面的按钮抓取，或先在「画廊」里把画布上的图收进来。',
-  /** 抓取结果（原 411，逐字） */
-  fetched: (n: number, failed: number) => `已抓取 ${n} 张新图${failed ? `，${failed} 张失败` : ''}`,
-  /** 只失败（原 413，逐字） */
-  failedOnly: (n: number) => `${n} 张取值失败`,
-  /** 没有新的（原 415，逐字） */
-  noNew: '没有新的图（页面上的图都已在列表里）',
-  /** 没有可抓取的账号（原 343，逐字） */
-  noAccounts: '没有可抓取的账号',
-  /**
-   * ★ **自动值守按钮的 `title`（当前为禁用占位）** —— ⚠️ **不是「本项目不做」，而是「只 Lovart 不做」**：
-   *   出处 `docs/10` #11 · `electron/main.js:2749`「**默认关闭 Lovart 自动抓取**，避免每 3 秒执行一次
-   *   页面脚本被判定为机器人」—— 它**只点名 Lovart**（就写在「Lovart 容器隔离」章节里）。
-   *   ⇒ **Tapnow 等其它站点要开**（源版自动值守本就覆盖两者：`Ee` 按 `ho(acc)` 分派 `wp`/`xp`）；
-   *   本工程**尚未落** ⇒ 按钮暂为**禁用占位**，`title` 如实写明「未落 + 接通后会跳过 Lovart」。
-   *   ⚠️ **不要把它读成「已裁定不做」** —— 那是把限定词（Lovart）吞掉后的误传（本轮更正）。
-   */
-  autoOff:
-    '自动值守尚未接通（本工程欠账）：接通后会**跳过 Lovart**（它每数秒执行页面脚本会被判机器人 —— docs/10 #11 · electron/main.js:2749），对 Tapnow 等其它账号每数秒自动抓取新图',
-  /** 自动值守按钮文案（原 676 的**暂停**态，逐字；恒显示这一态 —— 见上） */
-  autoPaused: '已暂停',
 } as const;
 
 /**

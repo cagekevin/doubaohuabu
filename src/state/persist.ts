@@ -11,14 +11,14 @@
 
 import type { ClockPort } from '@/core/ports/clock.port';
 import type { Cancel } from '@/core/ports/clock.port';
-import type { Project } from '@/stable/model/project';
+import type { Preset, Project } from '@/stable/model/project';
 import type { Account, AccountGroup, PoolStrategy } from '@/stable/model/account';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
 import type { ScanHistoryEntry } from '@/core/rules/scanHistory';
 import { persistProject, type PersistDeps } from '@/core/usecases/persistProject';
 import { persistAccounts } from '@/core/usecases/persistAccounts';
 import { persistLsKey } from '@/core/usecases/persistLsKey';
-import { LS_LOVART_GALLERIES, LS_SCAN_HISTORY } from '@/stable/contracts/keys';
+import { LS_LOVART_GALLERIES, LS_PRESETS, LS_SCAN_HISTORY } from '@/stable/contracts/keys';
 import { PERSIST_DEBOUNCE_MS } from '@/constants';
 
 /** 本控制器负责落盘的全部数据（工程 + 账号族） */
@@ -37,6 +37,11 @@ export interface PersistSnapshot {
   lovartGalleries: LovartGalleries;
   /** ★ 指纹体检历史（原 `jk` 26223）—— 同画廊：有切片与 `pick()` 就得有写盘分支 */
   scanHistory: ScanHistoryEntry[];
+  /**
+   * ★ **节点 / 提示词预设**（原 `wo` 26611 写 `doubao-presets`）—— 同画廊 / 体检历史：
+   *   `presets` 进了 store 就得有写盘分支，否则「导入工程并入的预设」重启即丢。
+   */
+  presets: Preset[];
 }
 
 export interface PersistControllerDeps {
@@ -106,6 +111,13 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
     const scan = persistLsKey(LS_SCAN_HISTORY, s.scanHistory, { storage: deps.persist.storage });
     if (!scan.ok) {
       deps.onError(scan.message);
+      return;
+    }
+
+    // ⑤ ★ 节点 / 提示词预设（同上；原 `wo` 26611）
+    const pre = persistLsKey(LS_PRESETS, s.presets, { storage: deps.persist.storage });
+    if (!pre.ok) {
+      deps.onError(pre.message);
       return;
     }
 

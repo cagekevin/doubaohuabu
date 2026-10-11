@@ -16,7 +16,7 @@ import '@/styles/reset.css';
 import '@/styles/theme.css';
 
 import { createContainer } from './container';
-import { StoreProvider, usePorts, useStore } from '@/state';
+import { StoreProvider, useLicenseOps, useStore } from '@/state';
 import { AppShell } from '@/ui/shell/AppShell';
 import { ErrorBoundary } from '@/ui/shell/ErrorBoundary';
 import { SaveErrorBanner } from '@/ui/common/SaveErrorBanner';
@@ -44,7 +44,8 @@ import type { LicenseStatus } from '@/core/model/license';
  */
 function Root() {
   const started = useStore((s) => s.started);
-  const ports = usePorts();
+  // ⚠️ 走控制器，**不是** `usePorts()` —— ui/bootstrap 不得直调 `host.license.*`（铁律 2 / TD-16-8）
+  const licenseOps = useLicenseOps();
   /** `undefined` = **还在查**（不渲染任何一边 —— 避免"先闪主界面再跳激活页"） */
   const [license, setLicense] = useState<LicenseStatus | null | undefined>(undefined);
   /**
@@ -55,8 +56,9 @@ function Root() {
 
   const refreshLicense = useCallback(async () => {
     try {
-      const r = await ports.host.license.getStatus();
-      setLicense(r.ok ? r.value : null);
+      // 业务状态在 `gate.info.status`（`used`/`tampered`/`invalid` 也是**成功的 IPC**）
+      const r = await licenseOps.checkStatus();
+      setLicense(r.ok ? r.value.info : null);
       // ⚠️ `r.ok === false` 也是失败（适配器把后端错误折进 `Result`）⇒ 原样带出来
       setLicenseError(r.ok ? '' : r.message);
     } catch (e) {
@@ -65,7 +67,7 @@ function Root() {
       setLicense(null);
       setLicenseError(e instanceof Error ? e.message : String(e));
     }
-  }, [ports]);
+  }, [licenseOps]);
 
   /**
    * ⚠️ 这里**不** `void refreshLicense()`（那样是"在 effect 体里直接调带 setState 的函数"，
@@ -74,10 +76,10 @@ function Root() {
    */
   useEffect(() => {
     let alive = true;
-    ports.host.license
-      .getStatus()
+    licenseOps
+      .checkStatus()
       .then((r) => {
-        if (alive) setLicense(r.ok ? r.value : null);
+        if (alive) setLicense(r.ok ? r.value.info : null);
       })
       .catch((e: unknown) => {
         if (!alive) return;
@@ -87,7 +89,7 @@ function Root() {
     return () => {
       alive = false;
     };
-  }, [ports]);
+  }, [licenseOps]);
 
   // ① 还在查 ⇒ 什么都不渲染（这一闪通常只有几毫秒）
   if (license === undefined) return null;
@@ -135,7 +137,7 @@ createRoot(rootEl).render(
   <StrictMode>
     {/* 全局错误边界（docs/11 §9.9 的第一级） */}
     <ErrorBoundary area="应用">
-      <StoreProvider store={container.store} gen={container.gen} analyze={container.analyze} accountOps={container.accountOps} batchSend={container.batchSend} sendQueue={container.sendQueue} capture={container.capture}>
+      <StoreProvider store={container.store} gen={container.gen} analyze={container.analyze} accountOps={container.accountOps} batchSend={container.batchSend} sendQueue={container.sendQueue} capture={container.capture} licenseOps={container.licenseOps} hostOps={container.hostOps} projectOps={container.projectOps} apiOps={container.apiOps}>
         <Root />
       </StoreProvider>
     </ErrorBoundary>

@@ -76,3 +76,15 @@ export function formatDateTimeMinute(ms?: number | null): string {
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+
+/**
+ * 本地日期 `YYYY-MM-DD`（原 `_Component46.jsx:32-38` 的内联实现；
+ * 与后端 `config-store.js` 的 `todayKey` **同形** —— API 用量按本地日期分桶）
+ *
+ * ⚠️ 非法时间 ⇒ 空串（调用方自己决定兜底；**不编一个"今天"**）
+ */
+export function formatLocalDate(ms: number): string {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}

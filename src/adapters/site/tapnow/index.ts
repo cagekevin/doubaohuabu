@@ -34,7 +34,7 @@ import type {
   SitePort,
   SiteProbe,
 } from '@/core/ports/site.port';
-import { TAPNOW_MIN_SIDE } from '@/constants';
+import { AUTO_WATCH_IDLE_BACKOFF_MS, AUTO_WATCH_INTERVAL_MS, TAPNOW_MIN_SIDE } from '@/constants';
 import { TAPNOW_TEXT } from '@/constants/text';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
@@ -79,6 +79,12 @@ async function tryScan(
 export function createTapnowSite(host: HostPort): SitePort {
   return {
     kind: 'tapnow',
+
+    // ★ **无人值守轮询**能力声明（注册制：站点细节住 adapter —— 见 `site.port.ts` 的注释）
+    //   源版的 `Ee` 循环对 Tapnow **也跑**（`_Component26.jsx:451` 的 `ho(acc) ? wp : xp` 走 else）。
+    //   节奏取源版的「**非 Lovart 档**」（`KR` 6000 / `XR` 15000）：
+    //   ⚠️ Lovart 档（`qR`/`YR`）在本仓**用不到** —— Lovart 不值守（`docs/10` #11，见 `lovart/index.ts`）。
+    autoWatch: { intervalMs: AUTO_WATCH_INTERVAL_MS, idleBackoffMs: AUTO_WATCH_IDLE_BACKOFF_MS },
 
     async scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>> {
       // 脚本按 `minSide` 生成（原 `fP` 的 `{ light, minSide }` 入参；默认 `Kl` = 96）

@@ -11,6 +11,11 @@
 import type { Account, SiteType } from '@/stable/model/account';
 import type { GenResult } from '@/stable/model/gen';
 import type { Result } from '@/core/model/result';
+// ★ **2026-10-11（TD-04-4）**：扫描枚举的**运行时真源**已搬到 `core/rules/scanChain.ts`
+//   （端口只能有类型，原则 3）⇒ 本文件只 `import type` 转发给既有消费者。
+import type { ScanPhase, ScanScope } from '@/core/rules/scanChain';
+
+export type { ScanPhase, ScanScope };
 
 /** 扫描选项 */
 export interface ScanOptions {
@@ -28,17 +33,11 @@ export interface ScanOptions {
   onPhase?: (event: ScanPhaseEvent) => void;
 }
 
-/** 抓取阶段机（原 `onStatus`） */
-export const SCAN_PHASES = ['scanning', 'found', 'working', 'done'] as const;
-export type ScanPhase = (typeof SCAN_PHASES)[number];
+/** 抓取阶段机（原 `onStatus`）—— `ScanPhase` 的类型见文件头说明（已迁至 `core/rules/scanChain.ts`） */
 export interface ScanPhaseEvent {
   phase: ScanPhase;
   message: string;
 }
-
-/** 外部页面区域作用域（原 `hp` 22664-22669）—— ⚠️ 这是**外部页面**的区域，不是应用画布 */
-export const SCAN_SCOPES = ['canvas', 'panel', 'feed', 'site'] as const;
-export type ScanScope = (typeof SCAN_SCOPES)[number];
 
 /** 单张抓取结果 */
 export interface ScannedImage {
@@ -150,6 +149,28 @@ export interface SitePort {
     imageUrl: string,
     instruction: string,
   ) => Promise<Result<{ text: string }>>;
+
+  /**
+   * ★ **无人值守轮询**能力（原 `_Component26` 的 `Ee` 428-592）—— **注册制：站点细节由 adapter 声明**
+   *
+   * ★★ **为什么它是「能力声明」而不是 `core`/`state`/`ui` 里的站点判断**：
+   *    「这个站点能不能被自动反复扫、以什么节奏」是**站点细节**（与 `chatUrl?` / `askWithImage?` 同族）
+   *    ⇒ 必须住 adapter。`core`/`state`/`ui` **一律不得**写 `type === 'lovart'` 之类的判断。
+   * ⚠️ **缺项 ⇒ 不支持**（调用方**跳过**该站点，不回落、不报错）。
+   * ⚠️ **`lovart` 故意不声明**：风控 —— `docs/10` #11 · `electron/main.js:2749`「默认关闭
+   *    **Lovart** 自动抓取，避免每 3 秒执行一次页面脚本被判定为机器人」。⚠️ 该约束**只点名 Lovart**
+   *    （那段就叫「Lovart 容器隔离」）；其余站点照常声明（见 `tapnow/index.ts`）。
+   * ⚠️ **与 `scan` 的关系**：`scan` = 「能不能抓」；本项 = 「能不能**自动反复**抓 + 什么节奏」。
+   *    二者独立 —— 可以有 `scan` 而无本项（= 只能**手动**抓）。
+   * ⚠️ **本项只是「能力 + 节奏」声明，不含任何定时器**：定时器在**编排层**（`state`），
+   *    `scan` 仍是被**显式调用**（`docs/11` §六 约束 4：适配器不得自启定时器）。这条**与站点无关**。
+   */
+  readonly autoWatch?: {
+    /** 基础间隔（ms）—— 原 `KR` = 6000 */
+    intervalMs: number;
+    /** 空转 / 超限后的**退避**间隔（ms）—— 原 `XR` = 15000 */
+    idleBackoffMs: number;
+  };
 
   /**
    * 抓取素材。

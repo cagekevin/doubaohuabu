@@ -16,15 +16,16 @@
  *   本实现**选完即 `patchNodeData({folder})`**（源版意图的合理落实）。
  *   文件名的替换/截断、状态的形状、300ms 间隔、`.mp4` 后缀**全部照抄**。
  *
- * ⚠️ **宿主调用走 `usePorts()`**（与 `BackendView` 同法）—— 本轮没有为它建 state 控制器：
- *   这里的逻辑是"逐条 IO + 局部状态"，没有跨组件状态要维护（原则 1 约束的是**写 store**，
- *   而写 store 的部分（`folder` / 节点状态）都走 action / 局部 state）。
+ * ⚠️ **宿主调用走 `useHostOps()` 控制器**（`selectFolder` / `downloadFile`）—— `ui` 不得直持
+ *   `Ports`（TD-16-8；`usePorts` 已从 `@/state` 移除）。这里的逻辑是"逐条 IO + 局部状态"，
+ *   没有跨组件状态要维护（原则 1 约束的是**写 store**，而写 store 的部分
+ *   （`folder` / 节点状态）都走 action / 局部 state）。
  * ⚠️ **不持久化下载状态**（源版也是组件 state）—— 重启后文件还在，但"下载过"的标记会丢。
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { NodeResizer } from '@xyflow/react';
-import { usePorts, useStore } from '@/state';
+import { useHostOps, useStore } from '@/state';
 import {
   collectDownloadTargets,
   countDownloaded,
@@ -41,7 +42,7 @@ import styles from './shared.module.css';
 const ITEM_INTERVAL_MS = 300;
 
 export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
-  const ports = usePorts();
+  const hostOps = useHostOps();
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
   const patchNodeData = useStore((s) => s.patchNodeData);
@@ -62,9 +63,9 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
 
   /** 选目录（原 33-40）—— ⚠️ **本实现顺手写回节点**（见文件头的有意偏离） */
   const chooseFolder = useCallback(async () => {
-    const r = await ports.host.file.selectFolder();
+    const r = await hostOps.selectFolder();
     if (r.ok && r.value) patchNodeData(id, { folder: r.value });
-  }, [ports, id, patchNodeData]);
+  }, [hostOps, id, patchNodeData]);
 
   /**
    * 批量下载（原 41-97）
@@ -84,7 +85,7 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
       try {
         const name = downloadFileName(target.data as { label?: unknown; vid?: unknown });
         // 原版用 `${folder}/${name}` 拼路径（宿主按平台再归一）
-        const r = await ports.host.file.downloadFile(url, `${folder}/${name}`);
+        const r = await hostOps.downloadFile(url, `${folder}/${name}`);
         if (r.ok) {
           setStatus((prev) => ({
             ...prev,
@@ -112,7 +113,7 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
 
     setBusy(false);
     runningRef.current = false;
-  }, [folder, targets, ports]);
+  }, [folder, targets, hostOps]);
 
   const total = totalDownloadedBytes(status);
   const doneCount = countDownloaded(status);

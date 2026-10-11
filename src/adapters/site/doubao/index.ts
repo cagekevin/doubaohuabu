@@ -67,7 +67,9 @@ async function sampleOnce(partition: string): Promise<Result<ResultScanItem[]>> 
       items?: ResultScanItem[];
       error?: string;
     } | null;
-    if (!raw || raw.ok === false) return err('page-error', raw?.error ?? '结果扫描返回失败');
+    // ★ 2026-10-11 收口（TD-05-3）：`ok === false` ⇒ **fail-open**（脚本漏 `ok` 即被当成功）。
+    //   脚本 `buildResultScanScript` 恒返回 `{ok:true,…}`（`shared/scanScripts.ts:100`）⇒ 改 `!== true`。
+    if (!raw || raw.ok !== true) return err('page-error', raw?.error ?? '结果扫描返回失败');
     return ok(Array.isArray(raw.items) ? raw.items : []);
   } catch (e) {
     return err('page-error', toMessage(e), e);

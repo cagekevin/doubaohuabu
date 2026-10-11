@@ -80,7 +80,10 @@ export interface ImageGenResult {
  *   1. **老数据兼容**：旧工程可能带我们不知道的字段（`docs/08` W2），契约上必须允许
  *   2. **框架要求**：`@xyflow/react` 的 `Node<T>` 约束 `T extends Record<string, unknown>`
  *
- * 字段级别的**不变量**由 `core/rules/node.ts` 在**运行时**校验（有单测覆盖）。
+ * ⚠️ **字段级不变量的「运行时校验」当前未接线**（TD-02-13）：`core/rules/node.ts` 的
+ *    `validateNode` / `validateNodes` 已实现且**有单测**，但**零生产消费**
+ *    ⇒ 加载老数据 / 建节点时**不会**被体检。原文写"由 … 在运行时校验"是**假声称**，2026-10-11 改如实。
+ *    见 `docs/DATAFLOW.md` §十二。
  */
 export interface NodeDataBase {
   [k: string]: unknown;
@@ -196,6 +199,15 @@ export interface GenVideoNodeData extends NodeDataBase {
   resultPoster?: string;
   resultVid?: string;
   resultAt?: number;
+  /**
+   * 「生成中」标记 —— ★ **2026-10-11 补**：`state/generate.ts:91/124/139` 早已对**两种**生成节点
+   *   写入它（真实样本 `doubao-projects.txt` 里也确有 `"generating":false`），
+   *   但此前**只有 `GenImageNodeData` 声明**了它 ⇒ `genvideo` 侧只能靠索引签名读成 `unknown`。
+   *   现在与 `GenImageNodeData.generating`（同文件 226 行）**对齐**。
+   * ⚠️ 源的 `genvideo` 用 `apiJob`/`_pendingAttempt` 推导「生成中」（`YL.jsx:43-58` 的 `m`），
+   *   **不是**这个布尔 —— 而本仓的 `m` 等价物就是它（见 TD-16-81）。
+   */
+  generating?: boolean;
   apiJob?: unknown;
   _pendingAttempt?: unknown;
   _pendingAttempts?: unknown;

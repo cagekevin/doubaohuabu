@@ -14,6 +14,7 @@ import type { HostOS } from '@/constants';
 import type { Project } from '@/stable/model/project';
 import type {
   ApiBatchResult,
+  ApiConfigMap,
   ApiJobEvent,
   ApiJobStatus,
   ApiProviderMeta,
@@ -163,8 +164,22 @@ export interface MediaPort {
   imageFetchDataUrl(url: string): Promise<Result<string | null>>;
   captureRect(rect: CaptureRect): Promise<Result<string | null>>;
   showInFolder(ref: string): Promise<Result<void>>;
-  /** 拖出文件（会失败：宿主缺失 / 拖拽被拒）⇒ 返 `Result`，不 throw */
-  startFileDrag(payload: { dataUrl: string; name: string; thumbDataUrl?: string }): Result<void>;
+  /**
+   * 拖出文件到系统（`webContents.startDrag`，`main.js:1223`）
+   *
+   * ⚠️ **本方法的 `Result` 只能表达两件事**：宿主缺失（`window.api` 不在）/ 调用本身抛出。
+   *    **「拖拽有没有真的成功」本仓无从判定** —— 后端走的是 `ipcRenderer.send`（**无回执**），
+   *    失败只 `console.warn`（`main.js:1232,1246,1254`）。
+   *    ⇒ **调用方不得据此报「已拖出」**（如实登记：`docs/16` · 母体 M5「失败不可见」的新实例）。
+   * ⚠️ **payload 只有 `dataUrl` + `name`**：**不传缩略图** —— icon 由**后端**从原图 resize 到 64px
+   *    （`docs/10` #53「拖拽预览 icon 必须是 64px」；`main.js:1239-1244`）。
+   *    原先本端口还声明过一个 `thumbDataUrl?`，**后端从不读它**（它在那边的注释里被写成"会额外落盘
+   *    缩略图"，属**假承诺**）⇒ 2026-10-11 **删除**（幽灵字段，母体 M6）。
+   * ⚠️ 后端另支持 `path`（`docs/10` #64「传 path 优先」）—— 本仓**不暴露**：我们手上的引用是
+   *    `img://`，后端 `persistImageDataUrl` 对它**原样返回**（非 data URL 早退）⇒ 不会重复写盘，
+   *    与传 `path` 等价（判据 B5：不留没人调的字段）。
+   */
+  startFileDrag(payload: { dataUrl: string; name: string }): Result<void>;
   /**
    * 清理各账号分区的**纯缓存**（Cache / Code Cache 等，原 `clear-browser-cache`，`preload.js:81`）
    *
@@ -290,7 +305,7 @@ export interface ApiPort {
   /** provider 元信息（**脱敏**：只有 `hasKey` / `keyHint`） */
   providersList(): Promise<Result<ApiProviderMeta[]>>;
   /** 配置原文 + provider 元信息（后端**一次**返回两者） */
-  configGet(): Promise<Result<{ providers: ApiProviderMeta[]; configs: unknown }>>;
+  configGet(): Promise<Result<{ providers: ApiProviderMeta[]; configs: ApiConfigMap }>>;
   configSet(providerId: string, patch: unknown): Promise<Result<{ config: unknown }>>;
   /** 密钥明文只进不出；返回脱敏提示（`sk-****7890`） */
   configSetKey(providerId: string, key: string): Promise<Result<{ keyHint?: string; maskedBy?: string }>>;

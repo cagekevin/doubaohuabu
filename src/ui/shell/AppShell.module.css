@@ -68,3 +68,51 @@
 }
 /* 右侧弹性占位（原 `style={{ flex: 1 }}`）*/
 .topbarSpacer { flex: 1; }
+
+/*
+ * 顶栏「项目保存路径」区（原 `.topbar-project-storage`）—— 按钮一律 `composes` 共享真源（`docs/17` 查 6）
+ * ⚠️ 图标是**内联 svg**（viewBox 20×20，path 逐字抄源 `_Component42.jsx:1593`）⇒ 只给尺寸与 `fill`。
+ */
+.storage {
+  display: flex;
+  align-items: center;
+}
+
+.storageMain {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.storageIcon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.storageReveal {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/*
+ * 左栏底部「API 服务」入口（原 `_Component48.jsx:155-159` 的 `.side-api-col` / `.side-api-btn`）
+ * ⚠️ 按钮走共享真源（`docs/17` 查 6）；图标 `⚡` 是源版原文。
+ */
+.sideApiCol {
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.sideApiBtn {
+  composes: btn btnSm from '../common/shared.module.css';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.sideApiIcon {
+  flex: none;
+}

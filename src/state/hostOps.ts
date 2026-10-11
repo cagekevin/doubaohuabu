@@ -1,0 +1,79 @@
+/**
+ * 宿主能力控制器（★ 收窄 `ui` 对 `usePorts()` 的使用 —— TD-16-8）
+ *
+ * ★ **为什么需要它**：`ui` 曾**直持 `Ports`**（`usePorts()`）去调宿主能力，绕过 `state` 控制器 ——
+ *   这正是母体 **TD-16-8**（「唯一入口只剩约定、无结构约束」）。本控制器是 `ui` **需要的那部分
+ *   `HostPort` 面**的唯一落点：端口只在 `container`（组合根）注入一次，`ui` **拿不到 `Ports`**。
+ *
+ * ★ **范围 = `ports.host.*` 里 `ui` 会用到的那些**（文件域 / 媒体域 / 剪贴板）：
+ *   | 方法 | 端口 | 消费者 |
+ *   |---|---|---|
+ *   | `dragFileOut` | `host.media.startFileDrag` | `NewImagesPanel`（长按拖出到系统） |
+ *   | `copyText` | `host.clipboard.writeText` | `VideoNode`（复制配方）· `AnalyzePrompt`（复制提示词） |
+ *   | `saveTextFile` | `host.file.saveFile` | `TopBar`（导出工程 JSON） |
+ *   | `importFiles` | `host.file.importFiles` | `LibraryPanel`（从文件添加素材） |
+ *   | `selectFolder` | `host.file.selectFolder` | `DownloadNode`（选目录） |
+ *   | `downloadFile` | `host.file.downloadFile` | `DownloadNode`（批量下载） |
+ *   | `openExternal` | `host.file.openExternal` | `GalleryLightbox`（打开原图） |
+ *
+ * ⚠️ 与 `licenseOps` / `sendQueue.readPanelPos` 同法：**只转发 + 归一**，不写第二份业务判据
+ *    （业务在 `core/rules` / `usecases`；这些调用都**无编排**，故不包 `core/usecases` ——
+ *    那会成"纯中转层"，见 `16-跨区-收窄ui端口可用面-批2` §四）。
+ *
+ * ⚠️ **落点约定（防母体 M3「同一真相两份」）**：`ui` 若还需要别的 `ports.host.*` 能力，
+ *    **在本控制器上扩展方法**，**不要另起一个平行的 host 控制器**。
+ *    ⇒ 由此 **`usePorts()` 从 `@/state` 移除**（结构上让 `ui` 拿不到 `Ports`）。
+ *
+ * ⚠️ **不落 store**：这些都是一次性副作用 / 显示偏好，不是要跨组件共享的画布状态。
+ */
+
+import type { Ports, PickedFile } from '@/core/ports';
+import type { Result } from '@/core/model/result';
+
+export interface HostOpsController {
+  /**
+   * 把一张图**拖出到系统**（`webContents.startDrag`）—— 原 `_Component26.jsx` 的 `se`。
+   *
+   * ⚠️ 返回的 `Result` **只可能表达两件事**：宿主缺失 / 调用本身抛出。
+   *    「拖拽有没有真的成功」**无从判定** —— 后端走 `ipcRenderer.send`（无回执），失败只 `console.warn`
+   *    （`electron/main.js:1232,1246,1254`）⇒ 调用方**不得**据此报「已拖出」（TD-16-63，母体 M5）。
+   */
+  dragFileOut(input: { dataUrl: string; name: string }): Result<void>;
+
+  /**
+   * 写**纯文本**剪贴板。
+   *
+   * ⚠️ 走端口而非 `navigator.clipboard`：端口实现内部保证 `docs/10` #8 的
+   *    **`clear()` → `writeText()` → `await`** 序列（`host.port.ts:74`「实现内部必须…」）——
+   *    直调浏览器 API 会漏掉 `clear()`（旧内容可能残留）。
+   */
+  copyText(text: string): Promise<Result<void>>;
+
+  /** 系统「另存为」对话框写文本文件（原 `TopBar` 导出工程 —— `host.file.saveFile`） */
+  saveTextFile(content: string): Promise<Result<{ path?: string }>>;
+
+  /** 系统「打开文件」对话框选素材（`LibraryPanel` 从文件添加 —— `host.file.importFiles`） */
+  importFiles(): Promise<Result<PickedFile[]>>;
+
+  /** 系统「选目录」对话框（`DownloadNode` —— `host.file.selectFolder`）；**取消 ⇒ `ok(null)`** */
+  selectFolder(): Promise<Result<string | null>>;
+
+  /** 下载到指定路径（`DownloadNode` —— `host.file.downloadFile`） */
+  downloadFile(url: string, fileName: string): Promise<Result<{ path?: string; size?: number }>>;
+
+  /** 用系统默认程序打开外链（`GalleryLightbox` 打开原图 —— `host.file.openExternal`） */
+  openExternal(url: string): Promise<Result<void>>;
+}
+
+export function createHostOps(ports: Ports): HostOpsController {
+  // 端口**只在这里**被取一次 —— 控制器之外（`ui`）拿不到 `Ports`
+  return {
+    dragFileOut: (input) => ports.host.media.startFileDrag(input),
+    copyText: (text) => ports.host.clipboard.writeText(text),
+    saveTextFile: (content) => ports.host.file.saveFile(content),
+    importFiles: () => ports.host.file.importFiles(),
+    selectFolder: () => ports.host.file.selectFolder(),
+    downloadFile: (url, fileName) => ports.host.file.downloadFile(url, fileName),
+    openExternal: (url) => ports.host.file.openExternal(url),
+  };
+}

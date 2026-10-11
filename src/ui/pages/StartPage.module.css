@@ -45,3 +45,8 @@
 .newProject {
   composes: btn btnPrimary from '../common/shared.module.css';
 }
+
+/* 「导入项目文件（.json）」—— 次级按钮（同走共享真源，不新造视觉） */
+.importProject {
+  composes: btn btnGhost from '../common/shared.module.css';
+}

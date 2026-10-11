@@ -16,11 +16,12 @@
  *   ① `勾选此图`（原 580-584）—— 它要画廊的**选择态**，而选择态的用途（「添加到画布」）
  *      在本工程尚未落地（见 `GalleryPanel` 文件头的登记）⇒ 不落一个"勾了也没用"的按钮；
  *   ② `ao()`（原 126：去掉 URL 上的追踪参数）—— 本工程直接开 `sourceUrl` 原文。
- * ⚠️ **原则 1**：本组件只调 `usePorts()`（`openExternal`）与 store 的 `pushToast`。
+ * ⚠️ **原则 1**：本组件只调 `useHostOps()`（`openExternal`）与 store 的 `pushToast`
+ *    —— `ui` 不得直持 `Ports`（TD-16-8；`usePorts` 已从 `@/state` 移除）。
  */
 
 import { useEffect } from 'react';
-import { usePorts, useStore } from '@/state';
+import { useHostOps, useStore } from '@/state';
 import { Modal } from '@/ui/common/Modal';
 import { GALLERY_TEXT } from '@/constants/text';
 import { formatBytes } from '@/core/rules/downloadNode';
@@ -53,7 +54,7 @@ export function GalleryLightbox({
   onClose,
   onRemove,
 }: GalleryLightboxProps) {
-  const ports = usePorts();
+  const hostOps = useHostOps();
   const pushToast = useStore((s) => s.pushToast);
 
   /** `←` / `→` 翻页（**全局键**，与源版同法 —— `Esc` 由 `<Modal>` 负责） */
@@ -81,7 +82,7 @@ export function GalleryLightbox({
       pushToast(GALLERY_TEXT.openOriginalNone, 4000, 'warn');
       return;
     }
-    const r = await ports.host.file.openExternal(url);
+    const r = await hostOps.openExternal(url);
     if (r.ok) pushToast(GALLERY_TEXT.openOriginalOk, 2500);
     else pushToast(GALLERY_TEXT.openOriginalFailed(r.message), 4000, 'error');
   };

@@ -23,6 +23,10 @@ import { createAccountOps, type AccountOpsController } from '@/state/accountOps'
 import { createBatchSendController, type BatchSendController } from '@/state/batchSend';
 import { createSendQueueController, type SendQueueController } from '@/state/sendQueue';
 import { createCaptureController, type CaptureController } from '@/state/capture';
+import { createLicenseOps, type LicenseOpsController } from '@/state/licenseOps';
+import { createHostOps, type HostOpsController } from '@/state/hostOps';
+import { createProjectOps, type ProjectOpsController } from '@/state/projectOps';
+import { createApiOps, type ApiOpsController } from '@/state/apiOps';
 import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/lib/hostEnv';
 import { filterWinScreens, filterWinWebgl } from '@/core/rules/fingerprintGenerator';
 import { createSubscriptions, type Subscriptions } from '@/state/subscriptions';
@@ -62,6 +66,14 @@ export interface Container {
   batchSend: BatchSendController;
   sendQueue: SendQueueController;
   capture: CaptureController;
+  /** 授权控制器（激活页 / 授权门 —— 收窄 ui 对 `usePorts()` 的使用，TD-16-8） */
+  licenseOps: LicenseOpsController;
+  /** 宿主能力控制器（拖出文件 / 剪贴板 —— 同批收窄 `ui` 对 `usePorts()` 的使用，TD-16-8） */
+  hostOps: HostOpsController;
+  /** 工程操作控制器（导入工程 —— 接 `core/usecases/importProject`，此前 0 生产消费） */
+  projectOps: ProjectOpsController;
+  /** API 配置控制器（provider / 密钥 / 测试连接；原 `_Component46` 直调 `window.api` 的收口） */
+  apiOps: ApiOpsController;
   /**
    * 启动加载（读键 + **启动归位** + 灌 store）
    * ⚠️ 注释更正（2026-10-10）：原写「+ 5 条迁移」—— 4 条已按 TD-16-2 删除，
@@ -119,11 +131,14 @@ export function createContainer(): Container {
         // ★ Lovart 画廊（同账号族：不接这一步就只在内存）
         lovartGalleries: s.lovartGalleries,
         scanHistory: s.scanHistory,
+        // ★ 节点 / 提示词预设（同上：不接这一步就只在内存）
+        presets: s.presets,
       };
     },
     // 原则 6：错误原样写入 saveError（不改写 message）
-    onError: (message) => store.useStore.setState({ saveError: { message, at: clock.now() } }),
-    onOk: () => store.useStore.setState({ saveError: null }),
+    //   ⚠️ 经**具名 action**（`AppStoreHook` 已摘掉 `setState`）—— 顺带清偿 TD-16-5（`setSaveError` 曾是死 action）
+    onError: (message) => store.useStore.getState().setSaveError({ message, at: clock.now() }),
+    onOk: () => store.useStore.getState().setSaveError(null),
   });
 
   // ★ 把 persist 接到 store：**只有"该存的数据"变了才安排落盘**
@@ -142,6 +157,8 @@ export function createContainer(): Container {
     // ★ Lovart 画廊：变了也要安排落盘（否则加图/清理都不落盘）
     s.lovartGalleries,
     s.scanHistory,
+    // ★ 预设：变了也要安排落盘（否则导入并入的预设不落盘）
+    s.presets,
   ];
   let last = pick(store.useStore.getState());
   store.useStore.subscribe((s) => {
@@ -161,12 +178,26 @@ export function createContainer(): Container {
     ports,
     gen: createGenController(store, ports),
     analyze: createAnalyzeController(store, ports),
-    accountOps: createAccountOps(store, ports),
+    accountOps: createAccountOps(store, ports, {
+      // ⚠️ 与下面 `capture` 同法：**运行环境在组合根读**，`state` 层不碰 `document`（TD-16-54 的教训）
+      //   —— 原 `_Component26` 的 `Ee:478` 用 `document.hidden` 决定「页面隐藏时这一轮不扫」。
+      isHidden: () => typeof document !== 'undefined' && document.hidden,
+      // ⚠️ 同法：宿主平台在组合根读（`host.os` 来自 preload 的 `process.platform`）
+      //   —— `state` 层**不读 `navigator`**（TD-16-54）；供「指纹诊断按钮只在 Windows 显示」
+      os: readHostOs(host.os),
+    }),
     batchSend: createBatchSendController(store, ports),
     capture: createCaptureController(store, ports, {
       // ⚠️ 运行环境在这里读（`container` 是组合根）—— `state` 层不碰 `window`
       dpr: () => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
     }),
+    licenseOps: createLicenseOps(ports),
+    hostOps: createHostOps(ports),
+    projectOps: createProjectOps(store, ports, {
+      // ⚠️ 时序职责走注入：选保存路径前必须先把当前画布落盘（源版 `flushPersist()`）
+      flush: (reason) => persist.flush(reason),
+    }),
+    apiOps: createApiOps(store, ports),
     sendQueue: (() => {
       const c = createSendQueueController(store, ports);
       /**

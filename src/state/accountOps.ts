@@ -16,7 +16,14 @@
 
 import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
-import { applyProxyAssignments, releaseSession } from '@/core/usecases/prepareSession';
+import type { Result } from '@/core/model/result';
+import type { HostOS } from '@/constants';
+import {
+  applyProxyAssignments,
+  prepareSession,
+  releaseSession,
+  type SessionReady,
+} from '@/core/usecases/prepareSession';
 import { assignProxyPool, normalizeProxyPool } from '@/core/rules/proxy';
 import {
   buildFingerprintDiagnosis,
@@ -33,8 +40,18 @@ import {
 // ★ 抓图入库用例（原 `wp` / `xp` / `NR` 的编排半 —— 扫页面 → 画廊入参）
 import { scanGallery as runScanGallery } from '@/core/usecases/scanGallery';
 import type { ScanPhaseEvent } from '@/core/ports/site.port';
+// ★ 自动值守的**纯决策**（原 `_Component26` 的 `Ee` 取值半）—— 定时与 IO 在本文件（编排层）
+import {
+  advanceAutoWatch,
+  autoWatchBaseDelay,
+  autoWatchJitter,
+  initialAutoWatchProgress,
+  shouldAutoWatchScan,
+  type AutoWatchProgress,
+} from '@/core/rules/autoWatch';
+import type { Cancel } from '@/core/ports/clock.port';
 import type { NewAccountInput } from '@/core/rules/accountRoster';
-import { ACCOUNT_STATUS } from '@/stable/model/account';
+import { ACCOUNT_STATUS, type Account } from '@/stable/model/account';
 import { SEND_TEXT } from '@/constants/text';
 
 /**
@@ -119,6 +136,60 @@ export interface AccountOpsController {
     accountIds: readonly string[],
     opts?: { onPhase?: (event: ScanPhaseEvent) => void },
   ): Promise<ScanGallerySummary>;
+
+  /**
+   * ★ **自动值守开 / 关**（原 `_Component26` 的 `he` 开关 + `Ee` 循环）
+   *
+   * ★ **谁能值守、什么节奏**：由**适配器**声明（`SitePort.autoWatch`）—— 本控制器**不认站点名**。
+   *    ⛔ `lovart` **不声明**该能力（风控，`docs/10` #11 / `electron/main.js:2749`）⇒ 它**不会**被值守；
+   *    ✅ `tapnow` 等声明了的站点会被值守（源版 `Ee` 本就覆盖两者）。
+   * ★ **参与条件**（与源一致，`Ee:434`）：账号的 `autoStart === true` **且** 其站点声明了 `autoWatch`。
+   *
+   * ⚠️ **幂等**：`setAutoWatch(true)` 会**先停再建**（账号增删 / `autoStart` 变化后由此重建）。
+   * ⚠️ **刻意不落源版的一处**：源 `Ee` 在「正在手动抓取」（`Jy()`/`o0()`）时顺延；本工程手动抓取
+   *    与值守共用 `scanGallery`，**不做互斥**（如实标注，见 `docs/16`）。
+   */
+  setAutoWatch(on: boolean): void;
+  /**
+   * ★ **准备 `<webview>` 的会话**（原 `_Component25.jsx:56-76` —— `usecases/prepareSession` 文件头
+   *   点名的那个场景）；只走 `fingerprint` 模式。
+   *
+   * ⚠️ 入参是**窄接口**（三个字段，**不收整个 `Account`**）：调用方在 effect 里按字段做依赖，
+   *    传整个对象会让 effect 因**对象标识变化**而重跑 ⇒ 重复打 IPC。
+   * @returns 就绪后的 `preloadUrl`（`null` = 该模式没有 preload）；失败**原样转发**（原则 6）
+   */
+  prepareWebviewSession(input: WebviewSessionInput): Promise<Result<SessionReady>>;
+  /**
+   * 该账号 `<webview>` 的会话页地址（`SitePort.chatUrl`）
+   * @returns 站点声明值，或 `about:blank`（**不编造 URL**，与源 `?? 'about:blank'` 一致）
+   */
+  chatUrlOf(type: Account['type']): string;
+  /**
+   * 指纹诊断按钮的显示判据（原 `_P`，`shared.js:34202-34210`：**源版只在 Windows 显示**）
+   * ⚠️ 宿主读数由 `bootstrap` 注入（`AccountOpsDeps.os`），**不是** ui 去读 `ports.host.os`
+   */
+  readonly canDiagnoseFingerprint: boolean;
+  /** 清理浏览器缓存（原 `OP.jsx:181-213` 的 `he()`）—— 单端口调用，**不建 usecase**（无编排） */
+  clearBrowserCache(): Promise<Result<{ cleared: number; failed?: number }>>;
+}
+
+/** `prepareWebviewSession` 的入参（**窄接口**：只要这三个字段） */
+export interface WebviewSessionInput {
+  accountId: string;
+  /** 允许 `null`（真实样本里有未设分区的账号）—— **如实传**，后端自己回落 */
+  partition: string | null;
+  fingerprint?: unknown;
+}
+
+/** `createAccountOps` 的注入（宿主/环境读数 —— `state` 不直碰 `document`/`navigator`，见 TD-16-54） */
+export interface AccountOpsDeps {
+  /** 页面是否被隐藏（原 `Ee:478` 的 `document.hidden`）—— 由 `bootstrap` 注入，`state` 不直读 DOM */
+  isHidden: () => boolean;
+  /**
+   * 宿主平台（原 `_P` 读的 `window.api.hostOS`）—— 同样由 `bootstrap` 注入。
+   * ⚠️ 若不注入就得在 `state` 里读 `navigator.platform` ⇒ 违反「宿主读数走端口/组合根」。
+   */
+  os: HostOS;
 }
 
 /** `scanGallery` 的结果（**结构化计数** —— UI 据此出提示，控制器不拼文案） */
@@ -133,7 +204,87 @@ export interface ScanGallerySummary {
   skipped: number;
 }
 
-export function createAccountOps(store: AppStore, ports: Ports): AccountOpsController {
+export function createAccountOps(
+  store: AppStore,
+  ports: Ports,
+  deps: AccountOpsDeps,
+): AccountOpsController {
+  /**
+   * 扫**一个**账号并落库（原 `wp` 的「单账号」那份）
+   *
+   * ★ 抽成局部函数供**两处**共用（判据 C1）：
+   *   ① `scanGallery`（**手动**「立即抓取」，逐账号）② 值守循环（`setAutoWatch`）
+   * ⚠️ 失败**原样上报**（原则 6：`pushBackendError`），返回 `null` 让调用方决定是否继续。
+   */
+  const scanOne = async (
+    account: Account,
+    onPhase?: (event: ScanPhaseEvent) => void,
+  ): Promise<{ added: number; failed: number; skipped: number } | null> => {
+    const r = await runScanGallery({ sites: ports.sites }, account, onPhase ? { onPhase } : {});
+    if (!r.ok) {
+      store.useStore.getState().pushBackendError('unknown', r.message);
+      return null;
+    }
+    return {
+      added: store.useStore.getState().addLovartImages(account.id, r.value.items),
+      failed: r.value.failed,
+      skipped: r.value.skipped,
+    };
+  };
+
+  // ── 自动值守（原 `_Component26` 的 `Ee` 428-592）────────────────────────────
+  /** 在跑的中途取消句柄（按账号 id）—— `setAutoWatch(false)` 即全清 */
+  const watchTimers = new Map<string, Cancel>();
+  /** 每账号进度（原 `je.idleRounds` / `je.autoCount`） */
+  const watchProgress = new Map<string, AutoWatchProgress>();
+  /** 值守是否开启（异步回调里据此自停 —— 关掉后到达的 tick 不再续排） */
+  let watching = false;
+
+  const stopWatch = (): void => {
+    for (const cancel of watchTimers.values()) cancel();
+    watchTimers.clear();
+    watchProgress.clear();
+  };
+
+  const scheduleWatch = (accountId: string, delayMs: number): void => {
+    // ⚠️ 走 **`ClockPort`**（原则 4 的延伸：时序可注入）—— **不直调 `setTimeout`**，
+    //    也**不碰 `window`**（TD-16-54 的教训）。
+    const cancel = ports.clock.setTimeout(() => {
+      void tickWatch(accountId);
+    }, delayMs);
+    watchTimers.set(accountId, cancel);
+  };
+
+  /** 一个账号的一轮（原 `Ee` 471-592 的骨架） */
+  const tickWatch = async (accountId: string): Promise<void> => {
+    if (!watching) return;
+    const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
+    // ★ 能力**问注册表**（`ports.sites[type].autoWatch`）—— **不判站点名**（注册制）
+    const cadence = account ? ports.sites[account.type]?.autoWatch : undefined;
+    if (!account || !cadence) {
+      // 账号被删 / 换成了不支持的站点 ⇒ 这条链自行退出（下次 `setAutoWatch` 重建）
+      watchTimers.delete(accountId);
+      return;
+    }
+    const prev = watchProgress.get(accountId) ?? initialAutoWatchProgress();
+    // ① 页面**隐藏** ⇒ 本轮不扫，按基础节奏顺延（原 `Ee:478` 的 `document.hidden`）
+    if (deps.isHidden()) {
+      scheduleWatch(accountId, autoWatchBaseDelay(prev, cadence));
+      return;
+    }
+    // ② 已**喂饱**（`autoCount` 达上限）⇒ 不扫，按退避顺延（原 `Ee:486`）
+    if (!shouldAutoWatchScan(prev)) {
+      scheduleWatch(accountId, autoWatchBaseDelay(prev, cadence));
+      return;
+    }
+    const r = await scanOne(account);
+    if (!watching) return; // 这轮跑的过程中被关掉了 ⇒ 不再续排
+    const next = advanceAutoWatch(prev, r?.added ?? 0);
+    watchProgress.set(accountId, next);
+    // ③ 基础 / 退避 + **按账号 id 错峰抖动**（原 `re(je, X(Ve) + je.jitter)`）
+    scheduleWatch(accountId, autoWatchBaseDelay(next, cadence) + autoWatchJitter(accountId));
+  };
+
   return {
     addAccount: (input) => store.useStore.getState().addAccount(input),
 
@@ -176,8 +327,9 @@ export function createAccountOps(store: AppStore, ports: Ports): AccountOpsContr
           ? { ...a, status: loggedIn ? ACCOUNT_STATUS.loggedIn : ACCOUNT_STATUS.loggedOut }
           : a,
       );
-      // ★ 只有 state 能写 store（原则 1）—— 本控制器是 state 层的文件，写在这里是合规的
-      store.useStore.setState({ accounts: next });
+      // ★ 只有 state 能写 store（原则 1）—— 且只能经**具名 action**
+      //   （`AppStoreHook` 已从对外类型摘掉 `setState`，直写=编译错误）
+      store.useStore.getState().setAccounts(next);
       // ⚠️ `accounts` 已在 `container.ts` 的自动落盘监听列表里 ⇒ 无需显式 persist
       return loggedIn;
     },
@@ -220,8 +372,8 @@ export function createAccountOps(store: AppStore, ports: Ports): AccountOpsContr
       s0.setProxyPool(pool);
       // ② 纯层轮询分配（原 `reassignLovartProxies` 30331-30346）
       const r = assignProxyPool(s0.accounts, pool);
-      // ③ 账号写回（`proxy` 字段）
-      store.useStore.setState({ accounts: r.accounts });
+      // ③ 账号写回（`proxy` 字段）—— 经具名 action（同上）
+      store.useStore.getState().setAccounts(r.accounts);
       // ④ 逐条落宿主（原 30347-30351）—— 源版 `.catch(() => {})` **全吞** ⇒ 这里如实上报（原则 6）
       const out = await applyProxyAssignments({ account: ports.host.account }, r.assignments);
       for (const f of out.failures) store.useStore.getState().pushBackendError('unknown', f);
@@ -262,23 +414,74 @@ export function createAccountOps(store: AppStore, ports: Ports): AccountOpsContr
       let failed = 0;
       let skipped = 0;
       for (const account of targets) {
-        const r = await runScanGallery(
-          { sites: ports.sites },
-          account,
-          // ⚠️ `onPhase` 只做转发（阶段机归 UI；本控制器不存它）
-          { ...(opts?.onPhase ? { onPhase: opts.onPhase } : {}) },
-        );
-        if (!r.ok) {
-          // 原则 6：不静默（源版只对 tapnow 那条提示，其余吞掉）；**但不中断**其余账号
-          store.useStore.getState().pushBackendError('unknown', r.message);
-          continue;
-        }
-        // ★ 落库（原则 1：写 store 只在 state）—— 去重由 `addLovartImages` 兜底
-        added += store.useStore.getState().addLovartImages(account.id, r.value.items);
-        failed += r.value.failed;
-        skipped += r.value.skipped;
+        // ⚠️ `onPhase` 只做转发（阶段机归 UI；本控制器不存它）
+        // ⚠️ 原则 6：单账号失败**原样上报但不中断**其余（源 `oe` 的 `for` 就是跳过）
+        const r = await scanOne(account, opts?.onPhase);
+        if (!r) continue;
+        added += r.added;
+        failed += r.failed;
+        skipped += r.skipped;
       }
       return { scanned: targets.length, added, failed, skipped };
+    },
+
+    setAutoWatch(on) {
+      // ★ 幂等：**先停再建**（账号增删 / `autoStart` 变化后由调用方再调一次即可重建）
+      stopWatch();
+      watching = on;
+      if (!on) return;
+      for (const account of store.useStore.getState().accounts) {
+        // ★ 参与条件（与源 `Ee:434` 一致）：账号开了「自启动」**且** 其站点适配器声明了值守能力。
+        //   ⚠️ 这里**只问注册表**（`ports.sites[type].autoWatch`）—— **不写 `type === 'lovart'`**：
+        //      「Lovart 不值守」是**站点细节**，住 `adapters/site/lovart`（它压根不声明该能力）。
+        const cadence = ports.sites[account.type]?.autoWatch;
+        if (account.autoStart !== true || !cadence) continue;
+        watchProgress.set(account.id, initialAutoWatchProgress());
+        // 首发也带抖动（原 `re(je, te(Ve) + je.jitter)`）—— 多账号不会被同拍叫醒
+        scheduleWatch(account.id, cadence.intervalMs + autoWatchJitter(account.id));
+      }
+    },
+
+    /**
+     * ★ **准备 `<webview>` 的会话**（原 `_Component25.jsx:56-76`）
+     *
+     * ⚠️ 只走 `fingerprint` 模式：调用方（`BackendView`）**仍自行**守卫 `type !== 'other'`
+     *    —— 本方法**不接管**那个判据（保持行为等价；`other` 类型本来就没有指纹）。
+     * ⚠️ 失败**原样转发**（原则 6）—— 由调用方决定"要不要挂 preload"。
+     */
+    async prepareWebviewSession(input) {
+      return prepareSession(
+        { account: ports.host.account },
+        {
+          mode: 'fingerprint',
+          accountId: input.accountId,
+          partition: input.partition,
+          ...(input.fingerprint === undefined ? {} : { fingerprint: input.fingerprint }),
+        },
+      );
+    },
+
+    /**
+     * 该账号 `<webview>` 的会话页地址（`SitePort.chatUrl`）
+     *
+     * ⚠️ 站点细节**住适配器**（不在这里写死站点名）；未声明 ⇒ `about:blank`（与源一致，**不编造**）。
+     */
+    chatUrlOf(type) {
+      return ports.sites[type]?.chatUrl ?? 'about:blank';
+    },
+
+    /** 指纹诊断按钮的显示判据（原 `_P`：**源版只在 Windows 显示**）—— 宿主流派由注入决定 */
+    canDiagnoseFingerprint: deps.os === 'windows',
+
+    /**
+     * 清理浏览器缓存（原 `OP.jsx:181-213` 的 `he()`）
+     *
+     * ⚠️ **不建 usecase**：它是**单端口调用、无编排** —— 再包一层就是"纯中转层"
+     *    （7 步法 Step 6 第 0 关：删/不建它，暴露面一项没变）。源版那条「当前环境不支持」
+     *    分支**不可达**（端口契约恒存在），故不落（判据 B5）。
+     */
+    async clearBrowserCache() {
+      return ports.host.media.clearBrowserCache();
     },
   };
 }

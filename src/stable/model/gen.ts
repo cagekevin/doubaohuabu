@@ -87,19 +87,63 @@ export interface ApiBatchResult {
   total: number;
 }
 
-/** provider 元信息（渲染层只读；密钥明文永不过桥） */
+/**
+ * provider 动态表单字段（原 `api/types.js` 的 `ParamField`；后端 `registry.js:31` **逐字**下发）
+ *
+ * ★ **schema 驱动**：新增一个服务商 = 一个 provider 文件 + 一行注册，**零 UI 代码**
+ *   （设置页 / 生成面板都按这张表渲染）。
+ */
+export interface ParamField {
+  /** 参数键（写入 `config.params` / 提交 `params`） */
+  key: string;
+  label: string;
+  type: 'select' | 'number' | 'text';
+  /** `type: 'select'` 的可选项 */
+  options?: Array<{ value: string; label: string }>;
+  min?: number;
+  max?: number;
+  default?: unknown;
+}
+
+/**
+ * provider 元信息（渲染层只读；密钥明文永不过桥）
+ *
+ * ⚠️ **2026-10-11 形状更正**：原先这里混进了 `enabled` / `hasKey` / `keyHint` / `hasSecret` ——
+ *    那四个是**配置**字段（后端 `config-store.js:141` 的 `publicOf` 才给），而元信息口
+ *    （`registry.js:27` 的 `listProvidersMeta`）**只回** `id/name/capabilities/paramSchema/defaults/domains`
+ *    ⇒ 旧类型在撒谎（真实宿主**永远不给**那四个）。已移入 `ApiProviderConfig`。
+ */
 export interface ApiProviderMeta {
   id: string;
   name: string;
   capabilities: readonly string[];
-  enabled?: boolean;
-  /** 是否已配置密钥（脱敏） */
-  hasKey?: boolean;
-  /** 形如 `sk-****7890` */
-  keyHint?: string;
-  hasSecret?: boolean;
+  /** ★ schema 驱动表单（原 `paramSchema`） */
+  paramSchema?: ParamField[];
+  /** 默认配置（`baseUrl` / `model` 等；用户未覆盖时用） */
+  defaults?: Record<string, unknown>;
+  /** 公开端点地址（可下发） */
   domains?: string[];
 }
+
+/**
+ * provider 的**配置**（后端 `config-store.js:141` 的 `publicOf` **逐字**）
+ *
+ * ⚠️ 脱敏：只有 `hasKey` / `keyHint` / `hasSecret`；**密钥明文永不过桥**。
+ */
+export interface ApiProviderConfig {
+  id: string;
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  params: Record<string, unknown>;
+  hasKey: boolean;
+  /** 形如 `sk-****7890`；无密钥 ⇒ 空串 */
+  keyHint: string;
+  hasSecret: boolean;
+}
+
+/** `api-config:get` 的 `configs` —— **按 `providerId` 索引**（原 `{[id]: publicOf(adapter)}`） */
+export type ApiConfigMap = Record<string, ApiProviderConfig>;
 
 /** API 配置（`apiSetupGet`） */
 export interface ApiSetup {

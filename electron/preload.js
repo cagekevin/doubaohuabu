@@ -81,7 +81,7 @@ contextBridge.exposeInMainWorld('api', {
   clearBrowserCache: () => ipcRenderer.invoke('clear-browser-cache'),
   // 跨界面拖放：把一张图片作为真实文件发起系统级拖拽（拖到 Lovart / Tapnow 的 webview 内松手即放入素材）。
   // 渲染进程长按时调用，主进程把 dataUrl 落盘后调用 webContents.startDrag 启动系统拖拽。
-  // payload: { dataUrl, name, thumbDataUrl? }，thumbDataUrl 用于拖拽预览 icon，dataUrl 才是真正 drop 的文件。
+  // payload: { dataUrl, name }，dataUrl 才是真正 drop 的文件；拖拽 icon 由主进程从原图 resize 到 64px。
   startFileDrag: (payload) => ipcRenderer.send('start-file-drag', payload),
   // 在 Finder 中显示 img:// 引用对应的本地文件（素材节点右键菜单）
   showInFolder: (ref) => ipcRenderer.invoke('show-in-folder', ref),

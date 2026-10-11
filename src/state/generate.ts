@@ -43,21 +43,13 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
       const s = store.useStore.getState();
       const node = s.nodes.find((n) => n.id === nodeId);
       if (!node) {
-        store.useStore.setState({
-          backendErrors: [
-            ...s.backendErrors,
-            { id: `err-${ports.clock.now()}`, kind: 'unknown', message: `节点不存在：${nodeId}` },
-          ],
-        });
+        // ★ 经**唯一写入口** `pushBackendError`（带 kind 去重 + 统一 id）
+        //   —— 原先是直改 `setState` 绕过它（TD-07-2）
+        store.useStore.getState().pushBackendError('unknown', `节点不存在：${nodeId}`);
         return false;
       }
       if (node.type !== 'imggen' && node.type !== 'genvideo') {
-        store.useStore.setState({
-          backendErrors: [
-            ...s.backendErrors,
-            { id: `err-${ports.clock.now()}`, kind: 'unknown', message: `节点类型 ${node.type} 不支持生成` },
-          ],
-        });
+        store.useStore.getState().pushBackendError('unknown', `节点类型 ${node.type} 不支持生成`);
         return false;
       }
 
@@ -72,12 +64,7 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
         if (s.apiSetup.imageProviderId || s.apiSetup.videoProviderId) {
           // 继续（API 通道不需要账号）
         } else {
-          store.useStore.setState({
-            backendErrors: [
-              ...s.backendErrors,
-              { id: `err-${ports.clock.now()}`, kind: 'unknown', message: '无可用账号' },
-            ],
-          });
+          store.useStore.getState().pushBackendError('unknown', '无可用账号');
           return false;
         }
       }
@@ -120,14 +107,9 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
 
       const now = ports.clock.now();
       if (!res.ok) {
-        // ★ 原样写进 backendErrors（原则 6）
+        // ★ 原样写进 backendErrors（原则 6）—— 同上，走唯一写入口
         store.useStore.getState().patchNodeData(nodeId, { generating: false });
-        store.useStore.setState({
-          backendErrors: [
-            ...store.useStore.getState().backendErrors,
-            { id: `err-${now}`, kind: 'unknown', message: res.message },
-          ],
-        });
+        store.useStore.getState().pushBackendError('unknown', res.message);
         return false;
       }
 

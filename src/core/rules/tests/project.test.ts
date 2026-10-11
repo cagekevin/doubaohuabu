@@ -23,7 +23,7 @@ import {
   renameProject,
   setProjectStoragePath,
 } from '../project';
-import type { GraphPreset, Project } from '@/stable/model/project';
+import type { GraphPreset, PromptPreset, Project } from '@/stable/model/project';
 
 const makeProject = (id: string, name: string, storagePath?: string): Project => ({
   id,
@@ -152,6 +152,15 @@ describe('mergeImportedPresets（原 30025-30040）', () => {
     expect(mergeImportedPresets([], undefined)).toEqual([]);
     expect(mergeImportedPresets([], 'nope')).toEqual([]);
     expect(mergeImportedPresets([], [null, 1, 'x'])).toEqual([]);
+  });
+
+  it('★ 契约是**联合**（`Preset`）：提示词预设（**无 `kind`**）也照收 —— 2026-10-11 形状更正', () => {
+    // ⚠️ 源 `doubao-presets` 数组**混装**两种：提示词预设（无 kind）+ 图预设（kind:'graph'）
+    //    ⇒ 若把值形状写成 `GraphPreset[]`，这一条**根本传不进来**（旧类型的失真点）。
+    const prompt: PromptPreset = { id: 'pre_p1', name: '我的提示词', content: '一只橘猫' };
+    expect(mergeImportedPresets([], [prompt])).toEqual([prompt]);
+    // 与图预设**同数组**判重（按 id，不分形状）
+    expect(mergeImportedPresets([prompt], [prompt, preset('pre_g1')]).map((p) => p.id)).toEqual(['pre_g1']);
   });
 });
 

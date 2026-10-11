@@ -4,13 +4,17 @@
  */
 
 export { createAppStore, type AppState, type AppStore, type AppStoreHook, type AppStoreDeps } from './store';
-export { StoreProvider, usePorts, useStore, useGen, useAnalyze, useAccountOps, useBatchSend, useCapture, useSendQueue, useStoreApi } from './context';
+export { StoreProvider, useStore, useGen, useAnalyze, useAccountOps, useBatchSend, useCapture, useSendQueue, useStoreApi, useLicenseOps, useHostOps, useProjectOps, useApiOps } from './context';
 export type { GenController } from './generate';
 export type { AnalyzeController } from './analyze';
 export type { AccountOpsController } from './accountOps';
 export type { BatchSendController } from './batchSend';
 export type { SendQueueController } from './sendQueue';
 export type { CaptureController } from './capture';
+export type { HostOpsController } from './hostOps';
+export type { ProjectOpsController } from './projectOps';
+/** ★ 只导出**面板真的用**的两个类型（判据 B5：`ApiOpsController` / `SaveProviderInput` 无人消费 ⇒ 不导出） */
+export type { ProviderDraft, ProviderTestResult } from './apiOps';
 export type { UiSlice, BannerError } from './slices/ui';
 export type { GlobalSlice, SaveError } from './slices/global';
 export type { CanvasSlice, CanvasSnapshot, CanvasSliceDeps } from './slices/canvas';

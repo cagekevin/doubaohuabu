@@ -40,12 +40,15 @@
  *   node scripts/debt.mjs area <NN>            # 某区**全部**历史债（含归档）—— 开审前查"这区以前查出过什么"
  *   node scripts/debt.mjs search <关键词> [--area 22]   # 跨区找同类问题（多词 AND）
  *   node scripts/debt.mjs show <TD-ID>         # 单条最新真相 + **解法入口**（锚点区域日志）
+ *   node scripts/debt.mjs mothers              # ★ 母体登记表（唯一真源）—— 引用母体**必须带规范名**（TD-16-61）
  *   node scripts/debt.mjs audit [--liveness]   # 只读体检（**不是闸**）；常开"锚点里有没有这个债号"（断链巡检）；
  *                                              # --liveness 追加"债描述点名的代码文件是否还在"
  * 用法（写 / 维护）：
  *   node scripts/debt.mjs add --area 22 --summary "…" [--class 增债] [--rate 中] [--owner 结构债]
  *                              [--anchor 22-视频-横切全量-2026-09-13.md] [--refs "@见 TD-xx"]
  *   node scripts/debt.mjs resolve <TD-ID> [--status 已解决] [--note "…"] [--date YYYY-MM-DD]
+ *                              # ⚠️ `--note` 请带**可复现证据**（命令 / 探针引用）——
+ *                              #    一凭证闸的防线是「动作」不是闸（TD-16-41；建闸前置评审未过）
  *   node scripts/debt.mjs edit <TD-ID> --field summary｜solution｜classify｜rate --value "…"
  *                              # 整格/文本替换：现象 · 解法（寄居状态格）· 归类 · 利息率
  *   node scripts/debt.mjs reanchor <TD-ID> --anchor 22-视频-剪辑器-M2计划审计-2026-09-14.md
@@ -107,6 +110,27 @@ const SYNONYMS = {
   注释漂移: ['描述漂移', '失实注释', '过时注释', 'stale'],
   漏网: ['未覆盖', '盲区', '回潮', '复发'],
 };
+/**
+ * ★ **母体登记表 —— 「母体编号」的唯一真源**（TD-16-61 的结构解）
+ *
+ * 【为什么必须有】母体编号此前只散落在**多份轮次文件的散文**里 ⇒ 实测**同名两义**：
+ *   `M2` 在一处指「守卫声索 > 覆盖」、在另一处被当成「兜底不留痕」（后者实为 `M5`）；
+ *   且 `M1` 还与**里程碑 M1**（`docs/16` §7 的 M0~M14）**撞号**。
+ * 【规矩】引用母体**必须带规范名**（写 `M2（守卫声索 > 覆盖）`），**禁裸写 `M#`** ——
+ *   裸号无法判定指哪条（这正是 TD-16-61）。
+ * 【历史】旧轮次文件里的裸号**不改**（它们是当时的记录）；本表 `misused` 给出映射，供读者还原。
+ * 【取号】新母体**只在这里加**；加之前先查 `misused`，别再复用旧号。
+ */
+const MOTHERS = [
+  { id: 'M1', name: '导出无消费者核对缺位', def: '导出 / 契约定义了却没人消费，且没有「导出即核对消费者」的机制', tds: ['TD-01-7', 'TD-14-3'], misused: [] },
+  { id: 'M2', name: '守卫声索 > 覆盖', def: '闸 / 规则自称覆盖 X，实际不覆盖（声索靠人解释）', tds: ['TD-16-23'], misused: ['TD-07-3', 'TD-16-48', 'TD-16-50'] },
+  { id: 'M3', name: '同一真相抄 ≥2 份', def: 'SSOT 第二份：同一真相在多处手写 / 维护 ⇒ 必漂', tds: ['TD-16-24'], misused: [] },
+  { id: 'M4', name: '描述层无回写机制', def: '注释 / 文档 / 账本与代码脱节，且无回写或对账机制', tds: ['TD-16-25'], misused: [] },
+  { id: 'M5', name: '失败不可见', def: '静默兜底 / 吞错 / 假成功 ⇒ 失败没有信号', tds: ['TD-16-26'], misused: [] },
+  { id: 'M6', name: '死代码 / 幽灵预留', def: '写了不用：死导出 / 死文件 / 幽灵字段', tds: ['TD-16-27'], misused: [] },
+  { id: 'M7', name: '偿还不完整无对账', def: 'resolve 只改状态、不核验是否真修完', tds: ['TD-16-41'], misused: [] },
+  { id: 'M8', name: '注释漂移无校验', def: '注释点名的符号 / 数字 / 路径无人验（原**无编号**，此处补号）', tds: ['TD-16-28'], misused: [] },
+];
 /** 反向索引：值 → 所属键（让"搜表外的同义说法"也能扩展，如 `重复实现` → SSOT 全组） */
 const SYN_REV = (() => { const m = {}; for (const [k, vs] of Object.entries(SYNONYMS)) for (const v of vs) (m[v.toLowerCase()] ??= []).push(k); return m; })();
 /** 把一个搜索词扩展成同义组（键 + 双向） */
@@ -981,6 +1005,19 @@ function cmdFix(argv = []) {
   if (total && !dry) console.log('↳ 收尾请复跑 `node scripts/debt.mjs audit` 确认「可自动修」归零');
 }
 
+/** 列出**母体登记表**（唯一真源；见头注【母体登记表】） */
+function cmdMothers() {
+  console.log('★ 母体登记表（唯一真源 = scripts/debt.mjs）');
+  console.log('   规矩：引用母体**必须带规范名**（如 `M2（守卫声索 > 覆盖）`），**禁裸写 `M#`**（裸号无法判定指哪条 —— TD-16-61）。');
+  console.log('');
+  for (const m of MOTHERS) {
+    console.log(`${m.id} ｜ ${m.name}`);
+    console.log(`     定义：${m.def}`);
+    console.log(`     债　：${m.tds.length ? m.tds.join(' · ') : '（无）'}`);
+    if (m.misused.length) console.log(`     ⚠️ 历史误用：${m.misused.join(' · ')}（这些行曾把本号当**别的**母体用，已在账本更正）`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 function argVal(argv, flag) { const i = argv.indexOf(flag); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : ''; }
 function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
@@ -999,10 +1036,11 @@ switch (cmd) {
   case 'archive': cmdArchive(rest); break;
   case 'audit': cmdAudit(rest); break;
   case 'fix': cmdFix(rest); break;
+  case 'mothers': cmdMothers(); break;
   case 'stats': cmdStats(); break;
   default:
     console.log('债务账本读写唯一入口（详见文件头注释）');
-    console.log('  读：list [--area NN] [--status X] [--all] | area <NN> | search <关键词> | show <TD-ID>');
+    console.log('  读：list [--area NN] [--status X] [--all] | area <NN> | search <关键词> | show <TD-ID> | mothers（母体登记表）');
     console.log('  写：add --area NN --summary "…" | resolve <TD-ID> --note "…" | edit <TD-ID> --field summary｜solution｜classify｜rate --value "…" | reanchor <TD-ID> --anchor <区域文件> | move <TD-ID> --to <NN>');
     console.log('  维护：archive [--dry] | audit [--liveness] | fix [--dry]（规范化历史列错位行）');
     console.log('  统计：stats（形态/解法分布 —— 供"找债捷径"与"手法排行"，见两份 SOP）');

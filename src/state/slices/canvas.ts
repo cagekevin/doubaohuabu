@@ -24,6 +24,9 @@ import {
 import { makeLibraryId, makeNodeId } from '@/core/rules/project';
 import { defaultNodeData, nodeCreateSize } from '@/core/model/defaults';
 import { buildMaterialBatch, type MaterialBatchInput } from './materialBatch';
+// ★ API 任务事件的落点（原 `applyApiJobEvent` 写 store 的那几件事）—— **本片的片段**
+//   （与 `materialBatch.ts` 同法：`canvas.ts` 代码行已到 `max-lines` 上限〔⚠️ 该规则已于 2026-10-11 关闭〕）
+import { createApiLandingActions, type ApiLandingActions } from './apiLanding';
 // ⚠️ `按配方重跑` 反建出来的文本框默认名（SSOT，不内联中文）
 import { VIDEO_NODE_TEXT } from '@/constants/text';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
@@ -74,7 +77,7 @@ export interface CanvasSliceDeps {
   persistImage(dataUrl: string): string;
 }
 
-export interface CanvasSlice {
+export interface CanvasSlice extends ApiLandingActions {
   // ── state ──
   nodes: CanvasNode[];
   edges: CanvasEdge[];
@@ -382,7 +385,7 @@ export function createCanvasSlice(
     addMaterialsBatch: (items, opts = {}) => {
       if (!Array.isArray(items) || items.length === 0) return [];
       const s = get();
-      // ⚠️ 主体在 `./materialBatch.ts`（判据 C1 + `max-lines`）—— 本处只做「读 → 算 → 写」
+      // ⚠️ 主体在 `./materialBatch.ts`（判据 C1 + `max-lines`〔该规则 2026-10-11 已关闭〕）—— 本处只做「读 → 算 → 写」
       const r = buildMaterialBatch({ nodes: s.nodes, library: s.library, snap: s.snap }, items, opts, {
         persistImage: deps.persistImage,
         nextNodeId: () => makeNodeId('material', deps.now(), ++nodeSeq),
@@ -595,5 +598,13 @@ export function createCanvasSlice(
         ),
       });
     },
+
+    // ★ API 任务事件的落点（`addToLibrary` / `attachImageResultToNode` / `attachVideoResultToNode`）
+    //   —— 主体在 `./apiLanding.ts`（同片片段；`canvas.ts` 已到 `max-lines` 上限〔该规则 2026-10-11 已关闭〕）
+    ...createApiLandingActions(set, get, {
+      now: () => deps.now(),
+      persistImage: deps.persistImage,
+      nextLibraryId: () => makeLibraryId(deps.now(), ++nodeSeq),
+    }),
   };
 }

@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useAccountOps, usePorts, useStore } from '@/state';
+import { useAccountOps, useStore } from '@/state';
 import { ACCOUNT_STATUS, SITE_TYPES } from '@/stable/model/account';
 import { GalleryPanel } from './GalleryPanel';
 import { FingerprintScanPanel } from './FingerprintScanPanel';
@@ -59,7 +59,6 @@ export function AccountPanel() {
   const setActiveAccountId = useStore((s) => s.setActiveAccountId);
   const pushToast = useStore((s) => s.pushToast);
   const accountOps = useAccountOps();
-  const ports = usePorts();
   /** ★ 重新生成指纹（原 `OP.jsx:757-765` 的 ↻） */
   const regenerateFingerprint = useStore((s) => s.regenerateFingerprint);
   /**
@@ -67,8 +66,10 @@ export function AccountPanel() {
    *
    * ⚠️ **源版只在 Windows 显示它**（`window.api.hostOS === 'windows'`，无则看 `navigator.platform`）
    *    —— 指纹伪装那条链是 Windows 向的，照抄此门（**不擅自放开**）。
+   * ★ 2026-10-11：宿主读数**不再由 ui 直读**（原 `ports.host.os`）—— 改由 `bootstrap` 注入
+   *    `AccountOpsDeps.os` 并由控制器算出本标志（与 `isHidden` 同法，TD-16-54）。
    */
-  const canDiagnose = ports.host.os === 'windows';
+  const canDiagnose = accountOps.canDiagnoseFingerprint;
   // ★ 底部操作条（原 `OP.jsx:925-941`）：网格吸附 / 返回首页 / 清空画布
   const snap = useStore((s) => s.snap);
   const setSnap = useStore((s) => s.setSnap);
@@ -186,7 +187,7 @@ export function AccountPanel() {
     if (!window.confirm(ACCOUNT_PANEL_TEXT.clearCacheConfirm)) return;
     setCacheBusy(true);
     try {
-      const r = await ports.host.media.clearBrowserCache();
+      const r = await accountOps.clearBrowserCache();
       if (r.ok) {
         showStatus(ACCOUNT_PANEL_TEXT.clearCacheDone(r.value.cleared, r.value.failed ?? 0), CACHE_MSG_MS);
       } else {

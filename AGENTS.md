@@ -31,7 +31,7 @@
 ### 已知缺口（勿当已完成）
 
 - 缺口登记：`docs/13`（UI 层）· `docs/14`（功能层）· `docs/15`（数据与持久化）。
-- 未接线（有实现、无链路）：`core/rules` 的 `dedupe` / `facemask` / `faceDetect` / `sendGuard` / `replyKind` / `genProgress` / `node` 等 —— 见 `docs/DATAFLOW.md` §十二。
+- 未接线（有实现、无链路）：`core/rules` 的 `dedupe` / `facemask` / `faceDetect` / `replyKind` / `genProgress` / `node`，另 `core/usecases` 的 `apiConfig` / `localizeVideos`（0 生产消费）—— 见 `docs/DATAFLOW.md` §十二（**2026-10-11 全表重测**）。**已接线（勿再当缺口）**：`sendGuard`（`adapters/site/gpt/index.ts:64`）· `license`（`state/licenseOps`）· `importProject` / `projectStorage`（`state/projectOps`）。
 - ⛔ 阻塞：`fetchWatermarkFree`（缺 `SitePort.executeJavaScript` + webview 租约）。
 - 未落：图片编辑器 + 人脸遮罩层 · 出片记录面板 · 账号分组 / 导入导出 UI · 画布对齐 / 分布。
 - 待 Electron 内验证：W3 磁盘侧 · W4 `projects-autobackup.json`；W6 toast 接线。
@@ -47,6 +47,8 @@
 npm run dev              # Vite 开发服务器（5175）
 npm run build            # check + vite build → dist/
 npm run check            # ★ 门禁（清单真源 scripts/gates.manifest.json）：typecheck + lint + boundaries + dead-code + gate-vitals + test
+npm run gate:status      # 闸开关注态（真源 = manifest 的 `disabled`；闸仍登记，只是被跳过）
+npm run gate:off -- <id> # 临时关某道闸（例 `npm run gate:off -- dead-code`）；恢复 `npm run gate:on -- <id>`
 npm run lint:gates       # 元层闸（闸的闸）：扫描根存在 + 基数自检 + 申诉口三问
 npm run lint:dead-code   # knip 死代码闸（基线「永不复涨」；新增即红）
 npm run test             # vitest run
@@ -85,7 +87,7 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 
 ### 状态与接线约定
 
-- **单 slice ≤ 300 行 · state 字段 ≤ 25 个 · action 只编排**（业务在 `core/rules`/`usecases`）；`max-lines` 400 由 eslint 强制（`docs/11` §5.3）。
+- **单 slice ≤ 300 行（建议 · 人工把关）· state 字段 ≤ 25 个 · action 只编排**（业务在 `core/rules`/`usecases`）；~~`max-lines` 400 由 eslint 强制~~ **2026-10-11 已关闭**（行数是代理指标；留痕见 `eslint.config.js`）。
 - `state/store.ts` 的 `setPartial` = **画布 → 工程（`projects[activeId].data`）的唯一镜像点**。
 - `state/subscriptions.ts` = **宿主事件订阅的唯一写入点**。
 

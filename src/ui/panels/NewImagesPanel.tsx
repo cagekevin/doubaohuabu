@@ -11,14 +11,19 @@
  * ✅ **已落**：聚合列表 · **发送到画布**（含大图确认）· **从列表移除** · **折叠**
  *   （`doubao-newimages-folded`）· **只留本画布**（`doubao-newimages-current-only`）·
  *   `NEW` / `✓ 已发送` / `⚠` / 来源标签 四类徽标 · **「立即抓取」+ 四阶段状态机**
- *   （2026-10-11 接通：`accountOps.scanGallery` → `SitePort.scan`）。
+ *   （2026-10-11 接通：`accountOps.scanGallery` → `SitePort.scan`）·
+ *   ★ **自动值守**（`doubao-newimages-autocap`；2026-10-11 接通 —— 纯层 `core/rules/autoWatch.ts`
+ *   + 编排 `accountOps.setAutoWatch`；**谁能值守由 adapter 声明**：`tapnow` 声明、
+ *   **`lovart` 刻意不声明**（风控 `docs/10` #11），本组件**不判站点名**）·
+ *   ★ **长按拖出到系统**（`se`/`V`/`pe`；2026-10-11 接通 —— 位移 **6px** 阈值触发
+ *   `hostOps.dragFileOut`，含**幽灵预览**与**拖后吞掉那次 click**）。
  *
  * ⛔ **未落地的逐条标注（判据 B4/B5，不假装）**：
  *   | 缺 | 源 | 原因 |
  *   |---|---|---|
- *   | **自动值守轮询（非 Lovart）** | `Ee`（原 428-592） | ⏳ **未落（欠账）**：源版按账号 `autoStart` 建循环 + 抖动 `tD(id)`(0~8s) + 基础间隔 `qR=3000`(Lovart)/`KR=6000`(其它) + 空转退避 `YR=10000`/`XR=15000`（`idleRounds>=xl=4`）+ 单账号累计上限 `QR=40` + 每轮 `limit=m0=6`。★ **只有 Lovart 不做**（`docs/10` #11 · `main.js:2749` 只点名 Lovart）⇒ **接通时跳过 Lovart**。当前按钮为**禁用占位**（见 `NEW_IMAGES_TEXT.autoOff`） |
- *   | 长按拖出到系统 | `se`（原 152-192） | 走 `startFileDrag`（`MediaPort` 未用，见 `docs/14` §1.4） |
+ *   | `.nip-drop-active` 落点高亮 | 原 258-263 | 它要给**跨层容器**（`.doubao-view-webviews`）挂**全局**类，而本仓只有 CSS Modules ⇒ **不为它开全局 CSS 例外**；其源样式亦不可得。⚠️ 功能不受影响（只少一层视觉提示） |
  *   | 「正在抓取中，请稍候」 | 原 336 | 源版有**模块级并发锁**（`Jy()`/`o0()`）；本工程只有本面板会发起，且按钮在忙时**禁用** ⇒ 该分支**不可达** ⇒ 不落（判据 B5） |
+ *   | 值守轮询**每轮 `limit`**（原 `m0`=6）/ **并发锁互斥**（原 486 的 `Jy()`/`o0()` 顺延） | `Ee` 498-521 | 本仓 `ScanOptions` 的 `limit` 属扫描侧未落项（`docs/14` §5）；互斥未做（手动抓取与值守共用 `scanGallery`）—— 已如实登记（`docs/16`） |
  *
  * ⚠️ **一处刻意的处理**：源版的 toast 是**面板内**的 `.dvl-toast`（3200ms 自动消失），
  *   本工程统一走 store 的 `pushToast`（与 `GalleryPanel` 同法），**时长逐条对源**。
@@ -28,11 +33,13 @@
  * ⚠️ **原则 1**：本组件只调 `useStore` 暴露的 action 与 `useAccountOps()`，不写 store。
  */
 
-import { useMemo, useState } from 'react';
-import { useAccountOps, useStore } from '@/state';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAccountOps, useHostOps, useStore } from '@/state';
+import { toMessage } from '@/core/model/result';
 import { NewImagesThumb } from './NewImagesThumb';
 import { NEW_IMAGES_TEXT } from '@/constants/text';
-import { GALLERY_GRID_GAP } from '@/constants';
+import { GALLERY_GRID_GAP, NEW_IMAGES_DRAG_THRESHOLD_PX } from '@/constants';
+import { withThumb } from '@/stable/protocols/img';
 import { formatBytes } from '@/core/rules/downloadNode';
 import { galleryItemDims, isBigGalleryItem } from '@/core/rules/materialGrid';
 import {
@@ -58,7 +65,83 @@ export function NewImagesPanel() {
   const currentOnly = useStore((s) => s.newImagesCurrentOnly);
   const setFolded = useStore((s) => s.setNewImagesFolded);
   const setCurrentOnly = useStore((s) => s.setNewImagesCurrentOnly);
+  const autoWatchOn = useStore((s) => s.newImagesAutoWatch);
+  const setAutoWatchFlag = useStore((s) => s.setNewImagesAutoWatch);
   const accountOps = useAccountOps();
+  // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
+  const hostOps = useHostOps();
+
+  /** 开了「自启动」的账号 id（排序后拼串）—— 它一变就要**重建**值守链（源版 effect 依赖 `l` 同理） */
+  const autoStartSig = useMemo(
+    () =>
+      accounts
+        .filter((a) => a.autoStart)
+        .map((a) => a.id)
+        .sort()
+        .join(','),
+    [accounts],
+  );
+
+  /**
+   * ★ **把开关落到定时器上**（原 `_Component26.jsx` 的 `he` + `useEffect(428)`）
+   *
+   * ⚠️ 本组件**不知道哪些站点能值守** —— 那是**适配器**的 `SitePort.autoWatch` 声明；
+   *    控制器 `accountOps.setAutoWatch` 只问注册表（注册制）。
+   * ⚠️ 控制器内部**幂等**（先停再建）⇒ 依赖变化时"停→建"就是一次重建；卸载时全停。
+   */
+  useEffect(() => {
+    accountOps.setAutoWatch(autoWatchOn);
+    return () => accountOps.setAutoWatch(false);
+  }, [accountOps, autoWatchOn, autoStartSig]);
+
+  // ── 长按拖出到系统（原 `_Component26.jsx` 的 `se` 152-192 + `V` 226-264 + window 监听 274-326）──
+  //
+  // ⚠️ **源版的「长按」不是计时**：按下后**位移超过 6px**（原 `eD`；`NEW_IMAGES_DRAG_THRESHOLD_PX`）
+  //    就起系统拖拽（`Math.hypot(dx, dy) > eD`）。
+  // ⚠️ **拖拽成败本仓无从判定** —— 端口走 `send` 无回执（TD-16-63）⇒ 只报「宿主缺失 / 调用抛出」。
+  /** 本次按下的起点 + 待拖条目（原 `O.current`） */
+  const pressRef = useRef<{ x: number; y: number; item: NewImageItem } | null>(null);
+  /** 这一次「按下→抬起」里**已经起过拖**——用来**吞掉紧随其后的 click**（原 `F.current` + `pe`） */
+  const draggedRef = useRef(false);
+  const dragStartedRef = useRef(false);
+  /** 拖拽预演幽灵（原 `M` 的 `{x,y,src,name}`）—— 只在「按下 → 过阈值」之间可见 */
+  const [ghost, setGhost] = useState<{ x: number; y: number; src: string; name: string } | null>(null);
+  /** 是否处于按下态（**它才是挂 window 监听的开关**） */
+  const [pressing, setPressing] = useState(false);
+
+  useEffect(() => {
+    if (!pressing) return;
+    const onMove = (e: MouseEvent): void => {
+      const p = pressRef.current;
+      if (!p || dragStartedRef.current) return;
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > NEW_IMAGES_DRAG_THRESHOLD_PX) {
+        // ★ 过阈值 ⇒ 起系统拖拽（原 `A.current = true; se(re.it)`）
+        dragStartedRef.current = true;
+        setGhost(null); // 原 `se` 开头的 `U(null)`
+        // ⚠️ 端口只可能报「宿主缺失 / 调用抛出」；**拖拽是否真的成功无从得知**（TD-16-63）
+        const r = hostOps.dragFileOut({ dataUrl: p.item.dataUrl, name: p.item.name });
+        if (!r.ok) pushToast(NEW_IMAGES_TEXT.dragFailed(r.message), 4000, 'error');
+      } else {
+        // 未过阈值 ⇒ 幽灵跟着光标走（原 `U(Ve => ({...Ve, x, y}))`）
+        setGhost({ x: e.clientX, y: e.clientY, src: p.item.dataUrl, name: p.item.name });
+      }
+    };
+    const onUp = (): void => {
+      // 原 `te`（mouseup）：收尾，并把「这次有没有拖过」交给 click 抑制（原 `F.current = A.current`）
+      draggedRef.current = dragStartedRef.current;
+      pressRef.current = null;
+      setGhost(null);
+      setPressing(false);
+    };
+    // ⚠️ 与源的一处**有意差异**（写明）：源版**常挂** window 监听（effect 空依赖、内部判 `O.current`）；
+    //    本实现**只在按下期间挂**（等价、更省）。二者语义相同：都由 `mouseup` 收尾。
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [pressing, hostOps, pushToast]);
 
   /**
    * ⚠️ 时钟**只在挂载时取一次**（`useState(() => …)`）—— 渲染期禁 `Date.now()`（`docs/11` §9.1）。
@@ -129,6 +212,10 @@ export function NewImagesPanel() {
       if (r.added > 0) pushToast(NEW_IMAGES_TEXT.fetched(r.added, r.failed), 4500, 'info');
       else if (r.failed > 0) pushToast(NEW_IMAGES_TEXT.failedOnly(r.failed), 6000, 'error');
       else pushToast(NEW_IMAGES_TEXT.noNew, 4000, 'warn');
+    } catch (e) {
+      // ★ **TD-16-53 清偿**：此前是 `try/finally` **无 `catch`** ⇒ 一旦抛出就成 unhandledRejection
+      //   （界面还把 busy 复位了，看不出出过事）。原则 6：不静默 —— **原文透传**上报。
+      pushToast(toMessage(e), 6000, 'error');
     } finally {
       setBusy(false);
     }
@@ -163,6 +250,34 @@ export function NewImagesPanel() {
     }
   };
 
+  /**
+   * 缩略图**按下**（原 `V` 226-264）：记待定态 + 起幽灵预览。
+   * （「仅左键」由 `NewImagesThumb` 那侧判过 —— 与源同一个位置 `V:225-227`。）
+   * ⚠️ 源版此处还会给 webview 容器加 `.nip-drop-active`（落点高亮）—— 本仓**不落**，
+   *    理由见 `NewImagesPanel.module.css` 头注（需跨层全局类，不为它开全局 CSS 例外）。
+   */
+  const startPress = (item: NewImageItem, x: number, y: number): void => {
+    draggedRef.current = false; // 原 `F.current = false`
+    dragStartedRef.current = false; // 原 `D.current = false`
+    pressRef.current = { x, y, item };
+    setGhost({ x, y, src: item.dataUrl, name: item.name });
+    setPressing(true);
+  };
+
+  /**
+   * 缩略图**点击**（原 `pe` 265-273）：★ **刚拖过一次就吞掉这次 click**
+   *
+   * ⚠️ 少了这一步，「拖出去」在缩略图上松手后会**紧接着补一次"发送到画布"**
+   *    （源版那个 `F.current` 就是为此存在的）。
+   */
+  const handleThumbClick = (item: NewImageItem): void => {
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      return;
+    }
+    send(item);
+  };
+
   /** 从列表移除（原 `ne` 327-331）—— ⚠️ 只动列表，**不影响画布** */
   const remove = (item: NewImageItem): void => {
     removeLovartImages(item._accId, [item.id]);
@@ -181,6 +296,8 @@ export function NewImagesPanel() {
           <div className={styles.title}>
             {NEW_IMAGES_TEXT.title}
             <span className={styles.count}>{items.length}</span>
+            {/* 值守中的小圆点（原 606）—— 与状态机圆点**不是**一个东西（这个表示"值守开着"） */}
+            {autoWatchOn && <span className={styles.live} title={NEW_IMAGES_TEXT.liveTitle} />}
             {fetchableCount > 0 && (
               <span className={styles.agg} title={NEW_IMAGES_TEXT.aggTitle}>
                 {NEW_IMAGES_TEXT.aggLabel(fetchableCount)}
@@ -212,8 +329,9 @@ export function NewImagesPanel() {
                     item={item}
                     isNew={isFreshItem(item, now)}
                     sent={sent.has(galleryItemKey(item))}
-                    onSend={send}
+                    onSend={handleThumbClick}
                     onRemove={remove}
+                    onPressStart={startPress}
                   />
                 ))}
               </div>
@@ -250,13 +368,28 @@ export function NewImagesPanel() {
                 {busy ? NEW_IMAGES_TEXT.fetchBusy : fetchLabel}
               </button>
               {/*
-                ⏳ 自动值守 —— **禁用占位**（维持源版布局，判据「组件照抄」）。
-                ★ 它是**未落（欠账）**，**不是裁定不做**：裁定只管 **Lovart**（`docs/10` #11 /
-                  `electron/main.js:2749`「默认关闭 **Lovart** 自动抓取」），**Tapnow 等站点要做**。
-                  `title` 已如实写明（`NEW_IMAGES_TEXT.autoOff`）。
+                ★ **自动值守开关**（原 674-677）—— 2026-10-11 接通。
+                ⚠️ 谁能值守 / 什么节奏由**适配器**声明（`SitePort.autoWatch`）：`tapnow` 声明、
+                  **`lovart` 刻意不声明**（风控：`docs/10` #11 只点名 Lovart）⇒ 本组件**不知道** Lovart 是谁。
+                ⚠️ 开关只写 store（`setAutoWatchFlag`）；**真的起停**由上面那个 effect 交给控制器。
               */}
-              <button type="button" className={styles.auto} disabled title={NEW_IMAGES_TEXT.autoOff}>
-                {NEW_IMAGES_TEXT.autoPaused}
+              <button
+                type="button"
+                className={styles.auto}
+                title={autoWatchOn ? NEW_IMAGES_TEXT.autoOnTitle : NEW_IMAGES_TEXT.autoOffTitle}
+                onClick={() => {
+                  const next = !autoWatchOn;
+                  setAutoWatchFlag(next);
+                  // ★ 与源一致（原 426/427，逐字 + 2000ms）
+                  pushToast(
+                    next ? NEW_IMAGES_TEXT.autoOnToast : NEW_IMAGES_TEXT.autoOffToast,
+                    2000,
+                    'info',
+                  );
+                }}
+              >
+                <span className={`${styles.autoDot} ${autoWatchOn ? styles.autoDotOn : ''}`} />
+                {autoWatchOn ? NEW_IMAGES_TEXT.autoRunning : NEW_IMAGES_TEXT.autoPaused}
               </button>
             </div>
           </div>
@@ -272,6 +405,23 @@ export function NewImagesPanel() {
       >
         {folded ? NEW_IMAGES_TEXT.foldExpandGlyph : NEW_IMAGES_TEXT.foldCollapseGlyph}
       </button>
+
+      {/*
+        拖拽预演幽灵（原 687-693 的 `.nip-ghost`）—— **只在「按下 → 过 6px 阈值」之间可见**
+        （过阈值后系统拖拽接管，源版同法 `U(null)`）。
+        ⚠️ `left/top` 是**动态值**（跟随光标 + 12px 偏移，与源一致）⇒ 行内 style；其余样式走 token。
+      */}
+      {ghost && (
+        <div className={styles.ghost} style={{ left: ghost.x + 12, top: ghost.y + 12 }}>
+          <img
+            className={styles.ghostImg}
+            src={withThumb(ghost.src, 64)}
+            alt={ghost.name}
+            draggable={false}
+          />
+          <span className={styles.ghostTip}>{NEW_IMAGES_TEXT.ghostTip}</span>
+        </div>
+      )}
     </div>
   );
 }

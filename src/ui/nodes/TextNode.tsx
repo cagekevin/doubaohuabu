@@ -27,11 +27,26 @@
  *    DOM 读数半在 `lib/editorText.ts`（不纯但无状态）。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { useStore } from '@/state';
 import { TEXT_NODE_LABEL } from '@/stable/model/node';
-import { NODE_EDIT_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
+import { MATERIAL_NODE_TEXT, NODE_EDIT_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
 import { parseRefChips } from '@/core/rules/refs';
+import {
+  collectLinkedMaterials,
+  materialDataUrlOf,
+  materialLabelOf,
+  moveItem,
+  orderByMaterialIds,
+} from '@/core/rules/linkedMaterials';
+import { withThumb } from '@/stable/protocols/img';
 import { resolveRefMaterial, type RefNodeLike } from '@/core/rules/prompt';
 import { refChipHtml, textToEditorHtml } from '@/core/rules/richText';
 import { editorToText } from '@/lib/editorText';
@@ -44,6 +59,8 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   const patchNodeData = useStore((s) => s.patchNodeData);
   const library = useStore((s) => s.library);
   const nodes = useStore((s) => s.nodes);
+  /** ★ 素材缩略条要从**边**推导「连入的素材节点」（原 `w`） */
+  const edges = useStore((s) => s.edges);
   /**
    * ★ 「按关键词拆分」的入口（原 `CL.jsx:401-403` 的 `it()`）
    *
@@ -53,7 +70,15 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   const [editingName, setEditingName] = useState(false);
   const nameRef = useRef<HTMLSpanElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const [refTrigger, setRefTrigger] = useState<{ query: string; start: number } | null>(null);
+  /**
+   * `@` 下拉的触发态。
+   * ★ `typed` = **是不是"打字打出来的 `@查询词`"**：
+   *   `true` ⇒ 采纳时要先**回退** `@查询词` 那段（`1 + query.length` 个字符）；
+   *   `false`（从「@ 引用素材」按钮打开）⇒ 光标前**没有** `@查询词` 可回退，只把药丸插在光标处。
+   */
+  const [refTrigger, setRefTrigger] = useState<{ query: string; start: number; typed: boolean } | null>(
+    null,
+  );
   /** 输入法合成中（**本工程新增守卫**，见文件头） */
   const composingRef = useRef(false);
 
@@ -104,7 +129,7 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
 
   const syncTrigger = (): void => {
     const hit = matchRefTrigger(textBeforeCaret());
-    setRefTrigger(hit ? { query: hit.query, start: hit.start } : null);
+    setRefTrigger(hit ? { query: hit.query, start: hit.start, typed: true } : null);
   };
 
   /** 采纳候选：把光标前的 `@查询词` **换成药丸**（原 `CL.jsx:592-600` 的 Range 手法） */
@@ -116,7 +141,7 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
     const range = sel.getRangeAt(0);
     if (!el.contains(range.startContainer)) return;
 
-    const n = refTrigger.query.length + 1; // `@` 自身也算
+    const n = refTrigger.query.length + (refTrigger.typed ? 1 : 0); // 打字触发时 `@` 自身也算
     const container = range.startContainer;
     const simple =
       container.nodeType === Node.TEXT_NODE && range.startOffset >= n;
@@ -168,6 +193,59 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
     return parsed.refs.map((r) => ({ n: r.n, ...resolveRefMaterial(r.id, library, nodeMap) }));
   }, [data.text, library, nodes]);
 
+  // ── 素材缩略条（原 `CL.jsx` 的 `w` / `v` / 拖拽回写）────────────────────────────────
+  /** 已连接素材：连入本节点的 `material` 节点，按 `materialIds` 排序（原 `v`） */
+  const linked = useMemo(
+    () => orderByMaterialIds(collectLinkedMaterials(nodes, edges, id), data.materialIds ?? []),
+    [nodes, edges, id, data.materialIds],
+  );
+  const barRef = useRef<HTMLDivElement>(null);
+  /** 拖拽态（原 `xt`/`gt`）：`from` = 起点，`over` = 当前悬停落点 */
+  const [drag, setDrag] = useState<{ from: number; over: number } | null>(null);
+
+  /**
+   * 拖拽排序（原 `CL.jsx:420-492`）—— 松手时按 `splice` 重排并**回写 `materialIds`**。
+   *
+   * ⚠️ 源版靠 raw DOM 的 `classList` + `data-idx` 找落点；本实现用 **`data-idx` + state**（同语义、
+   *    不直接改 DOM 的 class）。
+   * ⚠️ 与源一致：**只有落点真的变了**才回写（源 `hasMoved && xt !== gt`）。
+   */
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent): void => {
+      const bar = barRef.current;
+      if (!bar) return;
+      for (const el of bar.querySelectorAll<HTMLElement>('[data-idx]')) {
+        const r = el.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          const idx = Number(el.dataset.idx);
+          if (Number.isFinite(idx)) setDrag((d) => (d && d.over !== idx ? { ...d, over: idx } : d));
+          break;
+        }
+      }
+    };
+    const onUp = (): void => {
+      if (drag.from !== drag.over) {
+        patchNodeData(id, { materialIds: moveItem(linked, drag.from, drag.over).map((m) => m.id) });
+      }
+      setDrag(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [drag, linked, id, patchNodeData]);
+
+  /** 开始拖拽（原 `ee`）—— 只认左键；`preventDefault`/`stopPropagation` 免得拖成整个节点 */
+  const startDrag = (e: ReactMouseEvent, idx: number): void => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDrag({ from: idx, over: idx });
+  };
+
   const title = editingName ? (
     <span
       ref={nameRef}
@@ -200,6 +278,63 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   return (
     <NodeShell title={title} meta={`${data.aspectRatio} · ${data.duration}s`} selected={selected}>
       <div className={styles.editWrap}>
+        {/*
+          ★ 正文工具条（原 `.text-toolbar`，`CL.jsx:784-815`）：
+            · **`@ 引用素材`**（原 784-792）—— 给「打字 @」之外的**另一个入口**。⚠️ 与源一致用
+              **`onMouseDown` + `preventDefault()`**：那样按钮**不抢焦点**，正文的光标/选区还在 ⇒ `pickRef` 知道往哪插。
+            · **素材缩略条**（原 793-815）—— 连入本节点的素材缩略图 + 计数；**可拖拽排序**（回写 `materialIds`）。
+          ⚠️ 源版同一行还有**自动匹配**（含"待确认项"= 疑似匹配面板）—— 未落，见 TD-16-78。
+        */}
+        <div className={`${styles.textToolbar} nodrag nopan`}>
+          <button
+            type="button"
+            className={`${styles.atRefBtn} nodrag nopan`}
+            title={REF_TEXT.atRefTitle}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // `typed: false` ⇒ 采纳时**不回退字符**（光标前没有 `@查询词`），药丸插在光标处
+              setRefTrigger({ query: '', start: 0, typed: false });
+            }}
+          >
+            {REF_TEXT.atRef}
+          </button>
+
+          {linked.length === 0 && <span className={styles.matStripHint}>{REF_TEXT.stripHint}</span>}
+          <div className={styles.matPreviewBar} ref={barRef} data-testid="linked-materials">
+            {linked.map((m, i) => {
+              const url = materialDataUrlOf(m);
+              const label = materialLabelOf(m);
+              return (
+                <div
+                  key={m.id}
+                  data-idx={i}
+                  className={`${styles.matThumb} nodrag nopan ${
+                    drag?.from === i ? styles.matThumbDragging : ''
+                  } ${drag && drag.over === i && drag.from !== i ? styles.matThumbOver : ''}`}
+                  title={REF_TEXT.thumbDragTitle(label)}
+                  onMouseDown={(e) => startDrag(e, i)}
+                >
+                  {url ? (
+                    // ⚠️ 一律走 `?w=` 缩略图（同源 `CL.jsx:805` 的 `Xt(ae,160)`）—— 不加载原图
+                    <img
+                      className={styles.matThumbImg}
+                      src={withThumb(url, 160)}
+                      alt={label}
+                      draggable={false}
+                    />
+                  ) : (
+                    <span className={styles.matThumbPlaceholder}>{MATERIAL_NODE_TEXT.noImage}</span>
+                  )}
+                  <span className={styles.matThumbGrip} aria-hidden="true">
+                    ⠿
+                  </span>
+                </div>
+              );
+            })}
+            {linked.length > 0 && <span className={styles.matCount}>{linked.length}</span>}
+          </div>
+        </div>
         <div
           ref={bodyRef}
           className={`${styles.textEdit} ${styles.textEditor} nodrag nowheel`}

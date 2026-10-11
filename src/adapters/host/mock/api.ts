@@ -11,12 +11,17 @@ import type { ApiProviderMeta, ApiSetup } from '@/stable/model/gen';
 import { DEFAULT_API_CONCURRENCY } from '@/constants';
 import { err, ok } from '@/core/model/result';
 
+/**
+ * provider **元信息**（对齐后端 `registry.js:27` 的 `listProvidersMeta`）
+ * ⚠️ 只放元信息 —— `enabled` / `hasKey` / `hasSecret` 属**配置**（`config-store.publicOf`），
+ *    不在这里（2026-10-11 形状更正）。
+ */
 const PROVIDERS: readonly ApiProviderMeta[] = [
-  { id: 'volcengine-ark', name: '火山方舟（即梦）', capabilities: ['video', 'image'], enabled: true, hasKey: false },
-  { id: 'geeknow-relay', name: '中转聚合', capabilities: ['video', 'image'], enabled: true, hasKey: false },
-  { id: 'vidu', name: 'Vidu', capabilities: ['video'], enabled: true, hasKey: false },
-  { id: 'kling', name: '可灵', capabilities: ['video'], enabled: true, hasKey: false, hasSecret: false },
-  { id: 'llm-openai-compat', name: 'LLM（OpenAI 兼容）', capabilities: ['llm'], enabled: true, hasKey: false },
+  { id: 'volcengine-ark', name: '火山方舟（即梦）', capabilities: ['video', 'image'] },
+  { id: 'geeknow-relay', name: '中转聚合', capabilities: ['video', 'image'] },
+  { id: 'vidu', name: 'Vidu', capabilities: ['video'] },
+  { id: 'kling', name: '可灵', capabilities: ['video'] },
+  { id: 'llm-openai-compat', name: 'LLM（OpenAI 兼容）', capabilities: ['llm'] },
 ];
 
 const defaultSetup = (): ApiSetup => ({

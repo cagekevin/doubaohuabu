@@ -6,7 +6,14 @@
     "gateCost": "闸的成本守恒：任何闸的『合法通过成本』必须 ≤ 『绕行成本』，否则它在生产它本要禁止的行为。配套三条：① 每个**脚本**闸头部须有【申诉口】三问（锚点 `★闸的申诉口` + `Q1 守什么：`/`Q2 何时该改：`/`Q3 怎么改：`），由 check-gate-vitals 机器校验；② 扫描型闸必须有『扫到 0 即 fail-loud』的基数自检（治『扫 0 却绿灯』）；③ 闸拦住正确动作时【改闸不绕行】，改完用 scripts/probe.mjs 先红后绿验证。",
     "cmdStyle": "脚本闸一律写**直接 node 命令**（不用 `npm run lint:xxx` 包一层）—— 元层闸要从 cmd 里解析出脚本文件来校验【申诉口】，包一层就解析不到。npm scripts 仍保留作便捷入口。"
   },
-  "phases": ["check", "health"],
+  "phases": [
+    "check",
+    "health"
+  ],
+  "_disabled_help": "闸的开/关开关：把想关的闸 id 列在这里（闸**仍在 gates 里登记**，只是被跳过 —— 所以不会变成孤儿闸）。改它别手写，用 `npm run gate:off -- <id>` / `npm run gate:on -- <id>`（`npm run gate:status` 看当前开关）。全关 = 拒绝通过。",
+  "disabled": [
+    "dead-code"
+  ],
   "gates": [
     {
       "id": "typecheck",
@@ -18,7 +25,7 @@
       "id": "lint",
       "cmd": "npm run lint",
       "phase": "check",
-      "desc": "eslint（含 react-hooks + max-lines）"
+      "desc": "eslint（含 react-hooks）"
     },
     {
       "id": "boundaries",

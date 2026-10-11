@@ -3,8 +3,10 @@
  *
  * ⚠️ 全部颜色 / 间距 / 字阶 / 圆角 / 动效走 token（`docs/17` §1.2）；只有**元素尺寸**
  *    类像素值（缩略图边长 72px 等）与源版一致 —— 与 `GalleryCard`(20px) / `GenPanel`(14px) 同例。
- * ⚠️ 未落地的原版类（`.nip-ghost` 拖拽幽灵 / `.nip-drop-active` 落点高亮）**不造** ——
- *    它们属"长按拖出到系统"那条链（未落）。
+ * ⚠️ 原版 `.nip-ghost`（拖拽幽灵）**已落**（2026-10-11 随「拖出到系统」接通）—— 见文件末 `.ghost`，
+ *    样式**源版不可得** ⇒ 按语义自拟 + 全走 token。
+ * ⛔ `.nip-drop-active`（落点高亮）**仍不造**：它要给**跨层容器**（`.doubao-view-webviews`）挂**全局**类，
+ *    而本仓只有 CSS Modules（无全局类样式先例）⇒ 不为此开全局 CSS 例外；且其源样式亦不可得。
  */
 
 .wrap {
@@ -261,8 +263,66 @@
   composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
+/*
+ * 自动值守按钮里的**小圆点**（原 `.dvl-dot` / `.dvl-dot.on`）
+ * ⚠️ 复用真源 `.dot`（§4 红线 4）—— 只覆盖**颜色**；开启态 = 成功色（原 `.on` 用的就是绿）。
+ */
+.autoDot {
+  composes: dot from '../common/shared.module.css';
+  background: var(--color-text-faint);
+}
+
+.autoDotOn {
+  background: var(--color-success);
+}
+
+/*
+ * 头部那个「值守中」小圆点（原 606 的 `.dvl-live`）
+ * ⚠️ 与状态机圆点是**两个东西**：这个表示「值守开着」，那个表示「这一轮抓取到哪一步」。
+ */
+.live {
+  composes: dot from '../common/shared.module.css';
+  margin-left: var(--space-1);
+  background: var(--color-success);
+}
+
 /* 折叠把手（原 `.nip-fold-toggle`） */
 .foldToggle {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
   align-self: center;
+}
+
+/*
+ * 拖拽预演幽灵（原 `.nip-ghost`，原 `_Component26.jsx:687-693`）
+ *
+ * ⚠️ **源版样式在本仓不可得**（无 CSS 源，也没进 mockup）⇒ **按语义自拟**，但**全走 token**
+ *    （`docs/17` §1.2 / §3）。语义 = 「跟随光标的**固定定位**小浮层（图 + 提示）」。
+ * ⚠️ `pointer-events: none` **必须有**：否则浮层会挡住指针、让 `mousemove` 断在半路。
+ * ⚠️ 只覆盖**颜色/间距/圆角/阴影/字阶**；`left`/`top` 是**动态值**（跟随光标）⇒ 由行内 style 给。
+ */
+.ghost {
+  position: fixed;
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+
+/* 幽灵里的缩略图（源版 `<img src={M.src}>`，无独立类）—— 32px 是**元素尺寸**，与源版「小图」同例 */
+.ghostImg {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.ghostTip {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }

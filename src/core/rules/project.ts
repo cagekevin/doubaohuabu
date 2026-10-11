@@ -8,7 +8,7 @@
  * ⚠️ 原则 4：`now` 由外部注入（`ClockPort`），本模块**不调 `Date.now()`**
  */
 
-import type { CanvasEdge, GraphPreset, LibraryItem, Project, ProjectData } from '@/stable/model/project';
+import type { CanvasEdge, LibraryItem, Preset, Project, ProjectData } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
 import { emptyProjectData } from '@/stable/model/project';
 import { BRAND } from '@/constants/text';
@@ -170,19 +170,19 @@ export function readImportedProjectName(source: Record<string, unknown>): string
  * （原版对"没带 id"的项也丢弃 —— 否则无法判重）。
  */
 export function mergeImportedPresets(
-  existing: readonly GraphPreset[],
+  existing: readonly Preset[],
   incoming: unknown,
-): GraphPreset[] {
+): Preset[] {
   const items = asArray<unknown>(incoming);
   if (items.length === 0) return [];
   const seen = new Set(existing.map((p) => p.id));
-  const added: GraphPreset[] = [];
+  const added: Preset[] = [];
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;
-    const p = item as Partial<GraphPreset>;
+    const p = item as Partial<Preset>;
     if (!p.id || typeof p.id !== 'string' || seen.has(p.id)) continue;
     seen.add(p.id);
-    added.push(item as GraphPreset);
+    added.push(item as Preset);
   }
   return added;
 }

@@ -41,7 +41,7 @@ export function readHostOs(hostReported?: unknown): HostOS {
       if (/linux/i.test(t)) return 'linux';
     }
   } catch {
-    // best-effort：读不到就继续往下兜底（源版同款）
+    // catch-ok: best-effort 读数（window / navigator）—— 读不到即走下面的兜底值，不阻断指纹生成（源版同款）
   }
   return 'macos';
 }
@@ -54,7 +54,7 @@ export function readChromeMajor(): number {
     const n = m && m[1] ? parseInt(m[1], 10) : 0;
     if (n) return n;
   } catch {
-    // best-effort
+    // catch-ok: best-effort 读数 —— UA 解析失败即返回 FALLBACK_CHROME_MAJOR（不抛）
   }
   return FALLBACK_CHROME_MAJOR;
 }
@@ -74,7 +74,7 @@ export function readRealViewport(): { w: number; h: number } {
       };
     }
   } catch {
-    // best-effort
+    // catch-ok: best-effort 读数 —— 窗口尺寸读不到即返回 {0,0}（生成器对每项都有全表兜底）
   }
   return { w: 0, h: 0 };
 }

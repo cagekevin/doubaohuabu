@@ -150,6 +150,33 @@ export const GALLERY_PAGE_SIZE = 60;
 export const NEW_IMAGES_LIMIT = 48;
 /** 「NEW」徽标的时效窗口（ms，原 `_Component26.jsx:627` 的 `3600000` = 1 小时） */
 export const NEW_IMAGES_FRESH_MS = 3600000;
+
+// ── 自动值守（原 `_Component26.jsx` 的 `Ee` 循环 428-592）──
+//
+// ⚠️ 源版按站点分两档节奏：`ho(acc) ? qR : KR`（Lovart 3000 / 其它 6000），退避同形
+//    （`YR` 10000 / `XR` 15000）。本仓**只用「非 Lovart 档」** —— Lovart **不参与值守**
+//    （`docs/10` #11 · `electron/main.js:2749`），所以 Lovart 那一档被刻意留空不用。
+
+/** 值守轮询的**基础间隔**（原 `KR` shared.js:36672 = 6000；Lovart 档 `qR` = 3000 用不到） */
+export const AUTO_WATCH_INTERVAL_MS = 6000;
+/** 值守的**退避**间隔（原 `XR` = 15000；空转达上限 / 累计新增超限后转它。Lovart 档 `YR` = 10000 同前） */
+export const AUTO_WATCH_IDLE_BACKOFF_MS = 15000;
+/** 连续空转多少轮后转退避（原 `xl` 36675 = 4） */
+export const AUTO_WATCH_IDLE_ROUNDS_MAX = 4;
+/** 单账号累计新增上限，超过转退避（原 `QR` 36678 = 40） */
+export const AUTO_WATCH_MAX_NEW = 40;
+/** 抖动上界（原 `tD` 36685-36691 的 `t % 8000`）—— 各账号**错峰**，避免同时打页面 */
+export const AUTO_WATCH_JITTER_MOD = 8000;
+
+// ── 「出新图」缩略图的**拖出到系统**（原 `_Component26.jsx` 的 `V` 226-264 + 监听 274-326）──
+
+/**
+ * 触发系统拖拽的**位移阈值**（px，原 `eD` shared.js:36681 = 6）
+ *
+ * ⚠️ 源版叫「长按拖拽」，但**它不是计时** —— 按下后**移动超过这个距离**就起拖
+ *    （`Math.hypot(dx, dy) > eD`）。
+ */
+export const NEW_IMAGES_DRAG_THRESHOLD_PX = 6;
 /** 单张图下载超时（ms） */
 export const IMAGE_FETCH_TIMEOUT_MS = 25000;
 /** API 任务重试退避（ms） */
@@ -246,10 +273,15 @@ export const DEFAULT_API_CONCURRENCY = 3;
 /** 生成图片流上限（原 27132-27160） */
 export const IMAGE_GEN_FEED_LIMIT = 80;
 
+/** 文生图节点 `results` 上限（原 `attachImageResultToNode` 27273 的 `slice(0, 40)`） */
+export const IMAGE_GEN_RESULT_LIMIT = 40;
+
+/** `genHistory.attempts` 上限（原 `U$` 25568 的 `slice(-20)`） */
+export const GEN_HISTORY_ATTEMPT_LIMIT = 20;
+
 export * from './failure';
 export * from './text';
 export * from './models';
 export * from './stylePresets';
-export * from './dedupe';
-export * from './facemask';
-export * from './fingerprint';
+// ⚠️ TD-16-12：此处曾**再抄一遍** dedupe / facemask / fingerprint 的 star-export
+//   （与上文「去重 / 有效性」段重复）—— 同一模块被导出两次 ⇒ 名字来源二义。已删。

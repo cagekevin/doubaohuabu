@@ -41,7 +41,9 @@ import { planQueueDispatch, type DispatchDecision, type PickAutoResult } from '@
 import { planQueueSettlement } from '@/core/rules/sendQueueSettle';
 import { createSendPipeline } from './batchSend';
 import type { AppStore } from './store';
-import type { Ports } from '@/core/ports';
+import type { Ports, StoragePort } from '@/core/ports';
+import { LS_SENDQUEUE_POS } from '@/stable/contracts/keys';
+import { PERSIST } from './persistKeys';
 
 /** 泵的节流窗口（ms）—— 原 `M3` 42038 的 `50` */
 const PUMP_THROTTLE_MS = 50;
@@ -63,6 +65,37 @@ export interface SendQueueController {
   start(): void;
   /** 停泵并把代次 +1（在途结果作废） */
   stop(): void;
+  /**
+   * 读回面板位置（原 `U3` 42570-42585）—— 解析失败 / 字段不是有限数 ⇒ `null`
+   *
+   * ⚠️ 归本控制器是因为**读盘要走端口**：`ui` 不得持 `Ports`（TD-16-8）。
+   *    位置**不进 store** —— 它不是画布状态，只是这个面板的显示偏好。
+   */
+  readPanelPos(): { x: number; y: number } | null;
+  /** 记住面板位置（原 `Pp`）—— 写失败**不影响使用**，只影响「下次记住位置」 */
+  writePanelPos(pos: { x: number; y: number }): void;
+}
+
+/**
+ * 读回面板位置（原 `U3` 42570-42585）—— 解析失败 / 字段不是有限数 ⇒ `null`
+ *
+ * ⚠️ **保留「字段必须是有限数」的校验**：端口只负责取值，坏形状得自己挡。
+ * ★ 2026-10-11 从 `ui/panels/SendQueuePanel.tsx` **原样迁移**（那里曾让 `ui` 持 `StoragePort`）。
+ */
+function readPanelPos(storage: StoragePort): { x: number; y: number } | null {
+  const v = PERSIST[LS_SENDQUEUE_POS].read(storage) as { x?: unknown; y?: unknown } | null;
+  if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return { x: v.x as number, y: v.y as number };
+  return null;
+}
+
+function writePanelPos(storage: StoragePort, pos: { x: number; y: number }): void {
+  try {
+    PERSIST[LS_SENDQUEUE_POS].write(storage, pos);
+  } catch {
+    // catch-ok: 存不进去（配额 / 隐私模式）不影响使用，只影响「下次记住位置」。
+    // ⚠️ 这是**已登记**的「兜底不留痕」= **TD-07-3**（原登记在 ui 侧）；
+    //    本批只补机器可识别的标记、**不顺手改行为**（零炸：只做被要求的那件事）。
+  }
 }
 
 /**
@@ -318,5 +351,8 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
         timer = null;
       }
     },
+
+    readPanelPos: () => readPanelPos(ports.storage),
+    writePanelPos: (pos) => writePanelPos(ports.storage, pos),
   };
 }

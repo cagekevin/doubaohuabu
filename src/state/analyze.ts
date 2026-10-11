@@ -17,6 +17,9 @@ import type { Ports } from '@/core/ports';
 import type { AnalyzeDeps } from '@/core/usecases/analyzePrompt';
 import { analyzeNodePrompt, reviseNodePrompt } from '@/core/usecases/analyzePrompt';
 import { busyIdsOf } from '@/core/rules/accountBusy';
+// ⚠️ 语气档的**唯一真源**在 `constants/text.ts` —— 原先这里手写了 `'info' | 'warn' | 'error'`
+//    （比真源少 `'success'`，一改真源就编译不过 = 重复定义，已收口）
+import type { ToastLevel } from '@/constants/text';
 
 export interface AnalyzeController {
   /**
@@ -49,7 +52,7 @@ export function createAnalyzeController(store: AppStore, ports: Ports): AnalyzeC
   /** 落一次结果（patch 写节点 + toast 提示）——源版是 `u({analyzePrompt})` + `showToast` */
   const applyOutcome = (
     nodeId: string,
-    outcome: { patch: unknown; toast: { text: string; level: 'info' | 'warn' | 'error' } | null },
+    outcome: { patch: unknown; toast: { text: string; level: ToastLevel } | null },
   ): void => {
     const s = store.useStore.getState();
     // ⚠️ `patch === null` = **源版这一步根本不写数据**（`yS` 的五道前置闸）⇒ 只提示

@@ -23,6 +23,7 @@
 import type { ApiPort } from '@/core/ports/host.port';
 import type {
   ApiBatchResult,
+  ApiConfigMap,
   ApiJobEvent,
   ApiJobStatus,
   ApiProviderMeta,
@@ -114,7 +115,9 @@ export function createElectronApiPort(): ApiPort {
     configGet: async () =>
       callOk((api) => api.apiConfigGet(), (r) => ({
         providers: providersOf(r),
-        configs: r.configs ?? {},
+        // ⚠️ 后端 `main.js:3090-3097` 恒给 `configs` 对象（`publicOf` 逐 provider）——
+        //    `?? {}` 只兜「后端漏字段」这一种违约（不假装读到了配置）
+        configs: (isRecord(r.configs) ? r.configs : {}) as ApiConfigMap,
       })),
 
     configSet: async (providerId: string, patch: unknown) =>

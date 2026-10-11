@@ -20,8 +20,11 @@
  */
 
 import type { HostPort } from '@/core/ports/host.port';
-import type { ScanScope, ScannedImage, UnreadRoot } from '@/core/ports/site.port';
-import type { ScanStrategy } from '@/core/rules/scanChain';
+import type { ScannedImage, UnreadRoot } from '@/core/ports/site.port';
+// ★ **2026-10-11 收口**：扫描枚举的**运行时真源**在 `core/rules/scanChain.ts`（TD-04-4 从端口迁出）。
+//   本文件原先自己抄了一份 `['canvas','panel','feed','site']`（**同一真相抄两份**，母体 M3 /
+//   TD-16-24）—— 正是端口不该放运行时值所诱导出来的。现在只消费真源，不再自持副本。
+import { SCAN_SCOPES, type ScanScope, type ScanStrategy } from '@/core/rules/scanChain';
 import { isRecord } from '@/lib/object';
 import { isImgRef, isInlineImage } from '@/stable/protocols/img';
 
@@ -51,8 +54,6 @@ export interface ScanAttempt {
   /** ★ 逐张**落盘失败**的张数（原 `wp.failed`） */
   failed?: number;
 }
-
-const SCAN_SCOPES: readonly ScanScope[] = ['canvas', 'panel', 'feed', 'site'];
 
 const asScope = (v: unknown): ScanScope =>
   typeof v === 'string' && (SCAN_SCOPES as readonly string[]).includes(v) ? (v as ScanScope) : 'site';
@@ -132,7 +133,10 @@ export async function scanAttemptFromRaw(
   raw: unknown,
 ): Promise<ScanAttempt> {
   if (!isRecord(raw)) return { via, ok: false, error: '通道返回空' };
-  if (raw.ok === false) {
+  // ★ **2026-10-11 收口（TD-05-3）**：原写 `raw.ok === false` —— **fail-open**：脚本漏 `ok`
+  //   或换了形状时会被**当成成功**（0 张，"没扫到"）。统一为 `ok !== true`（照
+  //   `adapters/host/electron/api.ts:78` 的本仓正写法）。
+  if (raw.ok !== true) {
     return { via, ok: false, error: typeof raw.error === 'string' ? raw.error : '通道返回失败' };
   }
   const raws = Array.isArray(raw.images) ? (raw.images as RawScannedImage[]) : [];

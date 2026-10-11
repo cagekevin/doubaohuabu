@@ -27,6 +27,22 @@ export const SEND_FAIL_KINDS = [
 ] as const;
 export type SendFailKind = (typeof SEND_FAIL_KINDS)[number];
 
+/**
+ * ⚠️ **两套失败分类域不互通**（2026-10-11 如实登记 —— TD-16-68）
+ *
+ *   · **发送域** = 本文件上面的 `SendFailKind`（14 项）—— 由 `core/rules/failure.ts` 生产，
+ *     经 `Result.reason` 一路传到 `ui` / `state`。
+ *   · **后端横幅域** = 下面的 `BackendErrorKind`（6 项）—— 错误横幅（`ErrorBanner`）用它选文案。
+ *
+ *   两域**只有 `quota` / `unknown` 相交** ⇒ **消费者无法把 `res.reason` 转发进横幅**（类型不符），
+ *   只能归 `unknown` —— 这**属原则 6 禁止 #3 认可的情形**：「分类表没有的 → 归 `unknown`
+ *   但必须保留原始 message」。**不是** UI 偷懒（TD-10-1 已据此改判为该母体的症状）。
+ *
+ *   ⚠️ 另一事实：本域 5 个**具体** kind（`copyright` / `generation_failed` / `network` / `auth`）
+ *   在本仓**零生产者** —— 全仓 12 处 `pushBackendError` 全为 `unknown`（原版的"后端推送"路径
+ *   重写尚未接）。⇒ **两域是否应当合一，是一个待裁定项**（见 TD-16-68）。
+ */
+
 /** 后端错误横幅类型（原 1610-1633） */
 export const BACKEND_ERROR_KINDS = [
   'copyright',

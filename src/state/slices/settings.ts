@@ -19,15 +19,27 @@
  *    数组形态没法在"同一任务多次状态推送"下原地覆盖。
  */
 
-import type { ApiJobEvent, ApiProviderMeta, ApiSetup, ApiUsage } from '@/stable/model/gen';
+import type {
+  ApiConfigMap,
+  ApiJobEvent,
+  ApiProviderMeta,
+  ApiSetup,
+  ApiUsage,
+} from '@/stable/model/gen';
 import { DEFAULT_API_CONCURRENCY } from '@/constants';
 
 export interface SettingsSlice {
   // ── state ──
   /** provider 元信息（**脱敏**：只有 `hasKey`/`keyHint`，密钥明文永不过桥） */
   apiProvidersMeta: ApiProviderMeta[];
-  /** 配置原文（宿主返回什么就是什么 —— 判据 D1：适配器不解释，state 也不解释） */
-  apiConfigs: unknown;
+  /**
+   * provider 配置（**按 `providerId` 索引**；后端 `config-store.publicOf` 的脱敏形状）
+   *
+   * ⚠️ **2026-10-11 定形**：此前是 `unknown`（"宿主返回什么就是什么"）—— 但 API 设置面板要读
+   *    `enabled` / `baseUrl` / `keyHint` … ⇒ 用 `unknown` 就得在 UI 里 `as` 断言（TD-08-1 反模式）。
+   *    形状真源 = `stable/model/gen.ts` 的 `ApiConfigMap`（逐字对 `publicOf`）。
+   */
+  apiConfigs: ApiConfigMap;
   /** 通道选择（图 / 视频 / 兜底 provider + 并发） */
   apiSetup: ApiSetup;
   /** 任务快照（★ 由 `state/subscriptions.ts` 的 `onJobEvent` 订阅写入；键 = `jobId`） */
@@ -37,7 +49,7 @@ export interface SettingsSlice {
 
   // ── actions（只编排，不做业务）──
   setApiProviders: (list: ApiProviderMeta[]) => void;
-  setApiConfigs: (configs: unknown) => void;
+  setApiConfigs: (configs: ApiConfigMap) => void;
   setApiSetup: (setup: ApiSetup) => void;
   setApiJobs: (jobs: Record<string, ApiJobEvent>) => void;
   /** ★ 事件回灌用：按 `jobId` 覆盖或追加（订阅是**唯一写入点**，见 `state/subscriptions.ts`） */
@@ -61,7 +73,7 @@ export function createSettingsSlice(
 ): SettingsSlice {
   return {
     apiProvidersMeta: [],
-    apiConfigs: null,
+    apiConfigs: {},
     apiSetup: defaultApiSetup(),
     apiJobs: {},
     apiUsage: {},

@@ -12,6 +12,29 @@
  */
 
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
+import { GEN_HISTORY_ATTEMPT_LIMIT } from '@/constants';
+
+/**
+ * 往 `genHistory.attempts` **追加**一条尝试记录（原 `U$` `shared.js:25564-25574`）
+ *
+ * ⚠️ 与源逐字对齐的两个行为：
+ *   · `attempt` 为**假值** ⇒ **原样返回**（不做任何补救 —— 源 `if (!t) return e;`）
+ *   · 追加后 **只留最后 20 条**（源 `.slice(-20)`）；`genHistory` 缺失 / `attempts` 非数组 ⇒ 视作空表
+ *   · 恒返回**新对象**（不可变；`v` 固定为 `1`）
+ *
+ * @param data    节点 `data`（不可变）
+ * @param attempt 要追加的尝试（源传的是 `{...attempt, status:'success'}`）
+ */
+export function appendGenHistoryAttempt(
+  data: Record<string, unknown>,
+  attempt: unknown,
+): Record<string, unknown> {
+  if (!attempt) return data;
+  const history = data[GEN_HISTORY_KEY] as { attempts?: unknown } | undefined;
+  const prev = history && Array.isArray(history.attempts) ? history.attempts : [];
+  const attempts = [...prev, attempt].slice(-GEN_HISTORY_ATTEMPT_LIMIT);
+  return { ...data, [GEN_HISTORY_KEY]: { v: 1, attempts } };
+}
 
 /**
  * 按 `attemptId` 给 `genHistory.attempts` 里的**那一条**打补丁（原 `Uy`）

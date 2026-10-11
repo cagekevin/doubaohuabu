@@ -1,7 +1,7 @@
 {
   "_comment": "死代码闸基线（scripts/check-dead-code.mjs 消费）。基线内=存量（不阻塞，可逐步清偿）；基线外新增=闸红。重生成：node scripts/check-dead-code.mjs --update-baseline",
   "knipVersion": "6.41.0",
-  "count": 169,
+  "count": 167,
   "items": [
     "package.json::dependencies::@mediapipe/tasks-vision",
     "src/adapters/host/electron/index.ts::exports::HOST_MISSING",
@@ -111,10 +111,8 @@
     "src/core/usecases/applyApiJobEvent.ts::files::src/core/usecases/applyApiJobEvent.ts",
     "src/core/usecases/generate.ts::exports::rawMessage",
     "src/core/usecases/importProject.ts::files::src/core/usecases/importProject.ts",
-    "src/core/usecases/license.ts::files::src/core/usecases/license.ts",
     "src/core/usecases/localizeVideos.ts::files::src/core/usecases/localizeVideos.ts",
     "src/core/usecases/prepareSession.ts::exports::diagnoseSession",
-    "src/core/usecases/prepareSession.ts::exports::prepareSession",
     "src/core/usecases/projectStorage.ts::files::src/core/usecases/projectStorage.ts",
     "src/core/usecases/sendQueue.ts::exports::isBatchSendRunning",
     "src/lib/captureRegistry.ts::exports::clearCaptureRegistry",

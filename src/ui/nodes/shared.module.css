@@ -112,6 +112,73 @@
   background: var(--color-surface-sunken);
 }
 
+/*
+ * ── 生成节点「舞台」（原 `.gv-stage` / `.gv-waiting` / `.gvw-*` / `.gv-preview-*` /
+ *    `.gv-media-fallback`，`YL.jsx:485-530`）──────────────────────────────────────
+ * 样式真源 = `docs/mockup/assets/mockup.css:448-467`。
+ * ⚠️ mockup 的 `--mk-node-fs` → `var(--font-size-sm)`、`--mk-micro-fs` → `var(--font-size-xs)`
+ *    （mockup 自己就是这么定义的，`mockup.css:25-26`）；`aspect-ratio` 由**内联**给（数据驱动）。
+ */
+.gvStage {
+  position: relative;
+}
+
+.gvWaiting {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-1);
+}
+
+.gvwDots {
+  display: flex;
+  gap: 3px;
+}
+
+.gvwDots span {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-action-primary);
+}
+
+.gvwText {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* ⚠️ mockup 里**没有** `.gv-preview-empty` —— 按源语义（title + sub 两行居中）补，全 token */
+.gvPreviewEmpty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-1);
+  min-height: 80px;
+  padding: var(--space-3);
+  color: var(--color-text-faint);
+  text-align: center;
+}
+
+.gvPreviewTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.gvPreviewSub {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+}
+
+.gvMediaFallback {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
 /* 组节点 */
 .group {
   width: 100%;
@@ -154,6 +221,89 @@
 /** 正文编辑区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */
 .editWrap {
   position: relative;
+}
+
+/*
+ * 正文工具条（原 `.text-toolbar`）—— ★ 2026-10-11 补：目前只落「@ 引用素材」一个按钮
+ * ⚠️ 源版同一行还有**素材缩略条**（可拖拽排序）与**自动匹配** —— 属未落项，见 TD-16-77 / TD-16-78。
+ */
+.textToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+/* 「@ 引用素材」—— 走共享真源（`docs/17` 查 6） */
+.atRefBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/*
+ * 素材缩略条（原 `.mat-preview-bar` / `.mat-thumb*` / `.mat-count` / `.mat-strip-hint`）
+ * ⚠️ 缩略图一律走 `?w=`（`withThumb(url,160)`，同 `CL.jsx:805` 的 `Xt(ae,160)`）—— 不加载原图。
+ */
+.matPreviewBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.matStripHint {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.matThumb {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: grab;
+}
+
+/* 拖动中（原 `.mat-thumb-dragging`） */
+.matThumbDragging {
+  opacity: 0.4;
+}
+
+/* 悬停落点（原 `.mat-thumb-over`） */
+.matThumbOver {
+  outline: 1px dashed var(--field-border-focus);
+}
+
+.matThumbImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.matThumbPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.matThumbGrip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+}
+
+.matCount {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 /**

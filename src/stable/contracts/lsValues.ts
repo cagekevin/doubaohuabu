@@ -17,7 +17,7 @@
  */
 
 import type { Account, AccountGroup, PoolStrategy } from '../model/account';
-import type { GraphPreset, Project } from '../model/project';
+import type { Preset, Project } from '../model/project';
 import type { StylePreset } from '@/constants/stylePresets';
 import type { LsKey } from './keys';
 
@@ -111,7 +111,8 @@ export interface LsValueMap {
   'doubao-projects': Project[];
   'doubao-accounts': Account[];
   'doubao-account-groups': AccountGroup[];
-  'doubao-presets': GraphPreset[];
+  /** ★ 2026-10-11 更正：**联合**（提示词预设 + 图预设混装）—— 原写 `GraphPreset[]` 会误标真实数据 */
+  'doubao-presets': Preset[];
   'doubao-styles': readonly StylePreset[];
   'doubao-canvas-defaults': CanvasDefaults;
   /**

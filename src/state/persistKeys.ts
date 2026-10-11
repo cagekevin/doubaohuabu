@@ -48,14 +48,19 @@ import {
   LS_SENDQUEUE_POS,
   LS_STYLES,
   LS_VIEW_HEAD_COLLAPSED,
+  type READONLY_LS_KEYS,
   type LsKey,
 } from '@/stable/contracts/keys';
 
 /**
- * 只读键（**不得写入**）—— 与 `keys.ts` 的 `READONLY_LS_KEYS` 同集合。
- * ⚠️ 用 `typeof LS_*` 而非字面量：`doubao-*` 字面量只允许出现在 `stable/contracts/`（`原则5/ssot-keys`）。
+ * 只读键（**不得写入**）—— ★ **从唯一真源派生**：`keys.ts` 的 `READONLY_LS_KEYS`
+ *
+ * ⚠️ TD-01-6：此前这里**手写**了一份 `typeof LS_LEGACY_CANVAS | typeof LS_ACCESS_TOKEN`，
+ *    与 `keys.ts` 那份数组各管各的 —— 加一个只读键要改两处，改漏一处**不报错**（静默漂）。
+ *    派生后只改真源一处。
+ * ⚠️ 不写字面量：`doubao-*` 字面量只允许出现在 `stable/contracts/`（`原则5/ssot-keys`）。
  */
-type ReadonlyLsKey = typeof LS_LEGACY_CANVAS | typeof LS_ACCESS_TOKEN;
+type ReadonlyLsKey = (typeof READONLY_LS_KEYS)[number];
 
 /** 可写键（联合） */
 type WritableLsKey = Exclude<LsKey, ReadonlyLsKey>;

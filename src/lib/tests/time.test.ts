@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatClockTime, formatDateTimeMinute, parseSiteTimestamp } from '../time';
+import { formatClockTime, formatDateTimeMinute, formatLocalDate, parseSiteTimestamp } from '../time';
 
 describe('parseSiteTimestamp（原 `pR` 35735）', () => {
   it('null / undefined → NaN', () => {
@@ -108,5 +108,24 @@ describe('formatDateTimeMinute（原 `l0` 34180）', () => {
       return Date.UTC(y ?? 0, (mo ?? 1) - 1, da ?? 1, h ?? 0, mi ?? 0) / 60000;
     };
     expect(toMin(formatDateTimeMinute(T0 + 86_400_000)) - toMin(formatDateTimeMinute(T0))).toBe(1440);
+  });
+});
+describe('formatLocalDate（原 `_Component46.jsx:32-38`；后端 `config-store.todayKey` 同形）', () => {
+  // ⚠️ 不写死字面量：它是**本地时区**语义，写死会让测试依赖跑测机器的 TZ
+  const ms = Date.UTC(2026, 9, 11, 12, 34, 56);
+  const p = (n: number): string => String(n).padStart(2, '0');
+
+  it('形如 `YYYY-MM-DD`，且与本地日期字段逐位一致', () => {
+    const d = new Date(ms);
+    expect(formatLocalDate(ms)).toBe(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
+    expect(formatLocalDate(ms)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('★ 与 `formatDateTimeMinute` 的**日期部分**一致（同一套本地字段 ⇒ 两处不会各算一套）', () => {
+    expect(formatLocalDate(ms)).toBe(formatDateTimeMinute(ms).slice(0, 10));
+  });
+
+  it('非法时间 ⇒ 空串（不编一个「今天」）', () => {
+    expect(formatLocalDate(NaN)).toBe('');
   });
 });

@@ -131,7 +131,9 @@ export function createElectronHost(): HostPort {
         if (!r.ok) return r;
         const v = r.value as { ok?: boolean; error?: string; items?: unknown[]; href?: string } | null;
         // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**）
-        if (!v || v.ok === false) return err('page-error', v?.error ?? '多帧扫描返回失败');
+        // ⚠️ 2026-10-11 收口（TD-04-5）：原写 `v.ok === false` ⇒ **fail-open**（后端漏 `ok` 即当成功）。
+        //   已核后端 `electron/lovart-scan.js:83` 的 handler **每条 return 都带 `ok`** ⇒ 改 `!== true`。
+        if (!v || v.ok !== true) return err('page-error', v?.error ?? '多帧扫描返回失败');
         return ok({ items: Array.isArray(v.items) ? v.items : [], href: v.href });
       },
       showInFolder: async (ref: string) => {
@@ -153,7 +155,9 @@ export function createElectronHost(): HostPort {
         if (!r.ok) return r;
         const v = r.value as { ok?: boolean; error?: string; cleared?: unknown; failed?: unknown } | null;
         // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**，与 `scanFrames` 同法）
-        if (!v || v.ok === false) return err('unknown', v?.error ?? '清理浏览器缓存返回失败');
+        // ⚠️ 2026-10-11 收口（TD-04-5）：`ok === false` ⇒ fail-open。已核后端 `electron/main.js:1201,1213`
+        //   两条 return 都带 `ok` ⇒ 改 `!== true`。
+        if (!v || v.ok !== true) return err('unknown', v?.error ?? '清理浏览器缓存返回失败');
         return ok({
           cleared: typeof v.cleared === 'number' ? v.cleared : 0,
           ...(typeof v.failed === 'number' ? { failed: v.failed } : {}),

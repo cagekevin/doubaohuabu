@@ -8,7 +8,7 @@
  * ⚠️ 原则 1：**只有 state 能写 store**。usecases / adapters 只能返回 Result，由本层写入。
  */
 
-import { create, type StoreApi, type UseBoundStore } from 'zustand';
+import { create } from 'zustand';
 import type { Ports } from '@/core/ports';
 import { EDGE_MARKER, EDGE_STYLE } from '@/constants';
 import { createCanvasSlice, type CanvasSlice } from './slices/canvas';
@@ -23,8 +23,32 @@ import { isInlineImage } from '@/stable/protocols/img';
 
 export type AppState = GlobalSlice & CanvasSlice & UiSlice & SettingsSlice & QueueSlice & GallerySlice & ScanSlice;
 
-/** zustand 的 store hook 类型 */
-export type AppStoreHook = UseBoundStore<StoreApi<AppState>>;
+/**
+ * store 的**对外句柄**类型 —— ★ 结构上**不可写**
+ *
+ * 原则 1「只有 state 能写 store」的**结构承载**（不是闸）：
+ * 对外类型**不含 `setState`** ⇒ 除 `state/**` 的**具名 action** 之外，
+ * 任何地方写 `useStore.setState(…)` 都是**编译错误**。
+ *
+ * ★ 为什么这样最省（vs 加闸）：闸只能事后报红，且「合法通过成本 > 绕行成本」时
+ *   反而在教人绕行；**把写能力从类型上摘掉**后，绕过它需要先改类型 —— 成本瞬间倒挂。
+ * ★ 顺带保住的两条既有红线：
+ *   ① **唯一镜像点**（`setPartial`）：直写 `nodes/edges/library` 会**跳过**
+ *      「画布 → 工程」的镜像 ⇒ 刷新即丢 / 切项目串数据（见 `setPartial` 注释）；
+ *      摘掉 `setState` 后这条路径**结构上不存在**。
+ *   ② 非 state 层不得写 store（`ui` / `adapters` / `usecases` / `bootstrap`）。
+ *
+ * ⚠️ **写 store 的正确姿势**：调**具名 action**（`setProjects` / `setAccounts` /
+ *   `setSaveError` / `pushBackendError` / `loadHydrated` …）——
+ *   它们住在 `state/**`，且都经 `setPartial`（镜像点）。
+ */
+export interface AppStoreHook {
+  (): AppState;
+  <T>(selector: (state: AppState) => T): T;
+  getState(): AppState;
+  getInitialState(): AppState;
+  subscribe(listener: (state: AppState, prevState: AppState) => void): () => void;
+}
 
 export interface AppStore {
   /** 注入的端口（usecases 的依赖来源；state 自身不 import adapters —— 见 .dependency-cruiser.cjs） */
@@ -71,7 +95,9 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
     return r.ok ? r.value : url;
   };
 
-  const useStore = create<AppState>()((set, get) => {
+  // ★ 显式标成 `AppStoreHook`（对外句柄）⇒ 返回出去的 `useStore` **不带 `setState`**
+  //   （`create()` 的返回值本身有 setState，但**类型**上在这里被摘掉 —— 这就是结构收口处）
+  const useStore: AppStoreHook = create<AppState>()((set, get) => {
     /**
      * slice 只拿到 set / get，拿不到 ports —— 端口只能经 usecase 使用（原则 1）
      *

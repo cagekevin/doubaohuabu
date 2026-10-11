@@ -70,6 +70,21 @@ export interface Project {
   data: ProjectData;
 }
 
+/**
+ * 提示词预设（原 `addPreset` `shared.js:27863-27873`）
+ *
+ * ⚠️ **它和 `GraphPreset` 住在同一个数组里**：原 `addPreset` 与 `addNodePreset` 都 `push` 进
+ *    `t().presets` 并同样调 `wo()` 落 `doubao-presets` 键 ⇒ 靠 `kind` 区分
+ *    （提示词预设**没有 `kind`**；图预设 `kind === 'graph'`，判据见 `_Component42.jsx:196`）。
+ * ⚠️ 源里提示词预设**只写不读**（`CL.jsx` 的「保存预设」按钮写；119 个展开组件里没有列表 / 套用方）
+ *    —— 照实建模，不假装它有 UI。
+ */
+export interface PromptPreset {
+  id: string;
+  name: string;
+  content: string;
+}
+
 /** 节点图预设（原 28390-28396） */
 export interface GraphPreset {
   id: string;
@@ -78,6 +93,14 @@ export interface GraphPreset {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
 }
+
+/**
+ * `doubao-presets` 键里的**一条** —— ★ **联合**（不是 `GraphPreset[]`）
+ *
+ * ⚠️ **2026-10-11 更正（契约形状）**：此前 `lsValues.ts` 把它写成 `GraphPreset[]`，而源实测该数组
+ *    **混装两种**（提示词预设 + 图预设）⇒ 旧类型会把真实用户数据里的**提示词预设误标成图预设**。
+ */
+export type Preset = PromptPreset | GraphPreset;
 
 /** 磁盘快照格式（主进程写，前端只读兼容；原 main.js:290-328） */
 export interface ProjectSnapshot {

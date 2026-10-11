@@ -25,10 +25,9 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
-import { useCapture } from '@/state';
+import { useCapture, useHostOps, useStore } from '@/state';
 import { useCaptureElement } from '@/ui/common/useCaptureElement';
 import { NodeResizer, useReactFlow } from '@xyflow/react';
-import { useStore } from '@/state';
 import {
   formatClock,
   provenanceLabel,
@@ -50,6 +49,8 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   const patchNodeData = useStore((s) => s.patchNodeData);
   const pushToast = useStore((s) => s.pushToast);
   const addTextNodeFromRecipe = useStore((s) => s.addTextNodeFromRecipe);
+  // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
+  const hostOps = useHostOps();
   const { setCenter } = useReactFlow();
   const capture = useCapture();
   /**
@@ -115,17 +116,27 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
 
   const [panelOpen, setPanelOpen] = useState(false);
 
-  /** 「复制配方」（原 437-439 的 `ut`）—— 复制的是 `dR` 的多行详情 */
+  /**
+   * 「复制配方」（原 437-439 的 `ut`）—— 复制的是 `dR` 的多行详情
+   *
+   * ★ **2026-10-11 清场**：原先直调 **`navigator.clipboard.writeText`** —— 三处违规：
+   *   ① **绕过 `ClipboardPort`**（`ui` 的宿主能力必须经端口）；
+   *   ② **丢掉 `docs/10` #8 的硬约束** —— 剪贴板必须 **`clear()` → `writeText()` → `await`**，
+   *      而那条保证**只在端口实现里**（`host.port.ts:74` 写明「实现内部必须…」）⇒ 直调浏览器 API 会漏掉 `clear()`
+   *      （旧内容可能残留）；
+   *   ③ **`ui` 不得直持 `Ports`**（TD-16-8 母体）⇒ 走 **`hostOps` 控制器**，而不是 `usePorts()`。
+   * ⚠️ 换成端口后失败**不再是抛异常**而是 `Result` ⇒ 必须**判 `r.ok`**（否则失败分支变成死代码）。
+   * ⚠️ 失败**原文透传**（原则 6）—— 不再只给一句泛化文案。
+   */
   const copyRecipe = useCallback(async () => {
     if (!recipe) return;
-    const text = recipeDetailLines(recipe);
-    try {
-      await navigator.clipboard.writeText(text);
+    const r = await hostOps.copyText(recipeDetailLines(recipe));
+    if (r.ok) {
       pushToast(ANALYZE_UI_TEXT.copied);
-    } catch {
-      pushToast(ANALYZE_UI_TEXT.copyFailed, undefined, 'error');
+      return;
     }
-  }, [recipe, pushToast]);
+    pushToast(`${ANALYZE_UI_TEXT.copyFailed}：${r.message}`, undefined, 'error');
+  }, [recipe, pushToast, hostOps]);
 
   return (
     <div className={`${styles.videoNode} ${selected ? styles.groupSelected : ''}`} data-testid="video-node">

@@ -2,8 +2,15 @@
  * usecase · API 通道配置（provider / 配置 / 测试连接 / 任务）
  *
  * 依据（**逐行回源抄录**）：原 store action `loadApiSetup`(30567) · `saveApiSetup`(30594) ·
- *   `refreshApiConfig`(30650) · `submitApiJob`(30662) · `listApiJobs` / `cancelApiJob`(30699)
+ *   `refreshApiConfig`(30650) · `submitApiJob`(30662)
  *   + 消费者 `_Component46.jsx`（API 设置面板）
+ *
+ * ★ **2026-10-11 删掉 `listApiJobs` / `cancelApiJob`（判死，判据 B5）**：本面板接线的同一批里，
+ *   死代码闸把 `apiConfig.ts` 的**文件级**基线条目挤掉 ⇒ 这两个导出**浮出水面**。取证：
+ *   ① 源版 `cancelApiJob`(30694) **只有定义、没有调用方**；`listApiJobs` **在源里根本不存在**；
+ *   ② 全仓（含 `state/apiOps.ts`）无生产消费者 ⇒ 幽灵预留 ⇒ 按闸的 Q3「判死 → 删（首选）」删掉。
+ *   ⚠️ `ApiPort.jobList` / `jobCancel` **保留**（端口是契约；后端 `api-job:list` / `cancel` 已实现）
+ *      —— 将来要做「任务列表 / 取消」时，照 `_Component46` 同法补用例 + 面板。
  *
  * ★ **为什么值得有这一层**（不是"给端口套壳"）：
  *   `_Component46.jsx:100/109/118/149/175` **直调 `window.api.apiConfigSet*` / `apiConfigTest`**
@@ -17,7 +24,7 @@
  */
 
 import type { ApiPort } from '@/core/ports/host.port';
-import type { ApiJobEvent, ApiJobStatus, ApiProviderMeta, ApiSetup, ApiUsage } from '@/stable/model/gen';
+import type { ApiConfigMap, ApiProviderMeta, ApiSetup, ApiUsage } from '@/stable/model/gen';
 import type { Result } from '@/core/model/result';
 
 export interface ApiConfigDeps {
@@ -32,7 +39,7 @@ export interface ApiConfigDeps {
  */
 export async function loadApiProviders(
   deps: ApiConfigDeps,
-): Promise<Result<{ providers: ApiProviderMeta[]; configs: unknown }>> {
+): Promise<Result<{ providers: ApiProviderMeta[]; configs: ApiConfigMap }>> {
   return deps.api.configGet();
 }
 
@@ -91,15 +98,4 @@ export async function testProvider(
   return deps.api.configTest(providerId);
 }
 
-/** 任务列表（原 `api-job:list`） */
-export async function listApiJobs(deps: ApiConfigDeps): Promise<Result<ApiJobEvent[]>> {
-  return deps.api.jobList();
-}
 
-/** 取消任务（原 `cancelApiJob` 30699-30707） */
-export async function cancelApiJob(
-  deps: ApiConfigDeps,
-  jobId: string,
-): Promise<Result<{ status: ApiJobStatus }>> {
-  return deps.api.jobCancel(jobId);
-}

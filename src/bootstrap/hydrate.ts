@@ -25,6 +25,7 @@ import { resetStaleJobs } from '@/stable/migrations';
 import {
   LS_ACCOUNTS,
   LS_LOVART_GALLERIES,
+  LS_PRESETS,
   LS_PROJECTS,
   LS_SCAN_HISTORY,
   LS_STYLES,
@@ -41,7 +42,6 @@ export interface HydrateResult {
 /** 读取 → 启动归位 → 写回 → 灌入 store */
 export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   const { storage } = ports;
-  const set = store.useStore.setState;
   const notes: string[] = [];
 
   // ── 1. 读原始值（缺失即空数组 —— 「本来就没有」是正常态）──
@@ -52,6 +52,9 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   const lovartGalleries = PERSIST[LS_LOVART_GALLERIES].read(storage) ?? {};
   // ★ 指纹体检历史（源 `fT` 26232：读不到 ⇒ 空数组）
   const scanHistory = PERSIST[LS_SCAN_HISTORY].read(storage) ?? [];
+  // ★ 节点 / 提示词预设（源 `Tk` 26618：读不到 / 坏数据 ⇒ **空数组** —— 与 `?? []` 同义）
+  //   ⚠️ 此前该键**读都不读** ⇒ 用户已有预设重启即不可见（`docs/15` §1 #5）
+  const presets = PERSIST[LS_PRESETS].read(storage) ?? [];
 
   // ── 2. 启动归位：清在途任务状态（每次启动都要；不是迁移）──
   const reset = resetStaleJobs<Project>(projects);
@@ -67,19 +70,19 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
     }
   }
 
-  // ── 4. 灌入 store（state 层是唯一写入点）──
-  set({
+  // ── 4. 灌入 store（**经 state 的具名 action** —— 本文件在 bootstrap，不得写 store）──
+  //   ⚠️ 这里**没有** `setState` 可用：`AppStoreHook` 的对外类型已摘掉它
+  //      ⇒ 直写是**编译错误**（原则 1 的**结构承载**，不是靠闸拦）。
+  const first = reset.value[0];
+  store.useStore.getState().loadHydrated({
     projects: reset.value,
     accounts,
     lovartGalleries,
     scanHistory,
-    activeId: reset.value[0]?.id ?? null,
+    presets,
+    activeId: first?.id ?? null,
+    ...(first ? { canvas: first.data } : {}),
   });
-
-  if (reset.value[0]) {
-    const d = reset.value[0].data;
-    set({ nodes: d.nodes, edges: d.edges, library: d.library, snap: d.snap });
-  }
 
   return { notes, changed: reset.changed };
 }

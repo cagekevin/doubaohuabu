@@ -21,14 +21,16 @@
  *   | 重新检测按钮 | 152-155 | **只在 `expired`/`invalid`/`tampered` 时出现**（`C`） |
  *   | 机器码区 / 激活码区 / 页脚 | 157-189 | 逐字 |
  *
- * ⚠️ **原则 1**：本组件调**端口**（`usePorts()`，与 `BackendView` 同法），不写 store
- *   —— 授权状态不住 store（它是一次性读取的页面数据，不是要与画布共享的状态）。
+ * ⚠️ **原则 1 + 铁律 2**：本组件调 `useLicenseOps()`（state 控制器 → `core/usecases/license`），
+ *   **不写 store**，也**不直调端口** —— 授权状态不住 store（它是一次性读取的页面数据，
+ *   不是要与画布共享的状态）；而"不落 store"**不能**推出"ui 可直调端口"。
+ *   ★ 2026-10-11：原先 6 处 `usePorts().host.license.*` 已收口到控制器（TD-16-8）。
  * ⚠️ 与源一致：**激活成功要等 600ms 才 `onActivated`** —— 否则那条「激活成功，有效期至…」
  *   会一闪而过（用户看不到自己成功了）。
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePorts } from '@/state';
+import { useLicenseOps } from '@/state';
 import type { LicenseStatus } from '@/core/model/license';
 import { formatDateTime, formatLicenseRemaining, isLicenseUsable } from '@/core/rules/license';
 import { LICENSE_TEXT } from '@/constants/text';
@@ -51,7 +53,7 @@ export interface ActivatePageProps {
 const UNLOCK_DELAY_MS = 600;
 
 export function ActivatePage({ initialStatus, initialError, onActivated }: ActivatePageProps) {
-  const ports = usePorts();
+  const licenseOps = useLicenseOps();
 
   const [machineCode, setMachineCode] = useState('');
   const [status, setStatus] = useState<LicenseStatus | null>(initialStatus);
@@ -71,18 +73,18 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
   /** 刷新（原 `m` 15-30）—— 机器码与状态一起取；**状态 `ok` ⇒ 解锁** */
   const refresh = useCallback(async () => {
     try {
-      const mc = await ports.host.license.getMachineCode();
+      const mc = await licenseOps.readMachineCode();
       if (mc.ok) setMachineCode(mc.value);
-      const st = await ports.host.license.getStatus();
+      const st = await licenseOps.checkStatus();
       if (st.ok) {
-        setStatus(st.value);
-        if (st.value.status === 'ok') onActivated();
+        setStatus(st.value.info);
+        if (st.value.info.status === 'ok') onActivated();
       }
     } catch (e) {
       setMsg(LICENSE_TEXT.msgFetchFailed(e instanceof Error ? e.message : String(e)));
       setMsgKind('err');
     }
-  }, [ports, onActivated]);
+  }, [licenseOps, onActivated]);
 
   /**
    * ⚠️ 与 `main.tsx` 同一形态：**不**在 effect 体里直接调带 setState 的函数
@@ -90,16 +92,16 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
    */
   useEffect(() => {
     let alive = true;
-    ports.host.license
-      .getMachineCode()
+    licenseOps
+      .readMachineCode()
       .then((mc) => {
         if (alive && mc.ok) setMachineCode(mc.value);
-        return ports.host.license.getStatus();
+        return licenseOps.checkStatus();
       })
       .then((st) => {
         if (!alive || !st.ok) return;
-        setStatus(st.value);
-        if (st.value.status === 'ok') onActivated();
+        setStatus(st.value.info);
+        if (st.value.info.status === 'ok') onActivated();
       })
       .catch((e: unknown) => {
         if (!alive) return;
@@ -109,7 +111,7 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
     return () => {
       alive = false;
     };
-  }, [ports, onActivated]);
+  }, [licenseOps, onActivated]);
 
   /** 复制机器码（原 `w` 32-44） */
   const copyMachineCode = useCallback(async () => {
@@ -128,7 +130,7 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
   const exportMachineCode = useCallback(async () => {
     if (!machineCode) return;
     try {
-      const r = await ports.host.license.exportMachineCode(machineCode);
+      const r = await licenseOps.exportMachineCode(machineCode);
       if (r.ok) {
         setMsg(LICENSE_TEXT.msgMachineExported(r.value.path ?? ''));
         setMsgKind('ok');
@@ -141,7 +143,7 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
       setMsg(LICENSE_TEXT.msgExportFailed(e instanceof Error ? e.message : String(e)));
       setMsgKind('err');
     }
-  }, [machineCode, ports]);
+  }, [machineCode, licenseOps]);
 
   /** 激活（原 `y` 63-102） */
   const activate = useCallback(async () => {
@@ -154,13 +156,13 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
     setBusy(true);
     setMsg('');
     try {
-      const r = await ports.host.license.activateWithCode(trimmed);
+      const r = await licenseOps.activate(trimmed);
       if (!r.ok) {
         setMsg(LICENSE_TEXT.msgActivateFailed(r.message || LICENSE_TEXT.unknownError));
         setMsgKind('err');
         return;
       }
-      const v = r.value;
+      const v = r.value.info;
       if (v.status === 'ok') {
         setStatus({ status: 'ok', ...(v.expireAt === undefined ? {} : { expireAt: v.expireAt }), machineCode });
         setMsg(LICENSE_TEXT.msgActivated(formatDateTime(v.expireAt)));
@@ -186,7 +188,7 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
     } finally {
       setBusy(false);
     }
-  }, [code, ports, machineCode, onActivated, refresh]);
+  }, [code, licenseOps, machineCode, onActivated, refresh]);
 
   // 派生（原 103-107）
   const ok = !!status && status.status === 'ok';

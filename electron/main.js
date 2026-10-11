@@ -1216,9 +1216,12 @@ ipcMain.handle('clear-browser-cache', async () => {
 // 跨界面拖放：渲染进程在「出新图」面板里长按图片后调用，主进程把图片落盘为真实文件，
 // 再调用 webContents.startDrag 启动一次系统级文件拖拽。用户把光标拖到 Lovart / Tapnow 的
 // webview 内松手，guest 页面（若自身有图片拖放处理）即收到该文件作为素材。
-// 入参 payload：{ dataUrl, path, name, thumbDataUrl } —— 传 dataUrl 时主进程就地落盘并返回真实路径；
+// 入参 payload：{ dataUrl, path, name } —— 传 dataUrl 时主进程就地落盘并取真实路径；
 // 传 path 时直接使用（已是 img:// 落盘文件），优先用 path 避免重复写盘。
-// thumbDataUrl 可选：若提供，会额外落盘一张轻量缩略图，仅作为拖拽时的 icon/ghost 预览；
+// ⚠️ 2026-10-11 更正：此处原写「thumbDataUrl 可选：若提供，会额外落盘一张轻量缩略图…」，
+//    **那是假承诺** —— 本 handler 从不读 `thumbDataUrl`（全文件仅注释提到它）。拖拽 icon 一律由
+//    下方 `nativeImage.createFromPath(filePath).resize({width:64})` 从**原图**生成
+//    （`docs/10` #53「拖拽预览 icon 必须是 64px」）。⇒ 该字段已从渲染层端口删除（幽灵字段）。
 // 真正 drop 到页面的文件仍是原图 filePath，保证画质。
 ipcMain.on('start-file-drag', (e, payload) => {
   const win = (BrowserWindow.fromWebContents && BrowserWindow.fromWebContents(e.sender)) || mainWindow;

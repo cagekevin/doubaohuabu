@@ -101,6 +101,12 @@
   color: var(--color-surface-raised);
 }
 
+/* ★ 2026-10-11 补：源 `showToast` 的第 4 档 `'success'`（原 `.app-toast-success`） */
+.toastSuccess {
+  background: var(--color-success);
+  color: var(--color-text-strong);
+}
+
 /* ── ErrorBanner ── */
 .banner {
   display: flex;

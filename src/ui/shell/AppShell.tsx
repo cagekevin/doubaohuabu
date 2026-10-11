@@ -7,6 +7,7 @@
  * 依据：docs/05-画布与交互.md §5（原 `.app > .main-area` 结构）
  */
 
+import { useState } from 'react';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ErrorBanner } from '@/ui/common/ErrorBanner';
 import { ToastHost } from '@/ui/common/ToastHost';
@@ -15,8 +16,10 @@ import { GenPanel } from '@/ui/panels/GenPanel';
 import { AccountPanel } from '@/ui/panels/AccountPanel';
 import { BatchSendPanel } from '@/ui/panels/BatchSendPanel';
 import { SendQueuePanel } from '@/ui/panels/SendQueuePanel';
+import { ApiSettings } from '@/ui/panels/ApiSettings';
 import { TopBar } from './TopBar';
 import { useStore } from '@/state';
+import { API_SETTINGS_TEXT } from '@/constants/text';
 import styles from './AppShell.module.css';
 
 export interface AppShellProps {
@@ -30,6 +33,11 @@ export function AppShell({ canvas }: AppShellProps) {
   const backendErrors = useStore((s) => s.backendErrors);
   const dismissBackendError = useStore((s) => s.dismissBackendError);
   const clearBackendErrors = useStore((s) => s.clearBackendErrors);
+  /**
+   * 「API 服务」弹窗开合 —— ★ **组件局部 state**（原 `_Component48` 的 `c` / `l`）
+   * 依据：`docs/16` §2.9「面板开合 … ⇒ `useState` 组件局部」（不入 store）。
+   */
+  const [apiOpen, setApiOpen] = useState(false);
 
   return (
     <div className={styles.app}>
@@ -48,6 +56,18 @@ export function AppShell({ canvas }: AppShellProps) {
         */}
         <aside className={styles.side} aria-label="账号栏">
           <AccountPanel />
+          {/* ★ 「API 服务」入口（原 `_Component48.jsx:155-159` 的 `.side-api-btn`） */}
+          <div className={styles.sideApiCol}>
+            <button
+              type="button"
+              className={styles.sideApiBtn}
+              title={API_SETTINGS_TEXT.entryTitle}
+              onClick={() => setApiOpen(true)}
+            >
+              <span className={styles.sideApiIcon}>⚡</span>
+              {API_SETTINGS_TEXT.entryLabel}
+            </button>
+          </div>
         </aside>
 
         <div className={styles.centerStage}>
@@ -69,6 +89,9 @@ export function AppShell({ canvas }: AppShellProps) {
           <LibraryPanel />
         </aside>
       </div>
+
+      {/* 「API 服务」弹窗（原 `_Component48.jsx:199` 的 `{l && <_Component46 …/>}`） */}
+      {apiOpen && <ApiSettings onClose={() => setApiOpen(false)} />}
 
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>

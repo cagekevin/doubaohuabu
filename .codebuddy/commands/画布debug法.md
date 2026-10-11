@@ -130,7 +130,7 @@
 | 层 | 唯一职责 | 严禁 | 机器守卫 |
 | --- | --- | --- | --- |
 | `ui/**` | 视图；只依赖 `state` + `core/model` 类型 | import `adapters/**`；`useStore.setState()` 直改 | 规则 2 + 原则 1 |
-| `state/**` | **唯一**写 store；只做编排 | 放业务规则（算哈希 / 比较 / 组装提示词）；单 slice > 300 行 / > 25 字段 | 原则 1 + `max-lines` |
+| `state/**` | **唯一**写 store；只做编排 | 放业务规则（算哈希 / 比较 / 组装提示词）；单 slice > 300 行 / > 25 字段 | 原则 1（规模限**人工**把关） |
 | `core/usecases/**` | 编排，返回 `UsecaseResult<T>` | 写 store；碰 React / `window` | 原则 1 |
 | `core/rules/**` | 纯函数 | `window` / `document` / `Date.now()` / `Math.random()` / `localStorage` / `setTimeout` | `原则4/core-purity` |
 | `core/ports/**` | **只有类型** | 任何运行时实现 | `原则3/ports-type-only` |

@@ -1,0 +1,126 @@
+/**
+ * 「API 服务」面板（原 `_Component46.jsx` 的 `.api-settings-*` / `.api-card` / `.api-row`）
+ *
+ * ⚠️ 原则 5：色值 / 间距只走 token（`var(--…)`），**不硬编码**。
+ * ⚠️ 查 6：按钮 / 输入框 / 空态一律 `composes` `ui/common/shared.module.css` 的真源类，不自造。
+ */
+
+.sub {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.sectionTitle {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.rowLabel {
+  flex: none;
+  width: 84px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.input {
+  composes: field from '../common/shared.module.css';
+  flex: 1;
+  min-width: 0;
+}
+
+.usage {
+  margin: var(--space-2) 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.empty {
+  composes: emptyInline from '../common/shared.module.css';
+}
+
+/* ── provider 卡片 ── */
+
+.card {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.enable {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+}
+
+.cardName {
+  color: var(--color-text-strong);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.caps {
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.keyRow {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.keyHint {
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.saveBtn {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}
+
+.testBtn {
+  composes: btn btnSm from '../common/shared.module.css';
+}
+
+.testOk {
+  color: var(--color-success-text);
+  font-size: var(--font-size-sm);
+}
+
+.testBad {
+  color: var(--color-danger-text);
+  font-size: var(--font-size-sm);
+}

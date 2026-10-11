@@ -10,8 +10,10 @@
  */
 
 import type { Account, AccountGroup, Fingerprint, PoolStrategy } from '@/stable/model/account';
-import type { Project } from '@/stable/model/project';
-import { createProject as makeProject, makeNodeId } from '@/core/rules/project';
+import type { Preset, Project } from '@/stable/model/project';
+import type { LovartGalleries } from '@/core/rules/lovartGallery';
+import type { ScanHistoryEntry } from '@/core/rules/scanHistory';
+import { createProject as makeProject, makeNodeId, setProjectStoragePath as applyStoragePath } from '@/core/rules/project';
 import {
   addGroup as addGroupPure,
   deleteGroup as deleteGroupPure,
@@ -68,6 +70,26 @@ export interface GlobalSliceDeps {
 /** `roster()` 的返回值 —— 指纹生成环境的形状（`fpEnv` 的入参） */
 type RosterEnv = ReturnType<GlobalSliceDeps['roster']>;
 
+/**
+ * 启动灌入的载荷（`loadHydrated` 的入参）
+ *
+ * ⚠️ 形状**照抄 `bootstrap/hydrate.ts` 读到的东西**（键 → 值），不增不减：
+ *   多一个字段 = 又多一条「谁都能往里塞」的通用写入口。
+ * ⚠️ 画布部分复用 `Project['data']`（就是 `nodes/edges/library/snap`）——
+ *   与 `createGlobalSlice` 的 `set` 形状同源，避免反向 import `store.ts`（会成环）。
+ */
+export interface HydratedSnapshot {
+  projects: Project[];
+  accounts: Account[];
+  lovartGalleries: LovartGalleries;
+  scanHistory: ScanHistoryEntry[];
+  /** ★ 节点 / 提示词预设（`doubao-presets`）—— 2026-10-11 补（原先该键**读都不读**） */
+  presets: Preset[];
+  activeId: string | null;
+  /** 首个工程的画布数据（**无工程 ⇒ 不给**，与源版一致） */
+  canvas?: Project['data'];
+}
+
 export interface GlobalSlice {
   // ── 工程 ──
   projects: Project[];
@@ -91,12 +113,33 @@ export interface GlobalSlice {
    */
   accountBusy: BusyMap;
 
+  // ── 预设 ──
+  /**
+   * ★ **节点 / 提示词预设**（原 `presets` `shared.js:26757`，键 `doubao-presets`）
+   *
+   * ⚠️ 数组**混装两种形状**（见 `stable/model/project.ts` 的 `Preset`）：提示词预设（**无 `kind`**）
+   *    + 节点图预设（`kind === 'graph'`）—— 源里两者都 `push` 进同一数组、同一个键。
+   * ⚠️ **谁读**：`state/projectOps`（导入工程时按 `id` 判重）；**谁写**：`loadHydrated` + 导入回写。
+   *    UI 侧读方（拆分时挑预设 / 提示词预设列表）**尚未落** —— 见 `docs/13`（判据 B5：不落无人调的 action）。
+   */
+  presets: Preset[];
+
   // ── actions ──
   setProjects: (projects: Project[]) => void;
   setActiveId: (id: string | null) => void;
   setStarted: (v: boolean) => void;
   setSaveError: (e: SaveError | null) => void;
+  /**
+   * ★ **启动灌入**（`bootstrap/hydrate.ts` 的**唯一写入口**）
+   *
+   * 为什么要这个 action：`hydrate` 住在 `bootstrap`（非 state 层）⇒ 它**不得**写 store（原则 1）。
+   * 而 `AppStoreHook` 已**结构上不暴露 `setState`** ⇒ 启动灌入必须有个**具名 action** 承载。
+   * ⚠️ 一次调用**原子**灌完（不给「读了一半」的中间态）。
+   */
+  loadHydrated: (snapshot: HydratedSnapshot) => void;
   setAccounts: (a: Account[]) => void;
+  /** 整体替换预设（导入工程回写 / 启动灌入） */
+  setPresets: (p: Preset[]) => void;
   setGroups: (g: AccountGroup[]) => void;
   /**
    * ★ **分组 CRUD**（原 `shared.js:31937-32040`）
@@ -175,6 +218,23 @@ export interface GlobalSlice {
    *    同时换 `activeId` 与 `nodes/edges/library/snap`。
    */
   openProject: (id: string) => void;
+  /**
+   * ★ **插入一个「导入的」工程并切过去**（原 `importProject` 的**写入半**）
+   *
+   * ⚠️ 与 `openProject` **同法**：insert + 换 `activeId` + **把该工程的画布数据灌回来**
+   *   —— 只加进 `projects` 而不换画布 ⇒ `store.ts` 的镜像会把**旧画布**写进新工程
+   *   （`docs/14` §2 的 ⭐⭐ 数据损坏 bug，这是它的第三条触发路径）。
+   * ⚠️ 用例（`core/usecases/importProject`）**只返回**工程对象，写入必须发生在这里（原则 1）。
+   */
+  addImportedProject: (project: Project) => void;
+  /**
+   * ★ **设置当前工程的保存路径**（原 `_Component42.jsx` 顶栏存储区 → state 的 `setProjectStoragePath`）
+   *
+   * ⚠️ 纯逻辑在 `core/rules/project.ts` 的 `setProjectStoragePath`（空串 ⇒ `undefined`，与源一致）；
+   *   本 action 只把结果落到**当前工程**。
+   * ⚠️ 写回磁盘目录由宿主侧 `activateStorage` 负责（在 `state/projectOps` 的流程里，不在此处）。
+   */
+  setProjectStoragePath: (path: string) => void;
   /** 重命名当前项目 */
   renameProject: (id: string, name: string) => void;
   /** 删除项目 */
@@ -220,12 +280,23 @@ export function createGlobalSlice(
     proxyPool: [],
     poolStrategy: 'round-robin',
     accountBusy: {},
+    presets: [],
 
     setProjects: (projects) => set({ projects }),
     setActiveId: (activeId) => set({ activeId }),
     setStarted: (started) => set({ started }),
     setSaveError: (saveError) => set({ saveError }),
+    // ★ 启动灌入（唯一入口）—— 与 `hydrate` 原实现**逐字段等价**：
+    //   先灌工程/账号族/当前工程，再（有工程时）灌画布四字段。
+    loadHydrated: (snapshot) => {
+      const { canvas, ...head } = snapshot;
+      set(head);
+      if (canvas) {
+        set({ nodes: canvas.nodes, edges: canvas.edges, library: canvas.library, snap: canvas.snap });
+      }
+    },
     setAccounts: (accounts) => set({ accounts }),
+    setPresets: (presets) => set({ presets }),
     setGroups: (groups) => set({ groups }),
 
     addGroup: (name) => {
@@ -345,6 +416,27 @@ export function createGlobalSlice(
         edges: target.data.edges,
         library: target.data.library,
         snap: target.data.snap,
+      });
+    },
+
+    addImportedProject: (project) => {
+      // ★ 与 `openProject` 同法：插入 + 切过去 + **把它的画布数据灌回来**（否则镜像会把旧画布写进新工程）
+      set({
+        projects: [...get().projects, project],
+        activeId: project.id,
+        started: true,
+        nodes: project.data.nodes,
+        edges: project.data.edges,
+        library: project.data.library,
+        snap: project.data.snap,
+      });
+    },
+
+    setProjectStoragePath: (path) => {
+      const id = get().activeId;
+      if (!id) return;
+      set({
+        projects: get().projects.map((p) => (p.id === id ? applyStoragePath(p, path, deps.now()) : p)),
       });
     },
 

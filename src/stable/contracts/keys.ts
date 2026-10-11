@@ -52,32 +52,14 @@ export const LS_NEWIMAGES_FOLDED = 'doubao-newimages-folded';
 export const LS_VIEW_HEAD_COLLAPSED = 'doubao-view-head-collapsed';
 
 /**
- * 全部键的字面量联合 —— 让 `StoragePort.read(key)` **拼错键名编译期就报错**
+ * ★ **20 个键的唯一真源**（清单本身）
+ *
+ * ⚠️ 原先这里有**两份手写清单**：`LsKey` 联合一份、`ALL_LS_KEYS` 数组一份
+ *   —— 加一个键要改两处，改漏一处**不报错**（联合少一个 ⇒ 那个键的读写全部失去编译期保护）。
+ * ⚠️ **必须 `as const`**：没有它，下面派生的 `LsKey` 会退化成 `string`
+ *   ⇒ `StoragePort.read(key)` 拼错键名**不再报错**（那正是 `LsKey` 存在的唯一理由）。
  */
-export type LsKey =
-  | typeof LS_PROJECTS
-  | typeof LS_ACCOUNTS
-  | typeof LS_ACCOUNT_GROUPS
-  | typeof LS_PRESETS
-  | typeof LS_STYLES
-  | typeof LS_CANVAS_DEFAULTS
-  | typeof LS_LOVART_GALLERIES
-  | typeof LS_SCAN_HISTORY
-  | typeof LS_PROXY_POOL
-  | typeof LS_AUTO_VIDEO_DETECT
-  | typeof LS_FACE_MASK_OPTS
-  | typeof LS_ACCOUNT_POOL_STRATEGY
-  | typeof LS_SENDQUEUE_POS
-  | typeof LS_IMGGEN_DEDUP
-  | typeof LS_LEGACY_CANVAS
-  | typeof LS_ACCESS_TOKEN
-  | typeof LS_NEWIMAGES_AUTOCAP
-  | typeof LS_NEWIMAGES_CURRENT_ONLY
-  | typeof LS_NEWIMAGES_FOLDED
-  | typeof LS_VIEW_HEAD_COLLAPSED;
-
-/** 全部键（20 个）—— 用于「清空本地数据」等操作 */
-export const ALL_LS_KEYS: readonly LsKey[] = [
+export const ALL_LS_KEYS = [
   LS_PROJECTS,
   LS_ACCOUNTS,
   LS_ACCOUNT_GROUPS,
@@ -98,7 +80,22 @@ export const ALL_LS_KEYS: readonly LsKey[] = [
   LS_NEWIMAGES_CURRENT_ONLY,
   LS_NEWIMAGES_FOLDED,
   LS_VIEW_HEAD_COLLAPSED,
-];
+] as const;
 
-/** 只读键（不得写入） */
-export const READONLY_LS_KEYS: readonly LsKey[] = [LS_LEGACY_CANVAS, LS_ACCESS_TOKEN];
+/**
+ * 全部键的字面量联合 —— 让 `StoragePort.read(key)` **拼错键名编译期就报错**
+ *
+ * ★ **由上面的 `ALL_LS_KEYS` 派生** ⇒「20 个键」全仓只有**一份**清单（加键只改数组一处）。
+ *   （用途：运行时遍历，如「清空本地数据」——`StoragePort.remove` 接线后即可用。）
+ */
+export type LsKey = (typeof ALL_LS_KEYS)[number];
+
+/**
+ * 只读键（**不得写入**）
+ *
+ * ★ **「只读键」的唯一真源** —— `state/persistKeys.ts` 的 `ReadonlyLsKey` 由本数组**派生**
+ *   （`(typeof READONLY_LS_KEYS)[number]`）⇒ 增删只读键**只改这一处**，两边**结构上不可能漂**（TD-01-6）。
+ * ⚠️ **必须 `as const` 元组**：若写成 `readonly LsKey[]`，元素会被**加宽**成 `LsKey`
+ *   ⇒ 派生出的类型退化成全集 ⇒ `WritableLsKey` 塌成 `never`（**编译期假绿**）。改注解前先想这一行。
+ */
+export const READONLY_LS_KEYS = [LS_LEGACY_CANVAS, LS_ACCESS_TOKEN] as const;

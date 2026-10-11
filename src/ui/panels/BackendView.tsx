@@ -26,8 +26,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { usePorts, useStore } from '@/state';
+import { useAccountOps, useStore } from '@/state';
 import type { Account } from '@/stable/model/account';
+// ★ 容器钩子类名的 SSOT（`findWebview` 靠它定位；见下方 `className`）
+import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
 import styles from './BackendView.module.css';
 
 /**
@@ -55,7 +57,9 @@ function partitionOf(account: Account): string {
 }
 
 function AccountWebview({ account, active }: { account: Account; active: boolean }) {
-  const ports = usePorts();
+  // ★ 2026-10-11：原先两处 `usePorts()` 直调（`host.account.ensureFingerprint` / `sites[].chatUrl`）
+  //   已收口到 `accountOps`（TD-16-8）—— 组件不再持有 `Ports`。
+  const accountOps = useAccountOps();
   /** 宿主产出的指纹 preload 地址（原 `_Component25` 的 `preload={h}`） */
   const [preloadUrl, setPreloadUrl] = useState<string | null>(null);
 
@@ -68,8 +72,8 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
      */
     if (account.type !== 'other') {
       void (async () => {
-        const r = await ports.host.account.ensureFingerprint({
-          id: account.id,
+        const r = await accountOps.prepareWebviewSession({
+          accountId: account.id,
           partition: account.partition,
           fingerprint: account.fingerprint,
         });
@@ -83,7 +87,9 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
       cancelled = true;
     };
     // ⚠️ 指纹或盐一变就要**重新准备**（换指纹 = 换身份）
-  }, [ports, account.id, account.partition, account.fingerprint, account.type]);
+    //   ⚠️ **必须用字段级依赖**（不是 `account` 对象）：`accounts` 每次 store 更新都会换对象标识，
+    //      用整个 `account` 会让本 effect 每轮重跑 ⇒ 重复打 `ensureFingerprint` IPC。
+  }, [accountOps, account.id, account.partition, account.fingerprint, account.type]);
 
   return (
     <webview
@@ -98,7 +104,7 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
        *    否则会先在错误的 session 里起一次导航（Electron 的已知行为）。
        */
       partition={partitionOf(account)}
-      src={backendUrlOf(account, ports.sites[account.type]?.chatUrl)}
+      src={backendUrlOf(account, accountOps.chatUrlOf(account.type))}
       // 原版：有指纹就用指纹的 UA；否则交给引擎默认（不编一个）
       {...(account.fingerprint ? { useragent: account.fingerprint.userAgent } : {})}
       // ⚠️ 渲染侧守卫（不是 effect 里重置状态）：`other` 类型永远不挂 preload，
@@ -123,7 +129,9 @@ export function BackendView() {
   const activeAccountId = useStore((s) => s.activeAccountId);
 
   return (
-    <div className={styles.webviews}>
+    // ★ 这个**字面量类**不是装饰：`adapters/site/shared/webview.ts` 的 `findWebview` 靠它定位容器
+    //   （`WEBVIEWS_HOST_CLASS` = SSOT）。2026-10-11 前这里只挂 CSS-module 哈希类 ⇒ 定位恒失效。
+    <div className={`${WEBVIEWS_HOST_CLASS} ${styles.webviews}`}>
       {accounts.map((a) => (
         <AccountWebview key={a.id} account={a} active={a.id === activeAccountId} />
       ))}

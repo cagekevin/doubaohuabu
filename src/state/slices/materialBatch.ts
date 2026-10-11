@@ -1,7 +1,7 @@
 /**
  * `canvas.addMaterialsBatch` 的**主体**（原 `addMaterialsBatch` shared.js:29084-29242）
  *
- * ★ **为什么单独成文件（判据 C1 + `max-lines`）**：`canvas.ts` 的**代码行**已超 400 ⇒
+ * ★ **为什么单独成文件（判据 C1 + `max-lines`〔该规则 2026-10-11 已关闭〕）**：`canvas.ts` 的**代码行**已超 400 ⇒
  *   把「排网格 → 落盘外置 → library 去重 → 建节点」这段抽出来；
  *   `canvas.ts` 只留「读 state → 调它 → 写 state」。
  *
