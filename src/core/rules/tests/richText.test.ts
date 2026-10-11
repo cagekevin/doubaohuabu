@@ -18,7 +18,6 @@ import {
   refMissingHtml,
   splitRefMarkers,
   textToEditorHtml,
-  thumbUrl,
 } from '../richText';
 
 describe('escapeHtml / escapeAttr（原 qs 39956 / Jc 39963）', () => {
@@ -53,31 +52,12 @@ describe('hasRichMarkup（原 bL 40051 的判定）', () => {
   });
 });
 
-/**
- * ★ 2026-10-11 回源纠错：`thumbUrl`（原 `Xt`）此前是**反的** —— 给远程挂 `?w=`、给 `img://` 原样返回。
- *   源版是 `Kh(e) ? …?w=… : e`，而 `Kh` = 「已是 `img://` 引用」（`qM = 'img://'`）
- *   ⇒ **只有 `img://` 挂 `?w=`**（这是 `img://` 协议自带的缩放参数）。这里锁**正确**行为。
- *   （同文件里那个基于误读的 `isRemoteImageUrl` 已删。）
+/*
+ * ⚠️ `thumbUrl` 的用例**已删**（2026-10-11）：该函数是协议真源 `withThumb` 的**第二份实现**
+ *   且判据写反了 ⇒ 已删除，调用方直接用 `withThumb`；它的判据由
+ *   `stable/protocols/tests/img.test.ts` 锁（含「远程 / `file:` ⇒ 原样」这条纠错护栏）。
+ *   本文件的 chip 用例（`refChipHtml` / `gpRefChipHtml`）会一并覆盖"经 `withThumb` 渲染"的那条路。
  */
-describe('thumbUrl（原 Xt 22564）', () => {
-  it('★ **只有 `img://` 引用**才挂 `?w=`', () => {
-    expect(thumbUrl('img://a.png', 120)).toBe('img://a.png?w=120');
-    expect(thumbUrl('img://a.png')).toBe('img://a.png?w=480'); // 默认宽 480
-  });
-
-  it('★ 远程 http(s) / `data:` / `file:` / 空 ⇒ **原样返回**（不再给远程挂 `?w=`）', () => {
-    expect(thumbUrl('https://cdn.x.com/a.png?x=1#f', 120)).toBe('https://cdn.x.com/a.png?x=1#f');
-    expect(thumbUrl('data:image/png;base64,AAA', 120)).toBe('data:image/png;base64,AAA');
-    expect(thumbUrl('file:///x.png', 120)).toBe('file:///x.png');
-    expect(thumbUrl('')).toBe('');
-    expect(thumbUrl(null)).toBe('');
-    expect(thumbUrl(undefined)).toBe('');
-  });
-
-  it('★ 幂等 —— 委托给协议真源 `withThumb`（已带 `?w=` 不叠加）', () => {
-    expect(thumbUrl(thumbUrl('img://a.png', 120), 999)).toBe('img://a.png?w=120');
-  });
-});
 
 describe('refChipHtml（原 P0 39988）', () => {
   it('★ 形状逐字：`contenteditable="false"` + `data-id` + `data-name`', () => {

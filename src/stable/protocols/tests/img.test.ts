@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { isDataUrl, isImgRef, isInlineImage, withThumb } from '../img';
+import { isImgRef, isInlineImage, withThumb } from '../img';
 
 describe('withThumb · 拼缩略图 URL', () => {
   it('img:// 无查询串 → 用 `?` 接', () => {
@@ -32,8 +32,15 @@ describe('withThumb · 拼缩略图 URL', () => {
     expect(withThumb(d, 480)).toBe(d);
   });
 
+  it('★ **远程 / file: ⇒ 原样返回**（2026-10-11 纠错：此前会给它们也挂 `?w=`）', () => {
+    expect(withThumb('https://cdn.x.com/a.png?x=1#f', 480)).toBe('https://cdn.x.com/a.png?x=1#f');
+    expect(withThumb('http://cdn.x.com/a.png', 480)).toBe('http://cdn.x.com/a.png');
+    expect(withThumb('file:///x/a.png', 480)).toBe('file:///x/a.png');
+  });
+
   it('空串 → 原样返回（不抛）', () => {
     expect(withThumb('', 480)).toBe('');
+    expect(withThumb(null as unknown as string, 480)).toBe('');
   });
 
   it('默认宽度来自 SSOT（`constants/dedupe.THUMB_WIDTH`）', () => {
@@ -52,11 +59,8 @@ describe('协议判定', () => {
     expect(isImgRef(123)).toBe(false);
   });
 
-  it('isDataUrl 只认 `data:` 前缀', () => {
-    expect(isDataUrl('data:image/png;base64,x')).toBe(true);
-    expect(isDataUrl('img://a.png')).toBe(false);
-    expect(isDataUrl('')).toBe(false);
-  });
+  // ⚠️ `isDataUrl` 的用例**已删**（2026-10-11）：它唯一的真实消费者是 `withThumb` 的早退分支，
+  //    而那分支按源 `Xt` 判据是冗余的 ⇒ 该导出失去全部生产消费者，按死代码闸判死删除。
 });
 
 /**

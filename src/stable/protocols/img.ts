@@ -23,10 +23,12 @@ export function isImgRef(v: unknown): v is string {
   return typeof v === 'string' && v.startsWith(PROTOCOL_IMG);
 }
 
-/** 是不是内联 dataUrl（⚠️ 返回 `boolean` 而非类型谓词 —— 它不改变调用方的类型） */
-export function isDataUrl(v: unknown): boolean {
-  return typeof v === 'string' && v.startsWith('data:');
-}
+/*
+ * ★ **2026-10-11 删除 `isDataUrl`**：它此前唯一的真实消费者是 `withThumb` 的早退分支；
+ *   而按源 `Xt` 的判据（只认 `isImgRef`），那个分支是**冗余**的 ⇒ `isDataUrl` 失去全部生产消费者
+ *   （只剩测试）⇒ 按死代码闸「只被测试引用 ⇒ 判死」删除。将来真有「任意 data:」的判据需求时，
+ *   `isInlineImage`（图片版）多半才是要的那条。
+ */
 
 /**
  * 是不是**内联 base64 图片**（`data:image/…;base64,…`）—— 原 `fp` 22561-22563
@@ -35,8 +37,8 @@ export function isDataUrl(v: unknown): boolean {
  *   只有内联 base64 需要外置成 `img://`；`img://` / 远程 http(s) / `file://` / 空
  *   ⇒ **一律原样返回**。
  *
- * ⚠️ 与 `isDataUrl` 的区别：`isDataUrl` 只认 `data:` 前缀（也可能是文本 data URL）；
- *   本判据要求**是图片 + base64**（`fp` 逐字）。
+ * ⚠️ 判据是**图片 + base64**（`fp` 逐字）：`data:text/…` 这类**非图片**的 data URL ⇒
+ *   **不落盘**（`saveImageSync` 只认图片，见 `electron/main.js:679`）。
  *
  * ★★ **2026-10-11 收口（判据 C1 + 回源纠错）**：此前这条判据在**两处**各写一遍，且
  *   **其中一处写反了** —— `core/rules/lovartGallery.ts` 的 `shouldMaterializeImage` 用的是
@@ -56,10 +58,22 @@ export function isInlineImage(v: unknown): v is string {
 /**
  * 拼缩略图 URL：`img://xxx.png` → `img://xxx.png?w=480`
  *
- * ⚠️ **幂等**：已是 `?w=` 的、`data:` 的、空的 —— 一律**原样返回**（不叠加、不抛）
+ * ★ **2026-10-11 回源纠错**：此前它给**任意**非 `data:` 地址都挂 `?w=`；而源 `Xt` 22564-22570
+ *   是 `Kh(e) ? …?w=… : e`，**`Kh` = 「已是 `img://` 引用」**（`qM = 'img://'`）
+ *   ⇒ **只对 `img://` 拼**。`?w=` 是**宿主协议处理器**认的参数（`electron/main.js:709`：
+ *   「之后 `img://xxx.png?w=480` 直接命中磁盘缓存」）—— 挂到远程 URL 上，CDN 只会收到一个
+ *   它不认识的 query（可能 404 / 返回别的图）。
+ *   ⇒ `adapters/media/faceDetect.ts` 原先各自加的那道 `isImgRef` 守卫由此**冗余**（已随之简化）。
+ *
+ * ⚠️ **幂等**：非 `img://` 的（`data:` / 远程 / `file:` / 空）—— 一律**原样返回**；
+ *   已带 `?w=` 的**不再叠加**。
+ * ⚠️ **与源的一处刻意差异**：源 `Xt` 会**截断**已有 query（`img://a.png?v=2` → `img://a.png?w=480`），
+ *   本实现是**幂等追加**（→ `img://a.png?v=2&w=480`）。宿主产出的 `img://` 引用**不带 query**
+ *   ⇒ 两者等价；而追加不会丢掉已有参数、也不会把 `?w=` 拼两次。
  */
 export function withThumb(src: string, width: number = THUMB_WIDTH): string {
-  if (!src || isDataUrl(src)) return src;
+  // ⚠️ 只有 `img://` 才拼（`data:` / 远程 / 空都不是 ⇒ 走这条早退）
+  if (!isImgRef(src)) return src || '';
   // 已带 `?w=`（`?w=` 或 `&w=`）⇒ 不再叠加
   if (new RegExp(`[?&]${THUMB_QUERY_KEY}=`).test(src)) return src;
   return `${src}${src.includes('?') ? '&' : '?'}${THUMB_QUERY_KEY}=${width}`;

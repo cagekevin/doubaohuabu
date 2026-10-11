@@ -39,7 +39,7 @@ import {
   type PixelFaceBox,
 } from '@/core/rules/faceDetect';
 import { loadImage } from '@/lib/image';
-import { isImgRef, withThumb } from '@/stable/protocols/img';
+import { withThumb } from '@/stable/protocols/img';
 
 /** 资源目录名（与 `main.js` 的 `appasset://mediapipe/...` → `dist/mediapipe/...` 对应） */
 const ASSET_DIR = 'mediapipe';
@@ -188,11 +188,12 @@ export async function detectFacesInImage(img: HTMLImageElement): Promise<PixelFa
  *
  * @param src 图片引用；`img://` 会拼 `?w=1024`（原 `Xt(src, HD)`，**只对 `img://`**）
  *
- * ⚠️ 非 `img://` 的引用（`https://` / `data:`）**不加参数** —— 这正是原 `Xt` 的 `Kh(e)` 守卫；
- *    若直接调 `withThumb` 会给任意 URL 也拼上 `?w=`，与原版**不等价**。
+ * ⚠️ **2026-10-11 简化**：这里原先自己加了一道 `isImgRef(src) ? … : src` 守卫，注释写着
+ *    「直接调 `withThumb` 会给任意 URL 也拼 `?w=`，与原版**不等价**」。现在那道守卫已**收进**
+ *    `withThumb` 自身（协议真源按 `Xt` 纠正）⇒ 本地这层冗余，去掉。
  */
 export async function detectFaces(src: string): Promise<FaceBox[]> {
-  const target = isImgRef(src) ? withThumb(src, FACE_LOAD_WIDTH) : src;
+  const target = withThumb(src, FACE_LOAD_WIDTH);
   const img = await loadImage(target);
   const width = img.naturalWidth || img.width || 1;
   const height = img.naturalHeight || img.height || 1;

@@ -5,7 +5,7 @@
  *   ① **双击改名**（原 111-155：`F` 进入改名态、`M` 提交）—— 走 **`renameMaterialNode`**
  *      （**多址改名**：资源库同名项 + 所有指向同一来源的素材节点一起改，见 `core/rules/materialRename.ts`）；
  *   ② **可缩放边框**（原 134 的 `_Component28` = `NodeResizer`，`minWidth=140`/`minHeight=100`）；
- *   ③ **图片**（原 157-160：`thumbUrl(dataUrl, 480)` 缩略图 + `onLoad` 读**自然尺寸**
+ *   ③ **图片**（原 157-160：`Xt(dataUrl, 480)` 缩略图（本仓 = `withThumb`） + `onLoad` 读**自然尺寸**
  *      到 `{w,h}`，供下游按原始宽高比使用）；
  *   ④ **分析提示词浮动按钮**（原 179-192）—— **逐字与生成节点相同** ⇒ 直接复用 `AnalyzePrompt`。
  *
@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NodeResizer } from '@xyflow/react';
 import { useStore } from '@/state';
-import { thumbUrl } from '@/core/rules/richText';
+import { withThumb } from '@/stable/protocols/img';
 import { MATERIAL_NODE_TEXT } from '@/constants/text';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import { AnalyzePrompt } from './AnalyzePrompt';
@@ -119,7 +119,7 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
           <img
             className={styles.materialImg}
             // 原 16：缩略图宽 **480**
-            src={thumbUrl(data.dataUrl, 480)}
+            src={withThumb(data.dataUrl, 480)}
             alt={label}
             draggable={false}
             loading="lazy"

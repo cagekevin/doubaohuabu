@@ -17,8 +17,8 @@
 /** 一段文本里是否已经有 HTML 标签或实体（原 `bL` 40051 的判定，**逐字**） */
 // ⚠️ `@图N` 协议正则的**唯一真源**在 `refs.ts`（原 `Ks` 40795）—— 不复刻第二份
 import { createRefMarkRe } from './refs';
-// ⚠️ `img://` + `?w=` 的**协议真源**在 `stable/protocols/img.ts`（本文件只做「是不是 img://」的守卫）
-import { isImgRef, withThumb } from '@/stable/protocols/img';
+// ⚠️ `img://` + `?w=` 的**协议真源**在 `stable/protocols/img.ts`（本文件不写第二份）
+import { withThumb } from '@/stable/protocols/img';
 
 export function hasRichMarkup(text: string): boolean {
   return /<[a-z][^>]*>/i.test(text) || /&(?:[a-zA-Z]+|#\d+|#x[0-9a-f]+);/i.test(text);
@@ -38,28 +38,19 @@ export function escapeAttr(v: unknown): string {
   return escapeHtml(v).replace(/"/g, '&quot;');
 }
 
-/**
- * 缩略图地址（原 `Xt` 22564-22570）
- *
- * ★★ **回源纠错（2026-10-11）**：此前本函数是**反的** —— 它给**远程** URL 挂 `?w=`、
- *   而给 `img://` 引用原样返回。逐行回源确认原版是
- *   `Kh(e) ? \`${e.split(/[?#]/)[0]}?w=${t}\` : e || ''`，而 **`Kh` = 「已是 `img://` 引用」**
- *   （`qM = 'img://'`）⇒ **只有 `img://` 才挂 `?w=`**：
- *   `?w=` 是 **`img://` 协议自带的缩略参数**（宿主协议处理器按它缩放 ——
- *   `electron/main.js:709`：「之后 `img://xxx.png?w=480` 直接命中磁盘缓存」），
- *   远程 URL 挂 `?w=` 反而会向 CDN 请求一个它不认识的 query。
- *   ⇒ 与 `stable/protocols/img.ts` 的 `withThumb`（**协议真源**）一致；拼接委托给它，不写第二份。
- *   ⚠️ 副产物：同文件里那个基于误读的 `isRemoteImageUrl` 已删（`img://` 才是 `Kh`）。
+/*
+ * ★ **2026-10-11 删除 `thumbUrl`（原 `Xt`）** —— 它是 `stable/protocols/img.ts` 的 `withThumb`
+ *   **第二份实现**（判据 C1），而且**写反了**：给远程 URL 挂 `?w=`、给 `img://` 原样返回。
+ *   逐行回源确认 `Xt(e,t)` = `Kh(e) ? \`${e.split(/[?#]/)[0]}?w=${t}\` : e || ''`，而
+ *   **`Kh` = 「已是 `img://` 引用」**（`qM = 'img://'`）⇒ 只有 `img://` 才挂 `?w=`。
+ *   `withThumb`（协议真源）已按此修正并收下这份守卫 ⇒ 调用方直接用 `withThumb`。
+ *   （同文件里那个基于误读的 `isRemoteImageUrl` 一并删除。）
  */
-export function thumbUrl(url: unknown, w = 480): string {
-  const s = typeof url === 'string' ? url : '';
-  return isImgRef(s) ? withThumb(s, w) : s;
-}
 
 /** 药丸的内文（原 `la` 39981-39987）—— 有图 ⇒ 图 + `@名`；无图 ⇒ `@名 (无图片)` */
 function chipInnerHtml(name: string, dataUrl: string): string {
   if (dataUrl) {
-    return `<img src="${escapeAttr(thumbUrl(dataUrl, 120))}" class="chip-img"/><span class="chip-name">@${escapeHtml(name)}</span>`;
+    return `<img src="${escapeAttr(withThumb(dataUrl, 120))}" class="chip-img"/><span class="chip-name">@${escapeHtml(name)}</span>`;
   }
   return `<span class="chip-name">@${escapeHtml(name)} <i>(无图片)</i></span>`;
 }
