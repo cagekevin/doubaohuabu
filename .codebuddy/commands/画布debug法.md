@@ -19,7 +19,7 @@
 | **运行时验证（真实渲染）** | `node scripts/verify-run.cjs`（M0：能否渲染 + 应用级错误数） | 构建产物在无头 Chromium 里的真实表现 |
 | **老数据兼容** | `node scripts/verify-w2.cjs`（W2，P0） | 真实样本注入 → 启动 → 6 项断言 |
 | **画布完整性** | `node scripts/verify-canvas.cjs`（W13） | 8 类节点 / 边 / 撤销 |
-| **文本级不变量** | `npm run lint:invariants` | 空 catch / 裸契约串 / 裸色值 / core 越界 / 测试边界 / `'Escape'` 手写重复 |
+| **不变量（AST）** | `npm run lint`（eslint） | 空 catch（`no-empty`）/ 裸契约串（原则5）/ core 越界接触宿主（原则4）/ 测试边界（原则7）/ 直调 `window.api`（TD-05-1）。⚠️ 裸色值 / 端口纯净 / `.catch` 形态**已无机器守卫**（文本不变量闸 2026-10-11 退役，见 `docs/17` §7） |
 | **引用面** | `node scripts/mv-sync-refs.mjs refs <file>` | 谁 import 它 + 字符串残留引用（改名/搬运后必跑） |
 | **真实数据真身** | `%APPDATA%\doubao-canvas\`（`projects-autobackup.json` + `Local Storage\leveldb`），用 `node scripts/extract-real-sample.cjs` 提取 | 老数据的**真实形状**（别拿推理当事实，`docs/11` §十二） |
 
@@ -119,7 +119,7 @@
 
 **断点（全部机器可判）**：
 
-- `catch {}` / `catch (e) {}` 空体 ⇒ `npm run lint:invariants` 的 `原则6/no-swallow`（**必须 0 命中**）。
+- `catch {}` / `catch (e) {}` 空体 ⇒ eslint 的 `no-empty`（`allowEmptyCatch:false`，**必须 0 命中**）。
 - `core/usecases/**` 里出现 `message:` 字面量 ⇒ `原则6/no-fake-message`（只能来自 `e.message` / 上游 `Result`）。
 - 文案映射写进 `state/slices/ui` 而不是 `constants/text.ts` ⇒ 违原则 5（SSOT）。
 
@@ -150,7 +150,7 @@
 | 老数据兼容（P0） | `node scripts/verify-w2.cjs` | 水合链 [3] + 迁移 |
 | 画布完整性（W13） | `node scripts/verify-canvas.cjs` | 渲染 + 节点/边/撤销 |
 | 真实样本提取 | `node scripts/extract-real-sample.cjs` | 拿"老数据真身"（`%APPDATA%\doubao-canvas\`） |
-| 文本级不变量 | `npm run lint:invariants` | 原则 3/4/5/6/7/8 |
+| 不变量（AST） | `npm run lint`（eslint） | 原则 4/5/6/7 + TD-05-1（⚠️ 文本不变量闸已退役 ⇒ 裸色值 / 端口纯净 / `.catch` 形态**现无机器守卫**） |
 | 层间方向 | `npm run lint:boundaries` | 规则 1~5（含"故意深导入必须失败"的探针） |
 | 引用面 | `node scripts/mv-sync-refs.mjs refs <file>` | 改名 / 搬运后的引用漏改 |
 

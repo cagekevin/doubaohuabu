@@ -63,8 +63,9 @@ state 变更（slices）
 渲染：ui/common/ErrorBanner · ToastHost
 ```
 
-**可执行检查**：`npm run lint:invariants`（`catch {}` 0 命中 · `core/usecases` 无 `message:` 字面量）。
-⚠️ 现状（2026-10-10）：后者**只匹配 `message:` 属性形态**，漏 `err(reason, 字面量)`（如 `usecases/generate.ts:125/133`）—— 见 TD-16-9。
+**可执行检查**：`npm run lint`（eslint）—— 空 `catch {}`（`no-empty`）0 命中；`core/usecases` 无 `message:` 属性字面量（「原则6」AST 选择器）。
+⚠️ **2026-10-11 更正**：原「文本不变量闸」（`scripts/check-invariants.cjs` / `npm run lint:invariants`）**已退役** ⇒ 这两条检查现由 **eslint（AST）** 承载。
+⚠️ 现状：换成 AST 后，后者**仍只匹配 `message:` 属性形态** ⇒ 依旧漏 `err(reason, 字面量)`（如 `usecases/generate.ts:125/133`）—— 见 TD-16-9（**该盲区未随退役而修复**）。
 
 ---
 
