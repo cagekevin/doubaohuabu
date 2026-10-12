@@ -1,0 +1,145 @@
+## 校验 1 · window.api 方法集（源：electron/preload.js）
+
+实测方法数：**83**
+按类型：value=1 / invoke=71 / send=4 / sendSync=2 / on=5
+
+| 方法 | 类型 | channel |
+|---|---|---|
+| `hostOS` | value | — |
+| `importFiles` | invoke | import-files |
+| `saveFile` | invoke | save-file |
+| `loadFile` | invoke | load-file |
+| `saveProjectsBackup` | send | projects-backup |
+| `activateProjectStorage` | sendSync | project-storage-activate-sync |
+| `pickProjectStorage` | invoke | project-storage-pick |
+| `saveProjectSnapshot` | send | project-snapshot |
+| `logProjectOperation` | send | project-operation |
+| `revealProjectStorage` | invoke | project-storage-reveal |
+| `getProjectStorageSize` | invoke | project-storage-size |
+| `openExternal` | invoke | open-external |
+| `copyImageToClipboard` | invoke | copy-image-to-clipboard |
+| `attachImagesToWebview` | invoke | attach-images-to-webview |
+| `copyTextToClipboard` | invoke | copy-text-to-clipboard |
+| `pasteToWebview` | invoke | paste-to-webview |
+| `readClipboardImage` | invoke | read-clipboard-image |
+| `onClipboardImageChanged` | on | clipboard-image-changed |
+| `exportAccountCookies` | invoke | export-account-cookies |
+| `importAccountCookies` | invoke | import-account-cookies |
+| `saveAccountsFile` | invoke | save-accounts-file |
+| `loadAccountsFile` | invoke | load-accounts-file |
+| `selectFolder` | invoke | select-folder |
+| `downloadFile` | invoke | download-file |
+| `downloadFileAs` | invoke | download-file-as |
+| `revealPath` | invoke | reveal-path |
+| `getMachineCode` | invoke | get-machine-code |
+| `getLicenseStatus` | invoke | get-license-status |
+| `activateWithCode` | invoke | activate-with-code |
+| `exportMachineCode` | invoke | export-machine-code |
+| `captureRect` | invoke | capture-rect |
+| `detectVideos` | invoke | detect-videos |
+| `detectErrors` | invoke | detect-errors |
+| `saveImageSync` | sendSync | img-save-sync |
+| `saveVideoFromUrl` | invoke | save-video-from-url |
+| `resolveImageRef` | invoke | img-resolve |
+| `imageFetchDataUrl` | invoke | image-fetch-dataurl |
+| `clearBrowserCache` | invoke | clear-browser-cache |
+| `startFileDrag` | send | start-file-drag |
+| `showInFolder` | invoke | show-in-folder |
+| `ensureFingerprint` | invoke | ensure-fingerprint |
+| `fpNetDiag` | invoke | fp-net-diag |
+| `ensurePlainSession` | invoke | ensure-plain-session |
+| `ensureLovartContainer` | invoke | ensure-lovart-container |
+| `clearAccountSession` | invoke | clear-account-session |
+| `setAccountProxy` | invoke | set-account-proxy |
+| `ensureLovartFirefoxProfile` | invoke | ensure-lovart-firefox-profile |
+| `openLovartFirefox` | invoke | open-lovart-firefox |
+| `removeLovartFirefoxProfile` | invoke | remove-lovart-firefox-profile |
+| `getFirefoxStatus` | invoke | get-firefox-status |
+| `ensureLovartChrome` | invoke | ensure-lovart-chrome |
+| `closeLovartChrome` | invoke | close-lovart-chrome |
+| `syncLovartSession` | invoke | sync-lovart-session |
+| `lovartChromeIsOpen` | invoke | lovart-chrome-is-open |
+| `getLovartChromeStatus` | invoke | get-lovart-chrome-status |
+| `onDolaMedia` | on | dola-media-update |
+| `downloadDolaMedia` | invoke | dola-media-download |
+| `clearDolaMedia` | invoke | dola-media-clear |
+| `lovartFetchImages` | invoke | lovart-fetch-images |
+| `onLovartFetchItem` | on | lovart-fetch-item |
+| `onLovartFetchDone` | on | lovart-fetch-done |
+| `lovartScanFrames` | invoke | lovart-scan-frames |
+| `lovartDiag` | invoke | lovart-diag |
+| `lovartDiagOpen` | invoke | lovart-diag-open |
+| `lovartDomDump` | invoke | lovart-dom-dump |
+| `getDownloadSettings` | invoke | get-download-settings |
+| `pickDownloadPath` | invoke | pick-download-path |
+| `injectDolaDurationMain` | invoke | inject-dola-duration-main |
+| `dolaDurationDiag` | invoke | dola-duration-diag |
+| `attachDolaDebugger` | invoke | attach-dola-debugger |
+| `apiProvidersList` | invoke | api-providers:list |
+| `apiConfigGet` | invoke | api-config:get |
+| `apiConfigSet` | invoke | api-config:set |
+| `apiConfigSetKey` | invoke | api-config:set-key |
+| `apiConfigTest` | invoke | api-config:test |
+| `apiJobSubmit` | invoke | api-job:submit |
+| `apiJobBatch` | invoke | api-job:batch |
+| `apiJobCancel` | invoke | api-job:cancel |
+| `apiJobList` | invoke | api-job:list |
+| `apiSetupGet` | invoke | api-setup:get |
+| `apiSetupSet` | invoke | api-setup:set |
+| `apiConfigSetSecret` | invoke | api-config:set-secret |
+| `onApiJobEvent` | on | api-job-event |
+
+## 校验 1b · 前端调用面 vs 宿主契约（差集必须为空）
+
+前端用到的宿主方法：**54** ｜ 契约方法：**83**
+
+**调用但契约里没有（必须为 0）**：❌ lovartChromeEval
+
+契约里有但前端未用（允许，属未使用能力）：30 个 → activateProjectStorage, apiJobList, apiProvidersList, attachDolaDebugger, clearDolaMedia, closeLovartChrome, detectErrors, downloadDolaMedia, downloadFileAs, ensureLovartFirefoxProfile, ensurePlainSession, getDownloadSettings, getFirefoxStatus, getLovartChromeStatus, injectDolaDurationMain, lovartDiag, lovartDiagOpen, lovartDomDump, lovartScanFrames, onDolaMedia, onLovartFetchDone, onLovartFetchItem, openLovartFirefox, pickDownloadPath, removeLovartFirefoxProfile, resolveImageRef, revealPath, saveFile, saveImageSync, saveVideoFromUrl
+
+## 校验 2 · sendSync（同步）方法
+
+- `activateProjectStorage` → `project-storage-activate-sync`
+- `saveImageSync` → `img-save-sync`
+
+实测：**2 个** —— 与文档「2 个」✅ 一致
+
+## 校验 3 · localStorage 键（源：shared.js 应用区）
+
+静态键 **8** 个：
+
+| 键 | 出现次数 |
+|---|---|
+| `access_token` | 1 |
+| `doubao-account-groups` | 2 |
+| `doubao-accounts` | 2 |
+| `doubao-auto-video-detect` | 2 |
+| `doubao-canvas` | 1 |
+| `doubao-presets` | 2 |
+| `doubao-projects` | 3 |
+| `doubao-styles` | 2 |
+
+## 校验 4 · 自定义协议使用情况
+
+应用区 `img://` 出现：**1** 次
+应用区 `vid://` 出现：**0** 次 （与文档「前端未使用」✅ 一致）
+主进程 `vid://` 注册：✅ 已注册
+
+## 校验 5 · 磁盘布局常量（源：electron/main.js）
+
+❌ 未找到 PROJECT_STORAGE_DIRS
+
+INNER_FOLDER_NAME = `资源`
+快照格式串：✅ 找到 `doubao-canvas-project`
+atomicWriteFile：✅ 存在
+
+## 校验 6 · 失败分类表（源：应用区 `_S`）
+
+实测 kind 数：**25**
+
+account-invalid · blob · br · busy · chip · confirm-required · data · empty-text · graph · http · human-verification · no-account · no-reply · none · offer · other · page-error · page-timeout · quota · rate-limit · risk-refuse · safety-promise · send-stuck · text · unknown
+
+## 校验 7 · 状态管理（是否单一 store）
+
+zustand 痕迹出现：**1** 次
+形如 `X((set,get)=>({...}))` 的 store 定义：**0** 个 → （无）

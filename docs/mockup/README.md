@@ -62,21 +62,88 @@ L3   COMPONENT   组件旋钮 · 每个控件自己的可调参数
 
 ---
 
-## 三、屏幕 ↔ 源码映射
+## 三、原版 UI 宏观结构（★ 真源：原版 jsx + 原版 CSS）
 
-| 屏幕 | 源码位置 |
-|---|---|
-| ① 启动页 | `src/ui/pages/StartPage.tsx` |
-| ② 工作台（三栏） | `src/ui/shell/AppShell.tsx` · `TopBar.tsx` |
-| ├ 左栏 · 账号 | `src/ui/panels/AccountPanel.tsx` · `BackendView.tsx` |
-| ├ 中 · 画布 | `src/ui/canvas/CanvasHost.tsx` |
-| ├ 中 · 生成面板 | `src/ui/panels/GenPanel.tsx` |
-| └ 右栏 · 资源库 | `src/ui/panels/LibraryPanel.tsx` |
-| ③ 8 类节点 | `src/ui/nodes/*.tsx`（**DOM 逐字对照原版 jsx**，见下节） |
-| ④ 浮层与反馈 | `src/ui/canvas/CreatePanel.tsx` · `SelectionToolbar.tsx` · `src/ui/common/*` |
-| ⑤ 后台管理 | `_Component43.jsx` → `src/ui/panels/BackendView.tsx` · `RP/DP/SD/OP.jsx`（均缺口） |
-| ⑥ 缺失面板 | `docs/13` §2.1「完全没有」10 个 + 生成面板完整版（`Z3_1` 16 按钮 / `_Component45` 18 按钮） |
-| ⑦ 补登组件 | `docs/13` §2.3 补登的 17 个带 UI 组件（画廊 / 风格库 / 登录弹窗 / 小提示…） |
+> 类名逐字取自 `docs/豆包画布原版参考/expanded_components/*.jsx`；
+> 样式真值取自原版 `index-Dg_Oc7MR.css`（安装目录 `…/doubao-canvas/resources/app/dist/assets/`）。
+> **看 mockup 前先读这张图**——它回答：有几个页面、哪些是常驻面板、哪些是浮层、哪些是弹窗、各挂哪。
+
+### 3.1 三个页面（根组件 `_Component48.jsx`）
+
+| 页面 | 出现条件 | 根类名 | 源码 |
+|---|---|---|---|
+| 加载态 | 授权校验中 | `.app-loading` | `_Component48.jsx:139` |
+| 激活页 | 授权无效 | `.license-screen` | `W3.jsx` |
+| 启动页 | 未选项目（`!started`） | `.startup` | `_Component47.jsx` |
+| 工作台 | 已启动 | `.app` | `_Component48.jsx`（组装） |
+
+### 3.2 工作台三栏（`.app › .main-area`）
+
+| 栏 | 宽 | 内容 | 源码 |
+|---|---|---|---|
+| 左 `.side.left-side` | 256px（响应 220 / 196） | 账号面板 `.account-panel`（`OP.jsx`）+ 底部「⚡API 服务」`.side-api-btn` | `OP.jsx` |
+| 中 `.center-stage` | 弹性 | 画布 `.canvas-wrap`（`_Component42.jsx`）＋ 后台视图 `.doubao-view`（`_Component43.jsx`，可切换显隐） | — |
+| 右 `.side.right-side` | 248px（响应 214 / 190） | 资源库 `.library-panel` | `RT.jsx` |
+
+- 两栏均可收起：`.side.collapsed` → 宽 0；`.side-toggle` 是 22×52 骑马钮（贴在栏边上）。
+- **没有全宽顶栏**。项目名 / 保存路径 / 授权 / 「▦豆包后台」是浮在画布上方的居中条 `.canvas-topbar`（`_Component42.jsx:1563`）。
+- 左栏底部还有「返回首页 / 清空画布 / 网格吸附」在 `.panel-foot`。
+
+### 3.3 画布内浮层（`.canvas-wrap` 的子节点，随画布页面共存亡）
+
+| 浮层 | 触发条件 | 定位 | 源码 |
+|---|---|---|---|
+| `.canvas-topbar` | 常驻 | absolute 顶部居中 | `_Component42.jsx:1563` |
+| `.canvas-sel-toolbar` | 多选 | 跟随选区（算位同 `L3.jsx`） | `:1490` |
+| `.sel-arrange-menu` | 点「整齐排列」 | 工具条下方 absolute | `:1506` |
+| `.gc-handle` + `.gc-line` | 多选 ≥2 | 包围框右缘 30×30 圆锚点 | `_Component37.jsx` |
+| `.bs-trigger-group` | 多选 text/genvideo ≥2 | 选区上/下方 | `L3.jsx:174` |
+| `.bs-backdrop` › `.bs-card` | 批量发送中 | 全屏遮罩 + 540px 卡 | `L3.jsx:191` |
+| `.drop-hint` | 拖文件经过画布 | **全屏 inset 12px 虚线大框** | `:1466` |
+| `.canvas-empty-hint` | 空画布 | 居中 | `:1467` |
+| `.app-toast` | 全局 toast | 固定底部居中（胶囊） | `:1474` |
+| `.error-banner-container` | 后台报错 | 顶部居中（top 52px） | `:1610` |
+| `.create-panel` | 从 handle 拖出连线 | 鼠标位置 fixed | `:1638` |
+| `.node-ctx-menu` | 节点右键 | 右键处 fixed | `:1685` |
+| `.face-mask-panel` | 点遮脸角标 | 232px 宽 fixed | `_Component40.jsx` |
+| `.sq-panel` | 发送队列非空 | 左上 16px，320px 宽，可拖 | `z3.jsx`（memo 为 `F3`） |
+| `.ie-overlay-root` | 编辑图片 | 全屏 | `G3.jsx`（`_Component41`） |
+
+### 3.4 节点自身附着的浮层（挂在节点 DOM 里或旁）
+
+| 浮层 | 宿主节点 | 形态 | 源码 |
+|---|---|---|---|
+| `.mat-prompt-pop` | material / imggen | 节点**下方** absolute（`top:calc(100% + 8px)`） | `fL.jsx` / `ZL.jsx` |
+| `.mpp-json*` | 上一者内部 | AI 提示词 JSON 视图 | `_Component31/32.jsx` |
+| `.gv-hist-pop` | genvideo / imggen | **portal 到 body**，264px | `YL.jsx:585` / `ZL.jsx` |
+| `.reply-notice` | text | **浮在节点上方**（`bottom:calc(100% + 8px)`） | `CL.jsx` |
+| `.vn-panel` | video | 视频区内 absolute 底部浮层 | `BL.jsx` |
+| `.ref-menu` / `.fuzzy-panel` | text | 节点内 / 条件显隐 | `CL.jsx` |
+| `.face-marks-layer` | material / imggen | 图片上方覆盖层（人脸框） | `iL.jsx` |
+
+### 3.5 Portal 弹窗（`createPortal(…, document.body)`）
+
+| 弹窗 | 根类名 | 打开方 | 源码 |
+|---|---|---|---|
+| 文生视频生成面板 | `.gen-panel-layer` | 点 genvideo 卡片 | `Z3_1.jsx` |
+| 文生图生成面板 | `.gen-panel-layer` | 点 imggen 卡片 | `_Component45.jsx` |
+| 风格库 | `.style-lib-layer` | 生成面板「◇ 风格」 | `US.jsx` |
+| 引用素材选择器 | `.panel-backdrop › .lib-picker` | 「@ 引用素材」/ 文本框 | `_Component33.jsx` |
+| 素材挑选器 | `.panel-backdrop` | 画布连线落选态 | `DT.jsx` |
+| API 服务 | `.modal-overlay › .api-settings` | 左栏「⚡API 服务」 | `_Component46.jsx` |
+| 账号登录 / 选择 / 导出 | `.login-backdrop` | 账号面板各按钮 | `TP` / `$P` / `PP` / `_Component23` / `_Component24.jsx` |
+| 指纹关联扫描 | `.login-backdrop › .linkscan-*` | 「🔗 关联扫描」 | `DP.jsx` |
+| 出口代理池 | `.login-backdrop` | 「🌐 出口代理」 | `LP.jsx` |
+| 图片编辑器 | `.ie-overlay-root` | 「编辑图片」 | `G3.jsx` |
+
+### 3.6 后台视图内部（`.center-stage` 里的 `.doubao-view`，`_Component43.jsx`）
+
+- `.doubao-view-head`：账号标题 `.dv-title` + 操作 `.dv-actions`；整条可收起（`.dv-head-toggle` 52×24）。
+- `.doubao-view-webviews`：每账号一个 webview（逻辑 1280×800 缩放适配）。
+- `.silent-overlay`：静默期遮罩（页面快照 + 68×68 恢复钮）。
+- `.dola-media-panel`（`SD.jsx`）：Dola 媒体面板（可 docked）。
+- `.nip-wrap`（`_Component26.jsx`）：「出新图」聚合条（Lovart / Tapnow / 网页抓图 → 发到画布）。
+- `.doubao-empty-hint`：无账号空态。
 
 ---
 
@@ -123,8 +190,8 @@ L3   COMPONENT   组件旋钮 · 每个控件自己的可调参数
 | video | `BL.jsx` | `vn-provenance`（来源/配方/可拉取）在视频下方；`vn-panel` 的 foot 是左「复制配方」右「按配方重跑」；`video-controls` = 播放 ‖ 时间线 ‖ 截图(S) |
 | download | `WL.jsx:111-147` | 「选择…」与「目录：」**同一行**；「全部下载」在 `dn-action-row` **左侧**，「已下载 X」在其右；错误态是 **✗** |
 | group | `GL.jsx:20-38` | 取消组按钮在 `group-node-head` 内**最右**；组是容器不挂 handle |
-| genvideo | `YL.jsx:474-585` | 历史按钮在 head **最右**；播放浮层在 stage **正中**、时长右上、下载右下；**三帧按钮在 `gv-meta` 之后**（卡片最下方） |
-| imggen | `ZL.jsx:213-320` | head 内 grow 之后是 `ig-chip-status` 再是历史按钮；**无结果时是 `gv-preview-empty`** |
+| genvideo | `YL.jsx:474-585` | 历史按钮在 head **最右**（22px 高胶囊）；播放浮层在 stage **正中**（34×34）；**时长徽章在左上**（`gv-dur-badge` left 8px）、**下载在右上**（28×28）；**三帧按钮 `gv-frame-actions` 是 absolute 浮在 stage 下方**（`top:calc(100% + 8px)` 居中），不在文档流里 |
+| imggen | `ZL.jsx:213-320` | head 内 grow 之后是 `ig-chip-status` 再是历史按钮；**无结果时是 `gv-preview-empty`**；有结果时浮出 `mat-float-actions`（编辑图片 / 分析提示词） |
 
 **★ 关于「输入提示词」**：生成节点上**没有**输入框。空态只显示
 `gv-preview-empty` —— 「文生图 · 在下方输入提示词」+「点击卡片打开生成面板，出图直接展示在这里」。
@@ -161,16 +228,31 @@ MD=1 node docs/mockup/tools/extract-skeleton.cjs CL fL OL BL WL GL YL ZL > docs/
 
 ---
 
-### ★ 布局旋钮（留余地：拿到原版只改一处）
+### ★ 布局旋钮（原版 CSS 已入库，旋钮即真值）
 
-`mockup.css` 顶部有一块**布局旋钮**，所有位置/尺寸集中在此。分两类：
+`mockup.css` 顶部有一块**布局旋钮**，所有位置/尺寸集中在此。**原版 CSS 已随安装目录入库**
+（`F:\Users\xinye\AppData\Local\Programs\doubao-canvas\resources\app\dist\assets\index-Dg_Oc7MR.css`），
+旋钮值**逐条对照过原版规则**，不再是推断值：
+
+| 旋钮 | 值 | 原版出处 |
+|---|---|---|
+| `--mk-head-gap` | 6px | `.node-head{gap:6px}` |
+| `--mk-head-pad-x` | 10px | `.node-head{padding:8px 10px}` |
+| `--mk-head-h` | 32px（= 8+8 padding + 16 行高） | 原版无固定高，padding 推成 |
+| `--mk-node-fs` | 12px | `.node-head{font-size:12px}` / `.account-node{font-size:13px}` |
+| `--mk-btn-h` | 22px | `.gv-hist-btn{height:22px}` |
+| `--mk-thumb` | 36px | `.mat-thumb` / `.lib-thumb{width:36px;height:36px}` |
+| `--mk-stage-ratio` | 16 / 9 | `.gv-stage{aspect-ratio:16/9}` |
+| `--mk-side-w-left` | 256px | `.left-side{width:256px}` |
+| `--mk-side-w-right` | 248px | `.right-side{width:248px}` |
+| `--mk-cell-min-w` | 340px | mockup 专有（图鉴栅格，原版无此界面） |
 
 **① 引用 token 的（守 SSOT，不用管）**
 
 ```css
---mk-head-gap:    var(--space-1);
---mk-head-pad-x:  var(--space-2);
---mk-head-h:      var(--node-head-height);   /* L3 */
+--mk-head-gap:    var(--space-1);   /* = 6px，与原版 gap:6px 一致 */
+--mk-head-pad-x:  var(--space-2);   /* = 10px，与原版 padding 一致 */
+--mk-head-h:      var(--node-head-height);
 --mk-node-fs:     var(--font-size-sm);
 --mk-micro-fs:    var(--font-size-xs);
 --mk-float-inset: var(--space-1);
@@ -181,17 +263,53 @@ MD=1 node docs/mockup/tools/extract-skeleton.cjs CL fL OL BL WL GL YL ZL > docs/
 | 旋钮 | 值 | 为什么它只在 mockup |
 |---|---|---|
 | `--mk-cell-min-w` | 340px | 图鉴栅格最小宽 —— **src 里还没有这个界面**（图鉴未落地）|
-| `--mk-btn-h` | 18px | 节点内微型按钮 —— src 的 `.btn` 最小档是 `--btn-height`(32px)，**没有 micro 档**；src 里也不存在 18px 的按钮 |
-| `--mk-thumb` | 22px | 素材缩略条 —— src 的列表缩略图（`.thumb`）是 **20px**，形态不同 |
+| `--mk-btn-h` | 22px | 节点内微型按钮高 —— 原版 `.gv-hist-btn{height:22px}`；src 的 `.btn` 最小档 32px 没有对应档 |
+| `--mk-thumb` | 36px | 素材缩略条 —— 原版 `.mat-thumb`/`.lib-thumb` 36px；src 的 `.thumb` 20px，形态不同 |
 | `--mk-stage-ratio` | 16/9 | 预览区比例 —— src 里只有 `GalleryPanel` 的 `aspect-ratio: 1`（网格卡片，不是舞台）|
+| `--mk-side-w-left/right` | 256 / 248px | 三栏宽 —— 原版写死在 `.left-side`/`.right-side`，无 token；两栏不同值，故不并 L3 |
 
-> ⚠️ **2026-10-11 更正**：本表原先写「token 未覆盖，**将来并入 L3**」——**逐条核对 `src/ui` 后不成立**：
-> 这 4 项在 src 里**没有对应概念**（图鉴 / 微型按钮 / 缩略条 / 舞台都还没落地），
-> 给不存在的东西造 token 只会污染 L3。**它们是 mockup 专有值**，等对应界面在 src 落地时再谈。
->
 > ✅ `--mk-micro-9`（9px 极小字）**已并入** —— 改用 `var(--font-size-2xs)`（`tokens.css` 里有这一档）。
 
-**拿到原版 CSS 后**：改这块旋钮即可，不需要逐条翻规则。若某个位置值原版与推断不同，改对应一行，全局生效。
+**发现原版与旋钮不一致时**：改旋钮一行即可全局生效，不需要逐条翻规则。
+
+### ★ 单规则独有的原版尺寸：随规则驻留（不进旋钮区）
+
+**口径**：旋钮区只放**跨规则复用**的布局参数；**单条规则独有的原版尺寸**（面板宽 880/720/680、`sq-panel` 320、
+`face-mask-panel` 232、`gv-hist-pop` 264、`bs-card` 540、`create-panel` 208、`gc-handle` 30、`side-toggle` 22×52 …）
+**就近写在规则旁并标注原版出处**（`/* 原版 .gv-hist-pop：264px */`）。
+理由：这些值原版自己也是散装硬编码、不复用；全塞进旋钮区只会让旋钮区失去"一眼可调"的意义。
+
+### ★ mockup 新增的 L2 语义（迁移前必须过 `docs/17`）
+
+本轮为忠实复刻原版，往 `tokens.css` 补了 4 个 L2 语义 + 1 个 L1 通道值。
+它们**不是**原版 token 的翻版，而是**新语义** —— 迁移到 `src/styles/tokens.css` 前要按 CSS 契约（`docs/17`）登记：
+
+| 新增 | 值 | 原版对应物 | 迁移前提 |
+|---|---|---|---|
+| `--color-info` / `-bg` / `-border` | blue-500 三件套 | 原版 `--info`/`--info-soft`/`--info-border` | 新增语义 → 过 `docs/17` 登记 |
+| `--color-media-scrim` | `rgb(black / .55)` | 原版 `#10121b8c`（图/视频上按钮底） | 同上 |
+| `--color-media-track` | `rgb(white / .45)` | 原版 `#ffffff73`（时间线轨道） | 同上 |
+| `--color-action-download` | `blue-600`（暗色 blue-400） | 原版 `.dn-btn-download{background:#2563eb}` | 同上（下载动作色 ≠ 品牌色） |
+| `--p-blue-500-ch` | `59 130 246` | 供 `rgb(var(--x-ch) / α)` 用 | L1 通道值，随上面几条一起过 |
+
+另：`--shape-xs` / `--radius-xs`（2px）**已与 `src/styles/tokens.css` 对齐**（src 早有此档，mockup 原先漏了）。
+
+### 原版设计变量（对照用，勿抄进 mockup）
+
+原版 `:root` 是**另一套 token**（自己的命名），mockup 不继承它、只对照数值：
+
+| 原版变量 | 值 | 备注 |
+|---|---|---|
+| `--primary` | `#5850ec` | 品牌靛蓝；hover `#4a42d8` |
+| `--bg` / `--panel` / `--panel-2` / `--panel-3` | `#f4f5f7` / `#fcfcfd` / `#f7f8fa` / `#eff1f5` | 四级底 |
+| `--border` / `--border-strong` | `#e8eaef` / `#d4d9e3` | 两级边 |
+| `--text` / `--text-soft` / `--text-faint` | `#1a1d24` / `#6b7280` / `#9ca3af` | 三级字 |
+| `--radius-xs…xl` | 4 / 6 / 8 / 12 / 16 | 节点用 lg(12)，面板内卡用 md(8) |
+| `--shadow-1…4` | 0 1px 2 / 0 2px 8 / 0 8px 24 / 0 16px 48 | 节点用 2，浮层用 3 |
+| `--accent-material` / `--accent-text` | `#6366f1` / `#f59e0b` | 节点圆点色 |
+| `--success` / `--warn` / `--danger` / `--info` | `#15803d` / `#b45309` / `#dc2626` / `#0369a1` | 语义色 |
+
+原版**只有亮色**（`color-scheme:light`）；mockup 的暗色是本文件的试验田，非原版事实。
 
 ### 防撑爆三原则
 
@@ -200,8 +318,36 @@ MD=1 node docs/mockup/tools/extract-skeleton.cjs CL fL OL BL WL GL YL ZL > docs/
 
 1. **只画典型状态** —— 互斥元素同一时刻只显示其一
 2. **`node-head` 用 `nowrap`** + 子元素 `min-width:0` + 长文本 `ellipsis`
-3. **窄屏横滚不挤压** —— `.screen-body{overflow-x:auto}` + `.shell{min-width:1200px}`
-   （1200 = 左右栏 480 + 画布 720；画布 720 才放得下节点 ≤440 + 生成面板浮层 260）
+3. **窄屏横滚不挤压** —— `.screen-body{overflow-x:auto}` + 第②屏演示框 `.app{min-width:1200px}`
+   （1200 = 左右栏 256+248 + 画布 696；画布 696 才放得下节点 + 浮动顶栏）
+
+### ★ 同级一致性约定（2026-10-12 立）
+
+同级元素必须**结构对称、角色唯一**。已落地的四条：
+
+| 约定 | 内容 | 违反过的实例 |
+|---|---|---|
+| **一个概念一个类名** | 注释件只有 `.cap` / `.cap-foot` / `.note` 三个角色类；不再有 `.gallery-cap` 与 `.overlay-cell > .cap` 两份同名副本 | `.gallery-cap` 与 `.cap` 声明完全相同 |
+| **标注位置按角色定** | `.cap` 标签 → 一律在格子**顶部**（CSS `order:-1` 固定，不靠 DOM 顺序）；`.cap-foot` 指标 → 一律在**底部**；`.note` → 随文 | ③④ 的注释在底、⑤⑥⑦ 在顶，同为 `.overlay-cell` 却两套 |
+| **同级元素顺序对称** | 左右栏的 `.side-toggle` 都是栏内**第一个**子元素 | 左栏 toggle 在末尾、右栏在开头 |
+| **引用格式统一** | 屏头 `<code>` 一律「`原版 <源文件> · <根类名 / src 归属>`」 | 三种引用体混用（原版 jsx / src 路径 / docs 编号） |
+
+### ★ 演示格约定（浮层怎么放进演示格）
+
+原版浮层是 `fixed` / 全屏遮罩，塞进演示格要"掰回文档流"。**统一由 CSS 负责**，HTML 不再逐个写内联：
+
+- `.overlay-cell > .app-toast / .node-ctx-menu / .gen-panel-layer / .login-backdrop …` → `position:relative; inset:auto; transform:none`
+- 全屏遮罩类（`.gen-panel-layer` / `.login-backdrop` / `.modal-overlay` / `.ie-overlay-root` / `.license-screen` / `.style-lib-layer`）→ 额外去暗底与内距
+- 面板内次级浮层（`.sel-arrange-menu` / `.gen-panel`）→ 单独一条放回文档流
+
+> 原先这 20+ 处是逐个写在 HTML 的 `style` 属性里的，现已全部收回 CSS（`index.html` 里只剩一处 `.canvas-box` 演示底）。
+
+### ★ 浮层不得重叠（算过的）
+
+第②屏画布 696px 宽：`.canvas-topbar` 居中占 x≈129–567 / y=12–48；
+`.canvas-sel-toolbar` 若放 `top:16px` 则占 x=36–333 / y=16–54 → **交集 204×32px，压住项目名与存储**。
+现放 `top:56px`（顶栏 36 高 + 8 间距）→ 无交集。
+**新增浮层前先算与既有浮层的矩形交集**，别靠肉眼。
 
 ---
 
@@ -209,14 +355,16 @@ MD=1 node docs/mockup/tools/extract-skeleton.cjs CL fL OL BL WL GL YL ZL > docs/
 
 这块 mockup 画的是**原版长什么样**，不是"已实现"。照实标注：
 
-| 面板 | 原版 | 本工程 |
+| 部件 | 原版事实（类名 / 尺寸） | 本工程 |
 |---|---|---|
-| 后台视图 | `_Component43.jsx` 3304 行 / 5 按钮 / 78 文案 | **只有 webview 容器**（`BackendView.tsx`，视图半），头部工具栏 / 账号 tab / 静默条全缺 |
-| 账号分组管理 | `RP.jsx` 7,951 B | 缺（`groups` 有数据，无 UI） |
-| 指纹诊断 | `DP.jsx` 4,971 B | 缺（分级文案真源已在 `core/rules/fingerprint.ts`，无消费方） |
-| 无水印资源 | `SD.jsx` 5,335 B | 缺 |
-| 账号导入导出 | `OP.jsx` 内 | 缺（文案常量 `ACCOUNT_TRANSFER_TEXT` 已落地，UI 无） |
-| 账号运维 | `OP.jsx` 17 按钮 | 只落地最小子集（添加 / 检测登录 / 移除） |
+| 后台视图 | `.doubao-view`：头部 `.doubao-view-head`（可整条收起，`.dv-head-toggle` 52×24）+ 每账号 webview（`.doubao-view-webviews`，逻辑 1280×800） | **只有 webview 容器**（`BackendView.tsx`，视图半），头部工具栏 / 静默条全缺 |
+| 静默遮罩 | `.silent-overlay`：页面快照 + 68×68 恢复钮 | 缺 |
+| 出新图 | `.nip-wrap` / `.dv-lovart-strip`：76px 高通栏，64×64 缩略图横滚（NEW / 已发送 / ⚠ 徽章） | 缺（`localizeVideos` 已接线，面板无） |
+| Dola 媒体 | `.dola-media-panel`（可 docked） | 缺 |
+| 账号分组 | `.account-group` / `.ungrouped-divider` | 缺（`groups` 有数据，无 UI） |
+| 指纹关联扫描 | `.linkscan-*`（4 列网格 + 分布单元格） | 缺（分级文案真源已在 `core/rules/fingerprint.ts`，无消费方） |
+| 出口代理池 | `.login-backdrop` 家族 | 缺 |
+| 账号导入导出 | `TP` / `$P` / `PP` 弹窗 | 缺（文案常量 `ACCOUNT_TRANSFER_TEXT` 已落地，UI 无） |
 
 判据 B4：**不假装有**。mockup 里每个子面板下方都标了 `.gap-flag` 说明当前是否落地。
 
@@ -229,8 +377,11 @@ MD=1 node docs/mockup/tools/extract-skeleton.cjs CL fL OL BL WL GL YL ZL > docs/
 
 ```
 docs/mockup/
-├── README.md
-├── index.html           四个屏幕 + 切换器
+├── README.md           本文件（宏观结构 + 开关说明 + 旋钮真值表）
+├── SKELETON.md         8 类节点 DOM 骨架（机械抽取真源）
+├── index.html          七个屏幕 + 切换器
+├── tools/
+│   └── extract-skeleton.cjs   骨架提取器（@babel/parser）
 └── assets/
     ├── tokens.css       ★ 核心资产 —— 未来直接迁到 src/styles/tokens.css
     └── mockup.css       mockup 专用布局 —— 不迁
@@ -258,7 +409,8 @@ docs/mockup/
 
 ## 五、已知取舍（照实列）
 
-- **暗色配色是我拍的**，没有设计稿。中性色阶用 `--p-ink-*` 一套，品牌色在暗色下自动提亮一档（`--brand-400`）避免压在深底上发闷。你要是有设计稿，改 L2 那一块即可。
+- **暗色配色是我拍的**，没有设计稿（原版只有亮色）。中性色阶用 `--p-ink-*` 一套，品牌色在暗色下自动提亮一档（`--brand-400`）避免压在深底上发闷。你要是有设计稿，改 L2 那一块即可。
 - **密度只影响间距与控件高度**，不影响字号（字号跟着变会让小字糊掉，大厂通常也分开控）。要连字号一起变的话，把 `--font-size-*` 也乘上 `--density` 就行。
 - **图片一律用 CSS 渐变占位**（`ph-a` ~ `ph-f`），避免往仓库塞二进制。
+- 第②/⑤屏画的是**原版结构**（三栏 + 后台视图），`src/ui` 尚未落地之处按 `.gap-flag` 标注，不假装有。
 - `docs/mockup/` 不在 eslint / tsconfig 范围内（同 `docs/**`），不会进 `npm run check`。

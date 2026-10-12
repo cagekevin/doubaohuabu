@@ -91,10 +91,12 @@
   --p-black-ch:      0 0 0;
   --p-red-500-ch:    239 68 68;
   --p-amber-500-ch:  245 158 11;
+  --p-blue-500-ch:   59 130 246;
   --p-indigo-500-ch: 99 102 241;
   --p-green-500-ch:  16 185 129;
 
   /* ── 尺寸基准（px 字面量的唯一落点）── */
+  --dim-half: 2px;
   --dim-1: 4px;
   --dim-2: 8px;
   --dim-3: 12px;
@@ -104,12 +106,14 @@
   --dim-8: 48px;
 
   /* ── 圆角基准 ── */
+  --shape-xs:   2px;
   --shape-sm:   4px;
   --shape-md:   8px;
   --shape-lg:   12px;
   --shape-full: 9999px;
 
   /* ── 字阶 ── */
+  --type-2xs: 10px;
   --type-xs: 11px;
   --type-sm: 12px;
   --type-md: 14px;
@@ -167,13 +171,13 @@
 [data-density='loose']    { --density: 1.25; }
 
 [data-shape='standard'] {
-  --shape-sm: 4px;  --shape-md: 8px;  --shape-lg: 12px;
+  --shape-xs: 2px;  --shape-sm: 4px;  --shape-md: 8px;  --shape-lg: 12px;
 }
 [data-shape='square'] {
-  --shape-sm: 2px;  --shape-md: 4px;  --shape-lg: 6px;
+  --shape-xs: 1px;  --shape-sm: 2px;  --shape-md: 4px;  --shape-lg: 6px;
 }
 [data-shape='round'] {
-  --shape-sm: 8px;  --shape-md: 12px; --shape-lg: 18px;
+  --shape-xs: 4px;  --shape-sm: 8px;  --shape-md: 12px; --shape-lg: 18px;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -210,6 +214,8 @@
   --color-marquee-border:       var(--brand-500);  /* 框选虚线 */
   --color-handle:               var(--brand-500);  /* 连线端点 */
   --color-edge:                 var(--brand-500);  /* 连线本体 */
+  /* 下载动作色（原版「全部下载」是蓝底，与品牌色区分）*/
+  --color-action-download:      var(--p-blue-600);
 
   /* ── 反馈 ── */
   --color-success: var(--p-green-500);
@@ -223,6 +229,10 @@
   --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.08);
   --color-danger-border: rgb(var(--p-red-500-ch) / 0.24);
   --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.10);
+  /* 信息态（原版 --info：可拉取芯片 / 等待倒计时 / 账号徽章 / reply-notice-info）*/
+  --color-info:      var(--p-blue-500);
+  --color-info-bg:     rgb(var(--p-blue-500-ch) / 0.10);
+  --color-info-border: rgb(var(--p-blue-500-ch) / 0.24);
 
   /* ── 叠加 ── */
   --color-shadow:        rgb(var(--p-black-ch) / 0.08);
@@ -230,6 +240,9 @@
   --color-mask:          rgb(var(--p-gray-100-ch) / 0.6);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.32);
   --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.08);
+  /* 媒体浮层（图/视频上的按钮与徽章：原版 #10121b8c 暗纱 + #ffffff73 轨道）*/
+  --color-media-scrim:  rgb(var(--p-black-ch) / 0.55);
+  --color-media-track:  rgb(var(--p-white-ch) / 0.45);
 
   /* ── 节点类型色 ── */
   --color-node-material: var(--p-node-material);
@@ -263,19 +276,24 @@
   --color-marquee-border:       var(--brand-400);
   --color-handle:               var(--brand-400);
   --color-edge:                 var(--brand-400);
+  --color-action-download:      var(--p-blue-400);
 
   --color-success: var(--p-green-400);
   --color-warning: var(--p-amber-400);
   --color-danger:  var(--p-red-400);
+  --color-info:    var(--p-blue-400);
 
   --color-shadow:        rgb(var(--p-black-ch) / 0.40);
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.56);
   --color-mask:          rgb(var(--p-black-ch) / 0.45);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.62);
+  --color-media-scrim:   rgb(var(--p-black-ch) / 0.62);
+  --color-media-track:   rgb(var(--p-white-ch) / 0.30);
 }
 
 /* ── 间距（受密度乘数影响；density=1 时与旧值完全一致）── */
 :root {
+  --space-half: calc(var(--dim-half) * var(--density));
   --space-1: calc(var(--dim-1) * var(--density));
   --space-2: calc(var(--dim-2) * var(--density));
   --space-3: calc(var(--dim-3) * var(--density));
@@ -290,8 +308,10 @@
   --radius-sm:   var(--shape-sm);
   --radius-md:   var(--shape-md);
   --radius-lg:   var(--shape-lg);
+  --radius-xs:   var(--shape-xs);
   --radius-full: var(--shape-full);
 
+  --font-size-2xs: var(--type-2xs);
   --font-size-xs: var(--type-xs);
   --font-size-sm: var(--type-sm);
   --font-size-md: var(--type-md);
@@ -373,17 +393,15 @@
   --node-head-bg:      var(--color-surface-sunken);
   --node-head-height:  calc(var(--dim-6) * var(--density));
   --node-head-fg:      var(--color-text-muted);
-  --node-head-size:    var(--font-size-xs);
-  --node-body-padding: var(--space-2);
-  --node-min-width:    180px;
 
-  /* ── 连线 ── */
-  --edge-stroke:        var(--color-edge);
-  --edge-stroke-width:  2;
-  --edge-stroke-selected: var(--color-action-primary-hover);
+  /* ── 连线（★ 原版真值：默认边 = faint 1px + 35% 透明；选中 = 品牌 2px 流动虚线）── */
+  --edge-stroke:          var(--color-text-faint);
+  --edge-stroke-width:    1;
+  --edge-stroke-opacity:  .35;
+  --edge-stroke-selected: var(--color-action-primary);
   --handle-bg:          var(--color-handle);
   --handle-border:      var(--color-surface-raised);
-  --handle-size:        8px;
+  --handle-size:        14px;   /* 原版 .react-flow__handle：14×14 品牌底 + 2px 面板边 */
 
   /* ── 药丸 / 徽章 ── */
   --chip-bg:     var(--color-surface-sunken);
@@ -398,53 +416,30 @@
   --badge-font-size: var(--font-size-xs);
 
   /* ── 顶栏 ── */
-  --topbar-height: calc(var(--dim-8) * var(--density));
-  --topbar-bg:     var(--color-surface-raised);
-  --topbar-border: var(--color-border);
-  --topbar-padding-x: var(--space-4);
+  /* ★ 原版没有全宽顶栏 —— 项目名 / 存储路径 / 授权 / 后台入口是浮在画布上方的
+     `.canvas-topbar`（绝对定位居中条，尺寸随规则驻留 mockup.css）。
+     旧 `--topbar-height/bg/border/padding-x` 与 `--side-width`（240px 推断值）已删：
+     原版真值为 `.left-side{width:256px}` / `.right-side{width:248px}`，
+     由 mockup.css 旋钮 `--mk-side-w-left/right` 承载。 */
 
-  /* ── 侧栏 ── */
-  --side-width: 240px;
-  --side-bg:    var(--color-surface-raised);
-  --side-border: var(--color-border);
-
-  /* ── 按钮（补充：悬停态）── */
-  --btn-default-border-hover: var(--color-action-primary);
-  --btn-ghost-fg-hover:       var(--color-accent-text);
-
-  /* ── 节点（补充）── */
-  --node-selected-border:  var(--color-selected-border);
+  /* ── 节点重命名输入框（原版 .node-name-edit：1px 虚线品牌底）── */
   --node-name-edit-border: var(--color-action-primary);
-  --node-chip-fg:          var(--color-accent-text);
-  --node-ref-ok-fg:        var(--color-success);
-  --node-ref-chip-fg:      var(--color-accent-text);
+
   /**
-   * ★ 身份圆点：与 MiniMap 用**同一套类型色**。
+   * ★ 身份圆点：值逐条对齐**原版节点圆点**（不是 MiniMap）。
    *
-   * 修正前 `.materialDot` / `.videoDot` 写的是 `--color-primary`（紫）、
-   * `.downloadDot` 写的是 `--color-success`（绿）—— 而 MiniMap 用的是类型色
-   * （material `#a5b4fc` / account `#34d399` / other `#fcd34d`）⇒ **同一概念两套颜色**。
-   * 现统一到 `--color-node-*`，与 MiniMap 一致。
+   * 原版真值（`index-*.css`）：`.text-dot`/`.download-dot` = `--accent-text`(#f59e0b)、
+   * `.material-dot` = `--accent-material`(#6366f1)、`.account-dot` = #10b981、
+   * `.video-dot` = #ef4444、`.gv-dot` = `--primary`、`.ig-dot` = #0ea5e9。
+   * 注意原版**圆点与 MiniMap 不同色**（MiniMap material=#a5b4fc / account=#34d399）——
+   * 本 mockup 的 material 圆点取 `--color-node-material`（#a5b4fc，与自家 MiniMap 一致），
+   * 其余圆点逐字取原版值。
    */
   --node-dot-material: var(--color-node-material);
-  --node-dot-other:    var(--color-node-other);
-  --node-dot-account:  var(--color-node-account);
-  --node-dot-download: var(--color-success);
-
-  /* ── 加载指示 ── */
-  --spinner-color: var(--color-action-primary);
-
-  /* ── 进度条 ── */
-  --progress-fill:  var(--color-action-primary);
-  --progress-track: var(--color-surface-sunken);
-
-  /* ── 标签页 ── */
-  --tab-active-fg:     var(--color-accent-text);
-  --tab-active-border: var(--color-selected-border);
-
-  /* ── 焦点 / 框选 ── */
-  --focus-ring:     var(--color-focus-ring);
-  --marquee-border: var(--color-marquee-border);
+  --node-dot-text:     var(--color-warning);
+  --node-dot-account:  var(--color-success);
+  --node-dot-video:    var(--color-danger);
+  --node-dot-download: var(--color-warning);
 }
 
 /* ── 圆角风格联动：切 data-shape 时组件层自动跟随（无需改 L3）── */
