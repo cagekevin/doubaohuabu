@@ -18,9 +18,23 @@
  */
 
 import { stripHtml } from '@/lib/text';
+import { SEND_DEDUP_MS } from '@/constants';
 
-/** 防重复窗口（ms）—— 原 `N3` 41834 的 `90000` */
-export const DEDUPE_WINDOW_MS = 90000;
+/**
+ * 防重复窗口（ms）—— **派生**自 `@/constants` 的 `SEND_DEDUP_MS`
+ *
+ * ★ **2026-10-12（`TD-02-20` · 母体 M3）收口**：此前这里**另写了一份 `90000`**，
+ *   与 `constants/index.ts:67` 的 `SEND_DEDUP_MS` 同值 ⇒ **SSOT 第二份**（改一处不改另一处
+ *   ⇒ 入队防重与发送防重两个窗口漂移，判定口径分裂）。
+ *
+ * ⚠️ **为什么这次可以合并（与 `TD-02-8` 相反）**——回源定案：
+ *   源里只有**一个**常量 `N3 = 90000`（`shared.js:41835`），且它**只有一个读者**
+ *   `shared.js:41895` 的 `!force && d && f && f.fp === d && now - f.at < N3` ——
+ *   而本仓 `sendGuard`（判定）与 `sendQueuePlan`（入队）**是同一句的两个落点**
+ *   （`sendGuard.ts` 头注自述判定式即此句）⇒ 同一条规则被本仓拆成两处才出现两份。
+ *   （对照 `TD-02-8`：那里源是 `lt` 与 `s(x)` **两个不同函数**，才判"不得合并"。）
+ */
+export const DEDUPE_WINDOW_MS = SEND_DEDUP_MS;
 
 /** 指纹截断长度（原 `AS` 的 `slice(0, 200)`） */
 const FINGERPRINT_MAX = 200;

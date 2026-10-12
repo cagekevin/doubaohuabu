@@ -96,6 +96,20 @@ export interface BannerError {
   message: string;
 }
 
+/**
+ * ★ 图片编辑器打开时的上下文（原 store `imageEditor`，`shared.js:31449-31458`）
+ *
+ * ⚠️ **为什么住 store 而不是组件局部 state**：编辑器由**节点内**的「编辑图片」按钮打开，
+ *   但浮层是**全屏模态**（原 `G3.jsx` 的 `.ie-overlay-root`）⇒ 由**外壳**（`CanvasHost`）渲染，
+ *   与 `splitKeywordModal` / `genPanelNodeId` 同法。
+ */
+export interface ImageEditorState {
+  nodeId: string;
+  /** 被编辑的图（`img://` / `data:`） */
+  imgRef: string;
+  label: string;
+}
+
 export interface UiSlice {
   // ── state ──
   toasts: ToastItem[];
@@ -109,6 +123,19 @@ export interface UiSlice {
    * 用户就是在那个可见页面里登录。`null` ⇒ 全隐藏（只跑后台任务、不给人看）。
    */
   activeAccountId: string | null;
+  /**
+   * ★ **最近一次成功发送用的账号**（原 `lastSentAccountId`，`shared.js:26790` ＋ setter `:30395`）
+   *
+   * **写方**（源对位）：发送/填入成功后 —— `state/batchSend` 的 `transport` 成功分支
+   *   （源 `OL.jsx:360`："已自动发送/填入成功后 `setLastSentAccount(V.id)`"）。
+   *   ⚠️ 源另一处写方 `_Component43.jsx:2538` 是**换号重发**成功后 —— 本仓**没有那条链**，如实登记。
+   * **读方**：顶栏「豆包后台」入口的**补齐逻辑**（`core/rules/accountPick.pickActiveAccountFallback`
+   *   ← `AppShell.openDoubaoView`）。
+   * ⚠️ 源里 `_Component48.jsx:23-25` 也订阅了它却**从不使用** —— 那是**源自己的死订阅**，
+   *   **不照抄**（判据 B5：不留没人读的订阅）。
+   * ⚠️ **内存态、不落盘**（源 `:26790` 给的是字面量 `null`，不是读盘函数 ⇒ 不在 `PersistSnapshot`）。
+   */
+  lastSentAccountId: string | null;
   /**
    * ★ **「按关键词拆分」弹窗**（原 `splitKeywordModal` shared.js:26776 / 28535-28546）
    *
@@ -150,6 +177,17 @@ export interface UiSlice {
   closeGeneratePanel: () => void;
   openImageGenPanel: (nodeId: string) => void;
   closeImageGenPanel: () => void;
+
+  /**
+   * ★ **图片编辑器上下文**（原 `imageEditor`，`shared.js:31449`）
+   *
+   * **开**：`openImageEditor`（原 31449-31459：**`nodeId` 与 `imgRef` 都非空才写**）
+   * **关**：`closeImageEditor`（原 31460-31466：有值才写 `null`）
+   * ⚠️ **内存态、不落盘**（源版也是纯 store 字段，不在 `PersistSnapshot`）。
+   */
+  imageEditor: ImageEditorState | null;
+  openImageEditor: (nodeId: string, imgRef: string, label?: string) => void;
+  closeImageEditor: () => void;
 
   // ── 「出新图」面板的持久化开关（原 `_Component26` 的 `f` / `m` 两个 `useState` + `Fd`）──
   /**
@@ -213,6 +251,8 @@ export interface UiSlice {
   clearBackendErrors: () => void;
   setSelectedCount: (n: number) => void;
   setActiveAccountId: (id: string | null) => void;
+  /** 原 `setLastSentAccount`（`shared.js:30395`）—— 写方只有发送成功路径 */
+  setLastSentAccount: (id: string | null) => void;
   /**
    * ★ **节点的发送状态**（原 `nodeSendStates[id]`）
    *
@@ -242,11 +282,15 @@ export function createUiSlice(deps: UiSliceDeps) {
     backendErrors: [],
     selectedCount: 0,
     activeAccountId: null,
+    // ★ 原 `lastSentAccountId: null`（**内存态**；真正的初值由发送路径写入）
+    lastSentAccountId: null,
     splitKeywordModal: null,
     // ★ 「拆分并套用节点预设」（源 `splitPresetPicker: null`，`shared.js:26775`）
     splitPresetPicker: null,
     genPanelNodeId: null,
     imggenPanelNodeId: null,
+    // ★ 图片编辑器（源 `imageEditor: null`，`shared.js` 里的 store 初值）
+    imageEditor: null,
     nodeSendStates: {},
     // ★ 初值**读盘**（原 `_Component26.jsx:30-45` 的 `zd(y0/v0/w0, '0') === '1'`）
     newImagesFolded: deps.readFlag(LS_NEWIMAGES_FOLDED),
@@ -286,6 +330,8 @@ export function createUiSlice(deps: UiSliceDeps) {
 
     setSelectedCount: (n) => set({ selectedCount: n }),
     setActiveAccountId: (activeAccountId) => set({ activeAccountId }),
+    // ★ 原 `setLastSentAccount`（`shared.js:30395`：`{ lastSentAccountId: n }`）
+    setLastSentAccount: (lastSentAccountId) => set({ lastSentAccountId }),
 
     openSplitKeywordModal: (sourceNodeId) => set({ splitKeywordModal: { sourceNodeId } }),
     closeSplitKeywordModal: () => set({ splitKeywordModal: null }),
@@ -306,6 +352,14 @@ export function createUiSlice(deps: UiSliceDeps) {
     },
     closeImageGenPanel: () => {
       if (get().imggenPanelNodeId) set({ imggenPanelNodeId: null });
+    },
+
+    // ⚠️ 逐字对源（`shared.js:31449-31466`）：开**只认 nodeId + imgRef 都非空**；关**有值才写 null**
+    openImageEditor: (nodeId, imgRef, label = '') => {
+      if (nodeId && imgRef) set({ imageEditor: { nodeId, imgRef, label } });
+    },
+    closeImageEditor: () => {
+      if (get().imageEditor) set({ imageEditor: null });
     },
 
     setNewImagesFolded: (value) => {

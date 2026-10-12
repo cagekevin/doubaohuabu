@@ -11,6 +11,10 @@
  */
 
 import { composeImagePrompt, composeVideoPrompt } from './prompt';
+// ★ **2026-10-12（`TD-16-109`）**：时间戳格式化收口到 `lib/time.toIsoTimestamp`（此前本文件 ×3 各写一份）
+import { toIsoTimestamp } from '@/lib/time';
+// ★ 2026-10-12（`TD-04-11`）：分区前缀取值收口到**唯一真源**（此前此处是第二套写死值）
+import { defaultPartitionOf } from '@/core/rules/partition';
 
 /** 发送来源（原实现三种；跨进程契约，不得改名） */
 export const SEND_SOURCES = ['canvas-image-gen', 'canvas-text-node', 'canvas-account-node'] as const;
@@ -20,7 +24,7 @@ export type SendSource = (typeof SEND_SOURCES)[number];
 export interface PayloadAccount {
   id: string;
   name: string;
-  /** 缺省 `'persist:doubao'`（原实现如此） */
+  /** 缺省走 `DEFAULT_PARTITION`（★ 2026-10-12 `TD-04-11`：值取自真源 `defaultPartitionOf`；⚠️ 因本形状**不带 `type`**，只能兜豆包） */
   partition?: string | null;
 }
 
@@ -45,7 +49,15 @@ export interface SendPayload<C extends Record<string, unknown>> {
   autoSend: boolean;
 }
 
-const DEFAULT_PARTITION = 'persist:doubao';
+/**
+ * 缺省分区 —— ★ 2026-10-12（`TD-04-11`）：值改从**唯一真源**取（此前此处是第二套写死值）
+ *
+ * ⚠️ **这里只能兜 `doubao`**：跨进程报文里的 `account`（`PayloadAccount`）**只有 `id`/`name`/`partition`**
+ *   三个字段、**不带 `type`** ⇒ 本函数拿不到类型，无法 type-aware（探债段症状③ 的根因就在这里）。
+ *   要彻底修需给 `PayloadAccount` 加 `type`（**跨进程契约扩容**）—— 那属另一步，**不在这里擅自扩**。
+ *   至少现在：**分区前缀的取值只有真源一处**，本行不再是自造的第二套。
+ */
+const DEFAULT_PARTITION = defaultPartitionOf('doubao');
 
 function accountOf(a: PayloadAccount): { id: string; name: string; partition: string } {
   return { id: a.id, name: a.name, partition: a.partition || DEFAULT_PARTITION };
@@ -89,7 +101,7 @@ export function buildImagePayload(input: {
   return {
     apiVersion: '1.0',
     action: 'account_node_send',
-    timestamp: new Date(input.now).toISOString(),
+    timestamp: toIsoTimestamp(input.now),
     account: accountOf(input.account),
     content: {
       text,
@@ -133,7 +145,7 @@ export function buildVideoPayload(input: {
   return {
     apiVersion: '1.0',
     action: 'account_node_send',
-    timestamp: new Date(input.now).toISOString(),
+    timestamp: toIsoTimestamp(input.now),
     account: accountOf(input.account),
     content: {
       text,
@@ -170,7 +182,7 @@ export function buildAccountNodePayload(input: {
   return {
     apiVersion: '1.0',
     action: 'account_node_send',
-    timestamp: new Date(input.now).toISOString(),
+    timestamp: toIsoTimestamp(input.now),
     account: accountOf(input.account),
     content: {
       text,

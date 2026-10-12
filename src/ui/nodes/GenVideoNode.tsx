@@ -449,7 +449,7 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         if (isCardClick(start, { x: e.clientX, y: e.clientY })) openGeneratePanel(id);
       }}
     >
-      <div className={styles.text}>{data.text || '（空提示词）'}</div>
+      <div className={styles.text}>{data.text || COMMON_TEXT.emptyPrompt}</div>
       {/* `gv-stage`（原 485-530）：按比例撑开的舞台，等待浮层叠在其上 */}
       <div className={styles.gvStage} style={{ aspectRatio: stageRatio(data.aspectRatio) }}>
         {generating && (

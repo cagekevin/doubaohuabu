@@ -161,6 +161,7 @@ export function createContainer(): Container {
     s.nodes,
     s.edges,
     s.library,
+    s.videoShares,
     // ★ 账号族：变了也要安排落盘（否则账号增删改不落盘 —— `docs/14` §2 ⭐）
     s.accounts,
     s.groups,

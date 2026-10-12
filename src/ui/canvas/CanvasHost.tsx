@@ -13,7 +13,7 @@
  * ⚠️ 快捷键：Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z 重做（原实现行为）
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -32,6 +32,7 @@ import type { CanvasEdge } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
 import { useCapture, useHostOps, useStore, useStoreApi } from '@/state';
 import { nodeTypes } from '@/ui/nodes';
+import { GenPanel } from '@/ui/panels/GenPanel';
 import { FaceMaskPanel } from '@/ui/panels/FaceMaskPanel';
 import type { RFCanvasNode } from '@/ui/nodes/types';
 import { InteractiveEdge } from '@/ui/edges/InteractiveEdge';
@@ -43,6 +44,8 @@ import { formatClockTime } from '@/lib/time';
 import { DRAG_MIME_MATERIAL, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
 import { CANVAS_TEXT } from '@/constants/text';
 import { CreatePanel, type CreatePanelState } from './CreatePanel';
+import { GroupConnectHandle } from './GroupConnectHandle';
+import { MaterialPickerModal } from './MaterialPickerModal';
 import { SelectionToolbar } from './SelectionToolbar';
 import { NodeContextMenu, type NodeContextMenuState } from './NodeContextMenu';
 import { NodePresetModal } from './NodePresetModal';
@@ -52,6 +55,12 @@ import { SplitPresetPickerModal } from '@/ui/nodes/SplitPresetPickerModal';
 import styles from './CanvasHost.module.css';
 
 const edgeTypes = { interactive: InteractiveEdge };
+
+/**
+ * ★ 图片编辑器（原 `G3.jsx`，1087 行）—— **动态导入（`lazy`）**（`docs/16` §2.2 定稿，判据 **M3**）：
+ *   重组件拆 chunk、不进主 bundle，只在用户点「编辑图片」时才拉。
+ */
+const ImageEditor = lazy(() => import('@/ui/panels/ImageEditor').then((m) => ({ default: m.ImageEditor })));
 
 /**
  * 边点击弹「建节点」浮层的防抖（ms，原 `_Component42.jsx:574` 的 `setTimeout(..., 220)`）
@@ -75,6 +84,8 @@ function Inner() {
   const storeApi = useStoreApi();
   const commit = useStore((s) => s.commit);
   const connect = useStore((s) => s.connect);
+  /** ★ 多选拖拽批量连线（原 `connectBatch`）—— `onConnect` 的多选 material 分支用 */
+  const connectBatch = useStore((s) => s.connectBatch);
   const undoAction = useStore((s) => s.undoAction);
   const redoAction = useStore((s) => s.redoAction);
   const pushToast = useStore((s) => s.pushToast);
@@ -102,6 +113,14 @@ function Inner() {
    */
   const faceMaskPanel = useStore((s) => s.faceMaskPanel);
   const closeFaceMaskPanel = useStore((s) => s.closeFaceMaskPanel);
+  /**
+   * ★ **图片编辑器**（原 `imageEditor`，`shared.js:31449`）—— 与 `splitModal`/`faceMaskPanel` 同法：
+   *   由节点内「编辑图片」按钮打开，由外壳渲染（全屏模态浮层）。
+   */
+  const imageEditor = useStore((s) => s.imageEditor);
+  const closeImageEditor = useStore((s) => s.closeImageEditor);
+  const replaceMaterialImage = useStore((s) => s.replaceMaterialImage);
+  const replaceImageGenImage = useStore((s) => s.replaceImageGenImage);
 
   const { fitView, screenToFlowPosition } = useReactFlow();
   /** 当前工程 id（原 `b`）—— 切项目后要自适应视图 */
@@ -189,14 +208,138 @@ function Inner() {
     commit('graph-move');
   }, [commit]);
 
+  /**
+   * ★ 连线发起时记下的「源节点 + 当时选中的全部节点」（原 `Ge.current` + `Me`，`_Component42.jsx:621-631`）
+   *
+   * 源逐行：
+   * ```js
+   * const Me = useCallback((B, ue) => {
+   *   const Oe = L.getState().nodes.filter(We => We.selected).map(We => We.id);
+   *   Ge.current = { sourceId: ue.nodeId, selectedIds: Oe };
+   * }, []);
+   * ```
+   * ⚠️ **内存态、不进 store**（源即如此）；一次拖拽结束（`onConnect`/`onConnectEnd`）后清空。
+   */
+  const connectStartRef = useRef<{ sourceId: string | null; selectedIds: string[] } | null>(null);
+
   /** ★ 连线：环检测在 state.connect 内（走 core/rules/graph） */
+  /**
+   * ★ `onConnect`（原 `Re`，`_Component42.jsx:632-654` 逐行回源）
+   *
+   * 源逐行：
+   * ```js
+   * const Re = B => {
+   *   if (!B || !B.source || !B.target || B.source === B.target) return;
+   *   const ue = Ge.current;                       // onConnectStart 记的
+   *   const Oe = L.getState().nodes;
+   *   if (ue && ue.selectedIds.length > 1) {       // ★ 发起时选了多个
+   *     const We = B.target && B.target !== B.source ? B.target : B.source;
+   *     const Ze = ue.selectedIds.filter(vt => {
+   *       const Dt = Oe.find(St => St.id === vt);
+   *       return Dt && Dt.type === 'material' && vt !== We;   // ★ 只要选中的 material
+   *     });
+   *     if (Ze.length > 1 && We) {                 // ★ 至少两个 material 才走批量
+   *       L.getState().connectBatch(Ze, We);
+   *       Ge.current = null;
+   *       return;
+   *     }
+   *   }
+   *   L.getState().onConnect(B);
+   *   Ge.current = null;
+   * };
+   * ```
+   * ⚠️ `Ze.length > 1` 是源的门槛：**只有一个** material 时反而走普通单连（不批量）。
+   */
   const onConnect = useCallback(
     (conn: { source: string | null; target: string | null }) => {
-      if (!conn.source || !conn.target) return;
+      if (!conn.source || !conn.target || conn.source === conn.target) {
+        connectStartRef.current = null;
+        return;
+      }
+      const start = connectStartRef.current;
+      const cur = storeApi.getState().nodes;
+      if (start && start.selectedIds.length > 1) {
+        const anchor = conn.target && conn.target !== conn.source ? conn.target : conn.source;
+        const materials = start.selectedIds.filter((id) => {
+          const n = cur.find((x) => x.id === id);
+          return !!n && n.type === 'material' && id !== anchor;
+        });
+        if (materials.length > 1 && anchor) {
+          connectBatch(materials, anchor);
+          connectStartRef.current = null;
+          return;
+        }
+      }
       const rejected = connect({ source: conn.source, target: conn.target });
       if (rejected) pushToast(rejected);
+      connectStartRef.current = null;
     },
-    [connect, pushToast],
+    [connect, connectBatch, pushToast, storeApi],
+  );
+
+  /**
+   * ★ 连线**落到空白**（原 `G`，`_Component42.jsx:584-607` 逐行回源）
+   *
+   * 源逐行：
+   * ```js
+   * const G = (B, ue) => {
+   *   if (ue.isValid) return;                       // 连上了就不开面板
+   *   const Oe = ue.fromNode;
+   *   const We = ue.fromHandle?.type || 'source';
+   *   if (!Oe) return;
+   *   nt({ x: B.clientX, y: B.clientY, sourceId: Oe.id, fromType: We, flowPos: O({x,y}) });
+   * };
+   * ```
+   * ⚠️ 源这个形态**没有 mode 字段**（走 `ye` 的 `else` 分支）⇒ 本仓起名 `mode:'single'`。
+   * ⚠️ `fromType` 决定**连线方向**（从源手柄发起 ⇒ 新节点接在下面；从目标手柄发起 ⇒ 反过来）。
+   */
+  const onConnectEnd = useCallback(
+    (e: MouseEvent | TouchEvent, state: { isValid: boolean | null; fromNode: { id: string } | null; fromHandle?: { type?: string | null } | null }) => {
+      if (state.isValid) return;
+      const fromNode = state.fromNode;
+      if (!fromNode) return;
+      const fromType = (state.fromHandle?.type ?? 'source') === 'target' ? 'target' : 'source';
+      // 源取的是**鼠标事件的 clientX/Y**（不是 `state.pointer`）
+      const clientX = 'clientX' in e ? e.clientX : 0;
+      const clientY = 'clientY' in e ? e.clientY : 0;
+      setCreatePanel({
+        mode: 'single',
+        x: clientX,
+        y: clientY,
+        sourceId: fromNode.id,
+        fromType,
+        flowPos: screenToFlowPosition({ x: clientX, y: clientY }),
+      });
+    },
+    [screenToFlowPosition],
+  );
+
+  /** ★ 连线开始（原 `Me`）—— 只记 ref，不碰 store */
+  const onConnectStart = useCallback(
+    (_e: MouseEvent | TouchEvent, params: { nodeId: string | null }) => {
+      const ids = storeApi.getState().nodes.filter((n) => n.selected).map((n) => n.id);
+      connectStartRef.current = { sourceId: params.nodeId, selectedIds: ids };
+    },
+    [storeApi],
+  );
+
+  /**
+   * ★ 组连线锚点拖到空白（原 `xe`，`_Component42.jsx:608-620` 逐行）
+   *
+   * 源逐行：`nt({x, y, flowPos: screenToFlow({x,y}), mode:'group', sourceIds: B})`
+   * —— 屏幕坐标定位浮层、flow 坐标定新节点落点（与其它三个入口同构）。
+   */
+  const onGroupConnectEnd = useCallback(
+    (ids: string[], screen: { x: number; y: number }) => {
+      setCreatePanel({
+        mode: 'group',
+        x: screen.x,
+        y: screen.y,
+        flowPos: screenToFlowPosition({ x: screen.x, y: screen.y }),
+        sourceIds: ids,
+      });
+    },
+    [screenToFlowPosition],
   );
 
   // ── 复制 / 粘贴节点（原 `_Component42.jsx:1178-1326`）────────────────────────────
@@ -429,6 +572,13 @@ function Inner() {
   const empty = nodes.length === 0;
   /** 节点右键菜单（原 `Y`）—— 见 `NodeContextMenu.tsx` */
   const [nodeMenu, setNodeMenu] = useState<NodeContextMenuState | null>(null);
+  /**
+   * ★ 素材选择器（原 `_e`，`_Component42.jsx` 的 `useState(null)`）—— **2026-10-12 落**
+   *
+   * 源里它是一个**判别联合**（`{mode:'replace', nodeId}` / 建素材节点的几种形态）；
+   * 本仓**只落 replace 一支**（创建素材节点那一支的宿主未落 ⇒ 不预支，判据 B5）。
+   */
+  const [materialPicker, setMaterialPicker] = useState<{ nodeId: string } | null>(null);
   /**
    * ★ 「保存为节点预设」的**载荷**（原 `ae`，`_Component42.jsx:1138-1155`）—— 住**宿主本地态**
    *   （源也是 `useState`：`we({ nodes: structuredClone(ue), edges: structuredClone(Oe) })`）。
@@ -710,6 +860,9 @@ function Inner() {
         onEdgesChange={onEdgesChange}
         onNodeDragStart={onNodeDragStart}
         onConnect={onConnect}
+        // ★ 连线开始/结束（原 `Me`/`G`）—— 多选 material 批量连 + 落空开建节点浮层
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         // ★ 建节点入口（原 `st` 的边点击 + `node-ctx-menu` 的节点右键）
         onEdgeClick={onEdgeClick}
         // ★ 边双击 → 删边（原 `dt`，`_Component42.jsx:576-583`）
@@ -760,7 +913,14 @@ function Inner() {
         <Background variant={BackgroundVariant.Lines} gap={GRID_SIZE} size={1} style={{ opacity: GRID_OPACITY }} />
         <Controls showInteractive={false} />
         <MiniMap nodeColor={(n) => MINIMAP_COLOR[n.type ?? ''] ?? 'var(--color-node-other)'} pannable zoomable />
+        {/* ★ 组连线锚点（原 `_Component37`，`_Component42.jsx:1463`）—— 选中 ≥2 个节点才出现 */}
+        <GroupConnectHandle onGroupConnectEnd={onGroupConnectEnd} />
       </ReactFlow>
+
+      {/* ★ 生成面板（选中生成类节点时出现）—— 必须住在 `ReactFlowProvider` 内：
+          它订阅 xyflow 的 `transform` 做锚点定位，放在 AppShell 里会因缺少 provider 抛
+          「not used ReactFlowProvider as an ancestor」 */}
+      <GenPanel />
 
       {empty && (
         <div className={styles.emptyHint}>
@@ -772,7 +932,7 @@ function Inner() {
       {/* ★ 选择工具条（原 `.sel-toolbar`）—— 成组的入口（`groupSelected` 此前没有调用方） */}
       {dropActive && <div className={styles.dropHint}>{CANVAS_TEXT.dropHint}</div>}
 
-      {/* ★ 节点右键菜单（原 `node-ctx-menu`，`_Component42.jsx:1685-1726`）—— 4/6 项（见组件头注） */}
+      {/* ★ 节点右键菜单（原 `node-ctx-menu`，`_Component42.jsx:1685-1726`）—— 6/6 项（见组件头注） */}
       {nodeMenu && (
         <NodeContextMenu
           state={nodeMenu}
@@ -787,7 +947,17 @@ function Inner() {
             setNodeMenu(null);
             setNodePresetPayload(buildClipboard(nodes, edges));
           }}
+          // ★ 项 2「更换素材」（原 `Ye`）：只记 nodeId → 开素材选择器（菜单随即卸载）
+          onReplaceMaterial={() => {
+            setNodeMenu(null);
+            setMaterialPicker({ nodeId: nodeMenu.nodeId });
+          }}
         />
+      )}
+
+      {/* ★ 素材选择器（原 `DT.jsx`，`_Component42.jsx:1681` 的 `{_e && <_cmp_DT …/>}`）—— 2026-10-12 落 */}
+      {materialPicker && (
+        <MaterialPickerModal nodeId={materialPicker.nodeId} onClose={() => setMaterialPicker(null)} />
       )}
 
       <SelectionToolbar />
@@ -830,6 +1000,29 @@ function Inner() {
           y={faceMaskPanel.y}
           onClose={closeFaceMaskPanel}
         />
+      )}
+
+      {/* ★ 图片编辑器（原 `G3.jsx`，`_Component42.jsx:1727-1744`）—— lazy 动态导入（`docs/16` M3） */}
+      {imageEditor && (
+        <Suspense fallback={null}>
+          <ImageEditor
+            imgRef={imageEditor.imgRef}
+            label={imageEditor.label}
+            onClose={closeImageEditor}
+            onSaved={(dataUrl, size) => {
+              const nodeId = imageEditor.nodeId;
+              closeImageEditor();
+              if (!dataUrl) return;
+              // ★ 源 `_Component42.jsx:1736-1743`：按节点类型分派（imggen → 换当前图，否则 → 换素材图）
+              const node = nodes.find((n) => n.id === nodeId);
+              if (node && node.type === 'imggen') {
+                replaceImageGenImage(nodeId, dataUrl, { w: size.w, h: size.h });
+              } else {
+                replaceMaterialImage(nodeId, dataUrl, { w: size.w, h: size.h });
+              }
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -12,6 +12,7 @@
  */
 
 import { useEffect, type ReactNode } from 'react';
+import { COMMON_TEXT } from '@/constants/text';
 import styles from './shared.module.css';
 
 export interface ModalProps {
@@ -49,7 +50,7 @@ export function Modal({ open, onClose, title, children, footer, closeOnMask = tr
         {title !== undefined && (
           <div className={styles.header}>
             <span>{title}</span>
-            <button type="button" className={styles.close} onClick={onClose} aria-label="关闭">
+            <button type="button" className={styles.close} onClick={onClose} aria-label={COMMON_TEXT.closeAria}>
               ✕
             </button>
           </div>

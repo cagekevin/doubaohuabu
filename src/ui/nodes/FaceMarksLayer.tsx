@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHostOps, useStore } from '@/state';
 import { displayFaceRects } from '@/core/rules/faceDetect';
+import { toPercent } from '@/lib/math';
 import { FACE_MASK_EFFECT_LABEL } from '@/constants/facemask';
 import { FACEMASK_TEXT } from '@/constants/text';
 import styles from './shared.module.css';
@@ -169,7 +170,7 @@ export function FaceMarksLayer({ nodeId, src, natW, natH, label }: FaceMarksLaye
   };
 
   const effectLabel = FACE_MASK_EFFECT_LABEL[faceMaskOpts.effect].label;
-  const padPercent = Math.round(faceMaskOpts.pad * 100);
+  const padPercent = toPercent(faceMaskOpts.pad);
   const show = status === 'done' && rects.length > 0;
 
   return (

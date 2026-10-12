@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useHostOps, useStore } from '@/state';
 import { Thumb } from '@/ui/common/Thumb';
-import { COMMON_TEXT, GEN_IMAGE_TEXT } from '@/constants/text';
+import { COMMON_TEXT, GEN_IMAGE_TEXT, MATERIAL_NODE_TEXT } from '@/constants/text';
 import { isCardClick } from '@/core/rules/cardClick';
 import { genImageCurrentUrl, imageApiChipLabel, imageChannelLabel, imageVersionView } from '@/core/rules/genImage';
 import { countInputs } from '@/core/rules/linkedMaterials';
@@ -41,6 +41,7 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   const pushToast = useStore((s) => s.pushToast);
   const openImageGenPanel = useStore((s) => s.openImageGenPanel);
   const patchNodeData = useStore((s) => s.patchNodeData);
+  const openImageEditor = useStore((s) => s.openImageEditor);
   // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
   const hostOps = useHostOps();
   /** 卡片按下起点（原 `ZL.jsx` 的 pointer-down ref）—— 供「点击 vs 拖动」判定 */
@@ -132,7 +133,7 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
     // ⚠️ 用 Fragment 包住：历史弹层走 `createPortal` 到 `document.body`（源 `ZL.jsx:288` 同法）
     <>
       <NodeShell
-        title="文生图"
+        title={GEN_IMAGE_TEXT.title}
         selected={selected}
         // 有框外浮层（分析按钮 / 提示词浮层）⇒ 不能被 `.node` 的 overflow 裁掉
         overflowVisible
@@ -165,13 +166,13 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           if (isCardClick(start, { x: e.clientX, y: e.clientY })) openImageGenPanel(id);
         }}
       >
-        <div className={styles.text}>{data.text || '（空提示词）'}</div>
+        <div className={styles.text}>{data.text || COMMON_TEXT.emptyPrompt}</div>
         {data.generating ? (
-          <div className={styles.spinner}>生成中…</div>
+          <div className={styles.spinner}>{COMMON_TEXT.generating}</div>
         ) : current ? (
           <Thumb src={current} className={styles.thumb} />
         ) : (
-          <div className={styles.placeholder}>未生成</div>
+          <div className={styles.placeholder}>{GEN_IMAGE_TEXT.notGenerated}</div>
         )}
         {/* `gv-dl`（原 244-255）：下载这张图（条件 = 有当前图 `u`，与是否在生成无关） */}
         {current ? (
@@ -201,6 +202,28 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
               <path d="M4 20h16" />
             </svg>
           </button>
+        ) : null}
+        {/*
+          `mat-edit-float`（原 256-272）—— ★ **2026-10-12 落（`TD-09-4`）**：
+          条件 = 有当前图 `u` 且**不在生成中**（原 256 的 `u && !l.generating`）。
+          ⚠️ 与 `AnalyzePrompt` 的按钮**不同位置**：本按钮在**左下角**（`.matFloatActions`），
+          分析按钮在**上方居中**（`AnalyzePrompt` 的 `.floatActions`）—— 不重叠。
+        */}
+        {current && !data.generating ? (
+          <div className={`${styles.matFloatActions} nodrag nopan`}>
+            <button
+              type="button"
+              className={styles.matFloatBtn}
+              title={MATERIAL_NODE_TEXT.editImageTitle}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                openImageEditor(id, current, data.label || GEN_IMAGE_TEXT.title);
+              }}
+            >
+              {MATERIAL_NODE_TEXT.editImage}
+            </button>
+          </div>
         ) : null}
         {/*
           `gv-meta`（原 960-962）—— ★ **落点更正**：源在**卡片底部独立行**（`gv-stage` 之后），

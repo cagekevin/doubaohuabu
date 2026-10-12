@@ -54,6 +54,14 @@ export interface HostOpsController {
   copyText(text: string): Promise<Result<void>>;
 
   /**
+   * 把图片写进系统剪贴板（原 `window.api.copyImageToClipboard`）—— **图片编辑器「复制」按钮**（`G3.jsx` 的 `tt`）
+   *
+   * ⚠️ 走端口而非 `navigator.clipboard`（源直调 `navigator.clipboard.write` —— 本仓收进端口，
+   *   与 `copyText` 同判据）。
+   */
+  copyImage(img: { dataUrl: string; label?: string }): Promise<Result<void>>;
+
+  /**
    * ★ **系统剪贴板变化订阅**（原 `window.api.onClipboardImageChanged`，`_Component42.jsx:1200`）
    *
    * 用途（**与源一致**）：只把「剪贴板变过」这件事记成**时间戳** —— `Ctrl+V` 靠它判断
@@ -131,6 +139,7 @@ export function createHostOps(ports: Ports): HostOpsController {
   return {
     dragFileOut: (input) => ports.host.media.startFileDrag(input),
     copyText: (text) => ports.host.clipboard.writeText(text),
+    copyImage: (img) => ports.host.clipboard.writeImage(img),
     onClipboardImageChanged: (cb) => ports.host.clipboard.onChanged(cb),
     readClipboardImage: () => ports.host.clipboard.readImage(),
     saveTextFile: (content) => ports.host.file.saveFile(content),

@@ -325,7 +325,13 @@ export function createGlobalSlice(
       const { canvas, ...head } = snapshot;
       set(head);
       if (canvas) {
-        set({ nodes: canvas.nodes, edges: canvas.edges, library: canvas.library, snap: canvas.snap });
+        set({
+          nodes: canvas.nodes,
+          edges: canvas.edges,
+          library: canvas.library,
+          snap: canvas.snap,
+          videoShares: canvas.videoShares ?? [],
+        });
       }
     },
     setAccounts: (accounts) => set({ accounts }),

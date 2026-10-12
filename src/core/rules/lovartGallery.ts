@@ -99,13 +99,19 @@ export function captureSource(url: string): string {
  *   · 「坏数据 ⇒ `{}`」的兜底**逐字对源**（原 `ET` 26637 同形，见本文件 `:17` 的表）⇒ **不在此改**；
  *   · 它是否**删除 / 接线**归**死代码批**（`docs/14` §1.9 一类），不属"兜底不留痕"。
  */
-export function parseLovartGalleries(json: string | null | undefined): LovartGalleries {
-  try {
-    const v = json ? (JSON.parse(json) as unknown) : {};
-    return v && typeof v === 'object' ? (v as LovartGalleries) : {};
-  } catch {
-    return {};
-  }
+/**
+ * 源 `ET` 26637 的**形状判据半**：「是对象才收，否则 `{}`」（**不抛** —— 画廊丢了不该挡住启动）
+ *
+ * ★ **2026-10-12（`TD-02-3`）由 `parseLovartGalleries` 拆出**：
+ *   原 `ET` 是「**读原始串 → `JSON.parse` → 形状判定**」三合一；本仓的读取路径
+ *   （`state/persistKeys` 的 `rw().read`）**已经做了 parse 且是三态**（`TD-06-1`）⇒
+ *   原函数的 **parse 半与读层重复**（硬接＝双解析／绕过三态，故**删**）；
+ *   而**判据半**此前**无任何消费者** ⇒ 盘上若是 `"null"` / `"[1,2]"` 这类**合法 JSON 但非对象**，
+ *   会**漏进 store**（`readOrDefault` 的 ok 分支不做形状判定）⇒ 判据半抽成本函数并在 hydrate 接线。
+ * ⚠️ 数组也是 `'object'`（源版判据就是 `typeof === 'object'`）⇒ 会被返回；照抄。
+ */
+export function ensureLovartGalleries(value: unknown): LovartGalleries {
+  return value && typeof value === 'object' ? (value as LovartGalleries) : {};
 }
 
 /**
@@ -312,19 +318,6 @@ export function removeLovartAccount(
   const next = { ...galleries };
   delete next[accountId];
   return { galleries: next };
-}
-
-/** 「加入画布选中素材」时只看这几个字段（**参考用**：函数签名刻意放宽成 `data?: unknown`，见那里注释） */
-export interface CanvasMaterialLike {
-  selected?: boolean;
-  type?: string;
-  data?: {
-    dataUrl?: unknown;
-    label?: unknown;
-    name?: unknown;
-    natW?: unknown;
-    natH?: unknown;
-  } | null;
 }
 
 /** 来自画布收藏的出处标记（原 `Ie` 350 的字面量） */

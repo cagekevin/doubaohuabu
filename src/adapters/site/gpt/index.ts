@@ -36,9 +36,12 @@ import { sleep, withTimeout } from '@/lib/async';
 // ★ 判据 C1：`isRecord`/`asRecord` 取自 `lib/object` —— ⛔ 不在本文件 / `tapnow/api.ts` / `tapnow/index.ts` 各写一遍
 //   ⇒ 第 3 次出现即抽出到 `lib/object.ts`
 import { asRecord } from '@/lib/object';
-// ★ 复用既有 SSOT 的内容指纹（`doubao/index.ts` 自带一个局部 `hash32`，
-//   按 C1 三振出局：GPT 是第 2 处 ⇒ 先用现成的；到第 3 处时把 `doubao` 也收口过来）
-import { contentFingerprint } from '@/core/rules/sendGuard';
+// ★ `TD-05-6`（2026-10-12）订正本注释与导入：会话幂等键的哈希段用 **`lib/hash.hash32`**
+//   （FNV-1a⇒base36；与 doubao 同一处）—— 原注释"先用现成的内容指纹"是**用途混用**：
+//   `contentFingerprint`（源 `AS` 41866）是**防重内容指纹**（stripHtml＋去空白＋截 200），
+//   不是会话键哈希；把它塞进 id 会让 id 带上最多 200 字明文。doubao 那份私有 `hash32`
+//   已随之删除，真源只有 `lib/hash` 一处。
+import { hash32 } from '@/lib/hash';
 import { findWebview, webviewEval } from '../shared/webview';
 import { gptSendScript } from './scripts';
 
@@ -61,7 +64,11 @@ export function createGptSite(host: HostPort): SitePort {
         return err('page-error', GPT_TEXT.pageNotOpen);
       }
 
-      const sessionId = `${account.id}:${payload.source}:${contentFingerprint(payload.text)}`;
+      // ★ `TD-05-6`（2026-10-12）：会话幂等键的哈希段改用**真源** `lib/hash.hash32` ——
+      //   此前这里拿 `contentFingerprint`（**内容指纹**：stripHtml＋去空白＋截 200）当哈希段，
+      //   与 doubao 的 `hash32`（FNV-1a⇒base36）**同一语义两套**；且内容指纹会把 200 字明文
+      //   塞进 id（会话键该短）。内容指纹的正当用途是 `sendGuard` 的防重窗口，**不在此处**。
+      const sessionId = `${account.id}:${payload.source}:${hash32(payload.text)}`;
 
       // ① 附参考图（**经 HostPort** —— 修掉原版 `window.api` 越权）
       if (payload.images.length > 0) {

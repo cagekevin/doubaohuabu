@@ -20,7 +20,7 @@
  */
 
 import type { HostPort } from '@/core/ports/host.port';
-import type { ImageQuestionContext, SitePort } from '@/core/ports/site.port';
+import type { ImageQuestionContext, SitePort, WatermarkThreadOutcome, WatermarkVideo } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { ANALYZE_TEXT } from '@/constants/text';
 import { sleep } from '@/lib/async';
@@ -39,6 +39,7 @@ import { withInputLock } from '../shared/inputLock';
 import { attachImageToWebview } from '../shared/attachImage';
 import { findWebview, type WebviewElement } from '../shared/webview';
 import { runProbe } from '../shared/waits';
+import { WATERMARK_FREE_BY_THREAD, WATERMARK_FREE_BY_VID } from './scripts';
 import {
   INPUT_FOCUS_SCRIPT,
   MESSAGE_BASELINE_SCRIPT,
@@ -229,5 +230,45 @@ export function createDoubaoPingQueueProgress(
     const view = viewOfAccount(ctx);
     if (!view) return err('page-error', '该账号的 webview 未初始化');
     return askAndWaitReply(host, view, ctx.webContentsId, instruction);
+  };
+}
+
+/** 页内脚本的成功返回（原 `mD` 返回 `{ok:true,url,…}`） */
+type WatermarkVidScriptResult = WatermarkVideo & { ok: true };
+/** 页内脚本的失败返回（原 `mD` 返回 `{ok:false,error}`） */
+type WatermarkVidScriptFail = { ok: false; error: string; note?: string };
+
+/**
+ * 构造 `SitePort.fetchWatermarkFree` 的实现（原 `_Component43` 的 `xt` 里 `mD` 页内脚本）
+ *
+ * ⚠️ 脚本封装在 `./scripts.ts`（`WATERMARK_FREE_BY_VID`），本方法只做「找 webview → 执行 → 判 ok」。
+ * ⚠️ 不用 `runProbe` 的 `timeoutMs`：`mD` 是**同步 XHR 三步链**（homepage→node_info→download），
+ *    耗时不可预期，给超时反而会截断正常拉取（源版也没有超时）。
+ */
+export function createDoubaoFetchWatermarkFree(): NonNullable<SitePort['fetchWatermarkFree']> {
+  return async (ctx, vid) => {
+    const view = viewOfAccount(ctx);
+    if (!view) return err('page-error', '该账号的 webview 未初始化');
+    const r = await runProbe<WatermarkVidScriptResult | WatermarkVidScriptFail>(
+      view,
+      `(${WATERMARK_FREE_BY_VID})(${JSON.stringify(vid)})`,
+    );
+    if (!r.ok) return err('page-error', r.error);
+    if (!r.value.ok) return err('page-error', r.value.error);
+    return ok(r.value);
+  };
+}
+
+/** 构造 `SitePort.fetchWatermarkFreeByThread` 的实现（原 `resolveThreadAndFetch` 里 `gD` 页内脚本） */
+export function createDoubaoFetchWatermarkFreeByThread(): NonNullable<SitePort['fetchWatermarkFreeByThread']> {
+  return async (ctx, threadId) => {
+    const view = viewOfAccount(ctx);
+    if (!view) return err('page-error', '该账号的 webview 未初始化');
+    const r = await runProbe<WatermarkThreadOutcome>(
+      view,
+      `(${WATERMARK_FREE_BY_THREAD})(${JSON.stringify(threadId)})`,
+    );
+    if (!r.ok) return err('page-error', r.error);
+    return ok(r.value);
   };
 }

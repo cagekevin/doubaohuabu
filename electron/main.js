@@ -2601,11 +2601,16 @@ ipcMain.handle('ensure-fingerprint', async (_e, acc) => {
     fs.writeFileSync(jsonPath, JSON.stringify(fp));
     fs.writeFileSync(jsPath, buildFingerprintPreload(fp));
     // HTTP 层：注入 Accept-Language（DOM 层在 preload 内覆盖）
+    // ★ 2026-10-12（TD-04-11）：**分区由前端按账号类型算好**（真源 core/rules/partition.defaultPartitionOf），
+    //   后端不再猜站点；且内层失败**如实上报**（探债段解法第二条）——
+    //   此前这里是「**无兜底** + 只 console.error + **仍回 ok:true**」⇒ 建号（partition:null）时
+    //   头注入静默跳过，而调用方拿到的是"成功"（探债段症状①）。
+    if (!acc.partition) throw new Error('ensure-fingerprint: 缺少 partition（应由前端按账号类型提供）');
     try {
       const ses = session.fromPartition(acc.partition);
       applyFingerprintHeaders(ses, fp);
     } catch (e) {
-      console.error('[fingerprint] 设置请求头失败:', e && e.message || e);
+      throw new Error(`[fingerprint] 设置请求头失败: ${e && e.message || e}`);
     }
     return { ok: true, preloadUrl: pathToFileURL(jsPath).href };
   } catch (err) {
@@ -2617,7 +2622,11 @@ ipcMain.handle('ensure-fingerprint', async (_e, acc) => {
 // 被 Chromium 默认接管，resolveProxy 能直接看出流量是否走了 PROXY）与真实引擎版本。
 ipcMain.handle('fp-net-diag', async (_e, { partition } = {}) => {
   try {
-    const ses = session.fromPartition(partition || 'persist:doubao');
+    // ★ 2026-10-12（TD-04-11）：**不再猜站点** —— 此前无分区就探 `persist:doubao`
+    //   ⇒ 非豆包号拿到的诊断报告是**别的会话**的出口（探债段症状②）。前端有账号类型时
+    //   会用真源算好分区（core/rules/partition.defaultPartitionOf）；这里没有 ⇒ 明确失败。
+    if (!partition) throw new Error('fp-net-diag: 缺少 partition（应由前端按账号类型提供）');
+    const ses = session.fromPartition(partition);
     let proxy = '';
     try { proxy = await ses.resolveProxy('https://www.doubao.com'); } catch (_) { proxy = ''; }
     return {
@@ -2706,7 +2715,10 @@ function buildCleanChromeUA() {
 
 ipcMain.handle('ensure-plain-session', async (_e, acc) => {
   try {
-    const partition = (acc && acc.partition) || 'persist:lovart';
+    // ★ 2026-10-12（TD-04-11）：不再猜 `persist:lovart` —— 前端按账号类型算好分区；
+    //   拿不到就明确失败（静默落到别的 session 比报错更难查）。
+    const partition = (acc && acc.partition) || '';
+    if (!partition) throw new Error('缺少 partition（应由前端按账号类型提供）');
     const ses = session.fromPartition(partition);
     const ua = buildCleanChromeUA();
     const lang = buildPlainAcceptLanguages();
@@ -2819,7 +2831,10 @@ async function prepareLovartContainer(ses, partition, proxy) {
 
 ipcMain.handle('ensure-lovart-container', async (_e, acc) => {
   try {
-    const partition = (acc && acc.partition) || 'persist:lovart';
+    // ★ 2026-10-12（TD-04-11）：不再猜 `persist:lovart` —— 前端按账号类型算好分区；
+    //   拿不到就明确失败（静默落到别的 session 比报错更难查）。
+    const partition = (acc && acc.partition) || '';
+    if (!partition) throw new Error('缺少 partition（应由前端按账号类型提供）');
     const proxy = (acc && acc.proxy) || '';
     const ses = session.fromPartition(partition);
     const { ua } = await prepareLovartContainer(ses, partition, proxy);

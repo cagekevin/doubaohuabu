@@ -11,7 +11,7 @@
 // 文案只依赖 L0（constants）内的 kind 联合，不依赖 core（分层：L0 不得依赖 L2）
 export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure';
 // ⚠️ 发送/面板文案的**分片转发**（定义在 `sendPanelText.ts`，见那里的头注释）
-export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, AUTO_MATCH_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EDGE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FUZZY_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_IMAGE_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, MATERIAL_NODE_TEXT, MEDIA_PLAYER_TEXT, NODE_CTX_TEXT, PRESET_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, STYLE_LIB_TEXT, VIDEO_NODE_TEXT } from './sendPanelText';
+export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, AUTO_MATCH_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EDGE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FUZZY_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_IMAGE_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, IMAGE_EDITOR_TEXT, MATERIAL_NODE_TEXT, MEDIA_PLAYER_TEXT, NODE_CTX_TEXT, PRESET_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, STYLE_LIB_TEXT, VIDEO_NODE_TEXT, WATERMARK_PANEL_TEXT } from './sendPanelText';
 // ⚠️ 以下三处分片由 eslint `max-lines`(400) 触发 —— **该规则已于 2026-10-11 关闭**（分片的"各组彼此内聚"理由仍成立，但不再有"必须 <400 行"的硬约束）。
 // ⚠️ 2026-10-11：从 `sendPanelText.ts` **拆出**（那个文件代码行越过 eslint `max-lines`(400)）——
 //    「出新图」那一族彼此内聚，独立成 `newImagesText.ts`。**公开入口不变**（仍从 `@/constants/text` 取）。
@@ -86,6 +86,26 @@ export const COMMON_TEXT = {
    *    必须如实报出来，**不能静默当成功**（否则失败被伪装成「成功且值为空」）。
    */
   boundaryViolation: (field: string) => `宿主返回缺少必需字段 ${field}（契约违约）`,
+  /**
+   * 提示词为空时的占位（**本工程新增** —— 回源 0 命中）
+   *
+   * ★ **2026-10-12（`TD-09-1`）**：`GenImageNode` 与 `GenVideoNode` **各写了一遍**同一句
+   *   ⇒ 两份（母体 M3）⇒ 收在这里一处，两处委托。
+   * ⚠️ 收它的理由**不是"源里有"**（源里没有）—— 而是「**用户可见文案只写一遍**」：
+   *   本文件的自述就是「只放 UI 独有文案」。判据用错会留下下一处漂移
+   *   （同轮刚修掉一处：`Thumb` 写"无图"、源写"暂无图片"）。
+   */
+  emptyPrompt: '（空提示词）',
+  /**
+   * 「正在生成」的按钮/占位文案（**本工程新增** —— 回源 0 命中；源里那个**无省略号**的
+   *   `生成中` 是 API 任务状态条的标签（`ZL.jsx:324`），**不是同一句**，别混）
+   *
+   * ★ **2026-10-12（`TD-09-1`）**：两处消费者 —— `GenPanel` 的运行按钮（`busy ? … : …`）
+   *   与 `GenImageNode` 的占位（`data.generating ? …`）⇒ 放通用层，各自委托。
+   */
+  generating: '生成中…',
+  /** 关闭按钮的无障碍名（**本工程新增** —— 源里没有对应 aria） */
+  closeAria: '关闭',
 } as const;
 
 /** 品牌 / 启动页 */
@@ -230,6 +250,8 @@ export const CANVAS_TEXT = {
    * @param clock `HH:MM:SS`（`lib/time.ts` 的 `formatClockTime`）
    */
   pastedImageName: (clock: string) => `粘贴图片 ${clock}`,
+  /** 组连线锚点的 title（原 `_Component37.jsx:184`，逐字） */
+  groupConnectHint: '拖拽此锚点，将所选节点一次性连接到目标节点',
 } as const;
 
 /**
@@ -307,10 +329,53 @@ export const BANNER_TEXT = {
 } as const;
 
 /** 资源库 / 素材 */
+/**
+ * 外壳（三栏）的**地标无障碍名**（**本工程新增** —— 源里只有 `展开/收起账号栏` 那类
+ * side-toggle 按钮的 title，**没有** `<aside>` 的 aria-label）
+ *
+ * ★ **2026-10-12（`TD-09-1`）**：按「用户可感知的文案只写一遍」收于此
+ * （读屏软件会把它们念出来 ⇒ 是用户可感知文案，不该散在两个 JSX 属性里）。
+ */
+export const SHELL_TEXT = {
+  /** 左栏（账号）—— ⚠️ 与源 `_Component48.jsx:163` 的 `展开账号栏`/`收起账号栏` **不是同一句**（那是折叠按钮的 title，且随状态变），别合并 */
+  accountsAria: '账号栏',
+  /** 右栏（资源库）—— 同理，源 `:182` 是折叠按钮的 title */
+  libraryAria: '资源栏',
+} as const;
+
 export const LIBRARY_TEXT = {
+  /** 面板标题（原 `RT.jsx:254` 的 `<span className="library-title">资源库</span>`，逐字） */
+  title: '资源库',
+  /** 条目删除按钮的无障碍名（**本工程新增** —— 源里没有对应 aria） */
+  deleteAria: '删除',
   empty: '资源库为空，请先从右侧资源库或文件添加素材。',
+  /** 素材选择器标题（原 `DT.jsx:33` 的 replace 档，逐字） */
   pickFromLibrary: '从资源库选择素材进行更换',
+  /** 素材选择器/资源库的「从文件选择」（原 `DT.jsx:47` / `RT.jsx:256`，逐字） */
   pickFromFile: '从文件选择',
+  /** 素材选择器的「取消」（原 `DT.jsx:49`，逐字） */
+  pickerCancel: '取消',
+  /**
+   * 资源库**右键菜单**的「替换素材」（原 `RT.jsx:351`，逐字）
+   * ⚠️ 与 `NODE_CTX_TEXT.replaceMaterial`（「更换素材」）**是两个不同的动作**：
+   *    这个是**换库条目自身的图**，那个是**换节点绑到哪张图**。
+   */
+  libReplace: '替换素材',
+  /** 资源库条目的「双击重命名」提示（原 `RT.jsx:301` 的 `title`，逐字） */
+  libRenameHint: '双击重命名',
+  /** 改名输入框的失焦/回车兜底名（原 `RT.jsx:248` 的 `|| '未命名'`，逐字） */
+  libUnnamed: '未命名',
+  /**
+   * 换图失败（守卫没过 / 外置失败）—— ⚠️ **源里没有这句**：`RT.jsx:151-153` 只在
+   * `!V.ok` 时 `alert`，且走的是**后端错误文案**域 ⇒ 本仓按原则 6 给 toast，原文透传。
+   */
+  libReplaceFailed: '替换素材失败',
+  /**
+   * 换图失败（守卫没过）—— ⚠️ **源里没有这句**：`_Component42.jsx:967` 把
+   * `replaceMaterialWithLib` 的返回值**直接丢掉**（完全静默）⇒ 本仓按原则 6 不静默。
+   * 原文来自 `core/rules/materialReplace.ts` 的 `err('bad-input', …)`。
+   */
+  replaceFailed: '更换素材：节点不是素材节点或未选择图片',
   alreadyOnCanvas: (name: string) => `「${name}」已在画布上，已移到落点（同一素材不重复创建）`,
 } as const;
 
@@ -358,6 +423,13 @@ export const BACKEND_VIEW_TEXT = {
   expandHead: '展开顶部工具栏',
   /** 点「刷新」时账号已被删（防的是"点了之后才发现没了"）—— 原则 6：不静默 */
   accountGone: '账号已不存在，无法刷新后台页',
+  /**
+   * 顶栏的「豆包后台」入口（原 `_Component42.jsx:1606` —— 逐字：图标 `▦` ＋ 文字 `豆包后台`）
+   * ⚠️ 与 `title.doubao`（`豆包对话后台`，后台视图**头部标题**）**不同字**：那是标题、这是按钮。
+   */
+  entry: '豆包后台',
+  /** 该按钮的 `title`（原 `:1606` 逐字） */
+  entryTitle: '查看账号节点发送后的豆包对话',
 } as const;
 
 /** 侧栏折叠 */

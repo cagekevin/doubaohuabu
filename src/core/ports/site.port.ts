@@ -173,6 +173,29 @@ export interface SitePort {
   ) => Promise<Result<{ text: string }>>;
 
   /**
+   * 可选的「**无水印视频拉取**」能力（原 `_Component43` 的 `xt` 里 `mD` 页内脚本）
+   *
+   * ★ 只有**豆包 / Dola** 有这条链（走 `/samantha/aispace/` 三步链拉无水印直链）。
+   *   缺项时 `core/usecases/fetchWatermarkFree` **明确报错**，不回落。
+   * ⚠️ **脚本封装在 adapter 内部**（`adapters/site/doubao/scripts.ts` 的 `WATERMARK_FREE_BY_VID`）
+   *   —— 本方法只收「按哪个 vid 拉」，不收脚本（与 `askWithImage` 同法）。
+   * @param ctx 账号 + `webContentsId`（来自 `BackendPagePort.prepareForSend`，**必须已就绪**）
+   * @param vid 视频 id（`v0…`）
+   */
+  readonly fetchWatermarkFree?: (ctx: ImageQuestionContext, vid: string) => Promise<Result<WatermarkVideo>>;
+
+  /**
+   * 可选的「**按分享链接批量拉无水印**」能力（原 `resolveThreadAndFetch` 里 `gD` 页内脚本）
+   *
+   * ⚠️ `threadId` 由**调用方**从分享链接里剥出（`/thread/<id>`），本方法只收 id。
+   * ⚠️ 脚本封装在 adapter 内部（`WATERMARK_FREE_BY_THREAD`）。
+   */
+  readonly fetchWatermarkFreeByThread?: (
+    ctx: ImageQuestionContext,
+    threadId: string,
+  ) => Promise<Result<WatermarkThreadOutcome>>;
+
+  /**
    * ★ **无人值守轮询**能力（原 `_Component26` 的 `Ee` 428-592）—— **注册制：站点细节由 adapter 声明**
    *
    * ★★ **为什么它是「能力声明」而不是 `core`/`state`/`ui` 里的站点判断**：
@@ -222,6 +245,36 @@ export interface SitePort {
 export interface ImageQuestionContext {
   account: Account;
   webContentsId: number;
+}
+
+/** 单个视频的无水印直链（原 `mD` 页内脚本的返回形状） */
+export interface WatermarkVideo {
+  url: string;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
+  poster?: string | null;
+  definition?: string | null;
+  source?: string | null;
+}
+
+/** 按分享链接批量拉取的单个结果（原 `gD` 的 `videos[]` 项） */
+export interface WatermarkVideoResult {
+  vid: string;
+  url: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
+  poster?: string | null;
+  error?: string;
+}
+
+/** 按分享链接批量拉取的返回（原 `gD`） */
+export interface WatermarkThreadOutcome {
+  videos: WatermarkVideoResult[];
+  total: number;
+  success: number;
+  note?: string;
 }
 
 /** 站点适配器注册表（由 bootstrap 组装） */

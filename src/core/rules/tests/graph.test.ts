@@ -11,6 +11,8 @@ import {
   detachConnection,
   detectCycle,
   edgeInsertPosition,
+  planConnectBatch,
+  planConnectManyToTarget,
 } from '../graph';
 import { NODE_CREATE_SIZES, nodeCreateSize } from '@/core/model/defaults';
 import type { CanvasEdge } from '@/stable/model/project';
@@ -268,5 +270,79 @@ describe('collectLinkedTexts（原 d3 41179-41228）', () => {
 
   it('没有入边 ⇒ 空数组', () => {
     expect(collectLinkedTexts('gv', [textNode('t1', '甲')], [])).toEqual([]);
+  });
+});
+
+describe('planConnectManyToTarget（原 `connectManyToTarget` 27070-27094）', () => {
+  it('★ 目标不在 nodes 里 ⇒ null（整个不干）', () => {
+    const plan = planConnectManyToTarget([matNode('m1')], [], ['m1'], 'gv', makeEdge);
+    expect(plan).toBeNull();
+  });
+
+  it('★ 源里含目标自己 ⇒ 被剔掉（不自环）', () => {
+    const nodes = [matNode('m1'), matNode('gv')];
+    const plan = planConnectManyToTarget(nodes, [], ['m1', 'gv'], 'gv', makeEdge);
+    expect(plan?.edges.map((e) => e.source)).toEqual(['m1']);
+  });
+
+  it('★ 滤完空了 ⇒ null（不 commit）', () => {
+    const nodes = [matNode('gv')];
+    expect(planConnectManyToTarget(nodes, [], ['gv'], 'gv', makeEdge)).toBeNull();
+    expect(planConnectManyToTarget(nodes, [], [], 'gv', makeEdge)).toBeNull();
+  });
+
+  it('多个源 ⇒ 逐条造边（顺序保持）', () => {
+    const nodes = [matNode('m1'), matNode('m2'), matNode('m3'), matNode('gv')];
+    const plan = planConnectManyToTarget(nodes, [], ['m1', 'm2', 'm3'], 'gv', makeEdge);
+    expect(plan?.edges.map((e) => [e.source, e.target])).toEqual([
+      ['m1', 'gv'],
+      ['m2', 'gv'],
+      ['m3', 'gv'],
+    ]);
+  });
+
+  it('★ 已存在同 source+target 的边 ⇒ 跳过（addEdge 去重语义）', () => {
+    const nodes = [matNode('m1'), matNode('m2'), matNode('gv')];
+    const existing = [makeEdge({ source: 'm1', target: 'gv' })];
+    const plan = planConnectManyToTarget(nodes, existing, ['m1', 'm2'], 'gv', makeEdge);
+    expect(plan?.edges.map((e) => e.source)).toEqual(['m2']);
+  });
+
+  it('★ 不查环（源走裸工厂 `Mr`）—— text→text 成环也照连', () => {
+    const nodes = [textNode('a'), textNode('b'), textNode('gv')];
+    const existing = [makeEdge({ source: 'gv', target: 'a' })];
+    const plan = planConnectManyToTarget(nodes, existing, ['a', 'b'], 'gv', makeEdge);
+    expect(plan?.edges).toHaveLength(2);
+  });
+
+  it('空 source id ⇒ 跳过该条（源 `uA:17026`）', () => {
+    const nodes = [matNode('m1'), matNode('gv')];
+    const plan = planConnectManyToTarget(nodes, [], ['', 'm1'], 'gv', makeEdge);
+    expect(plan?.edges.map((e) => e.source)).toEqual(['m1']);
+  });
+});
+
+describe('planConnectBatch（原 `connectBatch` 27054-27069）', () => {
+  it('★ 不做守卫：目标不在 nodes 也照连（调用方已滤好）', () => {
+    const plan = planConnectBatch([], ['m1', 'm2'], 'gv', makeEdge);
+    expect(plan.edges.map((e) => [e.source, e.target])).toEqual([
+      ['m1', 'gv'],
+      ['m2', 'gv'],
+    ]);
+  });
+
+  it('★ 不剔自己：源含目标也连（与 connectManyToTarget 的唯一差别）', () => {
+    const plan = planConnectBatch([], ['m1', 'gv'], 'gv', makeEdge);
+    expect(plan.edges.map((e) => e.source)).toEqual(['m1', 'gv']);
+  });
+
+  it('同样去重（已有边不重复追加）', () => {
+    const existing = [makeEdge({ source: 'm1', target: 'gv' })];
+    const plan = planConnectBatch(existing, ['m1', 'm2'], 'gv', makeEdge);
+    expect(plan.edges.map((e) => e.source)).toEqual(['m2']);
+  });
+
+  it('空列表 ⇒ 空结果（调用方仍会 commit —— 与源一致）', () => {
+    expect(planConnectBatch([], [], 'gv', makeEdge).edges).toEqual([]);
   });
 });

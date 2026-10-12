@@ -176,6 +176,10 @@ export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline 
       return ok({ ok: false, reason: res.reason, note: res.message });
     }
     opts?.onProgress?.({ type: 'success' });
+    // ★ **记住"最近一次成功发送用的账号"**（原 `lastSentAccountId`，源 `OL.jsx:360`
+    //   "已自动发送/填入成功后 `setLastSentAccount(V.id)`"；另一处写方是换号重发，本仓无那条链）。
+    //   ⚠️ 它的**唯一读方**是顶栏「豆包后台」入口的补齐逻辑 —— 见 `core/rules/accountPick.pickActiveAccountFallback`。
+    store.useStore.getState().setLastSentAccount(account.id);
     return ok({ ok: true, sessionId: res.value.sessionId });
   };
   return { prepare, transport };

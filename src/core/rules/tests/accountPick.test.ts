@@ -11,6 +11,7 @@ import {
   deriveChannelFromGroup,
   filterPoolAccounts,
   hasExecutableAccount,
+  pickActiveAccountFallback,
   pickInitialActiveAccount,
   resolveSendAccount,
   UNGROUPED,
@@ -332,5 +333,36 @@ describe('pickInitialActiveAccount（原 `shared.js:26791-26805` 的 IIFE）', (
   it('未登录账号**不会**因 `autoStart` 被选中（条件是 `&&`，不是 `||`）', () => {
     const list = [withAuto('a', true, '未登录'), withAuto('b', false)];
     expect(pickInitialActiveAccount(list)).toBe('b');
+  });
+});
+
+describe('pickActiveAccountFallback（原 `_Component42.jsx:463-475` 的 `tt`）', () => {
+  const accs = (): Account[] => [acc('a', 'doubao', { status: '未登录' }), acc('b'), acc('c')];
+
+  it('① **已选中就不动** ⇒ `null`（源第一句 `if (!activeDoubaoAccountId)`）', () => {
+    expect(
+      pickActiveAccountFallback({ activeAccountId: 'c', lastSentAccountId: 'b', accounts: accs() }),
+    ).toBeNull();
+  });
+
+  it('② 没选中 ⇒ 优先「上次发送过的」（**且该账号还在**）', () => {
+    expect(
+      pickActiveAccountFallback({ activeAccountId: null, lastSentAccountId: 'c', accounts: accs() }),
+    ).toBe('c');
+  });
+
+  it('③ 「上次发送过的」已不存在 ⇒ 回落第一个已登录（跳过未登录）', () => {
+    expect(
+      pickActiveAccountFallback({ activeAccountId: null, lastSentAccountId: 'gone', accounts: accs() }),
+    ).toBe('b');
+  });
+
+  it('★ ④ 补不出已登录账号 ⇒ `null` —— **没有**"首个不看状态"那一档（与 `pickInitialActiveAccount` 的关键差异）', () => {
+    const allOut = [acc('a', 'doubao', { status: '未登录' })];
+    expect(
+      pickActiveAccountFallback({ activeAccountId: null, lastSentAccountId: null, accounts: allOut }),
+    ).toBeNull();
+    // 对照：同一条输入，**初始化**那条规则会取"首个（不看状态）"
+    expect(pickInitialActiveAccount(allOut)).toBe('a');
   });
 });

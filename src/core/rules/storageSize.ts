@@ -15,7 +15,17 @@
  * ⚠️ 原则 4：纯函数，不碰宿主。
  */
 
-/** 体积（bytes → 人类可读，原 `Mt`） */
+/**
+ * 体积（bytes → 人类可读，原 `Mt`）
+ *
+ * ⚠️ **`TD-16-109` 复核结论（2026-10-12）：与 `core/rules/downloadNode.formatBytes`（源 `$e`）
+ *   **是有意分叉，勿合并** —— 两者是**不同源函数**且规则不同：
+ *   | | 本函数（源 `Mt`） | `downloadNode.formatBytes`（源 `$e`） |
+ *   |---|---|---|
+ *   | KB/MB 精度 | **动态**（<10 两位 · <100 一位 · 其余整数） | 恒 `toFixed(1)` |
+ *   | GB 档 | **有** | **无**（再大也显示 MB） |
+ *   | 非法输入 | `null/undefined/负数/NaN` ⇒ 空串 | `0`/`NaN` ⇒ 空串 |
+ */
 export function formatStorageSize(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return '';
   const n = Number(bytes);

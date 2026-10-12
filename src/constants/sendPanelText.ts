@@ -110,6 +110,8 @@ export const GEN_PANEL_TEXT = {
   modelLabel: '模型',
   /** 关闭按钮 `title`（原 `Z3_1.jsx:969`，逐字） */
   closeTitle: '保存并关闭（Esc）',
+  /** 模型下拉的"跟随默认"项（**本工程新增**，回源 0 命中 —— 同上判据） */
+  modelDefault: '（默认）',
   /** 关闭按钮字形（原 `Z3_1.jsx:970`，逐字） */
   closeGlyph: '✕',
 
@@ -201,6 +203,8 @@ export const STYLE_LIB_TEXT = {
  *   并把文本框与素材填入所选账号对话框（不触发发送）** —— 它是「填表」节点，不是「发送」节点。
  */
 export const ACCOUNT_NODE_TEXT = {
+  /** 节点头部文本（**本工程新增** —— 源里账号节点没有对应标题串） */
+  title: '账号',
   /** 未绑定时的按钮文案（原 `OL.jsx:289` 的 `'选择账号'`） */
   pickAccount: '选择账号',
   /** 绑定菜单的「未绑定」项（原 `OL.jsx:456` 的 `foot-menu-grid-header`） */
@@ -594,6 +598,8 @@ export const AUTO_MATCH_TEXT = {
 export const NODE_CTX_TEXT = {
   /** 「自动排列（整理所选节点）」（原 1695，逐字） */
   arrange: '自动排列（整理所选节点）',
+  /** 「更换素材」（原 1700，逐字）—— 仅 material 节点显示 */
+  replaceMaterial: '更换素材',
   /** 「打开文件所在位置」（原 1711，逐字） */
   reveal: '打开文件所在位置',
   /** 该项的 `title`（原 1710，逐字） */
@@ -618,6 +624,12 @@ export const GEN_IMAGE_TEXT = {
   downloadName: (now: number) => `文生图_${now}.png`,
   /** 卡片 `title`（原 `ZL.jsx:210`，逐字） */
   cardTitle: '点击卡片打开文生图面板（填提示词与参数，出图直接展示在这里）',
+  /** 尚未出图的占位（**本工程新增**，回源 0 命中 —— 按「用户可见文案只写一遍」收于此） */
+  notGenerated: '未生成',
+  /** 节点头部文本（**本工程新增** —— 源里那个 `文生图` 是下载文件名前缀，不是标题） */
+  title: '文生图',
+  // ⚠️ `generating: '生成中…'` **不在这里** —— 它与 `GenPanel` 的运行按钮**同一句**（跨两处）
+  //   ⇒ 已上移到 `COMMON_TEXT.generating`（`constants/text.ts`），此处再留就是同值两份（M3）。
 
   // ── 头部：`ig-chip-status` API 任务芯片（原 `ZL.jsx:218-220`）──────────────────
   /** 未完成（原 219：`API {… ? '失败' : '进行中'}` 的**进行中**支，逐字含前缀） */
@@ -969,6 +981,8 @@ export const FP_SCAN_TEXT = {
   /** 报告头两行（原 24-25，逐字） */
   scanned: (withFp: number, noFp: number) => `扫描账号: ${withFp} 个（${noFp} 个无指纹记录已跳过）`,
   pairs: (total: number) => `比对配对: ${total} 对`,
+  /** 「记进历史」按钮的 tooltip（**本工程新增** —— 源里没有这句；按「用户可见文案只写一遍」收于此） */
+  recordTitle: '把当前这份报告记进历史（同一结论不会重复记）',
   /** 分级计数（原 26-27，逐字） */
   critical: (n: number) => `🔴 完全关联(全维重合): ${n} 对`,
   warn: (n: number) => `🟡 高度相似(≥70%重合): ${n} 对`,
@@ -1215,4 +1229,138 @@ export const FP_DIAG_TEXT = {
   prefix: (name: string) => `指纹诊断「${name}」：`,
   /** 段分隔（原 112 的 `$t.join(' · ')`） */
   separator: ' · ',
+} as const;
+
+/**
+ * 图片编辑器（原 `G3.jsx` 1087 行）—— ★ **2026-10-12 落（`TD-09-4`）**
+ *
+ * ⚠️ 遮脸效果（`Fu`）与裁剪比例档（`ef`）的**标签/提示**不在此重复：
+ *   效果 → `constants/facemask.ts` 的 `FACE_MASK_EFFECT_LABEL`；比例 → `core/rules/imageCrop.ts`
+ *   的 `CROP_RATIO_PRESETS`（判据 C1：真源各一处）。
+ * ⚠️ 逐字对源；带参的用函数（`${…}`）。
+ */
+export const IMAGE_EDITOR_TEXT = {
+  /** 面板标题（原 864） */
+  title: '图片编辑',
+  /** 标题右侧的标签后缀（原 864 的 ` · {label}`） */
+  titleSub: (label: string) => ` · ${label}`,
+  /** tab「一键遮脸」（原 870） */
+  tabMask: '一键遮脸',
+  /** tab「裁剪」（原 875） */
+  tabCrop: '裁剪',
+  /** 关闭按钮 `title`（原 884） */
+  close: '关闭',
+  /** 遮脸效果分组 label（原 891） */
+  effectLabel: '遮脸效果',
+  /** 笔刷分组 label（原 904） */
+  brushLabel: '笔刷',
+  /** 笔刷大小 `title`（原 907：`笔刷大小 ${C}px`） */
+  brushTitle: (size: number) => `笔刷大小 ${size}px`,
+  /** 透明度分组 label（原 911） */
+  opacityLabel: '透明',
+  /** 不透明度 `title`（原 914：`不透明度 ${pct}%`） */
+  opacityTitle: (pct: number) => `不透明度 ${pct}%`,
+  /** 「显示脸框」勾选（原 921） */
+  showBoxes: '显示脸框',
+  /** 「识别脸框」按钮（原 925） */
+  detectFaces: '识别脸框',
+  /** 识别中（原 926） */
+  detecting: '识别中…',
+  /** 「一键遮脸」按钮（原 929） */
+  applyAll: '一键遮脸',
+  /** 「清空框」按钮（原 935） */
+  clearBoxes: '清空框',
+  /** 清空后的提示（原 934） */
+  clearedBoxes: '已清空脸框',
+  /** 脸框计数（原 938：`${n} 个脸框`） */
+  boxCount: (n: number) => `${n} 个脸框`,
+  /** 「撤销」按钮（原 941） */
+  undo: '撤销',
+  /** 「整图遮脸」按钮（原 944 文本） */
+  applyWhole: '整图遮脸',
+  /** 「整图遮脸」`title`（原 944） */
+  applyWholeTitle: '不依赖脸框，直接对整张图应用效果',
+  /** 比例分组 label（原 949） */
+  ratioLabel: '比例',
+  /** 「重置框」按钮（原 963） */
+  resetBox: '重置框',
+  /** 「应用裁剪」按钮（原 967） */
+  applyCrop: '应用裁剪',
+  /** 载入中（原 975） */
+  loading: '正在载入图片…',
+  /** 「适应」按钮（原 1065） */
+  fit: '适应',
+  /** 「取消」按钮（原 1076） */
+  cancel: '取消',
+  /** 「复制」按钮（原 1079） */
+  copy: '复制',
+  /** 「保存并替换」按钮（原 1082） */
+  save: '保存并替换',
+
+  // ── 提示 / 错误（逐字）──
+  /** 图片尺寸异常（原 63） */
+  badSize: '图片尺寸异常，无法编辑',
+  /** 图片加载失败（原 97） */
+  loadFailed: '图片加载失败（引用可能已失效）',
+  /** 识别中提示（原 342） */
+  detectingHint: '正在识别人脸…',
+  /** 未识别到人脸（原 349 的回落） */
+  noFaces: '未识别到人脸，可用效果笔刷手动涂抹遮脸',
+  /** GPU/WebGL 不可用（原 349） */
+  gpuUnavailable: '人脸识别失败：当前环境 GPU/WebGL 不可用，请改用笔刷手动涂抹遮脸',
+  /** 人脸识别失败（原 349 的 `` `人脸识别失败：${Y || '检测器异常'}` ``） */
+  detectFail: (msg: string) => `人脸识别失败：${msg || '检测器异常'}`,
+  /** 识别到 N 个脸框（原 362） */
+  detectedBoxes: (n: number) => `识别到 ${n} 个人脸框，可拖动调整后点「一键遮脸」`,
+  /** 请先识别脸框（原 376） */
+  needBoxes: '请先「识别脸框」或手动添加脸框',
+  /** 已对 N 个脸框遮脸（原 397） */
+  maskedBoxes: (n: number) => `已对 ${n} 个脸框遮脸`,
+  /** 已整图遮脸（原 407） */
+  maskedWhole: '已对整张图应用遮脸效果',
+  /** 已裁剪（原 662：`已裁剪为 ${w} × ${h}`） */
+  cropped: (w: number, h: number) => `已裁剪为 ${w} × ${h}`,
+  /** 保存失败（原 819） */
+  saveFailed: (msg: string) => `保存失败：${msg}（画布可能被跨源图片污染）`,
+  /** 导出失败（原 832） */
+  exportFailed: '导出失败',
+  /** 已复制到剪贴板（原 837） */
+  copied: '已复制到剪贴板',
+  /** 复制失败（原 839） */
+  copyFailed: (msg: string) => `复制失败：${msg}`,
+
+  // ── 底部 hint（原 846 / 848）──
+  /** 遮脸模式的 hint（原 846） */
+  hintMask: '滚轮缩放，空格/右键拖拽，可多次涂抹',
+  /** 裁剪模式的 hint（原 848） */
+  hintCrop: '滚轮缩放，空格/右键拖拽，拖动裁剪框调整范围',
+} as const;
+
+/**
+ * 无水印资源面板（原 `SD.jsx` 160 行）—— ★ **2026-10-12 落（`docs/14` §10 的 ⛔ 阻塞）**
+ *
+ * ⚠️ 逐字对源；`type`（图/视频）在 `VideoShare` 里**没有**字段 —— 源 `SD` 的「图」来自
+ *   `onDolaMedia`（后端推送，未落），本仓**只展示视频**（`videoShares`），如实标注。
+ */
+export const WATERMARK_PANEL_TEXT = {
+  /** 面板标题（原 63） */
+  title: '无水印资源',
+  /** 计数（原 64-66：`图 N · 视频 N`；本仓只有视频 ⇒ 简化） */
+  count: (n: number) => `视频 ${n}`,
+  /** 空态（原 105-107） */
+  empty: '暂无。在 dola / 豆包 对话中生成或查看内容后，本面板会自动捕获无水印图片与视频。',
+  /** 类型标签「视频」（原 114） */
+  typeVideo: '视频',
+  /** 「原链接」（原 123） */
+  openLink: '原链接',
+  /** 「下载」（原 154） */
+  download: '下载',
+  /** 下载中（原 132） */
+  downloading: '下载中…',
+  /** 「移除」—— 本仓新增（`removeVideoShare`；源无单条移除，只有「清空」） */
+  remove: '移除',
+  /** 清空（原 87） */
+  clear: '清空',
+  /** 关闭（原 90） */
+  close: '关闭',
 } as const;

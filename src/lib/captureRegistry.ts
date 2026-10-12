@@ -38,7 +38,7 @@ export function captureElementOf(nodeId: string): HTMLElement | null {
   return elements.get(nodeId) ?? null;
 }
 
-/** 仅供测试：清空注册表 */
-export function clearCaptureRegistry(): void {
-  elements.clear();
-}
+// ⚠️ **2026-10-12（`TD-02-3`）删除 `clearCaptureRegistry`** —— 它注释自称"仅供测试"但
+//    **测试也没用它**（全仓 0 消费）；且注销已由 `useCaptureElement` 的清理函数保证
+//    （节点卸载/删除即 `Lu.delete`，源即如此）⇒ 全局清空是**冗余**的
+//    （见 `16-跨区-成片进度链生产者缺失-2026-10-11.md` 的判定）。

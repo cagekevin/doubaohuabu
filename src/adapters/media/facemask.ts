@@ -25,12 +25,19 @@ import {
   type FaceBox,
   type FaceMaskResult,
 } from '@/core/rules/facemask';
-import { createCanvas, createTmpState, drawBlur, drawMosaic, loadImage, makeDotGridPattern, type DrawableSource } from '@/lib/image';
+import { createCanvas, createTmpState, drawMaskEffect, loadImage, type DrawableSource, type TmpState } from '@/lib/image';
 
 export type { FaceMaskResult };
 
-/** 单块遮罩分发（原 `ZD`） */
-function drawMask(
+/**
+ * 单块遮罩分发（原 `ZD`）
+ *
+ * ★ **2026-10-12 收口（`TD-09-4`）**：效果分发那半已拆到 `lib/image.ts` 的 `drawMaskEffect`
+ *   （判据 C1：编辑器也要用同一份分发，不再各写一遍）。本函数只保留"算 cell + 委托"。
+ * ⚠️ 编辑器涂抹时 `strength` 恒 **1**（源 `G3.jsx` 的 `Qe` 只有透明度、没有强度），
+ *   `(x,y,w,h)` = 圆形笔刷的**外接正方**（`x-r, y-r, 2r, 2r`）。
+ */
+export function drawMask(
   ctx: CanvasRenderingContext2D,
   img: DrawableSource,
   x: number,
@@ -40,22 +47,9 @@ function drawMask(
   effect: FaceMaskEffect,
   strength: number,
   opacity: number,
+  st: TmpState = createTmpState(),
 ): void {
-  const st = createTmpState();
-  const prevAlpha = ctx.globalAlpha;
-  ctx.globalAlpha = opacity;
-
-  if (effect === 'mosaic') {
-    drawMosaic(ctx, img, x, y, w, h, maskCellSize('mosaic', w, h, strength), st);
-  } else if (effect === 'blur') {
-    drawBlur(ctx, img, x, y, w, h, maskCellSize('blur', w, h, strength));
-  } else {
-    const cell = maskCellSize(effect, w, h, strength);
-    ctx.fillStyle = makeDotGridPattern(ctx, effect, cell, st);
-    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-  }
-
-  ctx.globalAlpha = prevAlpha;
+  drawMaskEffect(ctx, img, x, y, w, h, effect, maskCellSize(effect, w, h, strength), opacity, st);
 }
 
 /**

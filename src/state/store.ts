@@ -23,6 +23,7 @@ import { createScanSlice, type ScanSlice } from './slices/scan';
 import { createSettingsSlice, type SettingsSlice } from './slices/settings';
 import { createStylesSlice, type StylesSlice } from './slices/styles';
 import { createFaceMaskSlice, type FaceMaskSlice } from './slices/faceMask';
+import { createNodeStatusSlice, type NodeStatusSlice } from './slices/nodeStatus';
 import { isInlineImage } from '@/stable/protocols/img';
 
 export type AppState = GlobalSlice &
@@ -33,7 +34,8 @@ export type AppState = GlobalSlice &
   GallerySlice &
   ScanSlice &
   StylesSlice &
-  FaceMaskSlice;
+  FaceMaskSlice &
+  NodeStatusSlice;
 
 /**
  * store 的**对外句柄**类型 —— ★ 结构上**不可写**
@@ -121,7 +123,7 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
      */
     const setPartial = (partial: Partial<AppState>) =>
       set((s) => {
-        const touchesCanvas = 'nodes' in partial || 'edges' in partial || 'library' in partial;
+        const touchesCanvas = 'nodes' in partial || 'edges' in partial || 'library' in partial || 'videoShares' in partial;
         /**
          * ★ **同一批里换了 `activeId` ⇒ 绝不镜像**（`docs/14` §2 的 ⭐⭐ 数据损坏 bug）
          *
@@ -136,10 +138,11 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
         const nodes = partial.nodes ?? s.nodes;
         const edges = partial.edges ?? s.edges;
         const library = partial.library ?? s.library;
+        const videoShares = partial.videoShares ?? s.videoShares;
         return {
           ...partial,
           projects: s.projects.map((p) =>
-            p.id === s.activeId ? { ...p, data: { ...p.data, nodes, edges, library } } : p,
+            p.id === s.activeId ? { ...p, data: { ...p.data, nodes, edges, library, videoShares } } : p,
           ),
         } as AppState;
       });
@@ -213,6 +216,8 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       ...createStylesSlice({ now: () => ports.clock.now() })(setPartial, getState),
       // ★ faceMask：遮脸族（角标层 / 参数面板 / 检测结果，见 slices/faceMask.ts 头注释）
       ...createFaceMaskSlice()(setPartial, getState),
+      // ★ nodeStatus：节点状态五族（`TD-16-93` 数据层 —— 通知 / 等待 / 换号 / 计时器）
+      ...createNodeStatusSlice({ now: () => ports.clock.now() })(setPartial, getState),
     };
   });
 

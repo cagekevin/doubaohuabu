@@ -45,8 +45,9 @@ import {
 // ⚠️ 纯规则由组件直接调（与 `FingerprintScanPanel` 同法）—— 摘要拼装 / 体检统计都是**纯函数**
 import { diagnosisSegments } from '@/core/rules/fingerprintDiagnosis';
 import { scanFingerprintCollisions } from '@/core/rules/fingerprintScan';
-import { BackendView } from './BackendView';
-import { NewImagesPanel } from './NewImagesPanel';
+// ⚠️ **2026-10-12 移出**：`BackendView`（原 `_Component43`）改由 `AppShell` 的 `.centerStage` 渲染
+//    （与画布并列，源即如此）；`NewImagesPanel`（原 `_Component26`）是**后台视图的子节点**
+//    ⇒ 移入 `BackendView`。两者都不再属于本文件。
 import styles from './AccountPanel.module.css';
 
 /** 状态行停留（ms）—— 逐条对齐源：导入结果 5000（本工程既定）/ 清缓存结果 4000（原 207-209） */
@@ -309,13 +310,18 @@ export function AccountPanel() {
         ★ **「出新图」条**（原 `_Component26`）—— 源版位置在 `.doubao-view-webviews` **之上**
           （它靠"把图拖进后台页面"来交互 ⇒ 必须紧贴 webview 区）。
       */}
-      <NewImagesPanel />
+      {/* ⚠️ **2026-10-12 移出**：「出新图」条（原 `_Component26`）**不是左栏的东西** —— 源里它是
+          **后台视图的子节点**（`_Component43.jsx:3301` 的 `{t && … <_Component26 …/>}`）
+          ⇒ 已移入 `ui/panels/BackendView.tsx`（紧贴 webview 区，源即如此）。 */}
 
       {/*
         ★ **后台视图必须常驻**（不随面板状态卸载）—— `findWebview` 靠这些 `<webview>`
           在 DOM 里；隐藏态的那些**也要在**，否则后台任务会「找不到 webview」。
       */}
-      <BackendView />
+      {/* ⚠️ **2026-10-12 移出**：后台视图（原 `_Component43`）**不该住账号栏** —— 源里它与画布
+          **并列**在 `.center-stage`（`_Component48.jsx:171-178`），由宿主的 `visible` 控制显隐
+          ⇒ 已移到 `AppShell` 的 `.centerStage`。原在此处的注释「必须常驻（`findWebview` 靠 DOM）」
+          **把两件事混成了一件事**：源的**容器始终在 DOM** ＋ **同时切 `dv-visible`/`dv-hidden`**。 */}
 
       {accounts.length === 0 ? (
         <div className={styles.empty}>{ACCOUNT_PANEL_TEXT.emptyHint}</div>

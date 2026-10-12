@@ -248,3 +248,89 @@ export function detachConnection(
   });
   return { nodes: nextNodes, edges: nextEdges };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 批量连线（原 `connectBatch` 27054-27069 · `connectManyToTarget` 27070-27094）
+//
+// 两个入口共用同一份「逐条造边 + 去重追加」内核算 —— 判据 C1：源里这两段的差异
+// **只在守卫**（目标在不在 / 要不要剔自己），append 那半步逐字相同（都走 `Mr` + `yo`）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 批量连线的规划结果 */
+export interface ConnectManyPlan {
+  /** 要追加的边（**已去重**；可能为空） */
+  edges: CanvasEdge[];
+}
+
+/**
+ * 批量连线的公共内核（源 `Mr` + `yo`/`uA` 的 addEdge 语义）
+ *
+ * 逐条规则（**全部对源**）：
+ *   ① `source`/`target` 任一为空 ⇒ **跳过该条**（源 `uA:17026`）；
+ *   ② 已存在**同 source+target** 的边 ⇒ **跳过**（源 `cA:17019-17023` 的**无 handle** 形态
+ *      —— 本仓 `CanvasEdge` 没有 handle 字段，故只比 source/target）；
+ *   ③ 其余 ⇒ `createEdge({source, target})` 收进结果。
+ *
+ * ⚠️ **不查环**（源这两个函数走的是 `Mr` 裸工厂，不过 `onConnect` 的环检测）—— 照抄，
+ *    不擅自"修"（群连线一次连一片，环检测的代价与语义都与单条不同）。
+ * ⚠️ **不动 `referenceOrder`**（同上：那条链路只在 `onConnect` 里）。
+ */
+function planAppendEdges(
+  edges: readonly CanvasEdge[],
+  sourceIds: readonly string[],
+  targetId: string,
+  createEdge: (conn: ConnectRequest) => CanvasEdge,
+): ConnectManyPlan {
+  const existing = new Set(edges.map((e) => `${e.source}\u0000${e.target}`));
+  const added: CanvasEdge[] = [];
+  for (const source of sourceIds) {
+    if (!source || !targetId) continue; // ①
+    const key = `${source}\u0000${targetId}`;
+    if (existing.has(key)) continue; // ②
+    existing.add(key);
+    added.push(createEdge({ source, target: targetId })); // ③
+  }
+  return { edges: added };
+}
+
+/**
+ * **多选拖拽连线**（原 `connectBatch(n, r)` 27054-27069）—— `onConnect` 的多选 material 分支
+ *
+ * 与 `planConnectManyToTarget` 的**唯一差别**：本函数**不做任何守卫** ——
+ * 不查目标在不在、不剔自己（源如此：调用方 `_Component42.jsx:638-650` 已先滤好）。
+ * @param sourceIds 来源节点 id（调用方已保证非空、且不含 target）
+ */
+export function planConnectBatch(
+  edges: readonly CanvasEdge[],
+  sourceIds: readonly string[],
+  targetId: string,
+  createEdge: (conn: ConnectRequest) => CanvasEdge,
+): ConnectManyPlan {
+  return planAppendEdges(edges, sourceIds, targetId, createEdge);
+}
+
+/**
+ * **群锚点批量连线**（原 `connectManyToTarget(n, r)` 27070-27094）—— `_Component37` 的两条落点
+ *
+ * 逐行对源：
+ *   ① 目标节点**不在** `nodes` 里 ⇒ **整个不干**（源 `27071-27075` 的 early return）；
+ *   ② 滤掉 `sourceIds` 里**等于目标**的（源 `27076-27078`；自环无意义）；
+ *   ③ 滤完**空了** ⇒ 也不干（源 `27079` 的 `length !== 0` 守卫）；
+ *   ④ 其余走公共内核逐条追加。
+ * @returns `null` = 三条守卫任一命中（**什么都不做**，调用方据此不 commit）
+ */
+export function planConnectManyToTarget(
+  nodes: readonly CanvasNode[],
+  edges: readonly CanvasEdge[],
+  sourceIds: readonly string[],
+  targetId: string,
+  createEdge: (conn: ConnectRequest) => CanvasEdge,
+): ConnectManyPlan | null {
+  // ① 目标必须在（源用 `t().nodes.find(...)`）
+  if (!nodes.some((n) => n.id === targetId)) return null;
+  // ② 剔自己（源 `filter(a => a !== r)`）
+  const sources = (sourceIds || []).filter((id) => id !== targetId);
+  // ③ 空 ⇒ 不干
+  if (sources.length === 0) return null;
+  return planAppendEdges(edges, sources, targetId, createEdge);
+}

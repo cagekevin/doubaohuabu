@@ -12,6 +12,7 @@
 import { useState } from 'react';
 // ★ 协议规则的真源（冻结契约）；此处 re-export 只为不破坏既有 import 路径
 import { withThumb } from '@/stable/protocols/img';
+import { MATERIAL_NODE_TEXT } from '@/constants/text';
 import styles from './shared.module.css';
 
 export { withThumb };
@@ -27,7 +28,16 @@ export interface ThumbProps {
 export function Thumb({ src, alt = '', className, width }: ThumbProps) {
   const [failed, setFailed] = useState(false);
 
-  if (!src) return <div className={`${styles.thumbPlaceholder} ${className ?? ''}`}>无图</div>;
+  // ★ **2026-10-12（`TD-09-1`）**：占位文案改委托 SSOT —— 原硬编码 `无图`，
+  //   而源版这句是 `暂无图片`（`fL.jsx:161` 的 `material-placeholder`）⇒ **顺带修掉一处文案漂移**。
+  //   ⚠️ **不新建键**：`MATERIAL_NODE_TEXT.noImage` 已是这句的唯一真源（`sendPanelText.ts:296`）——
+  //     再建一个 `THUMB_TEXT.noImage` 就是**同值两份**（母体 M3）。
+  if (!src)
+    return (
+      <div className={`${styles.thumbPlaceholder} ${className ?? ''}`}>
+        {MATERIAL_NODE_TEXT.noImage}
+      </div>
+    );
 
   if (failed) {
     // 降级：显示占位（**不隐藏错误**，用 title 暴露原始 src）

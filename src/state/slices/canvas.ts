@@ -7,7 +7,7 @@
  */
 
 import type { CanvasNode, NodeType } from '@/stable/model/node';
-import type { CanvasEdge, LibraryItem, Preset } from '@/stable/model/project';
+import type { CanvasEdge, LibraryItem, Preset, VideoShare } from '@/stable/model/project';
 import {
   commitSnapshot,
   initialUndoStack,
@@ -19,9 +19,11 @@ import {
   applyConnection,
   detachConnection,
   edgeInsertPosition,
+  planConnectBatch,
+  planConnectManyToTarget,
   type ConnectRequest,
 } from '@/core/rules/graph';
-import { makeLibraryId, makeNodeId } from '@/core/rules/project';
+import { makeId, makeLibraryId, makeNodeId } from '@/core/rules/project';
 import { defaultNodeData, nodeCreateSize } from '@/core/model/defaults';
 import { buildMaterialBatch, type MaterialBatchInput } from './materialBatch';
 // ★ API 任务事件的落点（原 `applyApiJobEvent` 写 store 的那几件事）—— **本片的片段**
@@ -40,8 +42,11 @@ import { SPLIT_NODE_GAP, SPLIT_NODE_HEIGHT, SPLIT_NODE_WIDTH } from '@/constants
 import { recipeTextNodePosition, RECIPE_TEXT_FALLBACKS, snapToGrid } from '@/core/rules/recipe';
 import { findMaterialNodeByLibId, type MaterialAddInput } from '@/core/rules/materialNode';
 import { planMaterialRename, resolveMaterialLibId } from '@/core/rules/materialRename';
+import { planMaterialReplaceWithLib } from '@/core/rules/materialReplace';
+import { planLibraryRename, planLibraryReplace } from '@/core/rules/libraryEdit';
 import { replaceRefId } from '@/core/rules/refs';
 import { selectVersionPatch, setVersionPosterPatch } from '@/core/rules/genHistory';
+import { genImageCurrentUrl } from '@/core/rules/genImage';
 
 /**
  * 拆分出来的文本节点的 `data`（原两条拆分路径**各写一份**的那个字面量）
@@ -123,6 +128,15 @@ export interface CanvasSlice extends ApiLandingActions {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   library: LibraryItem[];
+  /**
+   * ★ **无水印视频分享**（原 `videoShares`，`shared.js:27900-27939` 的 `addVideoShare` 写入）
+   *
+   * 随 `ProjectData` 持久化（`setPartial` 镜像进 `projects[activeId].data.videoShares`）。
+   * ⚠️ 消费者 = 「无水印资源」面板（原 `SD.jsx`，未落 —— 见 `docs/13` §2.3）。
+   */
+  videoShares: VideoShare[];
+  addVideoShare: (input: Omit<VideoShare, 'id' | 'createdAt'>) => void;
+  removeVideoShare: (id: string) => void;
   /** 吸附开关（工程级，随 ProjectData 持久化） */
   snap: boolean;
   /**
@@ -153,6 +167,35 @@ export interface CanvasSlice extends ApiLandingActions {
   /** ★ **只改边**（不动 `nodes`）—— 理由同上 */
   setEdges: (edges: CanvasEdge[]) => void;
   setLibrary: (library: LibraryItem[]) => void;
+  /**
+   * ★ **资源库条目改名**（原 `renameLibrary`，`shared.js:27515-27548`）
+   *
+   * 消费者 = `ui/panels/LibraryPanel` 的**双击改名**（原 `RT.jsx:301-314` 的 `M`/`U`）。
+   * 与素材节点改名（`renameMaterialNode`）**不是同一件事**：那个改**节点侧**的名字
+   * （含画廊同步），本 action 改**库条目侧**的名字（同步所有同源素材节点）。
+   *
+   * ⚠️ 撤销 key = **`'library'`**（原 27517，与源一致；`renameMaterialNode` 是 `rename-<nodeId>`）。
+   * ⚠️ 找不到条目 ⇒ **什么都不做、不 commit**（源 `if (s)` 守住）。
+   * ⚠️ **空名也照写**（源不过滤；输入框那侧的「未命名」兜底在 UI，原 `RT.jsx:248`）。
+   */
+  renameLibrary: (libId: string, name: string) => void;
+  /**
+   * ★ **替换资源库条目的图**（原 `replaceLibrary`，`shared.js:27755-27806`）
+   *
+   * 消费者 = `ui/panels/LibraryPanel` 的右键「替换素材」（原 `RT.jsx:342-352` 的 `O`）。
+   * 与「更换素材」（`replaceMaterialWithLib`）**不是同一件事**：那个是**换一个节点绑到哪张图**，
+   * 本 action 是**换库条目自身的图**（同步所有引用它的节点）。
+   *
+   * 源逐行：守卫（条目在 + 新图有地址）→ 记旧图地址 → 新图**外置**（`Tn`）→
+   * `commit('library')` → 库条目换 `dataUrl`（`w/h` 用新值或保留）→ 同源节点换 `dataUrl`。
+   * ⚠️ **外置由本 action 做**（`deps.persistImage`，与 `replaceMaterialImage` 同法）——
+   *    外置失败 ⇒ 什么都不动，交给调用方提示。
+   * @returns 实际被换图的节点数（源 `replaced`）；`null` = 守卫没过或外置失败
+   */
+  replaceLibrary: (
+    libId: string,
+    image: { dataUrl: string; w?: number; h?: number },
+  ) => number | null;
   setSnap: (snap: boolean) => void;
 
   /**
@@ -170,6 +213,29 @@ export interface CanvasSlice extends ApiLandingActions {
    * @returns 被拒时的提示文案；成功返回 `null`
    */
   connect: (conn: ConnectRequest) => string | null;
+  /**
+   * ★ **多选拖拽批量连线**（原 `connectBatch(n, r)` 27054-27069）
+   *
+   * 消费者 = `onConnect` 的**多选 material** 分支（原 `_Component42.jsx:638-650` 的 `Re`）：
+   * 从多个选中节点拖线到同一个目标 ⇒ 只把**选中里的 material** 一次连过去。
+   *
+   * ⚠️ 与 `connect` 的差别（**照抄源，两路不同语义**）：
+   *   ① **不查环**、**不动 `referenceOrder`**（源走裸边工厂 `Mr` + `yo`，不过 `onConnect`）；
+   *   ② **不去重自身**（源不滤 `a !== r`）—— 调用方已先滤好；
+   *   ③ 同 source+target 的**重复边跳过**（源 `yo`/addEdge 语义）。
+   * ⚠️ 撤销 key 恒为 `'graph-add'`（源 27055），**空列表也 commit**（源如此）。
+   */
+  connectBatch: (sourceIds: readonly string[], targetId: string) => void;
+  /**
+   * ★ **群锚点批量连线**（原 `connectManyToTarget(n, r)` 27070-27094）
+   *
+   * 消费者 = 组连线锚点（原 `_Component37`）拖到**目标节点**上，以及建节点浮层
+   * `mode:'group'` 建完新节点后（原 `$`/`be`/`ie`/`Ne`/`$e` 的 `sourceIds` 分支）。
+   *
+   * 三条守卫（**逐字对源**，任一命中 ⇒ 什么都不做、**不 commit**）：
+   *   ① 目标节点不存在；② 滤掉源里**等于目标**的；③ 滤完为空。
+   */
+  connectManyToTarget: (sourceIds: readonly string[], targetId: string) => void;
   /** 删除连线（并清理 `referenceOrder`） */
   disconnect: (edge: CanvasEdge) => void;
 
@@ -224,6 +290,46 @@ export interface CanvasSlice extends ApiLandingActions {
     dataUrl: string,
     opts?: { name?: string; w?: number; h?: number },
   ) => boolean;
+  /**
+   * ★ **换掉文生图节点的当前图**（原 `replaceImageGenImage`，`shared.js:27294-27351`）
+   *
+   * 源逐条：① 找**当前展示图** `l`（`viewUrl` 且在 `results` 里 ⇒ `viewUrl`，否则
+   * `resultUrl` → `results[0].dataUrl`；找不到 ⇒ return）② commit(`replace-img-${n}`)
+   * ③ 新名 = `opts.name.trim() || "${name||label||'文生图'}·已编辑"` ④ 外置 ⑤ 建库条目
+   * （`addToLibrary`，**按 dataUrl 去重**）⑥ `results` 里命中 `l` 的那张换 `dataUrl` +
+   * `resultUrl`/`viewUrl`/`dataUrl` 三字段都指向新图。
+   *
+   * ⚠️ 与 `replaceMaterialImage` 是**两套源、不合并**（前者建**素材**节点新图、后者改
+   * **文生图**节点的 `results`；源里就是两个独立 action）。
+   * @returns `false` = 没做（节点不在 / 非 imggen / 无 data / 空图 / 找不到当前图）
+   */
+  replaceImageGenImage: (
+    nodeId: string,
+    dataUrl: string,
+    opts?: { name?: string; w?: number; h?: number },
+  ) => boolean;
+  /**
+   * ★ **把素材节点的图换成资源库里的一张**（原 `replaceMaterialWithLib`，`shared.js:27682-27724`）
+   *
+   * 消费者 = 节点右键菜单「更换素材」（仅 material，原 `Ye` → `Z({mode:'replace', nodeId})`）
+   * ＋ 素材选择器 `DT.jsx`（本仓 `ui/canvas/MaterialPickerModal.tsx`）。
+   *
+   * 与 `replaceMaterialImage` 的**分工**（**两套不同源、不合并**）：
+   *   · 本 action：图**来自资源库/文件挑选**，只改**一个节点**的绑定 ＋ 把指向旧图的
+   *     **文本引用**改指新图（原 `Gy`）—— 源 27682-27724
+   *   · `replaceMaterialImage`：图是**新画出来的**（遮脸/编辑产物），要**建新库条目**、
+   *     可能**重设节点高** —— 源 27626-27681
+   *
+   * ⚠️ 撤销 key = **`replace-mat-${nodeId}`**（原 27694，按节点分区）——
+   *    与 `replaceMaterialImage` 的 `replace-img-${nodeId}` **不是同一个 key**。
+   * ⚠️ **不查环、不动 referenceOrder**（本动作不建边）。
+   * @returns `{ok:false, reason:'bad-input'}` = 守卫没过（节点不在 / 非素材 / 无 data / 条目无图）
+   *   —— 调用方据此提示；**不 commit**（源的 commit 在守卫之后）
+   */
+  replaceMaterialWithLib: (
+    nodeId: string,
+    item: { id?: string; name?: string; dataUrl: string; w?: number; h?: number },
+  ) => { ok: boolean; reason?: string };
   /**
    * ★ **建截图素材节点**（原 `addScreenshotMaterial` shared.js:28312-28352）
    *
@@ -486,6 +592,7 @@ export function createCanvasSlice(
     nodes: [],
     edges: [],
     library: [],
+    videoShares: [],
     snap: true,
     soundEnabled: true,
     clipboard: null,
@@ -495,6 +602,57 @@ export function createCanvasSlice(
     setNodes: (nodes) => set({ nodes }),
     setEdges: (edges) => set({ edges }),
     setLibrary: (library) => set({ library }),
+
+    /**
+     * 资源库条目改名（原 `renameLibrary` 27515-27548）
+     *
+     * 源逐行：`commit('library')` → 找条目 → 条目 + **所有同源素材节点**的 `name/label` 一起改。
+     * ⚠️ 源先 commit 再判空（`if (s)`）⇒ 空转也会进撤销栈 —— 本仓**先判空再 commit**
+     *    （不做无谓快照，与 `renameMaterialNode` 同法）。
+     */
+    renameLibrary: (libId, name) => {
+      const s = get();
+      const plan = planLibraryRename({ library: s.library, nodes: s.nodes, libId, name });
+      if (!plan) return;
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'library', deps.now()) });
+      set({
+        library: plan.library,
+        nodes: asCanvasNodes(plan.nodes),
+      });
+    },
+
+    /**
+     * 替换资源库条目的图（原 `replaceLibrary` 27755-27806）
+     *
+     * 源逐行：守卫 → 记旧图地址 → `Tn(r.dataUrl)` 外置 → `commit('library')` →
+     * 库条目换 `dataUrl`（`w/h` 新值或保留）→ 同源节点换 `dataUrl` → 数 `replaced`。
+     * ⚠️ 外置（`deps.persistImage`）失败 ⇒ **什么都不动**（与 `replaceMaterialImage` 同法），
+     *    返回 `null` 交给调用方提示。
+     */
+    replaceLibrary: (libId, image) => {
+      const s = get();
+      // ① 先外置（原 `Tn`，源在 action 里跑；失败 ⇒ 整个不做）
+      const stored = deps.persistImage(image.dataUrl);
+      if (!stored) return null;
+      // ② 规划（守卫在纯层：条目必须在 + 有地址）
+      const plan = planLibraryReplace({
+        library: s.library,
+        nodes: s.nodes,
+        libId,
+        storedUrl: stored,
+        w: image.w,
+        h: image.h,
+      });
+      if (!plan) return null;
+      // ③ 变更前 commit（统一约定；key 用源版那个字面量 `'library'`）
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'library', deps.now()) });
+      set({
+        library: plan.library,
+        nodes: asCanvasNodes(plan.nodes),
+      });
+      return plan.replaced;
+    },
+
     setSnap: (snap) => set({ snap }),
 
     commit: (key) => {
@@ -540,6 +698,37 @@ export function createCanvasSlice(
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
       set({ nodes: res.value.nodes, edges: [...s.edges, res.value.edge] });
       return null;
+    },
+
+    /**
+     * 多选拖拽批量连线（原 `connectBatch` 27054-27069）
+     *
+     * 源逐行：`commit('graph-add')`（**无条件**，空列表也提交）→ reduce 逐条 `Mr` + `yo`。
+     * ⚠️ 本仓把「造边 + 去重」收进纯层 `planConnectBatch`（判据 C1：与
+     *    `connectManyToTarget` 共用同一份 append 内核），这里只做 commit + 落 store。
+     */
+    connectBatch: (sourceIds, targetId) => {
+      const s = get();
+      const plan = planConnectBatch(s.edges, sourceIds, targetId, deps.makeEdge);
+      // 变更前 commit（统一约定）—— 与源一致：**无条件**（空列表也进撤销栈）
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
+      if (plan.edges.length > 0) set({ edges: [...s.edges, ...plan.edges] });
+    },
+
+    /**
+     * 群锚点批量连线（原 `connectManyToTarget` 27070-27094）
+     *
+     * 源逐行：目标不在 nodes ⇒ return → 滤自己 → 空 ⇒ return → `commit('graph-add')` → reduce。
+     * ⚠️ 三条守卫都在纯层 `planConnectManyToTarget`（返回 `null` = 不干）；**守卫命中不 commit**
+     *    （与源一致：源的 commit 在守卫之后）。
+     */
+    connectManyToTarget: (sourceIds, targetId) => {
+      const s = get();
+      const plan = planConnectManyToTarget(s.nodes, s.edges, sourceIds, targetId, deps.makeEdge);
+      if (!plan) return;
+      // 变更前 commit（统一约定）
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
+      if (plan.edges.length > 0) set({ edges: [...s.edges, ...plan.edges] });
     },
 
     disconnect: (edge) => {
@@ -782,6 +971,107 @@ export function createCanvasSlice(
         ),
       });
       return true;
+    },
+
+    replaceImageGenImage: (nodeId, dataUrl, opts = {}) => {
+      const s = get();
+      const node = s.nodes.find((n) => n.id === nodeId);
+      if (!node || node.type !== 'imggen' || !node.data || !dataUrl) return false;
+
+      const d = asRecord(node.data);
+      // ① 找当前展示图（复用纯层 `genImageCurrentUrl`，判据 C1 —— 与 `GenImageNode` 同一判据）
+      const currentUrl = genImageCurrentUrl({
+        viewUrl: typeof d.viewUrl === 'string' ? d.viewUrl : undefined,
+        resultUrl: typeof d.resultUrl === 'string' ? d.resultUrl : undefined,
+        results: Array.isArray(d.results) ? (d.results as Array<{ dataUrl?: string }>) : [],
+      });
+      if (!currentUrl) return false;
+
+      // ② 撤销快照（原 `commit(\`replace-img-${n}\`)`）
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `replace-img-${nodeId}`, deps.now()) });
+
+      // ③ 新名（原 `${c}·已编辑`，`c` = `name || label || '文生图'`）
+      const prefix = (typeof d.name === 'string' && d.name) || (typeof d.label === 'string' && d.label) || '文生图';
+      const name = (opts.name ?? '').trim() || `${prefix}·已编辑`;
+
+      // ④ 外置（原 `Tn(r)`；`persistImage` 幂等，失败原样返回入参）
+      const stored = deps.persistImage(dataUrl);
+      const w = opts.w || 0;
+      const h = opts.h || 0;
+
+      // ⑤ 建库条目（原 `addToLibrary` —— **按 dataUrl 去重**：已存在则不追加）
+      const exists = s.library.some((item) => item.dataUrl === stored);
+      const libId = makeLibraryId(deps.now(), ++nodeSeq);
+
+      // ⑥ 更新节点：`results` 里命中当前图的那张换 `dataUrl` + 三字段指向新图
+      const results = (Array.isArray(d.results) ? d.results : []).map((item) =>
+        (asRecord(item).dataUrl === currentUrl ? { ...asRecord(item), dataUrl: stored } : item) as Record<string, unknown>,
+      );
+
+      set({
+        ...(exists
+          ? {}
+          : {
+              library: [
+                ...s.library,
+                { id: libId, name, dataUrl: stored, favorite: false, ...(w && h ? { w, h } : {}) } as LibraryItem,
+              ],
+            }),
+        nodes: s.nodes.map((n) =>
+          n.id === nodeId
+            ? ({
+                ...n,
+                data: {
+                  ...n.data,
+                  results,
+                  resultUrl: stored,
+                  viewUrl: stored,
+                  dataUrl: stored,
+                },
+              } as CanvasNode)
+            : n,
+        ),
+      });
+      return true;
+    },
+
+    /**
+     * 换图（资源库/文件 → 素材节点）（原 `replaceMaterialWithLib` 27682-27724）
+     *
+     * 源逐行：守卫（节点在 / 是素材 / 有 data / 条目有图）→ `Ms` 解旧 libId →
+     * 四级回落取名 → `commit(\`replace-mat-${n}\`)` → `Gy` 改指 →  patch 目标节点。
+     * ⚠️ **guard 失败 ⇒ 不 commit**（源的 commit 在守卫之后）⇒ 直接返回，调用方提示。
+     */
+    replaceMaterialWithLib: (nodeId, item) => {
+      const s = get();
+      const plan = planMaterialReplaceWithLib({
+        nodes: s.nodes,
+        library: s.library,
+        nodeId,
+        item,
+      });
+      if (!plan.ok) return { ok: false, reason: plan.reason };
+      // 变更前 commit（统一约定；key 用源版那个**按节点分区**的 `replace-mat-${nodeId}`）
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `replace-mat-${nodeId}`, deps.now()) });
+      set({ nodes: asCanvasNodes(plan.value.nodes) });
+      return { ok: true };
+    },
+
+    addVideoShare: (input) => {
+      const s = get();
+      // 去重（原 27911-27919：先按 `vid`、再按 `url`）—— 命中任一 ⇒ 什么都不做
+      if (input.vid && s.videoShares.some((v) => v.vid === input.vid)) return;
+      if (input.url && s.videoShares.some((v) => v.url === input.url)) return;
+      set({
+        videoShares: [
+          { id: makeId('videoShare', deps.now(), ++nodeSeq), ...input, createdAt: deps.now() },
+          ...s.videoShares,
+        ].slice(0, 50),
+      });
+    },
+
+    removeVideoShare: (id) => {
+      set({ videoShares: get().videoShares.filter((v) => v.id !== id) });
     },
 
     renameMaterialNode: (nodeId, name) => {

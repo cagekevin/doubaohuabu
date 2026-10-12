@@ -280,9 +280,16 @@ export function createElectronLicense(): LicensePort {
         if (typeof raw === 'string') return ok(raw);
         // ★ 修：后端字段名是 `machineCode`（`main.js:2154`），原实现读的是 `code` ⇒ **恒为空串**
         // ★ TD-04-5：后端 `get-machine-code` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
-        const c = checkOk<{ machineCode?: string }>(raw, { fallback: LICENSE_TEXT.fetchFailed });
+        const c = checkOk<{ machineCode: string }>(raw, {
+          fallback: LICENSE_TEXT.fetchFailed,
+          // ★ `TD-04-10`：**点名缺哪个字段** —— 后端若把 `machineCode` 改名（源 `main.js:2154`），
+          //   这里当场报「宿主返回缺少必需字段 machineCode」，而不是静默兜成空串
+          //   （本仓曾经的症状：字段名读错 ⇒ 机器码**恒空**，用户看到的是"空的"而不是报错）
+          guard: (p) => typeof p.machineCode === 'string',
+          field: 'machineCode',
+        });
         if (!c.ok) return c;
-        return ok(typeof c.value.machineCode === 'string' ? c.value.machineCode : '');
+        return ok(c.value.machineCode);
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }

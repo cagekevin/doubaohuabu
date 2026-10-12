@@ -29,6 +29,19 @@ const SECOND_CUTOFF = 1000000000000;
  *   `formatDateTimeMinute` 后文件变成可达 ⇒ 文件级条目消失、这两个导出被暴露出来。
  *   ⇒ 它们**不是死代码**（有真实消费者 + 单测），按闸的正道打 `@public` 而非删。
  */
+/**
+ * 纪元毫秒 → ISO 时间戳（`2026-10-12T08:30:00.000Z`）
+ *
+ * ★ **2026-10-12（`TD-16-109`）收口**：此前 `core/rules/payload.ts` ×3 ＋
+ *   `core/usecases/accountTransfer.ts` ×1 各写一份 `new Date(x).toISOString()`。
+ * ⚠️ **原则 4 不被破坏**：调用方注入的**仍是 `now`（毫秒数）**，本函数只做「毫秒 → 字符串」
+ *   的格式化（与同文件的 `formatClockTime(ms)` 同一站位）；⚠️ 它是 **UTC** ——
+ *   要本地时区请用 `formatDateTimeMinute`（见 `core/rules/license.ts` 那条注释的教训）。
+ */
+export function toIsoTimestamp(epochMs: number): string {
+  return new Date(epochMs).toISOString();
+}
+
 export function parseSiteTimestamp(value: unknown): number {
   if (value == null) return NaN;
 

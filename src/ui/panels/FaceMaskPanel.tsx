@@ -17,6 +17,7 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from '@/state';
 import { FACE_MASK_EFFECTS, FACE_MASK_EFFECT_LABEL } from '@/constants/facemask';
+import { toPercent } from '@/lib/math';
 import { FACEMASK_TEXT } from '@/constants/text';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import styles from './FaceMaskPanel.module.css';
@@ -110,7 +111,7 @@ export function FaceMaskPanel({ nodeId, x, y, onClose }: FaceMaskPanelProps) {
 
         <div className={styles.row}>
           <span className={styles.label}>{FACEMASK_TEXT.expand}</span>
-          <span className={styles.val}>{Math.round(faceMaskOpts.pad * 100)}%</span>
+          <span className={styles.val}>{toPercent(faceMaskOpts.pad)}%</span>
         </div>
         <input
           type="range"

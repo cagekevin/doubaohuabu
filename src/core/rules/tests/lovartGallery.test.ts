@@ -23,7 +23,7 @@ import {
   purgeLovartImages,
   removeLovartAccount,
   clearLovartGallery,
-  parseLovartGalleries,
+  ensureLovartGalleries,
   removeLovartImages,
   type LovartGalleries,
 } from '../lovartGallery';
@@ -37,22 +37,23 @@ const deps = {
   normalizeImage: (u: string) => u,
 };
 
-describe('parseLovartGalleries（原 `ET` 26637）', () => {
+describe('ensureLovartGalleries（原 `ET` 26637 的判据半）', () => {
   it('★ 正常 JSON 对象 ⇒ 原样', () => {
-    expect(parseLovartGalleries('{"acc_1":[{"id":"lg_1"}]}')).toEqual({ acc_1: [{ id: 'lg_1' }] });
+    expect(ensureLovartGalleries({ acc_1: [{ id: 'lg_1' }] })).toEqual({ acc_1: [{ id: 'lg_1' }] });
   });
 
   it('★ 空 / 坏数据 / 不是对象 ⇒ `{}`（**不抛** —— 画廊丢了不该挡住启动）', () => {
-    expect(parseLovartGalleries(null)).toEqual({});
-    expect(parseLovartGalleries('')).toEqual({});
-    expect(parseLovartGalleries('{坏 json')).toEqual({});
-    expect(parseLovartGalleries('"字符串"')).toEqual({});
-    expect(parseLovartGalleries('42')).toEqual({});
-    expect(parseLovartGalleries('null')).toEqual({});
+    expect(ensureLovartGalleries(null)).toEqual({});
+    expect(ensureLovartGalleries(undefined)).toEqual({});
+    expect(ensureLovartGalleries('')).toEqual({});
+    // ⚠️ 「JSON 串本身是坏的」归**读层**（`rw().read` 的 error 态，`TD-06-1`）；判据半只管
+    //    「**解析成功**但不是对象」—— 这类（字符串 / 数字）在本仓会以 ok 态到达这里
+    expect(ensureLovartGalleries('字符串')).toEqual({});
+    expect(ensureLovartGalleries(42)).toEqual({});
   });
 
-  it('⚠️ 数组也算对象（源版判据 `typeof === "object"`）⇒ 会被返回', () => {
-    expect(parseLovartGalleries('[1,2]')).toEqual([1, 2]);
+  it('⚠️ 数组也算对象（源版判据 `typeof === "object"`）⇒ 会被返回（照抄）', () => {
+    expect(ensureLovartGalleries([1, 2])).toEqual([1, 2]);
   });
 });
 

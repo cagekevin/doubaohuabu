@@ -7,6 +7,39 @@
  * ⚠️ 原则 5：色值只走 token。
  */
 
+/*
+ * ★★ **视图块本体**（原 `.doubao-view` + `dv-visible` / `dv-hidden`，`_Component43.jsx:3223`）
+ *
+ * ⚠️ **2026-10-12 位置修正**：本文件早先写着「本工程改成**只在账号栏里占位**」—— 那是**错的**
+ *   （源里它是与画布**并列**的 `.center-stage` 视图块，`_Component48.jsx:171-178`）；
+ *   现由 `AppShell` 的 `.centerStage` 渲染。
+ * ⚠️ **显隐用「容器常驻 + 切类」**（逐字对源）：`.viewHidden` 只是 `display: none`，
+ *   `<webview>` 元素**仍在 DOM** ⇒ `adapters/site/shared/webview.ts` 的 `findWebview` 照旧找得到。
+ * ⚠️ 可见时**铺满**中栏（源是整页级容器；`docs/mockup/assets/mockup.css` **无** `.doubao-view` 真身
+ *   ⇒ 按 token 自写，不假装有真身）。
+ * ⚠️ 源还有第三态 `dv-send-overlay`（**隐藏但仍有发送任务**时叠"发送中"层）—— 本仓发送链不依赖
+ *   视图可见性 ⇒ 暂无该态（如实登记，不造空壳）。
+ */
+.view {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-surface);
+}
+
+/* 可见态（对应源 `dv-visible`）—— 无额外声明，只为与源的 class 语义对齐、便于排查 */
+.viewVisible {
+  display: flex;
+}
+
+/* 隐藏态（对应源 `dv-hidden`）—— **只隐藏，不卸载**（`<webview>` 仍在 DOM） */
+.viewHidden {
+  display: none;
+}
+
 .webviews {
   position: relative;
   width: 100%;

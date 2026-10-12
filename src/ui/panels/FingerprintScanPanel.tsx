@@ -60,7 +60,7 @@ export function FingerprintScanPanel({ onClose }: FingerprintScanPanelProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.primary}`}
-              title="把当前这份报告记进历史（同一结论不会重复记）"
+              title={FP_SCAN_TEXT.recordTitle}
               onClick={() => {
                 const recorded = recordScan(report);
                 // ⚠️ 不静默：源版同签名时是静默 return，用户会以为"没反应"

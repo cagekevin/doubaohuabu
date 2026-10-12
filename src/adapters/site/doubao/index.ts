@@ -22,9 +22,16 @@ import type { HostPort } from '@/core/ports/host.port';
 import type { SendPayload, SendResult, SitePort, SiteProbe, ScanResult } from '@/core/ports/site.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { sleep } from '@/lib/async';
+// ★ `TD-05-6`：会话幂等键的哈希段收口到 `lib/hash.hash32`（此前本文件有一份私有副本）
+import { hash32 } from '@/lib/hash';
 import { GEN_POLL_MS, GEN_SILENT_MS, GEN_TIMEOUT_MS } from '@/constants';
 import { buildClickSendScript } from './scripts';
-import { createDoubaoAskWithImage, createDoubaoPingQueueProgress } from './analyze';
+import {
+  createDoubaoAskWithImage,
+  createDoubaoFetchWatermarkFree,
+  createDoubaoFetchWatermarkFreeByThread,
+  createDoubaoPingQueueProgress,
+} from './analyze';
 import { requireWebview, webviewEval } from '../shared/webview';
 import { buildResultScanScript } from '../shared/scanScripts';
 
@@ -133,6 +140,9 @@ export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SiteP
     askWithImage: createDoubaoAskWithImage(host),
     // ★ `TD-16-103`：`store.queueProgress` 的生产者接缝（发送后追问排队进度）
     pingQueueProgress: createDoubaoPingQueueProgress(host),
+    // ★ 无水印拉取（原 `mD`/`gD` 页内脚本）—— 2026-10-12 落（`docs/14` §10 的 ⛔ 阻塞）
+    fetchWatermarkFree: createDoubaoFetchWatermarkFree(),
+    fetchWatermarkFreeByThread: createDoubaoFetchWatermarkFreeByThread(),
 
     async send(account: Account, payload: SendPayload): Promise<Result<SendResult>> {
       const partition = account.partition;
@@ -279,11 +289,5 @@ async function pollResults(
 
 
 /** 32 位字符串哈希（幂等键用；非加密用途） */
-function hash32(s: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(36);
-}
+// ⚠️ 已删除本文件私有的 `hash32`（2026-10-12 · `TD-05-6`）—— 提升为 `lib/hash.hash32` 唯一真源
+//   （源 `b$` `shared.js:25062-25068` 的后代；gpt 的 sessionId 也改用同一处）

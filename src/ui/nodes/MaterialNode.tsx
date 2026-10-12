@@ -35,6 +35,7 @@ import styles from './shared.module.css';
 
 export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
   const renameMaterialNode = useStore((s) => s.renameMaterialNode);
+  const openImageEditor = useStore((s) => s.openImageEditor);
 
   /** 名字兜底（原 18-19：空或字面量 `undefined` ⇒ `素材`） */
   const label = data.label && data.label !== 'undefined' ? data.label : MATERIAL_NODE_TEXT.fallbackName;
@@ -151,13 +152,17 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
             <button
               type="button"
               className={styles.matFloatBtn}
-              disabled
               /*
-               * ⛔ 源版这里有 `openImageEditor({nodeId, imgRef, label})`（原 167-171）——
-               *    遮脸 / 裁剪编辑器**尚未落地**。禁用并把原因写进 `title`（判据 B4）。
+               * ★ 原 163-178 的 `mat-edit-float`：`onMouseDown` stopPropagation 保选中、
+               *   `onClick` stopPropagation 后 `openImageEditor({nodeId, imgRef, label})`。
+               * ★ **2026-10-12 解禁（`TD-09-4`）**：图片编辑器已落（`ui/panels/ImageEditor.tsx`）。
                */
-              title={`${MATERIAL_NODE_TEXT.editImageTitle}\n${MATERIAL_NODE_TEXT.editImagePending}`}
+              title={MATERIAL_NODE_TEXT.editImageTitle}
               onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                openImageEditor(id, data.dataUrl, label);
+              }}
             >
               {MATERIAL_NODE_TEXT.editImage}
             </button>

@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { Modal } from '@/ui/common/Modal';
 import { useAccountOps, useStore } from '@/state';
-import { ACCOUNT_STATUS } from '@/stable/model/account';
+import { isAccountUsable } from '@/stable/model/account';
 import { ACCOUNT_TRANSFER_TEXT, EXPORT_TEXT } from '@/constants/text';
 import styles from './ExportAccountsModal.module.css';
 
@@ -28,7 +28,9 @@ export function ExportAccountsModal({ onClose }: ExportAccountsModalProps) {
   const accounts = useStore((s) => s.accounts);
   const accountOps = useAccountOps();
   // 已登录账号（原 `PP.jsx:95-97`：`(status || '已登录') === '已登录'`）
-  const loggedIn = accounts.filter((a) => (a.status || ACCOUNT_STATUS.loggedIn) === ACCOUNT_STATUS.loggedIn);
+  // ⚠️ **2026-10-12 越权收口**：原为**内联复写判据**（值虽取自常量，表达式仍是一份第二真相）
+  //    ⇒ 改委托源头 `isAccountUsable`（**判据只有一处实现**）。
+  const loggedIn = accounts.filter(isAccountUsable);
 
   /**
    * 默认全选「已登录」账号（原 `PP.jsx:14-18` 的 effect）

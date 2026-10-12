@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { base64ToBytes, exactHashFromDataUrl, hammingDistance, hashFromImgRef, sha1Hex } from '../hash';
+import { base64ToBytes, exactHashFromDataUrl, hammingDistance, hash32, hashFromImgRef, sha1Hex } from '../hash';
 import { fileNameFromUrl, normalizeUrl, shouldDiscardImage, stripSignature } from '../url';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -159,5 +159,24 @@ describe('fileNameFromUrl（原 `kR`）', () => {
   });
   it('解码百分号转义', () => {
     expect(fileNameFromUrl('https://a.com/%E5%9B%BE.png')).toBe('图.png');
+  });
+});
+
+describe('hash32（FNV-1a 32 ⇒ base36；`TD-05-6` 收口的会话键哈希段）', () => {
+  it('空串 ⇒ FNV-1a 的偏移基 2166136261 的 base36', () => {
+    expect(hash32('')).toBe((2166136261 >>> 0).toString(36));
+  });
+
+  it('确定性强（同输入同输出）且长度有界（32 位 base36 ≤ 7 位，不随输入涨）', () => {
+    const a = hash32('你好，世界');
+    expect(a).toBe(hash32('你好，世界'));
+    expect(a).toMatch(/^[0-9a-z]+$/);
+    expect(a.length).toBeLessThanOrEqual(7);
+    expect(hash32('x'.repeat(5000)).length).toBeLessThanOrEqual(7);
+  });
+
+  it('不同输入 ⇒ 不同输出（碰撞不属于本函数的保证，但常见输入必须分开）', () => {
+    expect(hash32('a')).not.toBe(hash32('b'));
+    expect(hash32('你好')).not.toBe(hash32('好你'));
   });
 });

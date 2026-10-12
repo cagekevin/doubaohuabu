@@ -118,13 +118,17 @@ export function createElectronProjectPort(): ProjectPort {
         const raw = await api.getProjectStorageSize(storagePath);
         // ★ 原则 6：后端字段是 `bytes/files/partial`（当 `{size}` 读 ⇒ **恒为 0**）
         // ★ TD-04-5：后端 `project-storage-size` 的 6 条 return **都带 `ok`** ⇒ fail-closed
-        const c = checkOk<{ bytes?: number; files?: number; partial?: boolean }>(raw, {
+        const c = checkOk<{ bytes: number; files: number; partial?: boolean }>(raw, {
           fallback: PROJECT_TEXT.unknownReason,
+          // ★ `TD-04-10`：点名缺字段 —— 后端若把 `bytes` 改名成 `size`（本仓曾经的症状：
+          //   按 `{size}` 读 ⇒ 占用空间**恒显示 0**），这里当场报「缺少必需字段 bytes」
+          guard: (p) => typeof p.bytes === 'number' && typeof p.files === 'number',
+          field: 'bytes',
         });
         if (!c.ok) return c;
         return ok({
-          bytes: typeof c.value.bytes === 'number' ? c.value.bytes : 0,
-          files: typeof c.value.files === 'number' ? c.value.files : 0,
+          bytes: c.value.bytes,
+          files: c.value.files,
           partial: c.value.partial === true,
         });
       } catch (e) {

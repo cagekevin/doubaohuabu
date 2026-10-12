@@ -14,7 +14,7 @@
  *    `patch === null` = **源版那一步根本不写数据**（`yS` 的五道前置闸）。
  */
 
-import type { Account, PoolStrategy, SiteType } from '@/stable/model/account';
+import { isAccountUsable, type Account, type PoolStrategy, type SiteType } from '@/stable/model/account';
 // ★ `analyzePrompt` 的**形状真源**在契约层（`stable/model`，与 `GenHistory` 同法）
 import type { AnalyzePromptState } from '@/stable/model/node';
 import type { BackendPagePort } from '@/core/ports/backendPage.port';
@@ -240,8 +240,10 @@ export async function reviseNodePrompt(
   if (!prevAccountId) return refuse(ANALYZE_TEXT.noAnalyzeAccount);
 
   // 原分析账号必须**仍在且已登录**（源版 `(m.status || '已登录') === '已登录'`）
+  // ⚠️ **2026-10-12 越权收口**：判据原为**内联复写**（全仓唯一一处内联字面量）——
+  //    改委托源头 `isAccountUsable`（它的实现逐字就是源那句），**不写第二份**。
   const original = input.accounts.find((a) => a.id === prevAccountId) ?? null;
-  if (!original || (original.status || '已登录') !== '已登录') {
+  if (!original || !isAccountUsable(original)) {
     return refuse(ANALYZE_TEXT.analyzeAccountGone);
   }
 

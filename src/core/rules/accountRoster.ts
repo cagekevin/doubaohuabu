@@ -19,7 +19,7 @@
  */
 
 import type { Account, Fingerprint } from '@/stable/model/account';
-import { normalizeAccountType } from '@/stable/model/account';
+import { ACCOUNT_STATUS, normalizeAccountType } from '@/stable/model/account';
 import { makeId } from './project';
 import { nextAccountName, renumberAccounts } from './accountName';
 
@@ -55,8 +55,12 @@ export interface RosterDeps {
   proxyPool?: readonly string[];
 }
 
-/** 默认登录态（原 `n.status || '已登录'`） */
-const DEFAULT_STATUS = '已登录';
+/**
+ * 默认登录态（原 `n.status || '已登录'`）
+ * ⚠️ **2026-10-12 越权收口**：原在此**又立了一个 `'已登录'` 字面量**（第三份）—— 改吃源头常量
+ *    `ACCOUNT_STATUS.loggedIn`（`stable/model/account.ts:109` 的唯一定义）。
+ */
+const DEFAULT_STATUS = ACCOUNT_STATUS.loggedIn;
 
 /**
  * 沿用传入的指纹，还是要重算？（原 `addAccount` 30194 的那个长三目）

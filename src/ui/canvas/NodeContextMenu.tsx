@@ -1,16 +1,15 @@
 /**
  * 节点右键菜单（原 `node-ctx-menu`，`_Component42.jsx:1685-1726`；处理函数 `1093-1160`）
  *
- * ★ **本仓只落 4/6 项**（源是 6 项，顺序即语义）：
+ * ★ **6/6 项全落**（源是 6 项，顺序即语义）：
  *   | # | 项 | 源 | 本仓 |
  *   |---|---|---|---|
  *   | 1 | 自动排列（整理所选节点） | `arrangeSelectedNodes()` | ✅ `canvas.arrangeSelectedNodes`（原 `shared.js:29635`） |
- *   | 2 | 更换素材（仅 material） | `Ye` → `Z({mode:'replace', nodeId})` | ⛔ **素材选择器未实现**（`docs/13` §3「叠加层」） ⇒ **不渲染** |
+ *   | 2 | 更换素材（仅 material） | `Ye` → `Z({mode:'replace', nodeId})` | ✅ **2026-10-12 落**（`onReplaceMaterial` ← 宿主开 `MaterialPickerModal`；state `canvas.replaceMaterialWithLib`） |
  *   | 3 | 打开文件所在位置（仅 material 且 `img://`） | `Pe` → `window.api.showInFolder(dataUrl)` | ✅ `hostOps.showInFolder`（**同源方法**）—— ⚠️ **不可用 `revealPath`**：它**只认真实路径**，`img://` 传进去主进程不解析 ⇒ 功能打不开 |
  *   | 4 | 复制 Ctrl+C | `Te` → `pe()` + `copyNodes()` | ✅ |
  *   | 5 | 保存为节点预设 | `rt` → `addNodePreset` | ✅ **2026-10-12 落**（`onSaveAsPreset` ← 宿主开 `NodePresetModal`；纯层 `makeGraphPreset` ＋ `global.addNodePreset` 同日落） |
  *   | 6 | 粘贴 Ctrl+V（无剪贴板则禁用） | `Ue` → `pasteNodes(screenToFlow(菜单位置))` | ✅ |
- *   ⇒ 「渲染一个点了没反应的按钮」= 假装功能在 ⇒ 这两项**不渲染**（`docs/13` §3 登记为债）。
  *
  * 源的**开合**（`1074-1092`）：菜单开着时监听 `document` 的 **`click`**（点菜单外 ⇒ 关；
  * 菜单自身 `onClick` 有 `stopPropagation` 所以点里面不关）+ **`Escape`** ⇒ 关。
@@ -51,6 +50,13 @@ export interface NodeContextMenuProps {
    * ⚠️ 与 `onCopyNodes` 同法：**载荷由宿主抓**（菜单点完就卸载）—— 宿主负责开模态。
    */
   onSaveAsPreset: () => void;
+  /**
+   * ★ 「更换素材」（原 `Ye`，`_Component42.jsx:1111-1120`：`Z({mode:'replace', nodeId})` + `fe()` 关菜单）
+   * —— **2026-10-12 落**（此前素材选择器 `DT.jsx` 未实现 ⇒ 该项**不渲染**）
+   *
+   * ⚠️ 与另两个回调同法：**由宿主开模态**（菜单点完就卸载）。
+   */
+  onReplaceMaterial: () => void;
 }
 
 export function NodeContextMenu({
@@ -58,6 +64,7 @@ export function NodeContextMenu({
   onClose,
   onCopyNodes,
   onSaveAsPreset,
+  onReplaceMaterial,
 }: NodeContextMenuProps) {
   const arrangeSelectedNodes = useStore((s) => s.arrangeSelectedNodes);
   const pasteNodes = useStore((s) => s.pasteNodes);
@@ -116,6 +123,12 @@ export function NodeContextMenu({
       <button type="button" className={styles.item} onClick={() => void arrangeSelectedNodes()}>
         {NODE_CTX_TEXT.arrange}
       </button>
+      {/* ★ 项 2「更换素材」（原 1699-1701）—— 仅 material；2026-10-12 落 */}
+      {node?.type === 'material' ? (
+        <button type="button" className={styles.item} onClick={onReplaceMaterial}>
+          {NODE_CTX_TEXT.replaceMaterial}
+        </button>
+      ) : null}
       {node?.type === 'material' ? (
         <button
           type="button"

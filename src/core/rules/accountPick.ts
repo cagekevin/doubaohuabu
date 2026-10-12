@@ -212,6 +212,21 @@ export function buildAccountGroups(
 const WEB_EXECUTABLE_TYPES: readonly string[] = ['doubao', 'dola', 'gpt'];
 
 /**
+ * 「**画廊型**」站点 —— 后台视图里显示「**出新图**」条（原 `_Component26`）的那三站
+ *
+ * 源出处：`_Component43.jsx:3301` 的渲染条件
+ * ```jsx
+ * {t && c.length > 0 && (Ke?.type==='lovart' || Ke?.type==='tapnow' || Ke?.type==='other')
+ *   && <_Component26 account={Ke} active={t} />}
+ * ```
+ * ⚠️ **它与上面 `WEB_EXECUTABLE_TYPES` 是同一处的互补两支**（源 `:3298` 是"其余站点"那支，
+ *   渲染的是 `SD`「无水印资源」面板）—— 故把两者放在一起，**避免各写一份站点清单**（判据 C1）。
+ * ⚠️ 类型放宽为 `readonly string[]`（与 `WEB_EXECUTABLE_TYPES` 同法）：本仓 `Account.type` 是
+ *   `string`，用 `SiteType` 收窄会在调用处逼出一个 `as`（那就是类型层兜底）。
+ */
+export const NEW_IMAGES_SITES: readonly string[] = ['lovart', 'tapnow', 'other'];
+
+/**
  * 从一组账号**推出该走哪个通道**（原 `K` `_Component45.jsx:622-634`）
  *
  * 规则：取该组账号的 `type` 集合 —— **恰好只有 1 种** ⇒ 用它；否则 ⇒ `'doubao'`。
@@ -261,6 +276,48 @@ export function pickInitialActiveAccount(
     list[0]?.id ??
     null
   );
+}
+
+/**
+ * 「**补齐当前账号**」—— 没选中时该补谁（原 `_Component42.jsx:463-475` 的 `tt`，**逐字**）
+ *
+ * 源（`_Component42` 的顶栏「豆包后台」按钮的处理函数）：
+ * ```js
+ * const tt = () => {
+ *   if (!L.getState().activeDoubaoAccountId) {
+ *     const Oe = (S && C.find(w => w.id === S)) ? S                  // ① "上次发送过的"（**且该账号还在**）
+ *              : (C.find(w => (w.status||'已登录')==='已登录')?.id) || null;  // ② 第一个已登录
+ *     if (Oe) L.getState().setActiveDoubaoAccount(Oe);
+ *   }
+ *   t();                                                             // 再打开后台视图
+ * };
+ * ```
+ *
+ * @returns 需要设置的账号 id；**`null` = 什么都不用设**（已选中，或补不出可用账号）
+ *
+ * ★ **2026-10-12 · 为什么它是**另一条**规则（**不许与 `pickInitialActiveAccount` 合并**）**：
+ *   | | `pickInitialActiveAccount`（源 `26791-26805` 的 IIFE） | 本条（源 `tt`） |
+ *   | --- | --- | --- |
+ *   | 时机 | **store 初始化**（读盘后种初值） | **运行期**（点顶栏入口时） |
+ *   | 是否有"已选中就跳过"的前置 | **没有**（它就是初值） | **有**（`if (!active)`） |
+ *   | 第一档 | 第一个「已登录 **且** `autoStart`」 | 「**上次发送过的**」（且账号还在） |
+ *   | 最后一档 | **第一个账号（不看状态）** | **无**（补不出就 `null`） |
+ *   ⚠️ 两条只有"第二个已登录"这一档相同 —— 合并任何一条都会**改掉源的语义**。
+ * ⚠️ 「已登录」判据**复用** `isAccountUsable`（不写第二份）。
+ */
+export function pickActiveAccountFallback(input: {
+  activeAccountId: string | null | undefined;
+  lastSentAccountId: string | null | undefined;
+  accounts: readonly Account[] | null | undefined;
+}): string | null {
+  // 源第一句：**已经选中了就不动**（这是它与 IIFE 最本质的区别）
+  if (input.activeAccountId) return null;
+  const list = input.accounts ?? [];
+  const last = input.lastSentAccountId;
+  // ① 「上次发送过的」—— **必须是当前仍在列表里的账号**（源 `C.find(id === S) ? S : …`）
+  if (last && list.some((a) => a.id === last)) return last;
+  // ② 第一个已登录；补不出 ⇒ `null`（源 `|| null`，**没有**"首个不看状态"那一档）
+  return list.find((a) => isAccountUsable(a))?.id ?? null;
 }
 
 /**

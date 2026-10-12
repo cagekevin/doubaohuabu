@@ -1,0 +1,42 @@
+/**
+ * 组连线锚点样式（原 `.gc-handle` / `.gc-line` / `.gc-target-hint`）
+ *
+ * ⚠️ **原版 CSS 未入库** ⇒ 本文件为**推断值**（母体 TD-16-87：照源语义补 + 回填 mockup）。
+ * ⚠️ `.gc-target-hint`（加在 `.react-flow__node` 上的那个类）**不落这里** —— 那是
+ *    xyflow 的 DOM，CSS Modules 管不到；组件用**内联样式**表达同一语义。
+ * ⚠️ 原则 5：色值/间距/圆角全部走 token。
+ */
+
+/* 锚点：30px 圆形把手（源 `marginLeft/-Top: -15` ⇒ 半径 15） */
+.handle {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  color: var(--color-text-on-brand);
+  background: var(--color-action-primary);
+  border: 2px solid var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+  cursor: crosshair;
+  z-index: var(--z-overlay);
+}
+
+.handle > svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.handle:hover {
+  background: var(--color-action-primary-hover);
+}
+
+/* 拖拽线（源 `gc-line`：虚连线，与画布连线同色系） */
+.line {
+  stroke: var(--color-action-primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}

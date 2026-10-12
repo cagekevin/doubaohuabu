@@ -23,6 +23,17 @@ export const SEND_FAIL_KINDS = [
   'rate-limit',
   'page-timeout',
   'page-error',
+  /**
+   * 入参不合法（**逐字对源** —— `shared.js:27686` 的 `replaceMaterialWithLib` 守卫
+   * `return { ok: false, reason: 'bad-input' }`）
+   *
+   * ★ **2026-10-12 补**（"源头没给全"的又一例）：本仓 `core/rules/materialReplace.ts`
+   *   照源写了这个 reason，而**分类表里没有它** ⇒ `tsc` 直接报错（TS2345）。
+   * ⚠️ **只补到"刚好够"**：源里约 60 个 `reason:` 字面量，但**绝大多数属本仓未落的路径**
+   *   （拆分/分析/参数脚本/租约…）⇒ 全搬进来＝声明一堆**没有生产者**的 kind（那才是"造一堆"）。
+   *   实测本仓生产的 reason 只有 9 种，前 8 种都已在表里 ⇒ **只缺这一个**。
+   */
+  'bad-input',
   'unknown',
 ] as const;
 export type SendFailKind = (typeof SEND_FAIL_KINDS)[number];
@@ -85,6 +96,10 @@ export const FAIL_LABEL: Record<SendFailKind, string> = {
   'rate-limit': '接口限流，稍后自动重试',
   'page-timeout': '页面超时，自动重试',
   'page-error': '页面异常，自动重试',
+  // ★ 2026-10-12 随 `bad-input` 一并补（`Record<SendFailKind, string>` 要求一一对应）——
+  //   源里**没有**这个 label（它只是守卫的 reason）⇒ 本句是展示层自产，与其余项同性质；
+  //   ⚠️ 它**不覆盖**原始 message（`materialReplace` 已带原文「更换素材：节点不是素材节点或未选择图片」）。
+  'bad-input': '入参不合法：节点或素材不符合要求',
   unknown: '发送失败',
 };
 

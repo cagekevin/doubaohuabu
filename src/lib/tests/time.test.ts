@@ -10,6 +10,7 @@ import {
   formatDateTimeMinute,
   formatLocalDate,
   formatMonthDayMinute,
+  toIsoTimestamp,
   parseSiteTimestamp,
 } from '../time';
 
@@ -157,5 +158,17 @@ describe('formatMonthDayMinute（原 `YL.jsx:460-470` 的 `te`）', () => {
     expect(formatMonthDayMinute(null)).toBe('');
     expect(formatMonthDayMinute(0)).toBe('');
     expect(formatMonthDayMinute(NaN)).toBe('');
+  });
+});
+
+describe('toIsoTimestamp（`TD-16-109` 收口的原语）', () => {
+  it('纪元毫秒 ⇒ UTC ISO 串（与 `new Date(ms).toISOString()` 逐字等价）', () => {
+    expect(toIsoTimestamp(0)).toBe('1970-01-01T00:00:00.000Z');
+    expect(toIsoTimestamp(1_760_236_800_000)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
+  it('⚠️ 它是 **UTC**（不是本地时区）—— 本地时区请用 `formatDateTimeMinute`', () => {
+    // 同一时刻：ISO 恒为 UTC 的 `00:00`，而本地格式化会带时区偏移
+    expect(toIsoTimestamp(0)).toBe('1970-01-01T00:00:00.000Z');
   });
 });

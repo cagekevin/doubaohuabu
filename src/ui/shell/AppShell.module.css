@@ -33,6 +33,9 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* ★ 2026-10-12：后台视图是**铺满本区**的绝对定位层（`BackendView.module.css` 的 `.view`），
+     故这里必须成为它的定位祖先（源 `_Component43` 是整页级容器，同理需要一个定位上下文）。 */
+  position: relative;
   position: relative;
 }
 
@@ -68,6 +71,33 @@
 }
 /* 右侧弹性占位（原 `style={{ flex: 1 }}`）*/
 .topbarSpacer { flex: 1; }
+
+/*
+ * 顶栏「豆包后台」入口（原 `.topbar-toggle` / `.topbar-icon`，`_Component42.jsx:1606`）
+ * ⚠️ `docs/mockup/assets/mockup.css` 里**没有** `.topbar-toggle` / `.topbar-icon`
+ *   （抽取时未收）⇒ 按 token 自写，不假装有真身。
+ */
+.topbarToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.topbarToggle:hover {
+  background: var(--color-surface-hover);
+}
+
+.topbarIcon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
 
 /*
  * 顶栏「项目保存路径」区（原 `.topbar-project-storage`）—— 按钮一律 `composes` 共享真源（`docs/17` 查 6）

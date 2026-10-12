@@ -47,6 +47,24 @@ export interface ImageGenFeedItem {
 }
 
 /**
+ * 无水印视频分享条目（原 `addVideoShare` shared.js:27900-27939 写入的形状）
+ *
+ * ⚠️ id 前缀 `vs` 属 `Pt` 家族（`core/rules/project.ID_PREFIX` 当前不含它 —— 见 `docs/15` §3）。
+ */
+export interface VideoShare {
+  id: string;
+  accountId: string | null;
+  accountName: string;
+  url: string | null;
+  vid: string | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  poster: string | null;
+  createdAt: number;
+}
+
+/**
  * 工程数据（原 29836-29841）
  * ★ 真实样本实测字段 = `nodes, edges, library, snap, videoShares`（docs/11 §12.1）
  */
@@ -56,7 +74,7 @@ export interface ProjectData {
   library: LibraryItem[];
   /** 吸附开关 */
   snap: boolean;
-  videoShares: unknown[];
+  videoShares: VideoShare[];
 }
 
 /** 工程（原 29828-29875 / 29741-29771 / 29909-29991） */

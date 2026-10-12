@@ -24,6 +24,7 @@ import type { StorageRead } from '@/core/ports/storage.port';
 import { PERSIST, type AppStore } from '@/state';
 import { resetStaleJobs } from '@/stable/migrations';
 import { validateNodes } from '@/core/rules/node';
+import { ensureLovartGalleries } from '@/core/rules/lovartGallery';
 import { pickInitialActiveAccount } from '@/core/rules/accountPick';
 import {
   LS_ACCOUNTS,
@@ -86,12 +87,18 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   const projects = readOrDefault(PERSIST[LS_PROJECTS].read(storage), LS_PROJECTS, [], notes, corruptKeys);
   const accounts = readOrDefault(PERSIST[LS_ACCOUNTS].read(storage), LS_ACCOUNTS, [], notes, corruptKeys);
   // ★ Lovart 画廊（原 `ET` 26637：读不到 ⇒ `{}`）
-  const lovartGalleries = readOrDefault(
-    PERSIST[LS_LOVART_GALLERIES].read(storage),
-    LS_LOVART_GALLERIES,
-    {},
-    notes,
-    corruptKeys,
+  //   ⚠️ **2026-10-12（`TD-02-3`）接线**：源 `ET` 的判据是「**是对象才收，否则 `{}`**」——
+  //     此前该判据半**无任何消费者**，而 `readOrDefault` 的 ok 分支**不做形状判定**
+  //     ⇒ 盘上若是 `"null"` / `"[1,2]"` 这类**合法 JSON 但非对象**，会漏进 store
+  //     ⇒ 在这里补上源的那道防线（`ensureLovartGalleries`；parse 半归读层，不双解析）。
+  const lovartGalleries = ensureLovartGalleries(
+    readOrDefault(
+      PERSIST[LS_LOVART_GALLERIES].read(storage),
+      LS_LOVART_GALLERIES,
+      {},
+      notes,
+      corruptKeys,
+    ),
   );
   // ★ 指纹体检历史（源 `fT` 26232：读不到 ⇒ 空数组）
   const scanHistory = readOrDefault(PERSIST[LS_SCAN_HISTORY].read(storage), LS_SCAN_HISTORY, [], notes, corruptKeys);

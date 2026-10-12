@@ -1,0 +1,323 @@
+/**
+ * 图片编辑器样式（原 `G3.jsx` 的 `.ie-*` 一族）
+ *
+ * ⚠️ **mockup 未收录这一族**（`mockup.css` 里 `.ie-*` 只命中 `.ie-stage`/`.ie-tools` 两处占位）
+ *    ⇒ 全部为**推断样式**（只用 token）—— 登记 **`TD-16-87`**（推断样式待校母体）。
+ */
+
+.overlayRoot {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--color-scrim);
+}
+
+.panel {
+  position: relative;
+  width: min(920px, 94vw);
+  height: min(720px, 92vh);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  color: var(--color-text-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.titleSub {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-half);
+}
+
+.tab {
+  padding: var(--space-half) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.tabActive {
+  border-color: var(--color-action-primary);
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+}
+
+.close {
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.groupLabel {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.seg {
+  display: flex;
+  gap: var(--space-half);
+}
+
+.segBtn {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.segActive {
+  border-color: var(--color-action-primary);
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+}
+
+.range {
+  width: 96px;
+}
+
+.rangeVal {
+  min-width: 3ch;
+  color: var(--color-text-strong);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-half);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.btn {
+  padding: var(--space-half) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-strong);
+  cursor: pointer;
+  font: inherit;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  border-color: var(--color-action-primary);
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+}
+
+.count {
+  color: var(--color-text-faint);
+}
+
+.notice {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.noticeError {
+  color: var(--color-danger);
+}
+
+.viewport {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background: var(--color-canvas-subtle);
+}
+
+.cursorBrush {
+  cursor: crosshair;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-faint);
+}
+
+.stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.canvasWrap {
+  position: relative;
+}
+
+.canvas {
+  display: block;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.facebox {
+  position: absolute;
+  border: 1px solid var(--color-action-primary);
+  cursor: move;
+}
+
+.faceboxActive {
+  border-color: var(--color-danger);
+  border-width: 2px;
+}
+
+.handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--color-text-on-brand);
+  border: 1px solid var(--color-action-primary);
+}
+
+.handleNw { top: -4px; left: -4px; cursor: nwse-resize; }
+.handleN { top: -4px; left: calc(50% - 4px); cursor: ns-resize; }
+.handleNe { top: -4px; right: -4px; cursor: nesw-resize; }
+.handleW { top: calc(50% - 4px); left: -4px; cursor: ew-resize; }
+.handleE { top: calc(50% - 4px); right: -4px; cursor: ew-resize; }
+.handleSw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.handleS { bottom: -4px; left: calc(50% - 4px); cursor: ns-resize; }
+.handleSe { bottom: -4px; right: -4px; cursor: nwse-resize; }
+
+.cropShade {
+  position: absolute;
+  background: var(--color-scrim);
+}
+
+.shadeTop { top: 0; left: 0; right: 0; }
+.shadeBottom { left: 0; right: 0; }
+.shadeLeft { left: 0; }
+.shadeRight { right: 0; }
+
+.cropbox {
+  position: absolute;
+  border: 1px solid var(--color-text-on-brand);
+  cursor: move;
+}
+
+.cropGrid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--color-text-on-brand) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-text-on-brand) 1px, transparent 1px);
+  background-size: 33.33% 33.33%;
+  opacity: 0.25;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.hint {
+  color: var(--color-text-faint);
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-half);
+}
+
+.zoomBtn {
+  min-width: 24px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-strong);
+  cursor: pointer;
+  font: inherit;
+}
+
+.zoomVal {
+  min-width: 4ch;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.zoomFit {
+  padding: 0 var(--space-2);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-1);
+}

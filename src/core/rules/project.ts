@@ -52,6 +52,8 @@ export const ID_PREFIX = {
   lovartGallery: 'lg',
   lease: 'rt',
   queueItem: 'sq',
+  /** 无水印视频分享（原 `addVideoShare` 的 `vs_` 前缀，`shared.js:27923`） */
+  videoShare: 'vs',
   // ── 节点类（原 `Pt` 的前缀）──
   text: 't',
   material: 'm',

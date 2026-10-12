@@ -36,6 +36,24 @@ export const INNER_FOLDER_NAME = '资源';
 export const PROJECT_FILE_SUFFIX = '.json';
 
 /**
+ * 项目存储的**格式标识**（原 `main.js:192` 的字面量 `'doubao-canvas-project-storage'`）
+ *
+ * ⚠️ **`@backend-contract`（2026-10-12 · `TD-13-9`）**：主进程写 manifest 时用的 `format` 字段值；
+ *   **前端 0 消费**（同 `PROJECT_STORAGE_DIRS` 的定性）⇒ 后端持有，此处是**前端侧唯一清单**
+ *   （后端 `electron/main.js` 是独立 JS、不能 import 本模块，故那边就地持值）。
+ */
+export const PROJECT_STORAGE_FORMAT = 'doubao-canvas-project-storage';
+
+/**
+ * 项目存储的**布局版本**（原 `main.js:40-41` 的 `PROJECT_STORAGE_VERSION_LEGACY = 1` / `_NEW = 2`）
+ *
+ * ⚠️ **`@backend-contract`（2026-10-12 · `TD-13-9`）**：主进程按它在 **legacy（1）** 与
+ *   **new-file（2）** 两种磁盘布局间切换；**前端 0 消费** —— `core/usecases/projectStorage`
+ *   只经端口读写，**不碰磁盘文件名/版本**（实测该文件无一处 `.json` 字面量）。
+ */
+export const PROJECT_STORAGE_VERSION = { legacy: 1, new: 2 } as const;
+
+/**
  * ★ **后台 webview 容器的 DOM 钩子类名**（原 `_Component43.jsx:3272` 的 `doubao-view-webviews`）
  *
  * ⚠️ 它是**跨层契约**：`ui/panels/BackendView` **挂**它、`adapters/site/shared/webview.ts`

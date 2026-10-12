@@ -143,3 +143,40 @@ export function makeDotGridPattern(
   st.tiles[key] = t;
   return ctx.createPattern(t, 'repeat') ?? color;
 }
+
+/**
+ * 单块遮罩的**效果分发**（原 `G3.jsx` 的 `Qe` / `shared.js` `ZD` 的绘制半）
+ *
+ * ★ **2026-10-12（`TD-09-4`）**：把"按效果分发改调 `drawMosaic`/`drawBlur`/`makeDotGridPattern`"
+ *   从 `adapters/media/facemask.ts` 的 `drawMask` 里**拆到 `lib`** —— 这样**图片编辑器**
+ *   （`ui`）也能直接用（铁律②：`ui` 不得 import `adapters`，但可以 import `lib`）。
+ *   ⚠️ **cell（格子尺寸）由调用方传入**（`core/rules/facemask.ts` 的 `maskCellSize` 算）——
+ *      `lib` 不碰 `core`（L0 不依赖 L2）。
+ * ⚠️ `effect` 只认 `'mosaic' | 'blur' | 'dots' | 'grid'`（`dots`/`grid` 走 pattern 分支）。
+ */
+export function drawMaskEffect(
+  ctx: CanvasRenderingContext2D,
+  img: DrawableSource,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  effect: 'mosaic' | 'blur' | 'dots' | 'grid',
+  cell: number,
+  opacity: number,
+  st: TmpState,
+): void {
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = opacity;
+
+  if (effect === 'mosaic') {
+    drawMosaic(ctx, img, x, y, w, h, cell, st);
+  } else if (effect === 'blur') {
+    drawBlur(ctx, img, x, y, w, h, cell);
+  } else {
+    ctx.fillStyle = makeDotGridPattern(ctx, effect, cell, st);
+    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  }
+
+  ctx.globalAlpha = prevAlpha;
+}

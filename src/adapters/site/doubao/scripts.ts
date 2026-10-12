@@ -300,3 +300,196 @@ export function buildReplyReadScript(opts: ReplyReadScriptOptions): string {
   } catch(e){ return { ok:false, reason:'exception', error: e.message || String(e) }; }
 })(${JSON.stringify(opts)})`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 无水印拉取（原 `mD` 37737-37815 / `gD` 37816-37947 的页内脚本）
+//
+// ★ **2026-10-12（`docs/14` §10 的 ⛔ 阻塞）**：这两段是**页内脚本**（在豆包后台
+//   webview 里用**同步 XHR** 调 `/samantha/aispace/` 三步链：homepage → node_info →
+//   get_download_info）。**绝不降级到带水印的 get_play_info**（源注释明写）。
+// ⚠️ 由 `core/usecases/fetchWatermarkFree.ts` 经 `BackendPagePort.runScript` 执行。
+// ⚠️ 脚本里的 `\\u6211\\u7684\\u521b\\u4f5c` = 「我的创作」（页内执行时才由 JS 引擎解析）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 按 `vid` 拉单个视频的无水印直链（原 `mD` 37737）—— 返回 `{ok,url,vid,width,height,duration,…}` */
+export const WATERMARK_FREE_BY_VID = `
+(function(vid){
+  try {
+    if (!vid) return { ok:false, error:'no_vid' };
+    var diag = { steps:[], raw:{} };
+    var BASE = '/samantha/aispace/';
+    var PARAMS = 'aid=497858&device_platform=web&samantha_web=1&use-olympus-account=1&version_code=20800&pkg_type=release_version';
+    function post(url, body, label) {
+      var x = new XMLHttpRequest();
+      x.open('POST', url + '?' + PARAMS, false);
+      x.setRequestHeader('Content-Type', 'application/json');
+      x.send(body !== undefined ? JSON.stringify(body) : '{}');
+      var respText = x.responseText;
+      diag.raw[label] = { status: x.status, body: respText.slice(0, 500) };
+      diag.steps.push(label + ':HTTP' + x.status);
+      if (x.status !== 200) throw new Error(label + '_HTTP_' + x.status);
+      var j = JSON.parse(respText);
+      if (j.code !== undefined && j.code !== 0) throw new Error(label + ':' + (j.message || 'code_' + j.code));
+      return j;
+    }
+    var home;
+    try { home = post(BASE + 'homepage', undefined, 'homepage'); } catch(e) {
+      return { ok:false, error:'homepage_failed', note:'无水印链路首页接口无返回（webview 可能不在创作空间页，或账号无水印导出权限不足）。', diag:diag };
+    }
+    var children = home.data && home.data.children;
+    var creationId = null;
+    if (children) {
+      for (var i = 0; i < children.length; i++) {
+        if (children[i].name === '\\u6211\\u7684\\u521b\\u4f5c') { creationId = children[i].id; break; }
+      }
+    }
+    if (!creationId) return { ok:false, error:'no_creation_folder', note:'未找到「我的创作」文件夹，请确认已登录', diag:diag };
+    var nodeInfo;
+    try { nodeInfo = post(BASE + 'node_info', { node_id: creationId, need_full_path:true, size:50, sort_param:{need_sort_config:true,sort_order:1,sort_type:0} }, 'node_info'); } catch(e) {
+      return { ok:false, error:e.message, note:'查找节点失败，尝试降级', diag:diag };
+    }
+    var nodeChildren = nodeInfo.data && nodeInfo.data.children;
+    var nodeId = null;
+    if (nodeChildren) {
+      for (var j = 0; j < nodeChildren.length; j++) {
+        if (String(nodeChildren[j].key) === String(vid)) { nodeId = nodeChildren[j].id; break; }
+      }
+    }
+    if (!nodeId) return { ok:false, error:'node_not_found', note:'在「我的创作」中未找到该视频（vid='+vid+'），可能视频不属于当前账号', diag:diag };
+    var dlInfo;
+    try { dlInfo = post(BASE + 'get_download_info', { requests:[{node_id:nodeId}] }, 'download'); } catch(e) {
+      return { ok:false, error:e.message, note:'获取下载信息失败', diag:diag };
+    }
+    var dlInfos = dlInfo.data && dlInfo.data.download_infos;
+    var mainUrl = dlInfos && dlInfos[0] && dlInfos[0].main_url;
+    var meta = dlInfos && dlInfos[0] ? (dlInfos[0].meta || dlInfos[0]) : null;
+    if (!mainUrl) return { ok:false, error:'no_url', note:'下载信息中无 main_url', diag:diag };
+    return {
+      ok: true,
+      url: mainUrl,
+      width: meta ? (meta.width || null) : null,
+      height: meta ? (meta.height || null) : null,
+      duration: meta ? (meta.duration || null) : null,
+      poster: null,
+      definition: meta ? (meta.definition || null) : null,
+      source: 'aispace',
+      diag: diag
+    };
+  } catch(e) { return { ok:false, error: e.message || String(e) }; }
+})
+`;
+
+/** 按分享链接（threadId）批量拉无水印直链（原 `gD` 37816）—— 返回 `{ok,videos,total,success,note}` */
+export const WATERMARK_FREE_BY_THREAD = `
+(function(threadId){
+  try {
+    if (!threadId) return { ok:false, error:'no_thread_id' };
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/thread/' + threadId + '?version_code=20800&language=zh-CN&device_platform=web&aid=497858&pc_version=2.51.7&samantha_web=1', false);
+    xhr.setRequestHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+    xhr.send();
+    if (xhr.status !== 200) return { ok:false, error:'http_'+xhr.status, note:'无法访问分享链接' };
+    var html = xhr.responseText;
+    var vids = [];
+    var seen = {};
+    var vidMatches = html.match(/v0[a-zA-Z0-9]{20,}/g);
+    if (vidMatches) {
+      for (var i = 0; i < vidMatches.length; i++) {
+        if (!seen[vidMatches[i]]) { seen[vidMatches[i]] = 1; vids.push(vidMatches[i]); }
+      }
+    }
+    var jsonBlocks = html.match(/(?:window\\\\.__INITIAL_STATE__\\\\s*=|window\\\\.__NEXT_DATA__\\\\s*=|id="__NEXT_DATA__"[^>]*>)([\\\\s\\\\S]*?)(?:<\\\\/script>|;\\\\s*$)/gi);
+    if (jsonBlocks && !vids.length) {
+      for (var j = 0; j < jsonBlocks.length; j++) {
+        var block = jsonBlocks[j];
+        var jsonStr = block.replace(/^[^=]*=/, '').replace(/;\\\\s*$/, '').trim();
+        if (jsonStr.charAt(0) !== '{' && jsonStr.charAt(0) !== '<') continue;
+        if (jsonStr.charAt(0) === '<') {
+          var inner = jsonStr.match(/>([\\\\s\\\\S]*)<\\\\/script>/);
+          if (inner) jsonStr = inner[1];
+        }
+        try {
+          var data = JSON.parse(jsonStr);
+          var str = JSON.stringify(data);
+          var embeddedVids = str.match(/"video_id"?\\\\s*:\\\\s*"([^"]+)"/g);
+          if (embeddedVids) {
+            for (var k = 0; k < embeddedVids.length; k++) {
+              var ev = embeddedVids[k].match(/"([^"]+)"$/);
+              if (ev && ev[1] && /^v0/.test(ev[1]) && !seen[ev[1]]) {
+                seen[ev[1]] = 1; vids.push(ev[1]);
+              }
+            }
+          }
+          var embedV0 = str.match(/v0[a-zA-Z0-9]{20,}/g);
+          if (embedV0) {
+            for (var m = 0; m < embedV0.length; m++) {
+              if (!seen[embedV0[m]]) { seen[embedV0[m]] = 1; vids.push(embedV0[m]); }
+            }
+          }
+        } catch(ignoredJson) {}
+      }
+    }
+    if (!vids.length) {
+      return { ok:false, error:'no_vid_found', note:'未在分享页面中找到视频ID，请确认链接有效且包含视频' };
+    }
+    var BASE2 = '/samantha/aispace/';
+    var PARAMS2 = 'aid=497858&device_platform=web&samantha_web=1&use-olympus-account=1&version_code=20800&pkg_type=release_version';
+    function post2(url, body) {
+      var x = new XMLHttpRequest();
+      x.open('POST', url + '?' + PARAMS2, false);
+      x.setRequestHeader('Content-Type', 'application/json');
+      x.send(body !== undefined ? JSON.stringify(body) : '{}');
+      if (x.status !== 200) throw new Error('HTTP_' + x.status);
+      var j = JSON.parse(x.responseText);
+      if (j.code !== undefined && j.code !== 0) throw new Error(j.message || 'api_err_' + j.code);
+      return j;
+    }
+    var creationId = null;
+    try {
+      var homeData = post2(BASE2 + 'homepage');
+      var hc = homeData.data && homeData.data.children;
+      if (hc) { for (var ci = 0; ci < hc.length; ci++) { if (hc[ci].name === '\\u6211\\u7684\\u521b\\u4f5c') { creationId = hc[ci].id; break; } } }
+    } catch(e) { }
+    function fetchOneVid(vid) {
+      var cId = creationId;
+      try {
+        if (!cId) {
+          var h = post2(BASE2 + 'homepage');
+          var ch = h.data && h.data.children;
+          if (ch) { for (var hj = 0; hj < ch.length; hj++) { if (ch[hj].name === '\\u6211\\u7684\\u521b\\u4f5c') { cId = ch[hj].id; break; } } }
+        }
+        if (!cId) return { vid:vid, url:null, error:'no_creation_folder' };
+        var nInfo = post2(BASE2 + 'node_info', { node_id:cId, need_full_path:true, size:50, sort_param:{need_sort_config:true,sort_order:1,sort_type:0} });
+        var nc = nInfo.data && nInfo.data.children;
+        var nid = null;
+        if (nc) { for (var ni=0;ni<nc.length;ni++) { if(String(nc[ni].key)===String(vid)){nid=nc[ni].id;break;} } }
+        if (!nid) return { vid:vid, url:null, error:'vid_not_in_creation' };
+        var dl = post2(BASE2 + 'get_download_info', { requests:[{node_id:nid}] });
+        var di = dl.data && dl.data.download_infos;
+        var mu = di && di[0] && di[0].main_url;
+        if (mu) {
+          var dm = di && di[0] ? (di[0].meta||di[0]) : null;
+          return { vid:vid, url:mu, width:dm?dm.width:null, height:dm?dm.height:null, duration:dm?dm.duration:null, poster:null, source:'aispace' };
+        }
+        return { vid:vid, url:null, error:'no_download_url' };
+      } catch(ae) {
+        return { vid:vid, url:null, error: ae.message || 'aispace_failed' };
+      }
+    }
+    var results = [];
+    for (var v = 0; v < vids.length; v++) {
+      results.push(fetchOneVid(vids[v]));
+    }
+    var successResults = results.filter(function(r){ return r.url; });
+    var failedResults   = results.filter(function(r){ return !r.url; });
+    return {
+      ok: successResults.length > 0,
+      videos: results,
+      total: results.length,
+      success: successResults.length,
+      note: '共找到 ' + results.length + ' 个视频，成功获取 ' + successResults.length + ' 个无水印链接' +
+            (failedResults.length ? '（' + failedResults.length + ' 个未获取到无水印链接）' : '')
+    };
+  } catch(e) { return { ok:false, error: e.message || String(e) }; }
+})
+`;

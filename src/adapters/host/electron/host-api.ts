@@ -31,13 +31,38 @@ export async function guard<T>(fn: (api: HostApi) => Promise<T> | T): Promise<Re
   }
 }
 
+/**
+ * 载荷守卫（`TD-04-10` 母体的收口点）—— **入参已是"判定成功"的那个对象**
+ *
+ * ⚠️ **为什么需要它**：此前 `normalize` / `checkOk` 的末尾都是 `ok(raw as T)` ——
+ *   即把 `unknown` **谎报**成调用方声明的任意形状。后端字段改名/漂移 ⇒ 前端读到 `undefined`
+ *   **静默**得到错数据（已发生症状 ≥7 笔：`{size}` vs `{bytes}` 恒 0 · `{code}` vs
+ *   `{machineCode}` 恒空串 · `ApiJobLite.id` vs `jobId` 订阅失效 …）。
+ * ⇒ 现在调用方可传一个守卫；**不通过 ⇒ 如实 `err`**（文案点名缺哪个字段），不再 `as T` 蒙过去。
+ *
+ * ⚠️ **分工不变（别混用）**：`normalize` 是 fail-open 通道、`checkOk` 是 fail-closed 通道，
+ *   守卫只是给两者**各加一层业务字段校验**，不改变它们各自的 `ok` 判定语义。
+ */
+export type PayloadGuard = (payload: Record<string, unknown>) => boolean;
+
+/** `normalize` 的可选参数：`guard` 业务字段守卫 · `field` 违约文案里点名的字段 */
+export interface BoundaryOpts {
+  guard?: PayloadGuard;
+  /** 违约文案点名的字段（默认 `payload`） */
+  field?: string;
+}
+
 /** 把宿主返回的 `{ok:false,error}` 形态也归一成 `Result` */
-export function normalize<T>(raw: unknown): Result<T> {
+export function normalize<T>(raw: unknown, opts: BoundaryOpts = {}): Result<T> {
   if (raw && typeof raw === 'object') {
     const r = raw as { ok?: unknown; error?: unknown };
     if (r.ok === false) {
       return err('unknown', typeof r.error === 'string' ? r.error : JSON.stringify(r.error ?? ''));
     }
+  }
+  // ★ `TD-04-10`：过了 `ok` 判定还要过**业务字段**守卫（缺字段 ⇒ 如实报错，不 `as T`）
+  if (opts.guard && !(raw && typeof raw === 'object' && opts.guard(raw as Record<string, unknown>))) {
+    return err('unknown', COMMON_TEXT.boundaryViolation(opts.field ?? 'payload'));
   }
   return ok(raw as T);
 }
@@ -62,13 +87,20 @@ export function checkOk<T = Record<string, unknown>>(
   {
     reason = 'unknown',
     fallback = COMMON_TEXT.unknownReason,
-  }: { reason?: SendFailKind; fallback?: string } = {},
+    guard,
+    field,
+  }: { reason?: SendFailKind; fallback?: string; guard?: PayloadGuard; field?: string } = {},
 ): Result<T> {
   if (!raw || typeof raw !== 'object') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
   const v = raw as { ok?: unknown; error?: unknown };
   if (typeof v.ok !== 'boolean') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
   if (v.ok !== true) {
     return err(reason, typeof v.error === 'string' ? v.error : fallback);
+  }
+  // ★ `TD-04-10`：`ok:true` 之后再过一层**业务字段**守卫（后端把 `machineCode` 改名成 `code`
+  //   这类漂移，在此**当场报错**，而不是让调用方 `typeof … === 'string' ? … : ''` 静默兜成空值）
+  if (guard && !guard(raw as Record<string, unknown>)) {
+    return err(reason, COMMON_TEXT.boundaryViolation(field ?? 'payload'));
   }
   return ok(raw as T);
 }

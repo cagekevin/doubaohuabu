@@ -54,7 +54,7 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
 
   return (
     <NodeShell
-      title="账号"
+      title={ACCOUNT_NODE_TEXT.title}
       meta={account?.type ?? '—'}
       selected={selected}
     >

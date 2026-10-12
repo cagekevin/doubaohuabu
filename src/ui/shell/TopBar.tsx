@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useHostOps, useProjectOps, useStore } from '@/state';
-import { PROJECT_STORAGE_TEXT, PROJECT_TEXT } from '@/constants/text';
+import { BACKEND_VIEW_TEXT, PROJECT_STORAGE_TEXT, PROJECT_TEXT } from '@/constants/text';
 import { formatStorageSize } from '@/core/rules/storageSize';
 import { toMessage } from '@/core/model/result';
 import type { StorageUsage } from '@/core/ports';
@@ -23,7 +23,16 @@ import styles from './AppShell.module.css';
 /** 占用统计的轮询间隔（原 `_Component42.jsx:279` 的 `30000`） */
 const STORAGE_POLL_MS = 30000;
 
-export function TopBar() {
+export interface TopBarProps {
+  /**
+   * 「豆包后台」入口被点（原 `_Component42.jsx:1606` 的 `onClick={tt}`）
+   * ⚠️ 由**宿主**（`AppShell`）实现：源 `tt` 要"先补齐当前账号再打开视图"，
+   *   而显隐是宿主的本地态 ⇒ 回调留在宿主（源也是这样把 `onOpenDoubaoView` 传进画布的）。
+   */
+  onOpenDoubaoView: () => void;
+}
+
+export function TopBar({ onOpenDoubaoView }: TopBarProps) {
   const project = useStore((s) => s.projects.find((p) => p.id === s.activeId) ?? null);
   const renameProject = useStore((s) => s.renameProject);
   const pushToast = useStore((s) => s.pushToast);
@@ -156,6 +165,18 @@ export function TopBar() {
 
       <button type="button" onClick={() => void onExport()}>
         {PROJECT_TEXT.export}
+      </button>
+
+      {/* ★ **「豆包后台」入口**（原 `_Component42.jsx:1606`，逐字：`<span className="topbar-icon">▦</span>豆包后台`）
+          —— 它是**后台视图的唯一打开入口**；其 `onClick`（源 `tt`）＝ 补齐当前账号 ＋ 打开视图。 */}
+      <button
+        type="button"
+        className={styles.topbarToggle}
+        onClick={onOpenDoubaoView}
+        title={BACKEND_VIEW_TEXT.entryTitle}
+      >
+        <span className={styles.topbarIcon} aria-hidden="true">▦</span>
+        {BACKEND_VIEW_TEXT.entry}
       </button>
     </div>
   );

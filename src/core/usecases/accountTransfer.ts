@@ -12,6 +12,7 @@
  *    ⇒ 重写改为**记账上报**（`warnings`），并**不因此中断**整批导入（与源版一致）。
  */
 
+import { toIsoTimestamp } from '@/lib/time';
 import type { AccountPort } from '@/core/ports/host.port';
 import type { ClockPort } from '@/core/ports/clock.port';
 import type { Account } from '@/stable/model/account';
@@ -73,7 +74,8 @@ export async function exportAccounts(
     entries.push(toExportedAccountEntry(account, res.value.cookies));
   }
 
-  const exportedAtIso = new Date(deps.clock.now()).toISOString();
+  // ★ 2026-10-12（`TD-16-109`）：格式化收口到 `lib/time.toIsoTimestamp`（原则 4 不变——注入的仍是 now）
+  const exportedAtIso = toIsoTimestamp(deps.clock.now());
   const content = buildAccountsExportFile(entries, exportedAtIso);
   const saved = await deps.account.saveAccountsFile(content);
   if (!saved.ok) return saved;

@@ -91,7 +91,19 @@ export const NODE_CREATE_SIZES: Readonly<Partial<Record<NodeType, { w: number; h
   download: { w: 280, h: 200 },
 };
 
-/** 取创建尺寸（缺项 ⇒ 源 `lt` 的兜底 `200×180`） */
+/**
+ * 取创建尺寸（缺项 ⇒ 兜底 `200×180`）
+ *
+ * ⚠️ **`TD-02-8` 复核结论（2026-10-12 · 回源定案）：这个 `200×180` 与下面两处
+ *   **不是同一条规则**，**禁止合并**成共享常量** ——
+ *   | 处 | 源 | 兜底形态 | 角色 |
+ *   |---|---|---|---|
+ *   | **本函数** | `lt` 的参数侧（`Oe.w/Oe.h`，`_Component42.jsx:559-560`） | 字面量 | **新建节点**自身的尺寸 |
+ *   | `core/rules/graph.ts:116-119` | `lt` 内部（`:552-555`） | `width \|\| 200`（**二级**，不查 `measured`） | **已有节点**的尺寸 |
+ *   | `core/rules/group.ts:17` | `s(x)`（`shared.js:31508-31513`） | `width ?? measured.width ?? 200`（**三级**） | **组内盒** |
+ *   ⇒ 三者分属**两个不同源函数**、**三种角色**、**两种不同层级**的兜底 —— 合并即**凭空造一条耦合**
+ *     （日后源改一处，另两处会被静默带偏）。**它们只是取值巧合相同。**
+ */
 export function nodeCreateSize(type: string): { w: number; h: number } {
   return NODE_CREATE_SIZES[type as NodeType] ?? { w: 200, h: 180 };
 }

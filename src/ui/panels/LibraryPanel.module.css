@@ -62,6 +62,27 @@
   object-fit: cover;
 }
 
+/* ★ 条目名（原 `RT.jsx:301` 的 `.lib-name`，`title` = 双击重命名） */
+.name {
+  padding: var(--space-half) var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ★ 改名输入框（原 `RT.jsx:304` 的 `.lib-name-input`）—— 形态同 `.name`，只是可编辑 */
+.renameInput {
+  width: 100%;
+  padding: var(--space-half) var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-strong);
+  background: var(--field-bg, var(--color-surface-raised));
+  border: 1px solid var(--field-border-focus);
+  border-radius: var(--radius-sm);
+}
+
 .actions {
   display: flex;
   justify-content: space-between;

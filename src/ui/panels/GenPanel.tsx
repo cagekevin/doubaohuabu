@@ -33,7 +33,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore as useXyStore } from '@xyflow/react';
 import { useGen, useStore } from '@/state';
-import { AUTO_MATCH_TEXT, GEN_PANEL_TEXT, NODE_EDIT_TEXT, REF_TEXT, PROJECT_TEXT } from '@/constants/text';
+import {
+  AUTO_MATCH_TEXT,
+  COMMON_TEXT,
+  GEN_PANEL_TEXT,
+  NODE_EDIT_TEXT,
+  REF_TEXT,
+  PROJECT_TEXT,
+} from '@/constants/text';
 import { autoMatchText } from '@/core/rules/autoMatch';
 import { resolveApiProviderId } from '@/core/rules/apiProvider';
 import { planGenPanelAnchor } from '@/core/rules/panelAnchor';
@@ -581,7 +588,7 @@ export function GenPanel() {
             value={videoNode.data.model ?? ''}
             onChange={(e) => patchNodeData(nodeId, { model: e.target.value })}
           >
-            <option value="">（默认）</option>
+            <option value="">{GEN_PANEL_TEXT.modelDefault}</option>
             {VIDEO_MODELS.map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -592,7 +599,7 @@ export function GenPanel() {
       )}
 
       <button type="button" className={styles.run} onClick={() => void run()} disabled={busy}>
-        {busy ? '生成中…' : hasResult ? PROJECT_TEXT.regenerating : PROJECT_TEXT.generate}
+        {busy ? COMMON_TEXT.generating : hasResult ? PROJECT_TEXT.regenerating : PROJECT_TEXT.generate}
       </button>
 
       {/*
