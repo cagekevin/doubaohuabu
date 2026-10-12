@@ -1,7 +1,7 @@
 /**
  * 画布宿主（原 `_Component39` / `_Component42` 体系的画布部分）
  *
- * 依据：docs/03-人类版.md §1
+ * 依据：docs/过程.md §1
  *   - `<ReactFlow nodeTypes=dO edgeTypes=fO>` + Background(Lines/20/1) + Controls(showInteractive=false) + MiniMap
  *   - MiniMap 配色：material `#a5b4fc` / account `#34d399` / 其它 `#fcd34d`（走 CSS 变量）
  *   - 网格 `GRID_SIZE=20`、透明度 `GRID_OPACITY=0.4`、拖拽 MIME `DRAG_MIME_MATERIAL`
@@ -42,7 +42,7 @@ import { log } from '@/lib/log';
 import { fitMaterialSize } from '@/core/rules/materialGrid';
 import { readImageFile, readTextFile, stripExtension } from '@/lib/readDroppedFile';
 import { formatClockTime } from '@/lib/time';
-import { DRAG_MIME_MATERIAL, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
+import { DRAG_MIME_MATERIAL, EDGE_CLICK_DEBOUNCE_MS, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
 import { CANVAS_TEXT } from '@/constants/text';
 import { CreatePanel, type CreatePanelState } from './CreatePanel';
 import { GroupConnectHandle } from './GroupConnectHandle';
@@ -59,16 +59,10 @@ import shared from '@/ui/common/shared.module.css';
 const edgeTypes = { interactive: InteractiveEdge };
 
 /**
- * ★ 图片编辑器（原 `G3.jsx`，1087 行）—— **动态导入（`lazy`）**（`docs/16` §2.2 定稿，判据 **M3**）：
+ * ★ 图片编辑器（原 `G3.jsx`，1087 行）—— **动态导入（`lazy`）**（`docs/过程.md` §2.2 定稿，判据 **M3**）：
  *   重组件拆 chunk、不进主 bundle，只在用户点「编辑图片」时才拉。
  */
 const ImageEditor = lazy(() => import('@/ui/panels/ImageEditor').then((m) => ({ default: m.ImageEditor })));
-
-/**
- * 边点击弹「建节点」浮层的防抖（ms，原 `_Component42.jsx:574` 的 `setTimeout(..., 220)`）
- * ⚠️ 拖画布 / 框选也会触发 `onEdgeClick`，不防抖会误弹
- */
-const EDGE_CLICK_DEBOUNCE_MS = 220;
 
 /** MiniMap 节点配色（CSS 变量，见 tokens.css） */
 const MINIMAP_COLOR: Record<string, string> = {
@@ -154,7 +148,7 @@ function Inner() {
       /**
        * ★★ **删除必须走 `removeNodes`，不能交给 `applyNodeChanges`**
        *
-       * 依据 `docs/14` §2 的 ★ 缺口（原实现里 `removeNodes` **零调用**）：
+       * 依据 `docs/过程.md` §2 的 ★ 缺口（原实现里 `removeNodes` **零调用**）：
        *   `applyNodeChanges` 只把节点从数组里丢掉、**完全不动 `edges`**
        *   ⇒ ① 留下**悬空边**；且它**不 `commit` 快照** ⇒ ② 删除**不可撤销**。
        * `removeNodes` 三件事都做：**commit 快照** + **清相关边** + **清幸存节点的 `referenceOrder` 引用**。
@@ -643,7 +637,7 @@ function Inner() {
         const item = library.find((it) => it.id === libId);
         if (!item) {
           // ★ 拖了不存在的素材 —— 明确上报（原则 6），不静默吞
-          pushBackendError('unknown', `拖入的素材不在资源库中（libId=${libId}）`);
+          pushBackendError('unknown', CANVAS_TEXT.materialMissing(libId));
           return;
         }
         const res = ensureMaterialNode(libId, {
@@ -1008,7 +1002,7 @@ function Inner() {
         />
       )}
 
-      {/* ★ 图片编辑器（原 `G3.jsx`，`_Component42.jsx:1727-1744`）—— lazy 动态导入（`docs/16` M3） */}
+      {/* ★ 图片编辑器（原 `G3.jsx`，`_Component42.jsx:1727-1744`）—— lazy 动态导入（`docs/过程.md` M3） */}
       {imageEditor && (
         <Suspense fallback={null}>
           <ImageEditor

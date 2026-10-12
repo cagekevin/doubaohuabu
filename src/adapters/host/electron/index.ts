@@ -11,6 +11,8 @@
  */
 
 import type {
+  DetectedVideo,
+  DolaMediaEvent,
   FilePort,
   HostPort,
   LicensePort,
@@ -96,7 +98,8 @@ export function createElectronHost(): HostPort {
 
   return {
     // ★ 真实宿主平台（来自 preload 的 `process.platform`，**不读 navigator**）
-    os: (api?.hostOS as HostPort['os']) ?? 'windows',
+    //   ⚠️ **如实传宿主报的值**，**不编默认 OS** —— 兜底归 `host/shared/env.readHostOs`（母体 M5 · TD-16-10）
+    os: api?.hostOS,
     file: createFile(),
     clipboard,
     project: createElectronProjectPort(),
@@ -139,6 +142,60 @@ export function createElectronHost(): HostPort {
         });
         if (!c.ok) return c;
         return ok({ items: Array.isArray(c.value.items) ? c.value.items : [], href: c.value.href });
+      },
+      detectVideos: async (webContentsId: number, seenKeys: readonly string[]) => {
+        const r = await guard((a) => a.detectVideos(webContentsId, seenKeys));
+        if (!r.ok) return r;
+        // ★ 后端 `detect-videos` handler **每条 return 都带 `ok`**（`main.js:2397`）⇒ fail-closed（TD-04-5）
+        const c = checkOk<{ videos?: unknown[] }>(r.value, {
+          reason: 'page-error',
+          fallback: '视频检测返回失败',
+        });
+        if (!c.ok) return c;
+        const videos = Array.isArray(c.value.videos) ? (c.value.videos as DetectedVideo[]) : [];
+        return ok({ videos });
+      },
+      // ★ 订阅型（与 `api.ts` 的 `onJobEvent` 同法）—— 返回取消函数
+      onDolaMedia: (cb) => {
+        const a = getHostApi();
+        if (!a) return () => undefined;
+        const off = a.onDolaMedia((payload) => cb(payload as DolaMediaEvent));
+        return typeof off === 'function' ? off : () => undefined;
+      },
+      attachDolaDebugger: async (webContentsId: number) => {
+        const r = await guard((a) => a.attachDolaDebugger(webContentsId));
+        if (!r.ok) return r;
+        // ★ 后端 `attach-dola-debugger` 恒返 `{ok, error?}`（`main.js:2568`）⇒ fail-closed（TD-04-5）
+        const c = checkOk(r.value, {
+          reason: 'page-error',
+          fallback: 'attach-dola-debugger 失败',
+        });
+        if (!c.ok) return c;
+        return ok(undefined);
+      },
+      // ★ Dola 30s 主世界钩子注入（原 `_Component25` 的 `injectDolaDurationMain`）
+      injectDolaDurationMain: async (webContentsId: number) => {
+        const r = await guard((a) => a.injectDolaDurationMain(webContentsId));
+        if (!r.ok) return r;
+        // ★ 后端 `inject-dola-duration-main` 返 `{ok, error?}`（`main.js:2508/2544`）⇒ fail-closed
+        const c = checkOk(r.value, {
+          reason: 'page-error',
+          fallback: 'inject-dola-duration-main 失败',
+        });
+        if (!c.ok) return c;
+        return ok(undefined);
+      },
+      // ★ Dola 30s 诊断（原 `ct`）—— 后端落盘到 `~/dola-duration-debug.log`
+      logDolaDuration: async (message: string) => {
+        const r = await guard((a) => a.dolaDurationDiag(message));
+        if (!r.ok) return r;
+        // ★ 后端 `dola-duration-diag` 恒返 `{ok, path|error}`（`main.js:2558-2559`）⇒ fail-closed
+        const c = checkOk(r.value, {
+          reason: 'page-error',
+          fallback: 'dola-duration-diag 失败',
+        });
+        if (!c.ok) return c;
+        return ok(undefined);
       },
       showInFolder: async (ref: string) => {
         const r = await guard((a) => a.showInFolder(ref));

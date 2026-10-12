@@ -16,6 +16,7 @@ import { createMockHost } from '@/adapters/host/mock';
 import { createElectronHost } from '@/adapters/host/electron';
 import { createSiteRegistry } from '@/adapters/site/registry';
 import { createBackendPage } from '@/adapters/site/shared/backendPage';
+import { activateProjectStorage } from '@/core/usecases/projectStorage';
 import { hydrate, type HydrateResult } from './hydrate';
 import { createGenController, type GenController } from '@/state/generate';
 import { createAnalyzeController, type AnalyzeController } from '@/state/analyze';
@@ -31,7 +32,10 @@ import { createProjectOps, type ProjectOpsController } from '@/state/projectOps'
 import { createApiOps, type ApiOpsController } from '@/state/apiOps';
 import { createPullResultController, type PullResultController } from '@/state/pullResult';
 import { createSendWatchController } from '@/state/sendWatch';
-import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/lib/hostEnv';
+import { createPostSendDetect } from '@/state/postSendDetect';
+import { createDolaMedia } from '@/state/dolaMedia';
+import { createAutoConfirm } from '@/state/autoConfirm';
+import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/adapters/host/shared/env';
 import { filterWinScreens, filterWinWebgl } from '@/core/rules/fingerprintGenerator';
 import { createSubscriptions, type Subscriptions } from '@/state/subscriptions';
 
@@ -49,11 +53,13 @@ export function hasElectronHost(): boolean {
 export function createPorts(): Ports {
   // ⚠️ 站点适配器**注入 HostPort**（不得直调 window.api —— TD-05-1）
   const host = hasElectronHost() ? createElectronHost() : createMockHost();
+  // ⚠️ `storage` 必须先建：站点适配器也要它（豆包 / Dola 的**跨会话去重表** —— 原 `TR`/`PR`）
+  const storage = createLocalStorage();
   return {
     host,
     // ★ 站点注册表（doubao / dola / lovart）；未实现的站点**缺项** ⇒ 调用方报明确错误
-    sites: createSiteRegistry(host),
-    storage: createLocalStorage(),
+    sites: createSiteRegistry(host, storage),
+    storage,
     clock: createSystemClock(),
     // ★ 后台页（账号 `<webview>` 的租约 / 就绪 / 命令）—— 原版是组件间注册表，本工程提成端口
     backendPage: createBackendPage(),
@@ -105,7 +111,7 @@ export function createContainer(): Container {
   const { host, storage, clock } = ports;
   // ★ 账号新增所需的环境（**getter**：源版就是调用时才读 `Uc()`/`M$()`/`$$()`）
   //   ‣ `os` 取 `host.os`（preload 的 `process.platform`，**不读 navigator**）
-  //   ‣ 其余三项是**渲染层自己的**读数（窗口尺寸 / 真实 GPU）⇒ 归 `lib/hostEnv`
+  //   ‣ 其余三项是**渲染层自己的**读数（UA / 窗口尺寸 / 真实 GPU）⇒ 归 `adapters/host/shared/env`
   const roster = () => {
     const vp = readRealViewport();
     return {
@@ -116,7 +122,35 @@ export function createContainer(): Container {
     };
   };
 
-  const store = createAppStore(ports, { roster });
+  const store = createAppStore(ports, {
+    roster,
+    /**
+     * ★ **操作日志**（原 `commit` 尾部的 `window.api.logProjectOperation`，`shared.js:26912-26928`）
+     *
+     * ⚠️ 源的守卫与取数都在 `commit` 里现读 store（`storagePath` 非空才记 · `projectId = activeId`）
+     *   —— 本仓把这两件放在这里，`canvas` slice 不必为它扩 `get()` 的跨片类型。
+     * ⚠️ 原则 6：源那里是 `try{}catch{}` **静默** ⇒ 本仓失败**上报**（错误横幅）。
+     */
+    logOperation: (e) => {
+      const s = store.useStore.getState();
+      const active = s.projects.find((p) => p.id === s.activeId);
+      if (!active?.storagePath) return;
+      const r = host.project.logOperation({ ...e, projectId: s.activeId ?? '' });
+      if (!r.ok) s.pushBackendError('unknown', r.message);
+    },
+    /**
+     * ★ **激活工程存储目录**（原 `window.api.activateProjectStorage`，**`sendSync`**）
+     *
+     * ⚠️ 源在 **5 处**调：createProject（29843）· openProject（29887）· renameProject（30077）
+     *   ＋ `deleteProject`（30128）/ `showStartup`（30148）那两处传 `{ storagePath: '' }`（**清空**）。
+     */
+    activateStorage: (project) =>
+      project
+        ? activateProjectStorage({ project: ports.host.project }, project, store.useStore.getState().projects)
+        : ports.host.project.activateStorage({ projectId: '', projectName: '', storagePath: '' }),
+    /** 立即落盘（源 `showStartup` 30146 的 `flushPersist()`）—— `persist` 在下面创建（闭包延迟取） */
+    flushPersist: () => persist.flush(),
+  });
 
   const persist = createPersistController({
     clock,
@@ -128,14 +162,13 @@ export function createContainer(): Container {
       },
       saveBackup: (json) => host.project.saveBackup(json),
       saveSnapshot: (p) => host.project.saveSnapshot(p),
-      logOperation: (e) => host.project.logOperation(e),
     },
     readState: () => {
       const s = store.useStore.getState();
       return {
         projects: s.projects,
         activeId: s.activeId,
-        // ★ 账号族（`docs/14` §2 ⭐：原实现只读不写 ⇒ 账号增删改刷新即丢）
+        // ★ 账号族（`docs/过程.md` §2 ⭐：原实现只读不写 ⇒ 账号增删改刷新即丢）
         accounts: s.accounts,
         groups: s.groups,
         proxyPool: s.proxyPool,
@@ -166,7 +199,7 @@ export function createContainer(): Container {
     s.edges,
     s.library,
     s.videoShares,
-    // ★ 账号族：变了也要安排落盘（否则账号增删改不落盘 —— `docs/14` §2 ⭐）
+    // ★ 账号族：变了也要安排落盘（否则账号增删改不落盘 —— `docs/过程.md` §2 ⭐）
     s.accounts,
     s.groups,
     s.proxyPool,
@@ -186,13 +219,20 @@ export function createContainer(): Container {
     const cur = pick(s);
     if (cur.some((v, i) => v !== last[i])) {
       last = cur;
-      persist.schedule('auto');
+      persist.schedule();
     }
   });
 
-  // ★ 宿主事件订阅（唯一写入点）：`onApiJobEvent` → `settings.upsertApiJob`
-  //   —— 原实现适配器早就暴露了订阅，但 state 侧无人订阅 ⇒ API 任务结果回不来（docs/14 §4）
-  const subscriptions = createSubscriptions(store, ports);
+  /**
+   * ★ 「CDP 媒体推送」控制器（原 `onDolaMedia` 回调，`_Component43.jsx:130-345`）
+   *
+   * ⚠️ **先于订阅创建**（订阅要转发给它）＋ **单例**（自己持有待归属队列与已见集合）。
+   */
+  const dolaMedia = createDolaMedia(store, ports);
+
+  // ★ 宿主事件订阅（唯一写入点）：`onApiJobEvent` → `settings.upsertApiJob`；`onDolaMedia` → `dolaMedia`
+  //   —— 原实现适配器早就暴露了订阅，但 state 侧无人订阅 ⇒ API 任务结果回不来（docs/过程.md §4）
+  const subscriptions = createSubscriptions(store, ports, { dolaMedia });
 
   // ★ 视频本地化（`core/usecases/localizeVideos` 的**唯一**接线处 —— 此前 0 调用方：
   //   链 18「视频必须落盘」整条没接，`MediaPort.saveVideoFromUrl` 也一直无人消费）
@@ -204,6 +244,18 @@ export function createContainer(): Container {
    *   **不反向依赖 `gen`** ⇒ 无环。
    */
   const sendWatch = createSendWatchController(store, ports);
+  /**
+   * ★ 「发送后检测」控制器（原 `it` / `postSendDetect`，`_Component43.jsx:2943-2955`）
+   *
+   * ⚠️ **单例**（自己持有「哪个账号在跑 / 待归属任务队列」）⇒ 在此建一次、注入 `accountOps`。
+   */
+  const postSendDetect = createPostSendDetect(store, ports);
+  /**
+   * ★ **「生成确认」控制器**（原 `kt` / `autoConfirm`，`_Component43.jsx:1738-2052`）
+   *
+   * ⚠️ **单例**（自己持有 running / onceKey 两张表 + 独立租约）⇒ 在此建一次、注入 `accountOps`。
+   */
+  const autoConfirm = createAutoConfirm(store, ports);
 
   return {
     store,
@@ -217,6 +269,9 @@ export function createContainer(): Container {
       // ⚠️ 同法：宿主平台在组合根读（`host.os` 来自 preload 的 `process.platform`）
       //   —— `state` 层**不读 `navigator`**（TD-16-54）；供「指纹诊断按钮只在 Windows 显示」
       os: readHostOs(host.os),
+      postSendDetect,
+      dolaMedia,
+      autoConfirm,
     }),
     batchSend: createBatchSendController(store, ports),
     capture: createCaptureController(store, ports, {
@@ -227,10 +282,10 @@ export function createContainer(): Container {
     hostOps: createHostOps(ports),
     projectOps: createProjectOps(store, ports, {
       // ⚠️ 时序职责走注入：选保存路径前必须先把当前画布落盘（源版 `flushPersist()`）
-      flush: (reason) => persist.flush(reason),
+      flush: () => persist.flush(),
     }),
     apiOps: createApiOps(store, ports),
-    pullResult: createPullResultController(store, ports),
+    pullResult: createPullResultController(store, ports, { postSendDetect }),
     localizeOps,
     /**
      * ★ 启动后 **5s** 回填视频直链（源 `_Component48.jsx:92-99`：挂载 5s 后 `backfillLocalVideos()`）

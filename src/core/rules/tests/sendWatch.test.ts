@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   QUOTA_EXHAUSTED_CODE,
   countdownOf,
+  formatCountdown,
   isSendEffective,
   pickReplyNotice,
   quotaExhaustedNotice,
@@ -156,6 +157,33 @@ describe('countdownOf（原 `CL.jsx:63-64`）', () => {
   });
 });
 
+describe('formatCountdown（原 `NL` `shared.js:40141`）', () => {
+  it('★ 秒数**向上取整**（源 `Math.ceil(ms/1000)`）—— 还剩 1ms 也显示 `00:01`', () => {
+    expect(formatCountdown(1)).toBe('00:01');
+    expect(formatCountdown(500)).toBe('00:01');
+    expect(formatCountdown(1000)).toBe('00:01');
+    expect(formatCountdown(1001)).toBe('00:02');
+  });
+
+  it('不足 1 小时 ⇒ `mm:ss`（分秒都补零两位）', () => {
+    expect(formatCountdown(0)).toBe('00:00');
+    expect(formatCountdown(59_000)).toBe('00:59');
+    expect(formatCountdown(60_000)).toBe('01:00');
+    expect(formatCountdown(3_599_000)).toBe('59:59');
+  });
+
+  it('★ ≥ 1 小时 ⇒ `h:mm:ss`（小时**不补零**，分秒补零）', () => {
+    expect(formatCountdown(3_600_000)).toBe('1:00:00');
+    expect(formatCountdown(3_661_000)).toBe('1:01:01');
+    expect(formatCountdown(36_000_000)).toBe('10:00:00');
+  });
+
+  it('负数 ⇒ 钳到 0（源 `Math.max(0, …)`）', () => {
+    expect(formatCountdown(-1)).toBe('00:00');
+    expect(formatCountdown(-100_000)).toBe('00:00');
+  });
+});
+
 describe('seedWatchState（原 2366-2372）', () => {
   it('★ `ackBaseline` 取「站点读数」与「上一轮留下的计数」的**较大者**', () => {
     expect(seedWatchState({ ack: { count: 3, text: '' } }, 7).ackBaseline).toBe(7);
@@ -235,12 +263,30 @@ describe('reduceWatchRound（原 2650-2672 的判断段）', () => {
     expect(run(base(), {}).effects.ackCount).toBeNull();
   });
 
-  it('★ `stop` 恒为 `false`（换号重发未落 —— 源那两支的 `return` 是"因为要换号"）', () => {
+  it('★ 额度预警命中 ⇒ 当轮返回换号请求（源 `Ne` 尾部 `return await be(fe, \'额度不足\')`）', () => {
     const s = seedWatchState({});
-    expect(run(s, { quota: quotaReading({ lowCount: 99, reason: 'explicit', sample: '额度不足' }) }).stop).toBe(false);
-    expect(
-      run(s, { notices: { counts: { 'quota-exhausted': 1 }, samples: {} } }).stop,
-    ).toBe(false);
+    const r = run(s, { quota: quotaReading({ lowCount: 99, reason: 'explicit', sample: '额度不足' }) });
+    expect(r.switchRequest).toMatchObject({ action: '额度不足' });
+    // `reason` = 同一份额度文案（与写进通知的 `text` 同源）
+    expect(r.switchRequest?.reason).toBe(r.effects.notices[0]?.text);
+  });
+
+  it('★「今日免费次数用尽」命中 ⇒ 换号请求（源 `ye` 尾部 `be(text, \'额度用尽\')`）', () => {
+    const s = seedWatchState({});
+    const r = run(s, { notices: { counts: { 'quota-exhausted': 1 }, samples: {} } });
+    expect(r.switchRequest).toMatchObject({ action: '额度用尽' });
+    expect(r.switchRequest?.reason).toBe(QUOTA_EXHAUSTED_FALLBACK_TEXT);
+  });
+
+  it('★ 其余回复通知**不换号**（源 `ye` 末尾 `return false`）', () => {
+    const s = seedWatchState({});
+    const r = run(s, { notices: { counts: { infringe: 1 }, samples: { infringe: 'C' } } });
+    expect(r.effects.notices).toHaveLength(1);
+    expect(r.switchRequest).toBeNull();
+  });
+
+  it('★ 无命中 ⇒ `switchRequest` 为 `null`（循环继续）', () => {
+    expect(run(seedWatchState({}), {}).switchRequest).toBeNull();
   });
 
   it('★ 不可变：不改传入的 `state`', () => {
@@ -250,3 +296,5 @@ describe('reduceWatchRound（原 2650-2672 的判断段）', () => {
     expect(s.seen).toEqual([]);
   });
 });
+
+

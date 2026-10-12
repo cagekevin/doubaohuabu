@@ -13,14 +13,15 @@
  *
  * ⚠️ **原则 1**：用例只返回 `Result`，**落 store 只在本文件**（`patchNodeData`）。
  * ⚠️ **原则 6**：`fetchWatermarkFreeByVid` 的失败**原样透传** —— 不改写、不兜底、不编文案。
- * ⚠️ **本工程只落「按 vid」那条分支**：原 `pullResult` 还有一条 `conversationId` 分支
- *   （回对话页 → 登记 `pull:true` 任务 → 交给 `postSendDetect` 捡）—— 它依赖
- *   **发送后监测子系统**（`docs/19` §4.1，未落地）⇒ 本文件对那条路**明确报错**，
- *   不假装成功、也不静默。
+ * ★ **两条分支都落了**（原 `pullResult`）：
+ *   ① **按 `vid`** ⇒ `fetchWatermarkFreeByVid` 直接拉无水印直链；
+ *   ② **只有 `conversationId`** ⇒ **回会话页**（`BackendPagePort.navigate`）→ 登记任务 →
+ *      交给**发送后检测**（`postSendDetect`，原 `it`）去捡（`:3180-3210`）。
  */
 
 import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
+import { sendToSiteDeps } from './sendDeps';
 import type { SendToSiteDeps } from '@/core/usecases/sendToSite';
 import { fetchWatermarkFreeByVid } from '@/core/usecases/fetchWatermarkFree';
 import { patchGenHistoryAttempt, pullTargetOf } from '@/core/rules/genHistory';
@@ -28,23 +29,29 @@ import { err, ok, type Result } from '@/core/model/result';
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
 import { VIDEO_NODE_TEXT } from '@/constants/text';
 import { localizeNodeInto } from './localizeOps';
+import type { PostSendDetectController } from './postSendDetect';
+import { log } from '@/lib/log';
 
 export interface PullResultController {
   /** 拉取某个视频节点「这一次生成」的结果（原 `pullResult`） */
   pull(nodeId: string): Promise<Result<void>>;
 }
 
-export function createPullResultController(store: AppStore, ports: Ports): PullResultController {
-  const deps: SendToSiteDeps = {
-    sites: ports.sites,
-    backendPage: ports.backendPage,
-    // ★ 占用 / 释放（原 `Fi` / `tn`）—— 真正的 `set` 在 state（与 `state/analyze.ts` 同法）
-    holdAccount: (accountId, nodeId) =>
-      store.useStore.getState().holdAccount(accountId, { itemId: null, nodeId }),
-    releaseAccount: (accountId) => {
-      store.useStore.getState().releaseAccount(accountId);
-    },
-  };
+/** 本控制器的注入（`bootstrap/container` 给） */
+export interface PullResultDeps {
+  /**
+   * ★ **发送后检测**（原 `it`）—— `conversationId` 支把任务交给它
+   * ⚠️ 必须是 `container` 里的**单例**（它自己持有待归属队列）
+   */
+  postSendDetect: PostSendDetectController;
+}
+
+export function createPullResultController(
+  store: AppStore,
+  ports: Ports,
+  pullDeps: PullResultDeps,
+): PullResultController {
+  const deps: SendToSiteDeps = sendToSiteDeps(store, ports);
 
   return {
     async pull(nodeId) {
@@ -56,13 +63,29 @@ export function createPullResultController(store: AppStore, ports: Ports): PullR
       const target = pullTargetOf(data);
       // 不可拉（已有 `url` / 没有尝试 / 尝试里既无 vid 也无 conversationId）
       if (!target) return err('unknown', VIDEO_NODE_TEXT.pullNotAvailable);
-      // 只有 `conversationId` ⇒ 走的是未落地的那条分支，**明确报错**
-      if (!target.vid) return err('unknown', VIDEO_NODE_TEXT.pullNeedConversation);
 
       // 账号：原 `ve.accountId || o`（`o` = 当前显示账号，本仓 = `activeAccountId`）
       const accountId = target.accountId ?? s.activeAccountId;
       const account = accountId ? s.accounts.find((a) => a.id === accountId) : undefined;
       if (!account) return err('no-account', VIDEO_NODE_TEXT.pullNoAccount);
+
+      // ★ **`conversationId` 支**（原 `pullResult` 的 `:3180-3210`）：这次生成**只记了会话 id**
+      //   ⇒ 回会话页 → 登记 `pull:true` 任务 → 交给**发送后检测**（`it`）去捡。
+      if (!target.vid) {
+        if (!target.conversationId) return err('unknown', VIDEO_NODE_TEXT.pullNotAvailable);
+        const chatUrl = ports.sites[account.type]?.chatUrl;
+        if (!chatUrl) return err('unknown', VIDEO_NODE_TEXT.pullNotAvailable);
+        // ① 回会话页（源把导航包在 `try{}catch{}` 里 ⇒ **失败不中止**后续检测）
+        const nav = await ports.backendPage.navigate(account, `${chatUrl}${target.conversationId}`);
+        if (!nav.ok) log.warn('[pullResult] 回会话页失败：', nav.message);
+        // ② 登记任务 ＋ 起检测（原 `k.current.push({…, pull:true})` ＋ `it(qe, ee)`）
+        pullDeps.postSendDetect.notifySent({
+          accountId: account.id,
+          sourceNodeId: nodeId,
+          ...(target.at > 0 ? { sentAt: target.at } : {}),
+        });
+        return ok(undefined);
+      }
 
       const res = await fetchWatermarkFreeByVid(deps, { account, vid: target.vid, nodeId });
       if (!res.ok) return res; // ★ 原样透传（原则 6）

@@ -13,14 +13,9 @@
   z-index: var(--z-overlay);
 }
 
+/* ★ 真源归位：与 `ui/common` 的 `.menu`（右键菜单壳）**逐字同形** ⇒ 委托它，不再写第二份 */
 .panel {
-  composes: panel from '../common/shared.module.css';
-  position: fixed;
-  z-index: var(--z-overlay);
-  min-width: 160px;
-  padding: var(--space-1);
-  display: flex;
-  flex-direction: column;
+  composes: menu from '../common/shared.module.css';
 }
 
 .title {

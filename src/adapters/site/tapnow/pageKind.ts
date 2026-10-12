@@ -9,14 +9,10 @@
  *    到**第三个**站点时再抽到 `adapters/site/shared/`。
  */
 
-/** 页面类型（原 `$s` 33108）—— `as const` 已给出只读类型，无需运行时 `Object.freeze` */
-export const PAGE_KINDS = {
-  CANVAS: 'canvas',
-  FEED: 'feed',
-  OTHER: 'other',
-} as const;
-
-export type PageKind = (typeof PAGE_KINDS)[keyof typeof PAGE_KINDS];
+// ★ **枚举真源已收口**（原 `$s` 33108 与 Lovart 的 `Sn` 22637 是**同一枚举**）：与 `SCAN_PHASES` /
+//   `SCAN_SCOPES` 同法搬到 `core/rules/scanChain.ts` —— 本文件**不再自持副本**（判据 C1：第 3 处到点）；
+//   **判定函数仍留本目录**（判据 A1：主机名与路径规则是站点专属）。
+import { PAGE_KINDS, type PageKind } from '@/core/rules/scanChain';
 
 /** Tapnow 主机名（原 `Dk` 33113）—— **只认这两个域**（含子域） */
 const TAPNOW_HOST_RE = /(^|\.)(tapnow\.media|tapnow\.art)$/i;

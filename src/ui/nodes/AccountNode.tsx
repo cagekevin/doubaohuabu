@@ -13,22 +13,37 @@
  *      （`buildAccountNodePayload`（原 `$L`）**只有测试调用、零运行时消费者**，正是缺了它。）
  *   ③ **`autoSend` 开关**（原 `OL.jsx:418-427`，一个滑块 + `title`）。
  *
- * ⚠️⛔ **未接通（如实标注，不假装）**：源版的「填入」动作走 `Bu(pe, {onProgress})`
- *   （`OL.jsx:329`），返回里带 `imagesAttached`/`imagesTotal`/`autoClicked`/`precheck`；
- *   而本工程已落的 `SitePort.send` 是**「发送 + 等生成结果」**（`doubao/index.ts:185` 有
- *   `pollResults`）⇒ **两者不是同一个操作**，拿它冒充会把「仅填入」变成「真发出去并等出片」。
- *   ⇒ 按钮**禁用**、原因写在 `title` 里（判据 B4：不对用户承诺不存在的能力）。
- *   待接通的是 `Bu` 的**填入半**（`docs/16` 的「站点页内脚本」那一层）。
+ * ★★ **2026-10-12 接通**（原来是恒禁用的占位）：按钮 → `accountOps.sendAccountNode(id)` ——
+ *   上游文本/素材 → 报文（原 `$L`）→ `withBackendPage`（租约）→ `site.send`；
+ *   `site.send` 现在**尊重 `payload.autoSend`**（关 ⇒ **只填不点**，原 `Be` 的 Phase 3）。
+ *   反馈条（`sending`/成功摘要/失败原文）+ 4s 自动清 + `err` 时的 ✕ 也一并落地（原 `:509-520`）。
+ * ⚠️ 与源的两处差异（如实标注）：① 无 `retrying` 档（本仓传输层没有重试循环）；
+ *   ② 源的 `precheck && !precheck.pass` 那档摘要不可达（校验不过时 `send` 直接返回 `err`）。
  */
 
-import { useMemo } from 'react';
-import { useStore } from '@/state';
+import { useEffect, useMemo, useState } from 'react';
+import { useAccountOps, useStore } from '@/state';
 import { NodeShell } from './NodeShell';
 import { AccountPicker } from '@/ui/common/AccountPicker';
 import { collectAccountNodeInputs } from '@/core/rules/accountNode';
+import { formatElapsed, timerBand, type TimerBand } from '@/core/rules/nodeStatus';
+import { hasVideoDescendant } from '@/core/rules/genDetect';
 import { ACCOUNT_NODE_TEXT } from '@/constants/text';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
+
+/** 「已过时长」的重渲染心跳（ms，原 `OL.jsx:240` 的 `setInterval(V, 250)`） */
+const TIMER_TICK_MS = 250;
+
+/**
+ * 档位 → `title`（原 `OL.jsx:415` 的嵌套三元）
+ * ⚠️ 与 `timerBand` 的档位**一一对应**（判断只写一份，这里只做映射）
+ */
+const TIMER_TITLE: Record<TimerBand, string> = {
+  red: ACCOUNT_NODE_TEXT.timerTitleRed,
+  yellow: ACCOUNT_NODE_TEXT.timerTitleYellow,
+  normal: ACCOUNT_NODE_TEXT.timerTitleNormal,
+};
 
 export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
   const accounts = useStore((s) => s.accounts);
@@ -38,6 +53,8 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
   const library = useStore((s) => s.library);
   const patchNodeData = useStore((s) => s.patchNodeData);
   const sendState = useStore((s) => s.nodeSendStates[id]);
+  /** ★ 「填入」的编排在控制器（`state/accountOps`）—— 本组件**不写 store**（原则 1） */
+  const accountOps = useAccountOps();
 
   /**
    * ★ 上游输入（原 `OL.jsx:177-179` 的 `x = RL(state, nodeId)`）
@@ -50,6 +67,42 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
 
   /** 状态行的四态（原 `OL.jsx:498-501` 的 `account-send-btn` 类名） */
   const status = sendState?.status ?? 'idle';
+
+  /**
+   * ★ **「已过时长」计时器**（原 `OL.jsx:211-255`）—— 数据源 `nodeTimers[nodeId]`，
+   *   写方 = `state/postSendDetect`（探到「已提交」时把 pending 转正）· `state/autoConfirm` ·
+   *   `accountOps.sendAccountNode`（无视频后代时登记 `setNodePendingTimer`）。
+   */
+  const timerStart = useStore((s) => s.nodeTimers[id] ?? null);
+  const setNodeTimer = useStore((s) => s.setNodeTimer);
+  /**
+   * 「有没有视频后代」（原 `OL.jsx:232` 的 `F = O0(V, e)`）
+   * ★ 源在 `F && z != null` 时**主动删掉计时器**（`:244-249` 的 `O(e)`）：片到了，不必再计时。
+   */
+  const hasVideo = useMemo(() => hasVideoDescendant(nodes, edges, id), [nodes, edges, id]);
+  useEffect(() => {
+    // ⚠️ **不新增 `removeNodeTimer` 动作**：源确实另有 `removeNodeTimer`（31862），
+    //    但它与 `setNodeTimer(id, null)` **同效** ⇒ 按「能一种的别搞两种」并掉（不影响用户功能）。
+    if (hasVideo && timerStart != null) setNodeTimer(id, null);
+  }, [hasVideo, timerStart, id, setNodeTimer]);
+  /**
+   * ★ **重渲染心跳**（原 `OL.jsx:233-243` 的 `[D, A]` + `setInterval(V, 250)`）——
+   *   源在**渲染期**读 `Date.now()` 算已过时长（`docs/11` §9.1 禁渲染期读时钟）
+   *   ⇒ 本仓把"现在"收进 state（与 `TextNode` 的倒计时同一法）。
+   */
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (timerStart == null) return;
+    const t = window.setInterval(() => setNowMs(Date.now()), TIMER_TICK_MS);
+    return () => window.clearInterval(t);
+  }, [timerStart]);
+  /**
+   * 已过时长 + 档位（`timerStart == null` ⇒ 不渲染，值恒 0 无所谓）
+   * ⚠️ `nowMs` 在"计时起点刚变"时最多**旧 250ms** ⇒ 夹到 0（显示 `00:00` 一瞬，下一拍纠正）——
+   *   与 `TextNode` 的倒计时同一法；**不在 effect 里同步 `setState`**（会触发级联渲染，eslint 挡）。
+   */
+  const elapsed = timerStart != null ? Math.max(0, nowMs - timerStart) : 0;
+  const band = timerBand(elapsed);
 
   return (
     /*
@@ -68,15 +121,37 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
     <NodeShell
       type="account"
       title={ACCOUNT_NODE_TEXT.title}
-      /* 中槽 = 自动发送开关（原 418-427：一个滑块 + `title`，**无可见文字**，紧跟标题之后） */
+      /*
+        中槽 = 「已过时长」计时器 + 自动发送开关（源顺序：`发送节点` · `timer-inline` · `auto-send-toggle`）
+      */
       meta={
-        <label className={styles.autoSend} title={ACCOUNT_NODE_TEXT.autoSendTitle}>
-          <input
-            type="checkbox"
-            checked={!!data.autoSend}
-            onChange={(e) => patchNodeData(id, { autoSend: e.target.checked })}
-          />
-        </label>
+        <>
+          {/*
+            已过时长（原 `OL.jsx:415`）—— **只在「没有视频后代」且有时计时起点时**出现；
+            档位（红/黄）与 `title` 由 `timerBand` 一处判定，别在类名与 title 里各写一遍。
+          */}
+          {!hasVideo && timerStart != null && (
+            <span
+              className={`${styles.timerInline}${
+                band === 'red'
+                  ? ` ${styles.timerRed}`
+                  : band === 'yellow'
+                    ? ` ${styles.timerYellow}`
+                    : ''
+              }`}
+              title={TIMER_TITLE[band]}
+            >
+              {formatElapsed(elapsed)}
+            </span>
+          )}
+          <label className={styles.autoSend} title={ACCOUNT_NODE_TEXT.autoSendTitle}>
+            <input
+              type="checkbox"
+              checked={!!data.autoSend}
+              onChange={(e) => patchNodeData(id, { autoSend: e.target.checked })}
+            />
+          </label>
+        </>
       }
       selected={selected}
     >
@@ -94,14 +169,15 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
             onBind={(accountId) => patchNodeData(id, { accountId })}
           />
           {/*
-            「发送」（原 `OL.jsx:498-507`）—— 标签照抄源版（`↑ 发送` / `⟳ 发送中…`）。
-            ⛔ **恒禁用** —— 「填入」通道未接通（见文件头）；`title` 同时给出源版语义与本工程原因。
+            「发送」（原 `OL.jsx:498-507`）—— 标签照抄源版（`↑ 发送` / `⟳ 发送中…`），
+            `title` 用源 `:501` 逐字那句。★ **2026-10-12 起按钮已启用**（「填入」通道落地）。
           */}
           <button
             type="button"
             className={styles.accountSend}
-            disabled
-            title={`${ACCOUNT_NODE_TEXT.sendTitle}\n${ACCOUNT_NODE_TEXT.channelPending}`}
+            disabled={status === 'sending'}
+            title={ACCOUNT_NODE_TEXT.sendTitle}
+            onClick={() => void accountOps.sendAccountNode(id)}
           >
             {status === 'sending' ? (
               <>
@@ -117,10 +193,24 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
           </button>
         </div>
 
-        {/* 状态行（原 `OL.jsx:509-520`）—— 只在非 `idle` 时出现 */}
+        {/* 状态行（原 `OL.jsx:509-520`）—— 只在非 `idle` 时出现；`err` 时带一颗 ✕ */}
         {sendState?.msg && status !== 'idle' && (
           <div className={`${styles.accountFeedback} ${styles[`st_${status}`] ?? ''}`}>
-            {sendState.msg}
+            <span className={styles.accountFeedbackMsg}>{sendState.msg}</span>
+            {status === 'error' && (
+              <button
+                type="button"
+                className={styles.accountFeedbackClose}
+                title={ACCOUNT_NODE_TEXT.closeTitle}
+                onClick={(e) => {
+                  // 原 `:512-516`：先 `stopPropagation`（别让画布跟着点），再清状态（顺手撤自动清定时器）
+                  e.stopPropagation();
+                  accountOps.dismissAccountFeedback(id);
+                }}
+              >
+                ×
+              </button>
+            )}
           </div>
         )}
 

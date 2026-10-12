@@ -17,13 +17,21 @@ import type { FaceMaskOpts } from '@/core/rules/facemask';
 import type { Preset, Project } from '@/stable/model/project';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
 import type { ScanHistoryEntry } from '@/core/rules/scanHistory';
-import { createProject as makeProject, makeId, setProjectStoragePath as applyStoragePath } from '@/core/rules/project';
+import {
+  activeIdAfterDelete,
+  createProject as makeProject,
+  makeId,
+  renameProject as renameProjectPure,
+  setProjectStoragePath as applyStoragePath,
+  shouldReactivateOnRename,
+} from '@/core/rules/project';
 import { makeGraphPreset, makePromptPreset, type GraphPresetInput } from '@/core/rules/preset';
 import {
   addGroup as addGroupPure,
   deleteGroup as deleteGroupPure,
   moveAccountsToGroup as moveAccountsToGroupPure,
   renameGroup as renameGroupPure,
+  setAccountAutoStart as setAccountAutoStartPure,
   setGroupAutoStart as setGroupAutoStartPure,
   setGroupColor as setGroupColorPure,
 } from '@/core/rules/accountGroup';
@@ -45,6 +53,8 @@ import {
   type ScreenSpec,
   type WebglSpec,
 } from '@/core/rules/fingerprintGenerator';
+import type { Result } from '@/core/model/result';
+import { PROJECT_STORAGE_TEXT } from '@/constants/text';
 
 /** 保存错误（★ 保留原始 message —— 原则 6） */
 export interface SaveError {
@@ -55,6 +65,17 @@ export interface SaveError {
 /** slice 需要的注入依赖 */
 export interface GlobalSliceDeps {
   now(): number;
+  /**
+   * 激活某工程的存储目录（原 `window.api.activateProjectStorage`，**`sendSync`**）
+   *
+   * ⚠️ 由 `bootstrap/container` 注入（它调 `core/usecases/projectStorage.activateProjectStorage`，
+   *   并把「当前工程列表」一起喂进去）—— `state` 不 import adapters。
+   * ⚠️ `project = null` ⇒ **清空路径**（回应用默认目录）：源在 `deleteProject`（30128）与
+   *   `showStartup`（30148）两处传的就是 `{ storagePath: '' }`。
+   */
+  activateStorage?(project: Project | null): Result<{ path?: string }>;
+  /** 立即落盘（`PersistController.flush`）—— 回启动页前先落盘（源 `showStartup` 30146） */
+  flushPersist?(): void;
   /**
    * 新增账号所需的**环境**（原则 4：`core` 只收值，不收宿主）
    *
@@ -88,6 +109,18 @@ type RosterEnv = ReturnType<GlobalSliceDeps['roster']>;
 export interface HydratedSnapshot {
   projects: Project[];
   accounts: Account[];
+  /**
+   * ★ **账号分组 / 出口代理池 / 选号策略**（`doubao-account-groups` · `doubao-proxy-pool` ·
+   *   `doubao-account-pool-strategy`）—— **2026-10-12 补读回**。
+   *
+   * ⚠️ 此前这三键**只写不读**（`usecases/persistAccounts` 写 · `hydrate` 不读）⇒ **重启即丢**
+   *   （与 `docs/过程.md` §2 的 ⭐ 同型；那次只修了 accounts / 画廊 / 体检历史 / 预设 / 风格 / 遮脸）。
+   * ⚠️ 源读方：`CT()`（groups，26600）· `hT()`（proxyPool，26251）· `Ou()`（策略，34480）——
+   *   都是「读不到 ⇒ 默认值」；策略另有**合法性校验**（非法回落 `'round-robin'`）。
+   */
+  groups: AccountGroup[];
+  proxyPool: string[];
+  poolStrategy: PoolStrategy;
   lovartGalleries: LovartGalleries;
   scanHistory: ScanHistoryEntry[];
   /** ★ 节点 / 提示词预设（`doubao-presets`）—— ⚠️ 必须**读**它（此前该键只写不读 ⇒ 白落盘） */
@@ -121,12 +154,22 @@ export interface GlobalSlice {
    * ★ **正在忙的账号**（W11：选号时跳过；全忙 ⇒ 排队）
    *
    * ★ **2026-10-10 修**：原字段是 `busyAccountIds: string[]`，配一个 `setBusyAccounts`
-   *   —— 而 `docs/14` §8 实测它 **零调用** ⇒ `all-busy` 排队分支**永不触发**。
+   *   —— 而 `docs/过程.md` §8 实测它 **零调用** ⇒ `all-busy` 排队分支**永不触发**。
    *   现在换成**带 TTL 与占用者的** `BusyMap`（原 `Fi`/`tn` 的语义），
    *   并由下面的 `holdAccount` / `releaseAccount` 提供**写入方**。
    * ⚠️ 不持久化（20 个 `LsKey` 里没有它）—— 重启即视为全空闲，与源版一致。
    */
   accountBusy: BusyMap;
+  /**
+   * ★ **「后台页还活着」的账号 id 快照**（原 `_Component43` 的 `d` = `oT()`，`shared.js:25973`）
+   *
+   * 语义 = **记录建立于「取到租约」、末条释放后还有 drain 宽限（`K$ = 1500ms`）**（原 `Jn`/`eT`）
+   *   ——**不是**「当下谁持有租约」。唯一消费者 = `ui/panels/BackendView` 的**挂载集合**
+   *   （`mounted = autoStart ∪ 本字段`，原 `_Component43.jsx:37-46`）。
+   * ⚠️ **唯一写入方 = `state/subscriptions.ts`**（原则 2：端口订阅的唯一写入点）。
+   * ⚠️ 不持久化（原 `d` 本来就是内存态）。
+   */
+  leasedAccounts: readonly string[];
 
   // ── 预设 ──
   /**
@@ -135,7 +178,7 @@ export interface GlobalSlice {
    * ⚠️ 数组**混装两种形状**（见 `stable/model/project.ts` 的 `Preset`）：提示词预设（**无 `kind`**）
    *    + 节点图预设（`kind === 'graph'`）—— 源里两者都 `push` 进同一数组、同一个键。
    * ⚠️ **谁读**：`state/projectOps`（导入工程时按 `id` 判重）；**谁写**：`loadHydrated` + 导入回写。
-   *    UI 侧读方（拆分时挑预设 / 提示词预设列表）**尚未落** —— 见 `docs/13`（判据 B5：不落无人调的 action）。
+   *    UI 侧读方（拆分时挑预设 / 提示词预设列表）**尚未落** —— 见 `docs/过程.md`（判据 B5：不落无人调的 action）。
    */
   presets: Preset[];
 
@@ -189,9 +232,18 @@ export interface GlobalSlice {
   deleteGroup: (id: string) => void;
   moveAccountsToGroup: (accountIds: readonly string[], groupId: string | null) => void;
   setGroupAutoStart: (groupId: string | null, value: boolean) => void;
+  /**
+   * **单账号**设自启动（源 `Ve` —— 静默遮罩里的「恢复该账号页面」按钮）：
+   * `_Component43.jsx:516-524` 的 `updateAccount(id, { autoStart: true })`。
+   */
+  setAccountAutoStart: (accountId: string, value: boolean) => void;
+  /**
+   * ★ **写「后台页还活着」快照**（原 `sT` 订阅回调里那句 `f(ee.map(Q => Q.accountId))`）
+   * ⚠️ **唯一调用方** = `state/subscriptions.ts`（别处不该调 —— 原则 2）。
+   */
+  setLeasedAccounts: (accountIds: readonly string[]) => void;
   setProxyPool: (p: string[]) => void;
   setPoolStrategy: (s: PoolStrategy) => void;
-  setAccountBusy: (map: BusyMap) => void;
   /**
    * 占用账号（原 `Fi` 34596）
    *
@@ -262,7 +314,7 @@ export interface GlobalSlice {
   /**
    * 打开工程（原 `openProject`）
    *
-   * ★ 这是 `docs/14` §2 记的 ⭐⭐ **数据损坏 bug 的修复点**：只 `setActiveId` 而不换画布
+   * ★ 这是 `docs/过程.md` §2 记的 ⭐⭐ **数据损坏 bug 的修复点**：只 `setActiveId` 而不换画布
    *    ⇒ `store.ts` 的镜像会把**旧画布**写进**新工程**。所以本 action **原子地**
    *    同时换 `activeId` 与 `nodes/edges/library/snap`。
    */
@@ -272,7 +324,7 @@ export interface GlobalSlice {
    *
    * ⚠️ 与 `openProject` **同法**：insert + 换 `activeId` + **把该工程的画布数据灌回来**
    *   —— 只加进 `projects` 而不换画布 ⇒ `store.ts` 的镜像会把**旧画布**写进新工程
-   *   （`docs/14` §2 的 ⭐⭐ 数据损坏 bug，这是它的第三条触发路径）。
+   *   （`docs/过程.md` §2 的 ⭐⭐ 数据损坏 bug，这是它的第三条触发路径）。
    * ⚠️ 用例（`core/usecases/importProject`）**只返回**工程对象，写入必须发生在这里（原则 1）。
    */
   addImportedProject: (project: Project) => void;
@@ -286,8 +338,20 @@ export interface GlobalSlice {
   setProjectStoragePath: (path: string) => void;
   /** 重命名当前项目 */
   renameProject: (id: string, name: string) => void;
-  /** 删除项目 */
+  /**
+   * ★ **删除项目**（原 `deleteProject`，`shared.js:30114-30142`）
+   *
+   * ⚠️ 删的是**当前**工程 ⇒ `activeId` 置 **null**（**回启动页**，不是切到列表里的下一个）+
+   *   `started=false` + 清空画布 + 清存储路径（`activeIdAfterDelete` / `activateStorageOf`）。
+   */
   deleteProject: (id: string) => void;
+  /**
+   * ★ **回启动页**（原 `showStartup`，`shared.js:30143-30158`）
+   *
+   * 顺序（逐字对源）：**先落盘**（`flushPersist`）→ **清空存储路径**（回默认目录）→
+   *   `started=false` / `activeId=null`。消费点 = 账号面板底部「返回首页」。
+   */
+  showStartup: () => void;
   /** 当前工程 */
   activeProject: () => Project | null;
 }
@@ -307,6 +371,21 @@ export function createGlobalSlice(
 ): GlobalSlice {
   /** 同毫秒内的序号（原 `Pt` 的计数） */
   let seq = 0;
+
+  /**
+   * 激活某工程的存储目录（原 `activateProjectStorage`）
+   *
+   * ⚠️ 源在 **新建 / 打开 / 重命名当前工程** 三处都调（`shared.js:29843-29859` · `29887-29908` ·
+   *   `30075-30093`）。
+   * ⚠️ 失败**上报** `saveError`：源只在 `openProject` 处提示（29900-29907），另两处是
+   *   `try{}catch{}` **静默** ⇒ 原则 6 不静默 ⇒ 统一提示（文案 `PROJECT_STORAGE_TEXT.storageFallback`
+   *   逐字对源 `29904`）。
+   */
+  const activateStorageOf = (project: Project | null): void => {
+    const r = deps.activateStorage?.(project);
+    if (!r || r.ok) return;
+    set({ saveError: { message: PROJECT_STORAGE_TEXT.storageFallback(r.message), at: deps.now() } });
+  };
 
   /**
    * 指纹生成环境（原 `Uc()` / `M$()` / `$$()`）
@@ -345,6 +424,7 @@ export function createGlobalSlice(
     proxyPool: [],
     poolStrategy: 'round-robin',
     accountBusy: {},
+    leasedAccounts: [],
     presets: [],
 
     setProjects: (projects) => set({ projects }),
@@ -411,9 +491,13 @@ export function createGlobalSlice(
     setGroupAutoStart: (groupId, value) =>
       set({ accounts: setGroupAutoStartPure(get().accounts, groupId, value) }),
 
+    setAccountAutoStart: (accountId, value) =>
+      set({ accounts: setAccountAutoStartPure(get().accounts, accountId, value) }),
+
+    setLeasedAccounts: (leasedAccounts) => set({ leasedAccounts }),
+
     setProxyPool: (proxyPool) => set({ proxyPool }),
     setPoolStrategy: (poolStrategy) => set({ poolStrategy }),
-    setAccountBusy: (accountBusy) => set({ accountBusy }),
 
     holdAccount: (accountId, opts = {}) => {
       const next = holdBusy(get().accountBusy, accountId, {
@@ -474,6 +558,8 @@ export function createGlobalSlice(
     createProject: () => {
       const now = deps.now();
       const p = makeProject({ now, seq: ++seq });
+      // ★ 激活存储目录 —— 源在 `set` **之前**调（`shared.js:29843-29859`）
+      activateStorageOf(p);
       set({
         projects: [...get().projects, p],
         activeId: p.id,
@@ -492,6 +578,8 @@ export function createGlobalSlice(
       const target = get().projects.find((p) => p.id === id);
       // 找不到就什么都不做（不把 activeId 指到不存在的工程）
       if (!target) return;
+      // ★ 激活存储目录（源 `29887`；失败 ⇒ `saveError`「已回退默认目录」）
+      activateStorageOf(target);
       set({
         activeId: id,
         started: true,
@@ -526,15 +614,32 @@ export function createGlobalSlice(
 
     renameProject: (id, name) => {
       const now = deps.now();
-      set({
-        projects: get().projects.map((p) => (p.id === id ? { ...p, name: name.trim() || p.name, updatedAt: now } : p)),
-      });
+      const next = get().projects.map((p) => (p.id === id ? renameProjectPure(p, name, now) : p));
+      set({ projects: next });
+      // ★ 重命名的是**当前工程** ⇒ 重新激活存储目录（源 `30075-30093`；payload 用**改名后**的 name）
+      if (shouldReactivateOnRename(id, get().activeId)) {
+        const renamed = next.find((p) => p.id === id);
+        if (renamed) activateStorageOf(renamed);
+      }
     },
 
     deleteProject: (id) => {
       const rest = get().projects.filter((p) => p.id !== id);
       const wasActive = get().activeId === id;
-      set({ projects: rest, ...(wasActive ? { activeId: rest[0]?.id ?? null } : {}) });
+      // ⚠️ 源（30120-30124）：删的是**当前** ⇒ `activeId` 置 **null**（回启动页），**不是**切到下一个
+      set({ projects: rest, activeId: activeIdAfterDelete(get().activeId, id) });
+      if (wasActive) {
+        // 源 30126-30141：清存储路径（回默认目录）→ 回启动页 + 清空画布
+        activateStorageOf(null);
+        set({ started: false, nodes: [], edges: [], library: [], videoShares: [] });
+      }
+    },
+
+    showStartup: () => {
+      // 源顺序（30146-30157）：先落盘 → 清存储路径 → 回启动页
+      deps.flushPersist?.();
+      activateStorageOf(null);
+      set({ started: false, activeId: null });
     },
 
     activeProject: () => get().projects.find((p) => p.id === get().activeId) ?? null,

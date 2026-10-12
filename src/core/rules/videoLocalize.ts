@@ -6,7 +6,7 @@
  *   - 回写引用：`applyLocalVideoRef` shared.js:30952-31016
  *
  * ⚠️ **编排（调 `saveVideoFromUrl`）在 `core/usecases/localizeVideos.ts`** —— 本文件只做纯变换。
- * ⚠️ 链 18 硬约束：视频**必须落盘**（`docs/10` #9）—— `http(s)` 直链不能留在节点里。
+ * ⚠️ 链 18 硬约束：视频**必须落盘**（`docs/过程.md` #9）—— `http(s)` 直链不能留在节点里。
  */
 
 import { asRecord } from '@/lib/object';

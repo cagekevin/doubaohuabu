@@ -5,25 +5,24 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NODE_TYPES, selfCheckDefaults, validateNode, validateNodes } from '../node';
-import { defaultNodeData } from '@/core/model/defaults';
+import { validateNode, validateNodes } from '../node';
+import { defaultNodeData, NODE_DEFAULTS } from '@/core/model/defaults';
 import type { CanvasNode, NodeType } from '@/stable/model/node';
+
+/** 8 类节点全集（真源 = `NODE_DEFAULTS` 的键；与 `core/rules/node.ts` 的必填表同一集合） */
+const ALL_TYPES = Object.keys(NODE_DEFAULTS) as NodeType[];
 
 const make = (id: string, type: NodeType): CanvasNode =>
   ({ id, type, position: { x: 1, y: 2 }, data: defaultNodeData(type) }) as CanvasNode;
 
 describe('W13 · 8 类节点全集', () => {
   it('★ 恰好 8 类，与原实现 nodeTypes 一致', () => {
-    expect(NODE_TYPES.slice().sort()).toEqual(
+    expect(ALL_TYPES.slice().sort()).toEqual(
       ['account', 'download', 'genvideo', 'group', 'imggen', 'material', 'text', 'video'].sort(),
     );
   });
 
-  it('★ 默认值自检通过（默认值必须满足自身不变量）', () => {
-    expect(selfCheckDefaults()).toEqual([]);
-  });
-
-  it.each(NODE_TYPES)('%s 类：用默认值构造 → 无问题', (type) => {
+  it.each(ALL_TYPES)('%s 类：用默认值构造 → 无问题', (type) => {
     const issues = validateNode(make('n1', type));
     expect(issues, JSON.stringify(issues)).toEqual([]);
   });

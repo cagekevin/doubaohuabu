@@ -1,7 +1,7 @@
 /**
  * 业务常量（★ SSOT：网格 / 超时 / 阈值 / 上限的唯一真源）
  *
- * 依据：docs/07-领域规则.md §八「业务常量表」（逐条对照还原源码行号）
+ * 依据：docs/过程.md §八「业务常量表」（逐条对照还原源码行号）
  * 铁律：各处**不得写魔法数**，一律引用本文件
  */
 
@@ -20,7 +20,10 @@ export const MAX_ZOOM = 4;
 export const CONNECTION_RADIUS = 60;
 /** 组节点 zIndex（原 31577） */
 export const GROUP_Z_INDEX = -1001;
-/** 边单击防抖（ms） */
+/**
+ * 边单击防抖（ms，原 `_Component42.jsx:574` 的 `setTimeout(..., 220)`）
+ * ⚠️ 拖画布 / 框选也会触发 `onEdgeClick`，不防抖会误弹
+ */
 export const EDGE_CLICK_DEBOUNCE_MS = 220;
 
 /**
@@ -66,13 +69,87 @@ export const PROJECT_SIZE_WARN_BYTES = 20 * 1024 * 1024;
 
 /** 生成轮询间隔（ms，原 `CR` 36228） */
 export const GEN_POLL_MS = 3000;
-/** 生成静默阈值（ms，原 `ER` 36229）—— 超时判「无真实图片」 */
+/** 生成静默阈值（ms，原 `ER` 36229）—— 有结果且静默这么久 ⇒ `settled` */
 export const GEN_SILENT_MS = 9000;
 /**
- * 生成总超时（ms，原 `Vo` 23618 = 25000）
- * ⚠️ 与静默阈值不同：静默 = 「不再有新结果」；总超时 = 「整体放弃」
+ * 「只有占位图」的判定阈值（ms，原 `jR` 36230）
+ * ⚠️ 只在「**一张真图都没出**且**见过占位图**」时计时（源 `w === 0 && f && z > jR`）
  */
-export const GEN_TIMEOUT_MS = 25000;
+export const GEN_NO_REAL_IMAGE_MS = 180000;
+/**
+ * 生成总超时（ms，原 `_R` 36231 = 600000 = 10 分钟）—— 「整体放弃」
+ *
+ * ⚠️ 与静默阈值不同：静默 = 「不再有新结果」；总超时 = 「整体放弃」。
+ * ⚠️ **别与 `Vo`（23618 = 25000）混**：那是**取图 / 画布导出**的页内超时，不是生成轮询的。
+ */
+export const GEN_TIMEOUT_MS = 600000;
+/**
+ * 结果扫描的**最小边长**（px，原 `Jk` 36232）—— `DR` 传给扫描脚本 `Xk` 的 `minSide`
+ * ⚠️ 与 `Xk` 自己的默认值（96）不同：**调用点**传的是 220（源 `:36427`）。
+ */
+export const GEN_SCAN_MIN_SIDE = 220;
+/**
+ * **发送后前 10 秒**内扫到的"新图"一律跳过（原 `IR` 36234）
+ *
+ * ⚠️ 源 `:36466` 的 `P - h < IR || p0(...) >= 2` 是**同一个 `if` 的两个子句**：
+ *   前 10 秒跳过的项**已进 `u`（已处理）** ⇒ 它们这一轮**永远不会**再被当成结果。
+ *   （作用：挡住刚发出去时页面上回显的**参考图 / UI 图**，它们不是生成结果。）
+ */
+export const GEN_SEND_GRACE_MS = 10000;
+
+// ───────────────────────── 发送后**视频**检测（原 `it` / `postSendDetect`）─────────────────────────
+// 依据 `_Component43.jsx:1544-1548`（四个常量都在 `it` 体内）
+
+/** 检测轮询间隔（ms，原 `Se` 1544 = 4000） */
+export const DETECT_POLL_MS = 4000;
+/** 有结果后**多久无新增**即收工（ms，原 `ge` 1545 = 900000 = 15 分钟） */
+export const DETECT_IDLE_END_MS = 900000;
+/** 单次检测的**总时长上限**（ms，原 `Le` 1546 = 3000000 = 50 分钟，＝ `qk`/`MAX_JOB_AGE_MS`） */
+export const DETECT_MAX_MS = 3000000;
+/** 等「已提交」回复的**兜底启动计时**阈值（ms，原 `Ge` 1547 = 90000） */
+export const DETECT_TIMER_FALLBACK_MS = 90000;
+/** 基线时间窗（ms，原 `_e()` 的 `- 60000`，`_Component43.jsx:1558`） */
+export const DETECT_BASELINE_WINDOW_MS = 60000;
+
+// ───────────────────── 视频节点的**网格布局**（原 `shared.js:26307-26309`）─────────────────────
+/** 网格列数（原 `vT` 26307 = 3） */
+export const VIDEO_GRID_COLS = 3;
+/** 网格间距（px，原 `wT` 26308 = 30） */
+export const VIDEO_GRID_GAP = 30;
+/** 相对源节点（或画布顶部）的偏移（px，原 `By` 26309 = 60） */
+export const VIDEO_GRID_OFFSET = 60;
+/** 新建视频节点的宽度（px，原 `addVideoNode` 内的 `b` 28025 = 1280） */
+export const VIDEO_NODE_WIDTH = 1280;
+
+// ───────────────────── 生成确认（原 `kt` / `autoConfirm`，`_Component43.jsx:1738-2052`）─────────────────────
+// ⚠️ 阈值原**全内联在 `kt` 体内** ⇒ 收口于此（判据 C1）
+
+/** 独立租约 TTL（ms，原 `vr` 的 `leaseTtlMs: 900000`）—— 到点租约自灭 ⇒ 循环随之结束 */
+export const GEN_CONFIRM_LEASE_TTL_MS = 900000;
+/** 租约 / 就绪等待超时（ms，原 `timeoutMs: 30000`） */
+export const GEN_CONFIRM_READY_TIMEOUT_MS = 30000;
+/** 循环轮询间隔（ms，原 `setTimeout(…, 2500)`） */
+export const GEN_CONFIRM_POLL_MS = 2500;
+/** 循环总时长上限（ms，原 `Date.now() - _e < 3000000`） */
+export const GEN_CONFIRM_MAX_MS = 3000000;
+/** 命中「要确认」后、动作前的冷静期（ms，原 `setTimeout(…, 2000)`） */
+export const GEN_CONFIRM_ACTION_DELAY_MS = 2000;
+/** 动作后等「已提交」回执的上限（ms，原两处 `90000`） */
+export const GEN_CONFIRM_ACK_WAIT_MS = 90000;
+/** 动作后的稳定期（ms，原两处 `2500`） */
+export const GEN_CONFIRM_SETTLE_MS = 2500;
+/** 「自动回复确认语」的发送重试次数（原 `for (… < 3)`） */
+export const GEN_CONFIRM_SEND_RETRIES = 3;
+/** 发送重试的退避基数（ms，原 `Ne * 800`） */
+export const GEN_CONFIRM_SEND_RETRY_MS = 800;
+/** 读输入框前的稳定期（ms，原 `setTimeout(…, 400)`） */
+export const GEN_CONFIRM_INPUT_SETTLE_MS = 400;
+/** 「输入框须为空」的轮询次数 / 间隔（ms，原 `for (… < 3) setTimeout(…, 500)`） */
+export const GEN_CONFIRM_INPUT_RETRIES = 3;
+export const GEN_CONFIRM_INPUT_POLL_MS = 500;
+/** 基线读取的重试次数 / 退避（ms，原 `for ($ < 2) setTimeout(…, 800)`） */
+export const GEN_CONFIRM_BASELINE_RETRIES = 2;
+export const GEN_CONFIRM_BASELINE_RETRY_MS = 800;
 /** 发送重试次数（原 `Bu` maxRetries） */
 export const SEND_MAX_RETRIES = 1;
 /** 分类驱动的重试上限（原 `g3` maxRetry） */
@@ -121,7 +198,7 @@ export const QUEUE_PING_MAX = 1;
  * 启动后**多久**开始回填视频直链（ms，原 `_Component48.jsx:92-99` 的裸 `setTimeout(…, 5000)`）
  *
  * 用途：`state/localizeOps.backfill()` —— 把已存的 `genvideo`/`video` 节点里的 `http(s)` 直链
- * 落盘成 `vid://`（链 18 / `docs/10` #9「视频必须落盘」）。**延迟 5s** 是给启动期让路（源即如此）。
+ * 落盘成 `vid://`（链 18 / `docs/过程.md` #9「视频必须落盘」）。**延迟 5s** 是给启动期让路（源即如此）。
  */
 export const VIDEO_BACKFILL_DELAY_MS = 5000;
 
@@ -207,7 +284,7 @@ export const NEW_IMAGES_FRESH_MS = 3600000;
 //
 // ⚠️ 源版按站点分两档节奏：`ho(acc) ? qR : KR`（Lovart 3000 / 其它 6000），退避同形
 //    （`YR` 10000 / `XR` 15000）。本仓**只用「非 Lovart 档」** —— Lovart **不参与值守**
-//    （`docs/10` #11 · `electron/main.js:2749`），所以 Lovart 那一档被刻意留空不用。
+//    （`docs/过程.md` #11 · `electron/main.js:2749`），所以 Lovart 那一档被刻意留空不用。
 
 /** 值守轮询的**基础间隔**（原 `KR` shared.js:36672 = 6000；Lovart 档 `qR` = 3000 用不到） */
 export const AUTO_WATCH_INTERVAL_MS = 6000;

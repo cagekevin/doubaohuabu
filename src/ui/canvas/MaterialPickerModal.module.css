@@ -5,23 +5,15 @@
  * ⚠️ 原则 5：色值/间距/圆角全部走 token；按钮 `composes` 真源类。
  */
 
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-overlay);
-}
-
+/*
+ * ⚠️ `.backdrop` 已删（**0 消费者** —— 本组件走 `PanelShell` 的 `overlay`，点外关闭归它）。
+ * ⚠️ `.panel` 只留**真源未设的**差异（计划 §5 刀 6 铁律：本地覆盖会被真源盖掉、且不报错）：
+ *   居中 / `display` / `flex-direction` 归 `PanelShell` 的 `.overlay` 与真源 `.panel`。
+ */
 .panel {
   composes: panel from '../common/shared.module.css';
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: var(--z-overlay);
   width: min(560px, 92vw);
   max-height: 80vh;
-  display: flex;
-  flex-direction: column;
   padding: var(--space-3);
 }
 

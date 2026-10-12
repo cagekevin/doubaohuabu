@@ -50,7 +50,7 @@
 }
 
 .cardActive {
-  border-color: var(--color-brand);
+  border-color: var(--color-selected-border);
 }
 
 .cardPick {
@@ -97,7 +97,7 @@
   width: 16px;
   height: 16px;
   border-radius: var(--radius-full);
-  background: var(--color-brand);
+  background: var(--color-action-primary);
   color: var(--color-text-on-brand);
   font-size: var(--font-size-2xs);
 }
@@ -157,11 +157,10 @@
   white-space: nowrap;
 }
 
+/* 编辑页「返回列表」钮 —— ★ 复用**唯一**的关闭钮形态（`ui/common` 的 `.panelClose`，24×24；
+   原 20×20 属「能一种的别搞两种」要并掉的差异） */
 .editClose {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
-  flex: none;
-  width: 20px;
-  height: 20px;
+  composes: panelClose from '../common/shared.module.css';
 }
 
 .editBody {

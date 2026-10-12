@@ -10,6 +10,7 @@
 
 import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
+import { sendToSiteDeps } from './sendDeps';
 import { generateImage, generateVideo, type GenDeps } from '@/core/usecases/generate';
 import type { SendWatchController } from './sendWatch';
 import { countUsable } from '@/core/rules/accountPool';
@@ -58,7 +59,8 @@ export function createGenController(
   let attemptSeq = 0;
 
   const deps: GenDeps = {
-    sites: ports.sites,
+    // `sites` / `backendPage` / `holdAccount` / `releaseAccount` 走**唯一组装点**（`./sendDeps`）
+    ...sendToSiteDeps(store, ports),
     host: ports.host,
     clock: ports.clock,
     /*
@@ -72,14 +74,6 @@ export function createGenController(
       attemptSeq += 1;
       return `a${ports.clock.now().toString(36)}${attemptSeq.toString(36)}`;
     },
-    // ★ 占用 / 释放（原 `Fi` / `tn`）—— **真正的 `set` 发生在 state**（原则 1）；
-    //   注入给用例是因为「占用」必须在「用例内部选号之后、发送之前」发生。
-    //   这是 `docs/14` §8「`setBusyAccounts` 零调用」的修法。
-    holdAccount: (accountId, nodeId) =>
-      store.useStore.getState().holdAccount(accountId, { itemId: null, nodeId }),
-    releaseAccount: (accountId) => {
-      store.useStore.getState().releaseAccount(accountId);
-    },
     // ★ TD-02-16：选号必须**实时**知道哪些账号在忙（用例跨重试多次选号）
     busyIds: () => busyIdsOf(store.useStore.getState().accountBusy, ports.clock.now()),
   };
@@ -91,11 +85,11 @@ export function createGenController(
       if (!node) {
         // ★ 经**唯一写入口** `pushBackendError`（带 kind 去重 + 统一 id）
         //   —— ⛔ 不得直改 `setState` 绕过它（TD-07-2）
-        store.useStore.getState().pushBackendError('unknown', `节点不存在：${nodeId}`);
+        store.useStore.getState().pushBackendError('unknown', GEN_PANEL_TEXT.nodeMissing(nodeId));
         return false;
       }
       if (node.type !== 'imggen' && node.type !== 'genvideo') {
-        store.useStore.getState().pushBackendError('unknown', `节点类型 ${node.type} 不支持生成`);
+        store.useStore.getState().pushBackendError('unknown', GEN_PANEL_TEXT.nodeTypeUnsupported(node.type));
         return false;
       }
 
@@ -155,6 +149,33 @@ export function createGenController(
       // 标记「生成中」（写入由 state 负责）
       store.useStore.getState().patchNodeData(nodeId, { generating: true });
 
+      /** `genvideo` 分支的数据（`sendGenVideo` 在这个分支里被调；提到外面会丢类型收窄） */
+      const videoData = node.type === 'genvideo' ? node.data : undefined;
+
+      /**
+       * 发一次**网页通道的视频**（原 `gt` 里的发送）—— 首次发送与**换号重发共用**同一条。
+       * ★ 它留在本文件（**发送源头**）：`sendWatch` 只拿这个回调去"换个账号再发一次"，
+       *   自己**不碰 payload**（不越权）。
+       */
+      const sendGenVideo = (accountId: string | undefined) =>
+        generateVideo(deps, {
+          accounts: s.accounts,
+          poolStrategy: s.poolStrategy,
+          accountId,
+          styleIds,
+          ratio,
+          text: apiText,
+          images: refSources,
+          // 这里脱离了 `node.type === 'genvideo'` 的收窄 ⇒ 显式取一次（它只在这个分支被调）
+          model: videoData?.model,
+          duration: videoData?.duration,
+          channel: isApi ? 'api' : 'doubao',
+          sourceNodeId,
+          providerId: apiProviderId,
+          providerName: apiProviderName,
+          rawText: text,
+        });
+
       const res =
         node.type === 'imggen'
           ? await generateImage(deps, {
@@ -172,22 +193,7 @@ export function createGenController(
               sourceNodeId,
               providerId: apiProviderId,
             })
-          : await generateVideo(deps, {
-              accounts: s.accounts,
-              poolStrategy: s.poolStrategy,
-              accountId: node.data.sendAccount,
-              styleIds,
-              ratio,
-              text: apiText,
-              images: refSources,
-              model: node.data.model,
-              duration: node.data.duration,
-              channel: isApi ? 'api' : 'doubao',
-              sourceNodeId,
-              providerId: apiProviderId,
-              providerName: apiProviderName,
-              rawText: text,
-            });
+          : await sendGenVideo(node.data.sendAccount);
 
       const now = ports.clock.now();
       if (!res.ok) {
@@ -211,7 +217,7 @@ export function createGenController(
           ...(first ? { resultUrl: first.ref, resultAt: now } : {}),
         });
         // ★ 视频本地化（源 `_Component43.jsx:3160`：写完 `attempt.url` 后**立刻** `localizeNodeVideos`）
-        //   链 18（`docs/10` #9）「视频必须落盘」；`void` 调 —— 落盘是收尾，不该拖住"生成成功"的返回
+        //   链 18（`docs/过程.md` #9）「视频必须落盘」；`void` 调 —— 落盘是收尾，不该拖住"生成成功"的返回
         void localizeNodeInto(store, ports, nodeId);
       }
 
@@ -220,7 +226,12 @@ export function createGenController(
       //   ⚠️ `void` 调 —— 监测最长 180s，**绝不能**拖住"发送成功"这条主链的返回。
       //   ⚠️ **只有网页通道**：源的 `watchSendReply` 挂在 `gt`（网页发送）上，API 通道另有一条链。
       if (res.value.via === 'web' && res.value.accountId) {
-        sendWatch?.start({ nodeId, accountId: res.value.accountId, ownText: text });
+        sendWatch?.start({
+          nodeId,
+          accountId: res.value.accountId,
+          // ★ 换号重发的能力**留在发送源头**（本文件持有那次发送的全部参数）
+          resend: async (accountId) => (await sendGenVideo(accountId)).ok,
+        });
       }
       return true;
     },
@@ -243,7 +254,7 @@ export function createGenController(
       const s = store.useStore.getState();
       const node = s.nodes.find((n) => n.id === nodeId);
       if (!node || node.type !== 'genvideo') {
-        store.useStore.getState().pushBackendError('unknown', `节点不存在：${nodeId}`);
+        store.useStore.getState().pushBackendError('unknown', GEN_PANEL_TEXT.nodeMissing(nodeId));
         return false;
       }
 

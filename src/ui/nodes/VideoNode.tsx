@@ -165,7 +165,10 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
     if (el.paused) {
       el.play()
         .then(() => setPlaying(true))
-        .catch(() => undefined);
+        .catch(() => {
+          // catch-ok: `play()` 被浏览器的自动播放策略拒绝（用户尚未交互）—— 预期内、非错误，源亦静默
+          return undefined;
+        });
       return;
     }
     el.pause();
@@ -369,10 +372,10 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
                 {recipe?.ratio ? <span className={styles.videoSpec}>{String(recipe.ratio)}</span> : null}
                 {recipe?.styleName ? <span className={styles.videoSpec}>{recipe.styleName}</span> : null}
                 {recipe?.images?.length ? (
-                  <span className={styles.videoSpec}>{`参考图×${recipe.images.length}`}</span>
+                  <span className={styles.videoSpec}>{VIDEO_NODE_TEXT.specImages(recipe.images.length)}</span>
                 ) : null}
                 {recipe?.textRefs?.length ? (
-                  <span className={styles.videoSpec}>{`引用文本×${recipe.textRefs.length}`}</span>
+                  <span className={styles.videoSpec}>{VIDEO_NODE_TEXT.specTexts(recipe.textRefs.length)}</span>
                 ) : null}
                 {recipe?.accountName ? <span className={styles.videoSpec}>{recipe.accountName}</span> : null}
               </div>

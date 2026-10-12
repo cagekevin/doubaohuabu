@@ -96,13 +96,6 @@ export function buildClickSendScript(): string {
 })()`;
 }
 
-/** 生成「读取输入框文本」脚本（原 `j0` 37252） */
-export const READ_INPUT_SCRIPT = `(() => {
-  const el = document.querySelector('textarea, [contenteditable="true"], [role="textbox"]');
-  if (!el) return { ok: false, text: '' };
-  return { ok: true, text: (el.value != null ? el.value : el.textContent) || '' };
-})()`;
-
 /** 生成「深查询穿透 Shadow DOM」脚本（原 `cD` 37266） */
 export const DEEP_QUERY_SCRIPT = `(() => {
   function deep(sel, root) {
@@ -117,16 +110,128 @@ export const DEEP_QUERY_SCRIPT = `(() => {
   return { ok: true, has: !!deep('[data-input-engine-actionbar-control-key]') };
 })()`;
 
-/** Dola「强开」脚本（原 `Yc` 34754；幂等：`__dolaCanvasForceUIState__`） */
-export const DOLA_FORCE_SCRIPT = `(() => {
-  if (window.__dolaCanvasForceUIState__) return { ok: true, already: true };
-  window.__dolaCanvasForceUIState__ = true;
-  // 只 hook fetch / XHR 以读取响应，**不改页面全局**
-  const of = window.fetch;
-  window.fetch = function (...args) { return of.apply(this, args); };
-  return { ok: true, already: false };
-})()`;
+// ─────────────────────────────────────────────────────────────────────────────
+// 「生成确认」链（原 `kt` / `autoConfirm`，`_Component43.jsx:1738-2052`）
+//
+// 基线读数（`Hd`/`A0`）→ 循环探测 → 点内联按钮（`lD`）或自动回复确认语（`j0` + `Zl`）
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 读「已提交 / 正在生成」回复**计数**（原 `Hd` 37494）
+ *
+ * ⚠️ **逐字搬入**（源文本原样，含转义层级）—— 别改。
+ */
+export const GEN_SUBMITTED_COUNT_SCRIPT = `
+(function(){
+  try {
+    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var inputText = '';
+    if (input) inputText = (input.value || input.textContent || input.innerText || '');
+    function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
+    var inN = norm(inputText);
+
+    var bodyText = norm(document.body.innerText || '');
+    // 只认明确的“已提交/正在生成”完成态。不能用无主语的「开始生成视频」：
+    // 「确认后我再开始生成视频」正好包含它，却表示仍在等待用户确认。
+    var pattern = /(?:视频生成已提交|(?:视频)?生成任务(?:已|已经)?提交|已开始生成视频|正在为你生成(?:视频)?|生成中.{0,20}请稍候|已收到.{0,20}生成请求|提交成功.{0,30}生成|视频生成好后[，,]?\\s*我会主动发送给你)/g;
+    var count = 0, sample = '', match;
+    while ((match = pattern.exec(bodyText))) {
+      if (inN && inN.indexOf(match[0]) !== -1) continue;
+      var lead = bodyText.slice(Math.max(0, match.index - 24), match.index);
+      if (/(?:确认后|确认之后|请先确认|等待确认).{0,20}$/.test(lead)) continue;
+      count++;
+      sample = match[0];
+    }
+    return { hit: count > 0, count: count, text: sample, src:'body', bodyLen: bodyText.length, inputLen: inN.length };
+  } catch(e) { return { hit:false, count:0, error: e.message || String(e) }; }
+})()
+`;
+
+/**
+ * 读「请先确认再生成视频」回复**计数**（原 `A0` 37519）
+ *
+ * ⚠️ **逐字搬入**（源文本原样，含转义层级）—— 别改。
+ */
+export const GEN_CONFIRM_REQUEST_COUNT_SCRIPT = `
+(function(){
+  try {
+    // 输入框文本（我方已发送/待发送内容）——用于排除自触发
+    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var inputText = '';
+    if (input) inputText = (input.value || input.textContent || input.innerText || '');
+    function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
+    var inN = norm(inputText);
+
+    // 全文只计一次：region 与 body 会包含同一条消息，不能重复计数。
+    // 发送前取基线，之后只认新增的确认回复，避免历史会话残留自动触发。
+    var bodyText = norm(document.body.innerText || '');
+    var pattern = /(?:确认(?:后|之后).{0,45}?(?:生成|制作)视频|(?:请|待|等)(?:你|您)?(?:先)?确认.{0,35}?(?:生成|制作)视频)/g;
+    var count = 0, sample = '';
+    var match;
+    while ((match = pattern.exec(bodyText))) {
+      if (inN && inN.indexOf(match[0]) !== -1) continue;
+      count++;
+      sample = match[0]; // 最后一条（回复通常在会话底部）
+    }
+    return { hit: count > 0, count: count, text: sample, src:'body', bodyLen: bodyText.length, inputLen: inN.length };
+  } catch(e) { return { hit:false, count:0, error: e.message || String(e) }; }
+})()
+`;
+
+/**
+ * 点**回复消息内联**的「确认生成」按钮（原 `lD` 37223）
+ *
+ * ⚠️ **逐字搬入**（源文本原样，含转义层级）—— 别改。
+ */
+export const CLICK_CONFIRM_BUTTON_SCRIPT = `
+(function(){
+  try {
+    var candidates = document.querySelectorAll('button, [role="button"]');
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      var txt = (el.textContent || el.innerText || el.value || '').replace(/\\s+/g,' ').trim();
+      if (!/^(?:确认(?:并)?(?:开始)?(?:生成)?|确认生成视频|确认并生成|立即生成|开始生成|继续生成|直接生成(?:完整的(?:一段)?)?视频)$/.test(txt)) continue;
+      if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+      // 必须属于回复消息本身，不能爬到整个对话区/页面容器：短会话里工具栏
+      // 的「确认」按钮也可能与回复文本共享上层容器。
+      if (el.closest && el.closest('nav, header, footer, form, [class*="sidebar"], [class*="input-bar"], [class*="input-area"]')) continue;
+      var node = el.parentElement, nearReply = false;
+      for (var depth = 0; node && node !== document.body && depth < 6; depth++, node = node.parentElement) {
+        var cls = (node.className || '').toString();
+        if (!/(?:message|bubble|assistant|answer|reply|chat-item|chat-block)/i.test(cls)) continue;
+        var context = (node.innerText || '').replace(/\\s+/g,' ').trim();
+        if (context.length < 1200 && /确认后.{0,45}(?:生成|制作)视频/.test(context)) {
+          nearReply = true; break;
+        }
+      }
+      if (!nearReply) continue;
+      el.click();
+      return { found:true, clicked:true, label:txt, strategy:'reply-confirm-button' };
+    }
+    return { found:false };
+  } catch(e) { return { found:false, error:e.message || String(e) }; }
+})()
+`;
+
+/**
+ * 读输入框**内容**（归空白；原 `j0` 37252）
+ *
+ * ⚠️ **逐字搬入**（源文本原样，含转义层级）—— 别改。
+ */
+export const READ_COMPOSER_TEXT_SCRIPT = `
+(function(){
+  try {
+    var input = document.querySelector('textarea.semi-input-textarea')
+      || document.querySelector('textarea[placeholder*="发消息"]')
+      || document.querySelector('[contenteditable="true"]')
+      || document.querySelector('[role="textbox"]')
+      || document.querySelector('textarea');
+    if (!input) return { found:false, text:'' };
+    var value = input.value != null ? input.value : (input.innerText || input.textContent || '');
+    return { found:true, text:String(value || '').replace(/\\s+/g,' ').trim() };
+  } catch(e) { return { found:false, text:'', error:e.message || String(e) }; }
+})()
+`;
 // ─────────────────────────────────────────────────────────────────────────────
 // 提示词分析链（原 `gS` 39044-39255 / `yS` 39256-39449 的页内半）
 //
@@ -175,7 +280,7 @@ export const INPUT_FOCUS_SCRIPT = `(function(){
 
 /**
  * 「读输入框状态」脚本（原 `Ql` 36861）—— 返回 `{found, valueLen, textContentLen, focused}`
- * ⚠️ 与本文件的 `READ_INPUT_SCRIPT`（原 `j0`）**不是同一个**：那个读**内容**，这个读**长度与焦点**
+ * ⚠️ 与 `READ_COMPOSER_TEXT_SCRIPT`（原 `j0`）**不是同一个**：那个读**内容**（且归一空白），这个读**长度与焦点**
  */
 export const READ_INPUT_STATE_SCRIPT = `(function(){
   try {
@@ -239,7 +344,7 @@ export function buildSetInputScript(text: string): string {
  *   源 `catch{ return [] }` 让「脚本崩」与「页面确实没有旧消息」在上游**不可分辨**
  *   （消费者只拿到空基线 ⇒ 旧回复可能被当成新回复，M5）。现与同文件
  *   `buildSetInputScript` 同范式（`{ok:true,…}` ／ `{ok:false, error}`）。
- *   ⚠️ **页内脚本不 `console.warn`**（反检测红线，见 `docs/09` C2）—— 异常只**带回结果**，
+ *   ⚠️ **页内脚本不 `console.warn`**（反检测红线，见 `docs/过程.md` C2）—— 异常只**带回结果**，
  *      留痕由渲染进程侧（`analyze.ts`）做。
  */
 export const MESSAGE_BASELINE_SCRIPT = `(function(){
@@ -318,7 +423,7 @@ export function buildReplyReadScript(opts: ReplyReadScriptOptions): string {
 // ─────────────────────────────────────────────────────────────────────────────
 // 无水印拉取（原 `mD` 37737-37815 / `gD` 37816-37947 的页内脚本）
 //
-// ★ **2026-10-12（`docs/14` §10 的 ⛔ 阻塞）**：这两段是**页内脚本**（在豆包后台
+// ★ **2026-10-12（`docs/过程.md` §10 的 ⛔ 阻塞）**：这两段是**页内脚本**（在豆包后台
 //   webview 里用**同步 XHR** 调 `/samantha/aispace/` 三步链：homepage → node_info →
 //   get_download_info）。**绝不降级到带水印的 get_play_info**（源注释明写）。
 // ⚠️ 由 `core/usecases/fetchWatermarkFree.ts` 经 `BackendPagePort.runScript` 执行。

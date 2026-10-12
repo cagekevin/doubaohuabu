@@ -1,7 +1,7 @@
 /**
  * 生成用例（**双通道**：网页通道 / API 通道）
  *
- * 依据：docs/04-AI协议版.md 单元 4 + docs/03-人类版.md §5
+ * 依据：docs/过程.md 单元 4 + docs/过程.md §5
  *   - 网页通道：`SitePort.send`（选择器策略在 adapter 内部）
  *   - API 通道：`HostPort.api.jobSubmit` / `jobBatch`
  *   - 失败决策：`core/rules/failure` 的 `decideFailAction`（`maxRetry = 2`）
@@ -19,7 +19,7 @@ import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { decideByReason } from '@/core/rules/failure';
 import { FAIL_LABEL, type SendFailKind } from '@/constants/failure';
 import { pickAccount } from '@/core/rules/accountPool';
-import { buildImagePayload, buildVideoPayload } from '@/core/rules/payload';
+import { buildImagePayload, buildVideoPayload, toSitePayload } from '@/core/rules/payload';
 import { clampImageCount } from '@/core/rules/prompt';
 import type { ApiBatchResult, GenResult } from '@/stable/model/gen';
 import { API_VIDEO_RESOLUTION, API_VIDEO_WATERMARK, BATCH_RATIOS } from '@/constants/models';
@@ -48,7 +48,7 @@ export interface GenDeps {
    *
    * 为什么必须注入而不是在本层直接写：占用**必须发生在「选号之后、发送之前」**，
    * 而选号就在本文件里 ⇒ 只有这里能给出正确的时序；但 `set()` 只能发生在 `state/**`。
-   * 这正是 `docs/16` §2.4「`setBusyAccounts` 零调用 ⇒ `all-busy` 排队永不触发」的修法。
+   * 这正是 `docs/过程.md` §2.4「`setBusyAccounts` 零调用 ⇒ `all-busy` 排队永不触发」的修法。
    *
    * @returns `false` = 已被占用（原 `Fi` 的 `return false`）
    */
@@ -397,20 +397,6 @@ export async function generateVideo(deps: GenDeps, input: VideoGenInput): Promis
   );
   if (!web.ok) return web;
   return ok({ via: 'web', accountId: web.value.accountId, results: web.value.results });
-}
-
-/** 把跨进程报文压成 `SitePort.send` 需要的形状（选择器/协议细节留在 adapter） */
-function toSitePayload(p: {
-  content: { text: string; images: unknown[]; params: Record<string, unknown>; autoSend: boolean };
-  source: 'canvas-account-node' | 'canvas-text-node' | 'canvas-image-gen';
-}): Parameters<AnySitePort['send']>[1] {
-  return {
-    text: p.content.text,
-    images: p.content.images as string[],
-    params: p.content.params,
-    autoSend: p.content.autoSend,
-    source: p.source,
-  };
 }
 
 /** 供上层透传：把抛出物转原文（**不做任何加工**） */

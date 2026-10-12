@@ -1,11 +1,11 @@
 /**
  * 宿主事件订阅（★ **唯一写入点** —— 判据 D2 / 职责归位原则 2）
  *
- * 依据：`docs/16` §1.8 + §4.1
+ * 依据：`docs/过程.md` §1.8 + §4.1
  *   `adapters/host/electron` 暴露 `onXxx(cb): () => void`（**只有订阅，只转发**）；
  *   **写入 store 只允许在本文件**。
  *
- * **它修的是哪个真实缺陷**（`docs/14` §4）：
+ * **它修的是哪个真实缺陷**（`docs/过程.md` §4）：
  *   `ApiPort.onJobEvent` 在适配器里**早已实现**，但 **state 侧从来没人订阅**
  *   ⇒ API 通道提交完任务只拿到 `job id`，`done` 事件**回不来** ⇒ 节点永远不落结果。
  *
@@ -18,6 +18,7 @@
 import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
 import { applyApiJobEvent } from '@/core/usecases/applyApiJobEvent';
+import type { DolaMediaController } from './dolaMedia';
 
 export interface Subscriptions {
   /** 卸载全部订阅 */
@@ -30,7 +31,7 @@ export interface Subscriptions {
  * **当前接线（M8 + 2026-10-10 修 + 2026-10-11 落点接通）**：
  *   - `host.api.onJobEvent` → `settings.upsertApiJob`（API 任务状态进 store，**键 = `jobId`**）
  *   - ★ **落点生效**：同一条事件再走 `core/usecases/applyApiJobEvent`（**纯决策**）→
- *     `addToLibrary` / `attachVideoResultToNode` / `patchNodeData` / `attachImageResultToNode` / `pushToast`。
+ *     `addToLibrary` / `addVideoNode` / `patchNodeData` / `attachImageResultToNode` / `pushToast`。
  *     ⇒ **API 通道的「出片落画布」至此闭环**（原 `applyApiJobEvent` 直接写 store 的六件事）。
  *
  * ★ **载荷字段是 `jobId`**（不是 `id`）：类型声明成 `ApiJobLite`（字段 `id`）⇒
@@ -40,11 +41,21 @@ export interface Subscriptions {
  * **待接线（各自用例落地时补，仍只在本文件）**：
  *   - ~~`host.clipboard.onChanged` → 剪贴板图片~~ ★ **已接（2026-10-12 复核）**：走 `state/hostOps.ts:134`
  *     ← `ui/canvas/CanvasHost.tsx:225`（**不经本文件** —— 若日后要收口"订阅唯一写入点"，这是落点）
- *   - `host.media.onDolaMedia` → 无水印资源（**需先扩 `HostPort`**，见 `docs/16` §1.5）
+ *   - ★ `host.media.onDolaMedia` → `state/dolaMedia`（**2026-10-12 已接**；**图像支未落** —— 见该文件头）
  *   - ⚠️ `applyApiJobEvent` 决策的 **`feed` 字段未落**（`pushImageGenFeed`）：源把它当 state 维护，
- *     但 119 个展开组件里**无读者** ⇒ `docs/16` §2.9 裁定「派生视图」⇒ 不落（TD-16-85）。
+ *     但 119 个展开组件里**无读者** ⇒ `docs/过程.md` §2.9 裁定「派生视图」⇒ 不落（TD-16-85）。
  */
-export function createSubscriptions(store: AppStore, ports: Ports): Subscriptions {
+/** 订阅要调到的控制器（由 `bootstrap/container` 给 —— 订阅本身**只在本文件**） */
+export interface SubscriptionDeps {
+  /** ★ CDP 媒体推送的消费者（原 `_Component43.jsx:130-345` 的 `onDolaMedia`） */
+  dolaMedia: DolaMediaController;
+}
+
+export function createSubscriptions(
+  store: AppStore,
+  ports: Ports,
+  deps: SubscriptionDeps,
+): Subscriptions {
   const offs: Array<() => void> = [];
 
   // ── API 任务事件 → settings.apiJobs（快照）+ 画布/资源库（落点）──
@@ -64,8 +75,17 @@ export function createSubscriptions(store: AppStore, ports: Ports): Subscription
       //    顺序有意义：视频/图片附加与 `nodePatch` 都改**同一个节点的 data**，先后不能反。
       if (decision.library.length > 0) st.addToLibrary(decision.library);
       if (decision.videoNode) {
-        st.attachVideoResultToNode(decision.videoNode.sourceNodeId, {
+        st.addVideoNode({
           url: decision.videoNode.url,
+          vid: (decision.videoNode.attempt?.vid as string | undefined) ?? null,
+          width: null,
+          height: null,
+          duration: null,
+          poster: null,
+          accountId: (decision.videoNode.attempt?.accountId as string | undefined) ?? null,
+          accountName: '',
+          name: '视频',
+          sourceNodeId: decision.videoNode.sourceNodeId,
           attempt: decision.videoNode.attempt,
         });
       }
@@ -79,6 +99,19 @@ export function createSubscriptions(store: AppStore, ports: Ports): Subscription
         });
       }
       if (decision.toast) st.pushToast(decision.toast.text, decision.toast.durationMs, decision.toast.level);
+    }),
+  );
+
+  // ── CDP 媒体推送 → 无水印分享 / 画布（原 `onDolaMedia`，`_Component43.jsx:130`）──
+  //    ⚠️ 订阅**只在本文件**；落 store 由 `state/dolaMedia` 控制器负责（原则 1/2）
+  offs.push(ports.host.media.onDolaMedia((event) => deps.dolaMedia.handle(event)));
+
+  // ── 后台页租约快照 → 「谁该保持挂载」（原 `sT` → `_Component43` 的 `d`，`shared.js:25962-25975`）──
+  //    ★ 源那两句：`gp.add(e)` 后紧跟 `e(Ck())` ⇒ **订阅即回调一次当前快照**，
+  //      store 的初值由此而来（不必在别处再补一次）。
+  offs.push(
+    ports.backendPage.subscribeLeases((accountIds) => {
+      store.useStore.getState().setLeasedAccounts([...accountIds]);
     }),
   );
 

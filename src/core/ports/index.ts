@@ -25,7 +25,7 @@ export interface Ports {
   readonly clock: ClockPort;
   /**
    * ★ 账号后台页（`<webview>`）—— 原版是**组件间注册表**（`vr` + `_Component43` 的 `reloadAccount`）
-   * 没有显式契约；本工程把它提成端口（`docs/16` §3.1 取舍 1）。
+   * 没有显式契约；本工程把它提成端口（`docs/过程.md` §3.1 取舍 1）。
    */
   readonly backendPage: BackendPagePort;
 }

@@ -17,7 +17,7 @@ const { parse } = require('@babel/parser');
 const ROOT = path.resolve(__dirname, '../../..');
 const SRC = path.join(ROOT, 'docs/豆包画布原版参考/expanded_components');
 
-/** 已知子组件 → 人话（依据 docs/12 / docs/13 的回源结论） */
+/** 已知子组件 → 人话（依据 docs/12 / docs/过程.md 的回源结论） */
 const COMPONENT_ALIAS = {
   _Component28: 'NodeResizer',
   _Component29: 'FaceMaskOverlay(iL)',

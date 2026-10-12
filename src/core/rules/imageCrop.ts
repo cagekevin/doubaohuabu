@@ -99,7 +99,7 @@ export function initialCropRect(size: CropSize, ratio?: number): CropRect {
  *   `Tt(e,t,n) = Math.max(t, Math.min(n, e))` **在公式上就保证结果 ≥ `ts`**
  *   （`Math.max(ts, …)` 不可能小于 `ts`）⇒ 那句判定**永不触发**，是**死分支/假护栏**
  *   （本仓另有 13 笔同形态债）。⇒ 本仓**不照抄**它：`applyCrop` 只做 clamp 并直接返回，
- *   调用方拿到的**必然是合法框**；源的「裁剪区域太小」文案保留在 `docs/13` 的登记里备查。
+ *   调用方拿到的**必然是合法框**；源的「裁剪区域太小」文案保留在 `docs/过程.md` 的登记里备查。
  */
 export function applyCrop(rect: CropRect, size: CropSize, min: number = CROP_MIN_EDGE): CropRect {
   const x = Math.round(clamp(rect.x, 0, size.w - 1));

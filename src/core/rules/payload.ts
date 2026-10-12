@@ -11,6 +11,16 @@
  */
 
 import { composeImagePrompt, composeVideoPrompt } from './prompt';
+import { isRecord } from '@/lib/object';
+
+/**
+ * ★ **两个品牌 symbol（结构约束 M1，`docs/11` §六·六）—— 故意不导出**
+ *
+ * 效果：`WirePayload` / `SiteSendPayload` 只能由**本文件**产出
+ *   （`build*Payload` 与 `toSitePayload`）⇒ 别的模块**只能引用类型、造不出来**。
+ */
+const WIRE: unique symbol = Symbol('doubao.wirePayload');
+const SITE: unique symbol = Symbol('doubao.siteSendPayload');
 // ★ **2026-10-12（`TD-16-109`）**：时间戳格式化收口到 `lib/time.toIsoTimestamp`（此前本文件 ×3 各写一份）
 import { toIsoTimestamp } from '@/lib/time';
 // ★ 2026-10-12（`TD-04-11`）：分区前缀取值收口到**唯一真源**（此前此处是第二套写死值）
@@ -19,6 +29,70 @@ import { defaultPartitionOf } from '@/core/rules/partition';
 /** 发送来源（原实现三种；跨进程契约，不得改名） */
 export const SEND_SOURCES = ['canvas-image-gen', 'canvas-text-node', 'canvas-account-node'] as const;
 export type SendSource = (typeof SEND_SOURCES)[number];
+
+/**
+ * `SitePort.send` 要的**已组装**形态 —— 从跨进程报文里取出那半边（原 `_Component44` 的
+ *   `a.sendPayload(o.account.id, o.content, o.sourceNodeId)`：它传的是 **`content`**，不是整份报文）
+ *
+ * ⚠️ **为什么必须有这一步**：`build*Payload` 产出的是**跨进程报文**（字段都在 `content` 下），
+ *   而 `site.send` 收的是**扁平形态**（`text` / `images` / `params` / `autoSend` / `source`）。
+ *   两者**不能互传** —— 传错时 `payload.text` / `payload.images` 恒为 `undefined`
+ *   （而 `payload.images.length` 会**直接抛**），且 `as` 会把类型检查糊掉。
+ * ⚠️ 三个调用方共用这一份（判据 C1）：`usecases/generate`（网页通道）· `state/batchSend`
+ *   （批量发送的 transport）· `state/accountOps`（账号节点「填入」）。
+ */
+export interface SiteSendPayload {
+  /**
+   * ★ **品牌（结构约束 M1，`docs/11` §六·六）** —— `SITE` **不导出** ⇒ 本类型**只能**由
+   *   `toSitePayload` 产出；别的模块只能**引用**它，**造不出来**（手写一个字面量编译不过）。
+   */
+  readonly [SITE]: true;
+  text: string;
+  /** ★ **归一成 `string[]`**（`img://` 引用）—— 见下方 `normalizeImages` */
+  images: readonly string[];
+  params: Record<string, unknown>;
+  autoSend: boolean;
+  source: SendSource;
+}
+
+/**
+ * 图引用归一（**「能一种的别搞两种」**）
+ *
+ * 报文里 `content.images` 是**有意宽**的（`unknown[]`）：图片通道传 `string[]`、
+ * 视频/账号节点传 `{label, dataUrl}[]`（`state/batchSend` 的 `prepare` 就产出后者）。
+ * 而 `site.send` 侧只认 `img://` 字符串（适配器 `ref => ({ dataUrl: ref })`）
+ * ⇒ 在此**收成一份**：字符串原样留、对象取 `dataUrl`、其余丢掉（空串也无意义）。
+ */
+function normalizeImages(images: readonly unknown[]): string[] {
+  const out: string[] = [];
+  for (const it of images) {
+    if (typeof it === 'string') {
+      if (it) out.push(it);
+      continue;
+    }
+    if (isRecord(it) && typeof it.dataUrl === 'string' && it.dataUrl) out.push(it.dataUrl);
+  }
+  return out;
+}
+
+/**
+ * 跨进程报文 → 站点适配器入参（见 `SiteSendPayload`）
+ *
+ * ★ **它是 `SiteSendPayload` 的唯一构造器**（品牌 `SITE` 不导出）⇒ 适配器入参在结构上
+ *   只可能来自这里；「把报文直接传给 `send`」编译不过（不再依赖"记得看名字"）。
+ */
+export function toSitePayload<C extends Record<string, unknown>>(
+  wire: WirePayload<C>,
+): SiteSendPayload {
+  return {
+    [SITE]: true,
+    text: wire.content.text,
+    images: normalizeImages(wire.content.images),
+    params: wire.content.params,
+    autoSend: wire.autoSend,
+    source: wire.source,
+  };
+}
 
 /** 报文里的账号摘要（**不是完整 Account** —— 只传跨进程需要的三个字段） */
 export interface PayloadAccount {
@@ -29,7 +103,9 @@ export interface PayloadAccount {
 }
 
 /** 跨进程报文的公共外形（`apiVersion: '1.0'`） */
-export interface SendPayload<C extends Record<string, unknown>> {
+export interface WirePayload<C extends Record<string, unknown>> {
+  /** ★ **品牌（M1）**：`build*Payload` 是唯一构造器 ⇒ 手写字面量编译不过 */
+  readonly [WIRE]: true;
   apiVersion: '1.0';
   action: 'account_node_send';
   /** ISO 8601（由外部注入的时间生成） */
@@ -74,7 +150,7 @@ export function buildImagePayload(input: {
   model?: string;
   resolution?: string;
   /**
-   * ⚠️ **有意宽**（不是偷懒）：`content.images` 是**跨进程黑盒载荷**（`SendPayload.content.images: unknown[]`，
+   * ⚠️ **有意宽**（不是偷懒）：`content.images` 是**跨进程黑盒载荷**（`WirePayload.content.images: unknown[]`，
    *   由后端读）—— 图片通道传 `string[]`、视频通道传 `{label,dataUrl}[]`，"形状不一致"本身是
    *   `TD-04-10`（IPC 载荷形状母体）家族的问题，**不在本刀收窄**（收窄会掩盖真正的通道分歧）。
    *   本刀只把它从"可选"改为**必填**（唯一调用方 `core/usecases/generate` 恒传）。
@@ -82,7 +158,7 @@ export function buildImagePayload(input: {
   images: readonly unknown[];
   sourceNodeId?: string | null;
   now: number;
-}): SendPayload<{ imageParams: { count: number; model: string | null; resolution: string | null } }> {
+}): WirePayload<{ imageParams: { count: number; model: string | null; resolution: string | null } }> {
   const text = composeImagePrompt({
     text: input.text,
     stylePrefix: input.stylePrefix,
@@ -99,6 +175,7 @@ export function buildImagePayload(input: {
   const resolution = /^(1K|2K|4K)$/.test(resolutionRaw) ? resolutionRaw : '';
 
   return {
+    [WIRE]: true,
     apiVersion: '1.0',
     action: 'account_node_send',
     timestamp: toIsoTimestamp(input.now),
@@ -130,7 +207,7 @@ export function buildVideoPayload(input: {
   sourceNodeId?: string | null;
   stylePrefix: string;
   now: number;
-}): SendPayload<{ genParams: { duration: number | null; model: string | null } }> {
+}): WirePayload<{ genParams: { duration: number | null; model: string | null } }> {
   const text = composeVideoPrompt({
     text: input.text,
     model: input.model,
@@ -143,6 +220,7 @@ export function buildVideoPayload(input: {
   const model = input.model ?? '';
 
   return {
+    [WIRE]: true,
     apiVersion: '1.0',
     action: 'account_node_send',
     timestamp: toIsoTimestamp(input.now),
@@ -172,7 +250,7 @@ export function buildAccountNodePayload(input: {
   autoSend?: boolean;
   sourceNodeId?: string | null;
   now: number;
-}): SendPayload<Record<string, unknown>> {
+}): WirePayload<Record<string, unknown>> {
   const texts = (input.texts ?? []).map((t) => String(t ?? '').trim()).filter(Boolean);
   const images = Array.isArray(input.images) ? input.images : [];
 
@@ -180,6 +258,7 @@ export function buildAccountNodePayload(input: {
   const text = texts.length > 0 ? texts.join('\n') : `请参考以下 ${images.length} 张素材图片进行创作。`;
 
   return {
+    [WIRE]: true,
     apiVersion: '1.0',
     action: 'account_node_send',
     timestamp: toIsoTimestamp(input.now),

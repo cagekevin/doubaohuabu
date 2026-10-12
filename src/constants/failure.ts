@@ -1,7 +1,7 @@
 /**
  * 失败分类（★ SSOT：kind 联合 + 文案映射的唯一真源）
  *
- * 依据：docs/04-AI协议版.md 附表（原 `_S` 41509 / `f3` / `p3` / `h3` / `m3` / `z0` / `g3`）
+ * 依据：docs/过程.md 附表（原 `_S` 41509 / `f3` / `p3` / `h3` / `m3` / `z0` / `g3`）
  *
  * ⚠️ 为什么 kind 放在 `constants` 而不是 `core/model`：
  *    `constants` 是 L0、`core` 是 L2。文案映射（本文件）必须被 L0 使用，
@@ -34,6 +34,16 @@ export const SEND_FAIL_KINDS = [
    *   实测本仓生产的 reason 只有 9 种，前 8 种都已在表里 ⇒ **只缺这一个**。
    */
   'bad-input',
+  /**
+   * **发送前校验未通过**（**逐字对源** —— `_Component43.jsx:1270` 的
+   * `return { ok:false, reason:'precheck-fail', note:`发送前校验未通过：${…}` }`）
+   *
+   * ★ **2026-10-12 补**（与 `bad-input` 同法、「源头没给全」的又一例）：本仓
+   *   `adapters/site/doubao` 的 `send` 照源实现了 Phase 3a 的**文本那一档**闸
+   *   （`autoSend` 时内容没进输入框 ⇒ 不点发送）⇒ 需要一个 kind 承载它。
+   * ⚠️ **只补到刚好够**：源的图数 / 图序两档依赖页内指纹探测（见 `docs/过程.md（原 plan/02）` 片 2b），未落。
+   */
+  'precheck-fail',
   'unknown',
 ] as const;
 export type SendFailKind = (typeof SEND_FAIL_KINDS)[number];
@@ -100,6 +110,10 @@ export const FAIL_LABEL: Record<SendFailKind, string> = {
   //   源里**没有**这个 label（它只是守卫的 reason）⇒ 本句是展示层自产，与其余项同性质；
   //   ⚠️ 它**不覆盖**原始 message（`materialReplace` 已带原文「更换素材：节点不是素材节点或未选择图片」）。
   'bad-input': '入参不合法：节点或素材不符合要求',
+  // ★ 随 `precheck-fail` 一并补（`Record<SendFailKind, string>` 要求一一对应）——
+  //   源里**没有**这个 label（它只是 3a 的 reason）⇒ 本句是展示层自产，与其余项同性质；
+  //   ⚠️ 它**不覆盖**原始 message（生产者已带原文「发送前校验未通过：文本未填入聊天框」）。
+  'precheck-fail': '发送前校验未通过：内容没进对话框',
   unknown: '发送失败',
 };
 

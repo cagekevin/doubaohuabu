@@ -9,6 +9,7 @@ import {
   buildDetectPlan,
   clamp01,
   clampBoxToImage,
+  explainEmptyFaceDetect,
   iou,
   coverFit,
   displayFaceRects,
@@ -196,5 +197,46 @@ describe('displayFaceRects（原 sL 39924-39940）', () => {
     expect(displayFaceRects([], { w: 200, h: 100 }, 2)).toEqual([]);
     expect(displayFaceRects(null, { w: 200, h: 100 }, 2)).toEqual([]);
     expect(displayFaceRects([face(0,0,1,1)], { w: 0, h: 0 }, 2)).toEqual([]);
+  });
+});
+
+
+describe('explainEmptyFaceDetect（原 `G3.jsx:346-350` 的三目）', () => {
+  it('★ 全部尝试都抛 ⇒ 报“识别失败”，带**原始错误原文**（不是“没识别到”）', () => {
+    expect(explainEmptyFaceDetect({ tried: 4, failed: 4, errors: ['detect boom'] })).toEqual({
+      kind: 'failed',
+      reason: 'detect boom',
+    });
+  });
+
+  it('★ 错误原文里有 GPU/WebGL 特征 ⇒ 单独一档（`gpuUnavailable` 那句）', () => {
+    for (const msg of ['activeTexture', 'WebGL context lost', 'GL_INVALID', 'GPU unavailable']) {
+      expect(explainEmptyFaceDetect({ tried: 2, failed: 2, errors: [msg] })).toEqual({ kind: 'gpu' });
+    }
+  });
+
+  it('★ **跑通了但没脸** ⇒ `no-faces`（哪怕有部分尝试抛过）', () => {
+    // failed(1) < tried(4)
+    expect(explainEmptyFaceDetect({ tried: 4, failed: 1, errors: ['boom'] })).toEqual({ kind: 'no-faces' });
+    // 一次都没失败
+    expect(explainEmptyFaceDetect({ tried: 4, failed: 0, errors: [] })).toEqual({ kind: 'no-faces' });
+    // 一次都没跑（tried=0/failed=0）—— `failed > 0` 不成立 ⇒ 也说“没脸”（与源一致）
+    expect(explainEmptyFaceDetect({ tried: 0, failed: 0, errors: [] })).toEqual({ kind: 'no-faces' });
+  });
+
+  it('★ `errors` 为空但全失败 ⇒ `failed` + **空 reason**（兜底那句由文案层给：`|| 检测器异常`）', () => {
+    expect(explainEmptyFaceDetect({ tried: 1, failed: 1, errors: [] })).toEqual({ kind: 'failed', reason: '' });
+  });
+
+  it('★ 只看 `errors[0]`（源 `K.errors[0]`）—— 后面几条不参与 GPU 判定', () => {
+    expect(
+      explainEmptyFaceDetect({ tried: 2, failed: 2, errors: ['boom', 'WebGL context lost'] }),
+    ).toEqual({ kind: 'failed', reason: 'boom' });
+  });
+
+  it('★ 不可变：不改传入的统计', () => {
+    const s = { tried: 1, failed: 1, errors: ['x'] };
+    explainEmptyFaceDetect(s);
+    expect(s).toEqual({ tried: 1, failed: 1, errors: ['x'] });
   });
 });

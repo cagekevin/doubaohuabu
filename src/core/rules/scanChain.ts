@@ -37,8 +37,47 @@ export type ScanPhase = (typeof SCAN_PHASES)[number];
 export const SCAN_SCOPES = ['canvas', 'panel', 'feed', 'site'] as const;
 export type ScanScope = (typeof SCAN_SCOPES)[number];
 
+/**
+ * 页面类型（原 `Sn` 22637 = Lovart · `$s` 33108 = Tapnow —— **同一枚举**）
+ *
+ * ★ 与 `SCAN_PHASES` / `SCAN_SCOPES` 同法：**运行时真源只此一份**，端口 `import type` 转发。
+ *   此前它在 **3 处**各持一份（`adapters/site/{tapnow,lovart}/pageKind.ts` ＋ 端口的**内联字面量**）
+ *   ⇒ 判据 C1 第 3 处到点，收口到这里。
+ * ⚠️ **判定函数**（主机名 + 路径规则）仍留各站点目录（判据 A1：站点专属）。
+ */
+export const PAGE_KINDS = {
+  CANVAS: 'canvas',
+  FEED: 'feed',
+  OTHER: 'other',
+} as const;
+export type PageKind = (typeof PAGE_KINDS)[keyof typeof PAGE_KINDS];
+
 /** 已废弃的档位（**保留常量仅供兼容读取**，不得作为可选档位） */
 export const DEPRECATED_SCAN_STRATEGY = 'chrome-cdp';
+
+/**
+ * 画布页地址里的画布 id —— 源里这形状出现**三处**（`n0` 33129 判定用 · `Yl` 33411 取值用 ·
+ * `wP:33930` 的 DOM 半 gate 用）⇒ 收口到一份（判据 C1）。
+ * ⚠️ **只认 `pathname`**：源 `wP:33930` 是在**整个 href** 上找（`?next=/canvas/x` 也会命中）
+ *   ⇒ 本仓更严（如实标注）。
+ */
+const CANVAS_ID_PATH_RE = /^\/canvas\/([0-9a-f-]{8,})/i;
+
+/**
+ * 从页面地址切出画布 id（原 `Yl` 33411 的切法）
+ * ⚠️ URL 非法 / 路径不匹配 ⇒ **空串**（语义即"这不是画布页"，不是错误）
+ */
+export function canvasIdFromHref(href: unknown): string {
+  if (!href || typeof href !== 'string') return '';
+  try {
+    const path = new URL(href).pathname || '';
+    return path.match(CANVAS_ID_PATH_RE)?.[1] ?? '';
+  } catch (e: unknown) {
+    // ⚠️ 与源一致：URL 非法 ⇒ 空串
+    void e;
+    return '';
+  }
+}
 
 /**
  * 还剩哪几档可试（按链序，排除已试过的）

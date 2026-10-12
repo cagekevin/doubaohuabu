@@ -27,7 +27,7 @@ const TOAST_DURATION_MS = 3000;
  *
  * ⚠️ **只列本片真的用**的键（判据 B5：不留没人读的开关）—— 四处：
  *   `doubao-newimages-{autocap,current-only,folded}` + `doubao-view-head-collapsed`（后台视图头部折叠）。
- * ⚠️ `autocap` = **非 Lovart 站点**的自动值守总开关（`docs/10` #11 / `main.js:2749` 的裁定**只覆盖 Lovart**）。
+ * ⚠️ `autocap` = **非 Lovart 站点**的自动值守总开关（`docs/过程.md` #11 / `main.js:2749` 的裁定**只覆盖 Lovart**）。
  */
 export type UiFlagKey =
   | typeof LS_NEWIMAGES_FOLDED
@@ -45,7 +45,7 @@ export interface UiSliceDeps {
   /**
    * 读「画布默认值」（原 `NT()`，`shared.js:26491-26503`：`JSON.parse` 失败 / 非对象 ⇒ 兜底三空）
    *
-   * ★ **2026-10-12 落（`docs/15` §3 的 `canvasDefaults` 真缺口）**：它是**对象**，不是 `'0'/'1'` 开关
+   * ★ **2026-10-12 落（`docs/过程.md` §3 的 `canvasDefaults` 真缺口）**：它是**对象**，不是 `'0'/'1'` 开关
    * ⇒ 不走 `readFlag`/`writeFlag`（那两个的签名只收 `UiFlagKey` 且值恒字符串）。
    */
   readCanvasDefaults: () => CanvasDefaults;
@@ -169,7 +169,7 @@ export interface UiSlice {
    *    （`AppShell` 里的 `<GenPanel/>`）。
    * ⚠️ 源是**两个**面板（`Z3_1.jsx` 文生视频 / `_Component45.jsx` 文生图）各带一个 id；
    *    本仓的 `GenPanel` 是**二者合一**（既有设计）⇒ 消费侧取「先 imggen 后 genvideo」。
-   * ⚠️ **这是唯一真源**：此前 `GenPanel` 用 `selected` 推导（`docs/14` §4 的登记项）。
+   * ⚠️ **这是唯一真源**：此前 `GenPanel` 用 `selected` 推导（`docs/过程.md` §4 的登记项）。
    */
   genPanelNodeId: string | null;
   imggenPanelNodeId: string | null;

@@ -23,16 +23,16 @@
 .view {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  /* ★ 必须**高于画布顶栏**（`--z-panel`）—— 源里打开后台后顶栏不可见（`docs/参考-原版界面/06`），
+     本仓顶栏是 `.centerStage` 内的绝对定位层，视图若低于它就会被压在下面（顶栏胶囊叠在后台头部上）。 */
+  z-index: var(--z-overlay);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--color-surface);
-}
-
-/* 可见态（对应源 `dv-visible`）—— 无额外声明，只为与源的 class 语义对齐、便于排查 */
-.viewVisible {
-  display: flex;
+  /* 以下三行 = `mockup.css:1822`（`.doubao-view`）—— 遮住画布顶栏的前提是不透明背景 */
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-surface-raised);
 }
 
 /* 隐藏态（对应源 `dv-hidden`）—— **只隐藏，不卸载**（`<webview>` 仍在 DOM） */
@@ -47,6 +47,85 @@
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* 真值 = `docs/mockup/assets/mockup.css:1844`（`.doubao-view-webviews`） */
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+
+/* 空态（原 `.doubao-empty-hint`）—— 复用共享真源 `.empty`，只补它撑满剩余高度 */
+.emptyHint {
+  composes: empty from '../common/shared.module.css';
+  flex: 1;
+}
+
+/*
+ * ── 静默遮罩（原 `.silent-overlay` / `.silent-mask` / `.silent-center` / `.silent-resume-btn` / `.silent-tip`）──
+ * 真值：`.silent-overlay` = `mockup.css:1848`；其余 mockup**未收录** ⇒ 按源语义补（待原版 CSS 校）。
+ * ★ **底图（`.silent-snap` + `.has-snap`）已落**（2026-10-13）：静默那一刻由 `BackendPagePort.captureSnapshot`
+ *   截下（原 `je`），垫在遮罩之下；截不到就是没有 `<img>`（`mockup` 无这两条 ⇒ 按 token 自写）。
+ */
+.silentOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+/* 压在图/内容之间的遮罩层（原 `.silent-mask`）—— 就是共享的媒体遮罩 */
+.silentMask {
+  composes: scrim from '../common/shared.module.css';
+}
+
+/*
+ * 静默底图（原 `.silent-snap`）—— 铺满遮罩、**不可交互**
+ * ⚠️ `mockup.css` 未收录 ⇒ 按 token 自写。`object-fit: cover` 让 960px 宽的截图铺满。
+ */
+.silentSnap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+
+.silentCenter {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* 68×68 恢复钮（`docs/mockup/README.md` §「后台管理的真实状态」） */
+.silentResume {
+  composes: btn btnIcon from '../common/shared.module.css';
+  width: 68px;
+  height: 68px;
+}
+
+.silentPauseIcon {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.silentPauseIcon i {
+  display: block;
+  width: 6px;
+  height: 20px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.silentTip {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 /* 隐藏态：仍在 DOM 里（后台任务要能用它跑脚本），但不可见、不占位 */
@@ -70,74 +149,70 @@
 }
 
 /* ───────────────── 头部工具栏（原 `.dv-head-wrap` / `.dv-head-clip` / `.doubao-view-head` / `.dv-head-toggle`）─────────────────
-   ⚠️ 与源版的一处**有意差异**：源是整页级容器（`dv-head-clip` 用 JS 量高度做折叠动画），
-      本工程只在账号栏里占位 ⇒ 折叠用 **CSS `height: 0`**（无需量高度、无需 ref）。
+   ★ 折叠高度**由 JS 量出后内联**（原 `_Component43.jsx:101-117` 的 ResizeObserver
+     ＋ `:3226-3228` 的 `style={{ height }}`）—— 本文件只管裁切与过渡。
    ⚠️ 原则 5：色值/间距/圆角只走 `styles/tokens.css` 的 token。 */
 
 .head {
-  composes: panelHead from '../common/shared.module.css';
-  /* 仅追加真源未设的属性 */
-  margin-bottom: var(--space-1);
+  position: relative;
+  flex: 0 0 auto;
 }
 
 .headClip {
-  flex: 1;
-  min-width: 0;
-  /* 折叠动画（源 `.dv-head-clip` 的 `transition: height`，源用 JS 给 height；这里给固定行高更简单） */
-  height: 28px;
   overflow: hidden;
   transition: height 0.15s ease;
 }
 
-.headCollapsed .headClip {
-  height: 0;
-}
-
+/* 视图头（原 `.doubao-view-head`，真值 = `docs/mockup/assets/mockup.css:1823-1827`） */
 .headInner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
+  gap: var(--space-3);
+  padding: 10px var(--space-4);
   background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+/* 视图题（原 `.dv-title`，真值 = `mockup.css:1828`）—— 居中 · 次级色 */
+.headTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 
 .actions {
   display: flex;
   flex: none;
-  gap: var(--space-1);
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.btn {
-  padding: 2px var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+/* ★ 逐字对源：源里这些是全局 `btn sm`（`_Component43.jsx:3235` / `:3246` / `:3255`），
+   「返回画布」是 `btn sm primary`（`:3262`）⇒ 一律走真源 `.btn`，不自造小按钮。 */
+.headBtn {
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
-.btn:hover {
-  background: var(--color-surface-hover);
+.headBtnPrimary {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
 }
 
+/* 折叠钮（原 `.dv-head-toggle`）—— 悬在头部下缘居中；宽度 = 原版（`mockup.css:1837`，推断值待校） */
 .headToggle {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  font-size: var(--font-size-sm);
-  line-height: 1;
-  color: var(--color-text-muted);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.headToggle:hover {
-  background: var(--color-surface-hover);
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: var(--space-half);
+  width: 52px;
 }

@@ -1,10 +1,9 @@
 /**
- * 节点状态五族的数据形状（原 `shared.js` 的 store 字段）
+ * 节点状态三族的数据形状（原 `shared.js` 的 store 字段）
  *
- * ★ **2026-10-12（`TD-16-93` 数据层）**：通知三族（`nodeNotices`/`nodeWaitTimes`/`nodeSwitches`）
- *   + 计时器两族（`nodeTimers`/`nodePendingTimers`）的形状。它们是 **store 字段**（不是
- *   `node.data`），生产者 = 「发送后监测」循环（原 `_Component43` 的 `autoConfirm`/`watchSendReply`，
- *   **未移植**），消费者 = `TextNode` 的 `reply-notice`/`wait-countdown`/`switch-status` 三块 UI。
+ * ★ **2026-10-12（`TD-16-93`）**：`nodeNotices` / `nodeWaitTimes` / `nodeSwitches` 三族的形状。
+ *   它们是 **store 字段**（不是 `node.data`）；生产者 = `state/sendWatch`（「发送后监测」循环），
+ *   消费者 = `TextNode` 的 `reply-notice` / `wait-countdown` / `switch-status` 三块 UI。
  *
  * ⚠️ **形状照抄源**（`shared.js`）：
  *   | 族 | 源 | 形状 | setter 守卫 |
@@ -12,12 +11,12 @@
  *   | `nodeNotices` | 31199-31239 | `{level,code,accountId,title,text,at}` | `text` 有值才设，否则删 |
  *   | `nodeWaitTimes` | 31903-31936 | `{minutes,seconds,detectedAt,text}` | `seconds > 0` 才设，否则删 |
  *   | `nodeSwitches` | 31268-31299 | `{state,fromName,toName?,reason,at}` | `state` 有值才设，否则删 |
- *   | `nodeTimers` | 31845-31873 | `number`（时间戳） | `r != null` 才设，否则删 |
- *   | `nodePendingTimers` | 31874-31902 | `number`（时间戳） | 同上 |
  *
  * ⚠️ **本文件只放形状**，setter/clear 的**写入逻辑**在 `state/slices/nodeStatus.ts`
  *   （原则 1：只有 state 写 store）。这里的纯函数只供 setter 做「该不该写」的判定（可单测）。
  */
+
+import { pad2 } from '@/lib/time';
 
 /** 节点通知（原 `setNodeNotice` 写入的形状） */
 export interface NodeNotice {
@@ -85,4 +84,38 @@ export function waitTimeToWrite(input: Omit<NodeWaitTime, 'detectedAt'> & { dete
 export function switchToWrite(input: Omit<NodeSwitch, 'at'>, at: number): NodeSwitch | null {
   if (!input || !input.state) return null;
   return { ...input, at };
+}
+
+// ─────────────────────────── 账号节点的「已过时长」计时器（原 `LL` + `OL.jsx:255-415`）───────────────────────────
+
+/** 红档阈值（ms，原 `OL.jsx:415` 的 `600000` = 10 分钟） */
+const TIMER_RED_MS = 600000;
+/** 黄档阈值（ms，原 `OL.jsx:415` 的 `300000` = 5 分钟） */
+const TIMER_YELLOW_MS = 300000;
+
+/**
+ * 毫秒 → 「已过时长」文本（原 `LL`，`shared.js:40736-40752`）
+ *
+ * ⚠️ **与 `formatCountdown`（原 `NL`）不是同一个**（判据 C1 管的是**同一形态**，这两个不同）：
+ *   · 本函数用 **floor**（向下取整）；`NL` 用 **ceil**
+ *   · 本函数的**时位补零**（`padStart(2,'0')`）；`NL` 的时位**不补**（`1:02:03` vs `01:02:03`）
+ *   · 负值 / 非有限 ⇒ 源归 **0**（`NL` 是 `max(0, ceil(...))`）
+ */
+export function formatElapsed(ms: number): string {
+  const v = ms < 0 || !Number.isFinite(ms) ? 0 : ms;
+  const total = Math.floor(v / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
+}
+
+/** 计时器档位（原 `OL.jsx:415` 的 `timer-red` / `timer-yellow` / 无后缀 三支） */
+export type TimerBand = 'red' | 'yellow' | 'normal';
+
+/** 已过时长 → 档位（**顺序即语义**：先判红再判黄 —— 源就是嵌套三元） */
+export function timerBand(elapsedMs: number): TimerBand {
+  if (elapsedMs >= TIMER_RED_MS) return 'red';
+  if (elapsedMs >= TIMER_YELLOW_MS) return 'yellow';
+  return 'normal';
 }

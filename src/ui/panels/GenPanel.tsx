@@ -1,7 +1,7 @@
 /**
  * 生成面板（原 `Z3_1.jsx` 文生视频 / `_Component45.jsx` 文生图 —— **两者共用同一套 `.gp-*` 骨架**）
  *
- * 依据：`docs/03-人类版.md` §5 §8 · 参考图 `docs/参考-原版界面/03 · 11`
+ * 依据：`docs/过程.md` §5 §8 · 参考图 `docs/参考-原版界面/03 · 11`
  *
  * ── 骨架（**逐行对源** `Z3_1.jsx:955-1218`）──
  *   `.gen-panel-layer`（**整屏透明层**，`onMouseDown` = 提交并关闭；**没有暗底遮罩**）
@@ -106,7 +106,7 @@ export function GenPanel() {
   const pushToast = useStore((s) => s.pushToast);
   /**
    * ★ **2026-10-11**：面板开合由 **`genPanelNodeId` / `imggenPanelNodeId`** 决定
-   *   （原 `shared.js:31467,31482`）—— 此前用 `selected` 推导（`docs/14` §4 的登记项）。
+   *   （原 `shared.js:31467,31482`）—— 此前用 `selected` 推导（`docs/过程.md` §4 的登记项）。
    *   ⚠️ 同一时刻源只会开一个；本仓两面板合一 ⇒ 取「先 imggen 后 genvideo」。
    */
   const genPanelNodeId = useStore((s) => s.genPanelNodeId);

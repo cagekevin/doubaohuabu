@@ -10,6 +10,7 @@ import {
   formatDateTimeMinute,
   formatLocalDate,
   formatMonthDayMinute,
+  formatRelativeTime,
   toIsoTimestamp,
   parseSiteTimestamp,
 } from '../time';
@@ -170,5 +171,32 @@ describe('toIsoTimestamp（`TD-16-109` 收口的原语）', () => {
   it('⚠️ 它是 **UTC**（不是本地时区）—— 本地时区请用 `formatDateTimeMinute`', () => {
     // 同一时刻：ISO 恒为 UTC 的 `00:00`，而本地格式化会带时区偏移
     expect(toIsoTimestamp(0)).toBe('1970-01-01T00:00:00.000Z');
+  });
+});
+
+describe('formatRelativeTime（原 `UP` 34366-34385）', () => {
+  const NOW = new Date(2026, 0, 20, 12, 0, 0).getTime();
+
+  it('★ 五档：刚刚 / 分钟 / 小时 / 天 / 日期', () => {
+    expect(formatRelativeTime(NOW - 30_000, NOW)).toBe('刚刚'); // < 1 分钟
+    expect(formatRelativeTime(NOW - 5 * 60_000, NOW)).toBe('5 分钟前');
+    expect(formatRelativeTime(NOW - 3 * 3_600_000, NOW)).toBe('3 小时前');
+    expect(formatRelativeTime(NOW - 2 * 86_400_000, NOW)).toBe('2 天前');
+  });
+
+  it('★ 各档都是 `Math.floor`（**逐级取整**：59.9 分钟仍是「59 分钟前」）', () => {
+    expect(formatRelativeTime(NOW - (59 * 60_000 + 59_000), NOW)).toBe('59 分钟前');
+    expect(formatRelativeTime(NOW - 23 * 3_600_000 - 3_599_000, NOW)).toBe('23 小时前');
+    // ⚠️ 逐级取整 vs 各自除毫秒：29 天 23 小时 ⇒ 仍是「29 天前」（不是 30 天）
+    expect(formatRelativeTime(NOW - (29 * 86_400_000 + 23 * 3_600_000), NOW)).toBe('29 天前');
+  });
+
+  it('★ **>= 30 天** ⇒ `YYYY-MM-DD`（本地时区、月日补零）', () => {
+    const ts = new Date(2026, 0, 5, 12, 0, 0).getTime();
+    expect(formatRelativeTime(ts, ts + 31 * 86_400_000)).toMatch(/^2026-01-05$/);
+  });
+
+  it('⚠️ `ts` 在**未来** ⇒ 差值为负 ⇒ 落进「刚刚」（源版如此，照抄）', () => {
+    expect(formatRelativeTime(NOW + 60_000, NOW)).toBe('刚刚');
   });
 });

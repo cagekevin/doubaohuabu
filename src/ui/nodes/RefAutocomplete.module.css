@@ -63,8 +63,9 @@
   font-size: var(--font-size-xs);
 }
 
+/* ★ 复用**唯一**的关闭钮（`ui/common` 的 `.panelClose`）—— 本地只追加真源未设的**定位** */
 .close {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  composes: panelClose from '../common/shared.module.css';
   position: absolute;
   right: var(--space-1);
   top: var(--space-1);

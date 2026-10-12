@@ -37,11 +37,12 @@ import {
 } from 'react';
 import { useStore } from '@/state';
 import { TEXT_NODE_LABEL } from '@/stable/model/node';
-import { AUTO_MATCH_TEXT, MATERIAL_NODE_TEXT, NODE_EDIT_TEXT, PRESET_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
+import { AUTO_MATCH_TEXT, MATERIAL_NODE_TEXT, NODE_EDIT_TEXT, NODE_STATUS_TEXT, PRESET_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
 import { parseRefChips } from '@/core/rules/refs';
 import { autoMatchText } from '@/core/rules/autoMatch';
 import { FuzzyConfirmPanel } from './FuzzyConfirmPanel';
 import { sendStatusView } from '@/core/rules/sendStatus';
+import { countdownOf, formatCountdown } from '@/core/rules/sendWatch';
 import {
   collectLinkedMaterials,
   materialDataUrlOf,
@@ -66,6 +67,37 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   /** 发送状态（原 `CL.jsx:757` 的 `l` = `nodeSendStates[id]`；由 `state/batchSend` 写入） */
   const sendState = useStore((s) => s.nodeSendStates[id]);
   const sendView = sendStatusView(sendState?.status);
+  /** 回复提示条（原 `CL.jsx:713` 的 `h` = `nodeNotices[id]`；生产者 = `state/sendWatch`） */
+  const notice = useStore((s) => s.nodeNotices[id]);
+  const clearNodeNotice = useStore((s) => s.clearNodeNotice);
+  /** 等待倒计时（原 `CL.jsx:28-34` 的 `c` = `nodeWaitTimes[id]`；生产者 = `state/sendWatch`） */
+  const wait = useStore((s) => s.nodeWaitTimes[id]);
+  /** 换号状态（原 `CL.jsx:768` 的 `m` = `nodeSwitches[id]`；生产者 = `state/sendWatch` 的 `performSwitch`） */
+  const sw = useStore((s) => s.nodeSwitches[id]);
+  /**
+   * 倒计时心跳（原 `CL.jsx:37-64`，**逐行**）
+   *
+   * 源：以 `d = 'detectedAt|seconds'` 为依赖 → 250ms 心跳、到点自停（源另有一支「挂载即过期就直接
+   *   `u(1)`」—— 本仓 `nowMs` 初值即挂载时刻，首次渲染天然判到点 ⇒ 不需要它）。
+   * ⚠️ 渲染期禁 `Date.now()`（eslint `Cannot call impure function during render`）⇒ 源那个
+   *   "渲染期算剩余"在本仓改为**时钟进 state**（`nowMs`），由心跳推进（同 `SendQueuePanel`）。
+   * ⚠️ 依赖用**派生的 `waitEnd`（数字）**而非 `wait` 对象：后者每次 store 更新都换引用，
+   *   用它当依赖会让心跳**无谓重启**。
+   */
+  const waitEnd = wait ? wait.detectedAt + wait.seconds * 1000 : null;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (waitEnd == null) return;
+    const end = waitEnd;
+    const timer = window.setInterval(() => {
+      const t = Date.now();
+      if (t >= end) window.clearInterval(timer); // 源 `Y()`：到点自停
+      setNowMs(t);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [waitEnd]);
+  /** 倒计时读数（原 `CL.jsx:63-64` 的 `f` / `p`）—— 时刻**注入**，渲染期不读时钟 */
+  const countdown = countdownOf(wait, nowMs);
   /** ★ 素材缩略条要从**边**推导「连入的素材节点」（原 `w`） */
   const edges = useStore((s) => s.edges);
   /**
@@ -369,6 +401,46 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
               {sendState?.msg}
             </span>
           ) : null}
+          {/*
+            ★ 「等待倒计时」（原 `CL.jsx:763-767`）—— 位置**逐字对源**：发送状态之后、
+            切换状态（未落）之前。`title` = 那句话（含全角空格）。
+            ⚠️ 显示判据 = `c` 存在（源 `{c && …}`）；`wait-done` 档在**到点后**由 `countdown.ended` 给出。
+          */}
+          {wait && (
+            <span
+              className={`${styles.waitCountdown}${countdown.ended ? ` ${styles.waitDone}` : ''} nodrag nopan`}
+              title={NODE_STATUS_TEXT.waitTitle(wait.text, wait.minutes, countdown.ended)}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {countdown.ended
+                ? NODE_STATUS_TEXT.waitEnded
+                : NODE_STATUS_TEXT.waitRunning(wait.minutes, formatCountdown(countdown.remainingMs))}
+            </span>
+          )}
+          {/*
+            ★ 「换号状态」（原 `CL.jsx:768-772`）—— 位置**逐字对源**：等待倒计时之后、
+            `head-actions` 之前。数据源 `nodeSwitches[id]`（生产者 = `state/sendWatch.performSwitch`）。
+            ⚠️ 三档文案与 `title` 全在 `NODE_STATUS_TEXT`（SSOT）；样式与 `.waitCountdown` 同族。
+          */}
+          {sw && (
+            <span
+              className={`${styles.switchStatus}${
+                sw.state === 'done'
+                  ? ` ${styles.switchDone}`
+                  : sw.state === 'failed'
+                    ? ` ${styles.switchFailed}`
+                    : ` ${styles.switchSwitching}`
+              } nodrag nopan`}
+              title={sw.reason ? NODE_STATUS_TEXT.switchTitle(sw.reason, sw.toName) : undefined}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {sw.state === 'done'
+                ? NODE_STATUS_TEXT.switchDone(sw.toName)
+                : sw.state === 'failed'
+                  ? NODE_STATUS_TEXT.switchFailed(sw.reason)
+                  : NODE_STATUS_TEXT.switchSwitching(sw.toName)}
+            </span>
+          )}
           {/* `head-actions`（原 `CL.jsx:773-780`）—— 头部**最后**一项「保存预设」 */}
           <button
             type="button"
@@ -385,6 +457,44 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
       }
       selected={selected}
     >
+      {/*
+        ★ 回复提示条（原 `CL.jsx:713-729`）—— 数据源 `nodeNotices[id]`（生产者 = `state/sendWatch`）。
+        浮在**节点上方**（`.replyNotice` 的 `absolute` 基准是 `.node`，逃出正文区的裁剪）。
+        ⚠️ base = `warn` 档，只为有差异的 `error` / `info` 输出修饰类（源 `reply-notice-${level || 'warn'}`）。
+        ⚠️ `title` = `h.text`（源同）；`nodrag nopan` 免得拖它时把节点一起拖走。
+      */}
+      {notice && (
+        <div
+          className={`${styles.replyNotice}${
+            notice.level === 'error'
+              ? ` ${styles.replyNoticeError}`
+              : notice.level === 'info'
+                ? ` ${styles.replyNoticeInfo}`
+                : ''
+          } nodrag nopan`}
+          title={notice.text}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <span className={styles.replyNoticeIcon} aria-hidden="true">
+            {NODE_STATUS_TEXT.noticeIcon[notice.level]}
+          </span>
+          <span className={styles.replyNoticeBody}>
+            {notice.title && <span className={styles.replyNoticeTitle}>{notice.title}</span>}
+            <span className={styles.replyNoticeText}>{notice.text}</span>
+          </span>
+          <button
+            type="button"
+            className={styles.replyNoticeClose}
+            title={NODE_STATUS_TEXT.noticeClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              clearNodeNotice(id);
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className={styles.editWrap}>
         {/*
           ★ 正文工具条（原 `.text-toolbar`，`CL.jsx:784-815`）：

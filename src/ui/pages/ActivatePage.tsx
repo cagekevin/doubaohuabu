@@ -123,7 +123,7 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
     if (!machineCode) return;
     // ★ **越权修正（2026-10-12）**：原为裸 `navigator.clipboard.writeText(machineCode)` ——
     //   而 canonical `hostOps.copyText` **早已存在**（`state/hostOps.ts:54`），其端口实现内部
-    //   保证 `docs/10` #8 的 **`clear()` → `writeText()` → `await`** 序列（`host.port.ts:74`）。
+    //   保证 `docs/过程.md` #8 的 **`clear()` → `writeText()` → `await`** 序列（`host.port.ts:74`）。
     //   裸调**丢掉 `clear()`** ⇒ 旧剪贴板内容残留。⚠️ 本文件头注自述"**不直调端口**"
     //   ⇒ 这是同一文件里的**自相矛盾**（越权形态：能调生产者导出的转发口却不调）。
     //   ⚠️ 失败文案**不自己拼**：`msgMachineCopyFailed` 是源的逐字文案（`W3.jsx:32-44`）。
@@ -182,7 +182,7 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
         // ⚠️ 与源一致：**等 600ms 再解锁**，否则这条成功消息一闪而过
         setTimeout(() => onActivated(), UNLOCK_DELAY_MS);
       } else if (v.status === 'tampered') {
-        setMsg(LICENSE_TEXT.msgTampered(v.tamperReason || '时间篡改'));
+        setMsg(LICENSE_TEXT.msgTampered(v.tamperReason));
         setMsgKind('err');
         void refresh();
       } else if (v.status === 'used') {

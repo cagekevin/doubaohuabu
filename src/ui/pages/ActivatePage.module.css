@@ -14,8 +14,6 @@
 
 .card {
   composes: panel from '../common/shared.module.css';
-  display: flex;
-  flex-direction: column;
   gap: var(--space-3);
   width: 100%;
   max-width: 460px;

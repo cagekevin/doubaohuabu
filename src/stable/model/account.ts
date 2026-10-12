@@ -1,10 +1,10 @@
 /**
  * 账号 / 分组 / 指纹模型 —— ★ 冻结契约（**值形状**不可改）
- * 依据：docs/03-人类版.md §0.4 + docs/06-账号与站点集成.md §3（7 维指纹）
+ * 依据：docs/过程.md §0.4 + docs/过程.md-账号与站点集成.md §3（7 维指纹）
  * 归属说明：数据形状属 `stable`（L1）—— 见 `./node.ts` 头部说明
  */
 
-import { FINGERPRINT_VERSION, type HostOS } from '@/constants';
+import type { HostOS } from '@/constants';
 
 /** 站点类型（原 `bT` 26399） */
 export const SITE_TYPES = ['doubao', 'dola', 'lovart', 'tapnow', 'gpt', 'other'] as const;
@@ -141,7 +141,7 @@ export const isSiteType = (v: unknown): v is SiteType =>
  * 账号类型归一化（原 `Ps` 26441-26447）
  *
  * 规则：**在 `SITE_TYPES` 里就原样返回，否则一律回落 `'doubao'`**
- * ⚠️ 为什么放 `stable/model`：它与 `isAccountUsable` / `isFingerprintStale` 同类
+ * ⚠️ 为什么放 `stable/model`：它与 `isAccountUsable` 同类
  *    —— 都是「对**账号形状**的纯判定」，且 `SITE_TYPES` 的真源就在本文件（SSOT 就近）。
  *    （原版 `Ps` 被 7 处跨模块复用 ⇒ 需要一个共享宿主，`stable/model` 正合适。）
  * ⚠️ 与源一致：**没有**「未知类型保留原文」的分支，未知一律变 `doubao`。
@@ -151,6 +151,3 @@ export const normalizeAccountType = (type: unknown): SiteType => {
   return isSiteType(t) ? t : 'doubao';
 };
 
-/** 指纹版本是否过期（过期需 M6 重算） */
-export const isFingerprintStale = (f: Fingerprint | undefined): boolean =>
-  !!f && f.ver !== FINGERPRINT_VERSION;

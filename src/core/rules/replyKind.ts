@@ -8,12 +8,16 @@
  *   - `BR` shared.js:36579-36586 —— 询问型（"要不要开始生成"）
  *   - `HR` shared.js:36587-36594 —— 排队型（"排队生成中"）
  *   - `WR` shared.js:36595-36625 —— **分类器**（顺序 FR → BR → HR，命中即停；空 → `no-reply`）
- *   - `VR` shared.js:36626-36630 —— 「是否算新回复」
+ *
+ * ⚠️ 源的 `VR`（`:36626-36630` 「是否算新回复」）**不单列**：它的判据是「当前文本 ≠ 发送前基线、
+ *   且 ≠ 哨兵句」，而这两条在本仓都由**页内脚本**承担 —— 基线过滤在 `buildReplyReadScript`
+ *   的 `baseline`（`scripts.ts`），哨兵回显过滤同在它的 `head`/`full`（`head` = 指令前 40 字，
+ *   原 `$D` `:38979-38989`）⇒ 拿不到第二个消费者，硬接就是恒真的假守卫。
  *
  * ⚠️ 与 `failure.ts` **必须分开**（判据 H1）：
  *   · `failure` 分类的是**发送失败**（14 类）→ 决定 `give-up`/`retry-switch`/`retry`；
  *   · 本模块分类的是**模型回复内容**（5 类）→ 决定"生成到底开始了没"。
- *   两者混在一起 ⇒ 无法单独测试与扩展（`docs/04` 附表末尾明确要求不可混）。
+ *   两者混在一起 ⇒ 无法单独测试与扩展（`docs/过程.md` 附表末尾明确要求不可混）。
  *
  * ⚠️ 本模块**不接触** `window` / `Date` / 随机（原则 4）。
  */
@@ -84,15 +88,4 @@ export function classifyReply(text: unknown): ReplyKindResult {
   if (isOfferToStart(t)) return { kind: 'offer', reply: true };
   if (isGenerating(t)) return { kind: 'busy', reply: true };
   return { kind: 'other', reply: true };
-}
-
-/**
- * 是否算「新回复」（原 `VR` 36626）
- *
- * 规则：当前文本非空、**不等于哨兵句**、且与上一次文本不同。
- */
-export function isNewReply(prev: unknown, cur: unknown): boolean {
-  const p = normalizeSpace(prev);
-  const c = normalizeSpace(cur);
-  return !!c && c !== REPLY_SENTINEL && (!p || c !== p);
 }

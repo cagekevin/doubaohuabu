@@ -9,11 +9,17 @@
  *   头部有动作按钮（扫描 / 全选 / 反选 / 清空选择 / 导入 / 从画布收藏 / 清空 / 关闭），
  *   内容区是缩放网格（勾选 + 缩略图 + 大图徽标 + 预览），底部是「添加到画布 (N)」。
  *
- * ⛔ **仍未落地的逐条标注（判据 B4，不假装）**：
- *   | 缺 | 源 | 原因 |
- *   |---|---|---|
- *   | **扫描 Tapnow 画布** | `ce`（原 423） | 走**站点页内脚本**读画布节点 —— 与 M11 剩余三项**同一层**（转写量大且无运行时验证手段） |
- *   | 从磁盘导入 | `oe`（原 437） | 需要"多选文件 → 读成 dataUrl"一条链（`FilePort` 目前只有单文件选目录/下载） |
+ * ★ **「导入图片」已落**（原 `oe` 436 + `he` 306-322）：走 `hostOps.importFiles`（系统对话框，
+ *   与本仓「＋ 添加素材」同一个入口）→ 逐张量尺寸 → `addLovartImages`（出处 `'import'`）。
+ *   ⚠️ 与源两处差异（如实标注）：① 源用**隐藏 `<input type=file>`**、本仓走**端口**（判据 C1）；
+ *   ② 源把「量尺寸失败」的兜底 `200 × 160` 写在 `Pu` 里，本仓同一份在 `lib/readDroppedFile`。
+ *   ⚠️ 《此前那版头注写着「`FilePort` 只有单文件选目录/下载」⇒ 导入做不了》 —— 那句是**错的**：
+ *     `FilePort.importFiles` 一直返回**多文件**，且 `readImageFile`（原 `Pu`）早已在仓里。
+ *
+ * ★ **「扫描 Tapnow 画布」已落**（原 `ce` ＝ `Yl` + `qc`）：走 `accountOps.scanCanvas`
+ *   （站点**接口**读画布节点 → 逐张落盘 → 入库）—— 见下方 `onScan`。⚠️ 与源两处差异（如实标注）：
+ *   ① 源的取图走页内脚本（`pP`/`mp`，失败再回落主进程），本仓**直接走主进程**；
+ *   ② 源的 `useDom: true` 还会再扫一遍页面 DOM 并合并，本仓**只走接口**（DOM 那半是另一条链）。
  *
  * ✅ **已落**（2026-10-11）：查看 / 单张移除 / 清空 / **从画布收藏**（原 `Ie` 440）/
  *   **大图预览**（`GalleryLightbox`）/ **选择态 + 全选·反选·清空选择**（原 427-435）/
@@ -28,13 +34,21 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useStore } from '@/state';
+import { useAccountOps, useHostOps, useStore } from '@/state';
+import type { ScanPhaseEvent } from '@/core/ports/site.port';
+import { toMessage } from '@/core/model/result';
 import { GalleryCard } from './GalleryCard';
 import { GalleryLightbox } from './GalleryLightbox';
 import { GALLERY_TEXT } from '@/constants/text';
 import { GALLERY_GRID_GAP, GALLERY_GRID_SCALE, GALLERY_PAGE_SIZE } from '@/constants';
 import { formatBytes } from '@/core/rules/downloadNode';
-import { canvasMaterialBookmarks, type LovartImage } from '@/core/rules/lovartGallery';
+import {
+  canvasMaterialBookmarks,
+  importedGalleryItems,
+  type ImportedGalleryImage,
+  type LovartImage,
+} from '@/core/rules/lovartGallery';
+import { measureImageSize, stripExtension } from '@/lib/readDroppedFile';
 import { galleryItemDims, isBigGalleryItem } from '@/core/rules/materialGrid';
 import styles from './GalleryPanel.module.css';
 import shared from '@/ui/common/shared.module.css';
@@ -69,6 +83,15 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
   const [preview, setPreview] = useState<number | null>(null);
   /** ★ 已显示张数（原 `C`；首屏 `Dd` = 60，「加载更多」每次再加） */
   const [visible, setVisible] = useState(GALLERY_PAGE_SIZE);
+  /** ★ 扫描阶段机（原 `y` 的 `{phase, message}`；`null` = 没在扫） */
+  const [phase, setPhase] = useState<ScanPhaseEvent | null>(null);
+  /**
+   * ★ **面板忙**（原 `m`，`_Component23:30`）—— 源是**一个**标志：扫描与导入共用它，
+   *   并同时禁用「导入图片 / 从画布收藏 / 清空画廊」三颗钮（`disabled={m}`）。
+   */
+  const [busy, setBusy] = useState(false);
+  const accountOps = useAccountOps();
+  const hostOps = useHostOps();
 
   const accountName = useMemo(
     () => accounts.find((a) => a.id === accountId)?.name ?? accountId,
@@ -87,6 +110,89 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
       else next.add(id);
       return next;
     });
+  };
+
+  /**
+   * ★ **扫描 Tapnow 画布**（原 `ce` 333-300 的编排半）—— 走 `accountOps.scanCanvas`
+   *   （站点**接口**读画布节点：`Yl` + `qc`），扫到的图直接入库本账号画廊。
+   *
+   * ⚠️ 三档 toast 的**文案 / 时长 / 语气逐字对源**（原 `:271-289`）；`!ok` **原文透传**（原则 6）。
+   * ⚠️ **一处如实差异**：源首档「没停在画布页」是 `warn`，本仓**按消息来源**认它
+   *   （比的是同一张 SSOT 常量，不是字面量）—— 分类表 `SendFailKind` 属**发送域**，没有这一档。
+   * ⚠️ **另一处**：源只失败时会带**首条失败原因**（`failures[0].error`），本仓 `ScanResult.failed`
+   *   只有计数（逐张原因进 `log.warn`）⇒ 只报张数（见 `GALLERY_TEXT.scanFailedOnly` 的注释）。
+   */
+  const onScan = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await accountOps.scanCanvas(accountId, { onPhase: setPhase });
+      if (!r.ok) {
+        const notOnCanvas = r.message === GALLERY_TEXT.scanNeedCanvas;
+        pushToast(r.message, notOnCanvas ? 6500 : 6000, notOnCanvas ? 'warn' : 'error');
+      } else if (r.value.added > 0) {
+        pushToast(
+          GALLERY_TEXT.scanOk(r.value.added, r.value.skipped, r.value.failed),
+          5000,
+          r.value.failed > 0 ? 'warn' : 'success',
+        );
+      } else if (r.value.failed > 0) {
+        pushToast(GALLERY_TEXT.scanFailedOnly(r.value.failed), 7000, 'error');
+      } else {
+        pushToast(GALLERY_TEXT.scanNone, 6000, 'warn');
+      }
+    } catch (e) {
+      // ★ 原则 6：不静默 —— 原文透传（与「出新图」面板同法）
+      pushToast(GALLERY_TEXT.scanException(toMessage(e)), 6000, 'error');
+    } finally {
+      setBusy(false);
+      setPhase(null);
+    }
+  };
+
+  /**
+   * ★ **从磁盘导入图片**（原 `oe` 436 的按钮 + `he` 306-322 的处理）
+   *
+   * 顺序（逐字对源）：`importFiles()` → 逐张 `Pu`（**读成 dataUrl 且量原始尺寸**）
+   *   → 滤掉读不出来的 → `addLovartImages`（出处 `'import'`）
+   *   → 三档提示（`已导入 N 张…` / `这些图片已在画廊中（重复跳过）` / `导入失败：…`）。
+   *
+   * ⚠️ 与源两处差异（如实标注）：
+   *   ① 源是**隐藏 `<input type=file multiple>`**（`v.current.click()`），本仓走端口
+   *      `hostOps.importFiles`（系统对话框）—— 与本仓「＋ 添加素材」同一个入口（判据 C1）；
+   *   ② 源的「导入失败」只有 **catch** 一条路（`Pu` 从不 reject，源那两个失败分支里能走到
+   *      的只有它）；本仓多一条 `!ok`（对话框被取消 / 失败是**端口**才有的形态），
+   *      两者共用**同一句** `导入失败：` —— 不另造文案。
+   */
+  const onImport = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await hostOps.importFiles();
+      if (!res.ok) {
+        pushToast(GALLERY_TEXT.importFailed(res.message), GALLERY_TEXT.msgMs, 'error');
+        return;
+      }
+      const read: ImportedGalleryImage[] = [];
+      for (const f of res.value) {
+        const dataUrl = f.dataUrl ?? '';
+        // ⚠️ 读不出来（`dataUrl` 空）的**不量尺寸**，交给 `importedGalleryItems` 丢掉（源同法）
+        const size = dataUrl ? await measureImageSize(dataUrl) : { natW: 0, natH: 0 };
+        read.push({ name: stripExtension(f.name), dataUrl, ...size });
+      }
+      const added = addLovartImages(accountId, importedGalleryItems(read));
+      if (added > 0) pushToast(GALLERY_TEXT.importOk(added), GALLERY_TEXT.msgMs, 'success');
+      else pushToast(GALLERY_TEXT.importDup, GALLERY_TEXT.msgMs, 'warn');
+    } catch (e) {
+      // ★ 原则 6：原文透传；拿不到 message 才用源那两句兜底里的那句
+      pushToast(
+        GALLERY_TEXT.importFailed(toMessage(e) || GALLERY_TEXT.importUnknownError),
+        GALLERY_TEXT.msgMs,
+        'error',
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   /** 大图预览翻页（原 `U` 90-98：**环形**取模） */
@@ -151,9 +257,15 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
       actions={
         <div className={styles.actions}>
             <span className={styles.count}>{GALLERY_TEXT.count(items.length)}</span>
-            {/* ⛔ 扫描：**禁用 + 说明原因**（走站点页内脚本，与 M11 剩余三项同一层） */}
-            <button type="button" className={shared.btn} disabled title={GALLERY_TEXT.pendingScan}>
-              {GALLERY_TEXT.scan}
+            {/* ★ 扫描：走**站点接口**读当前画布节点（原 `ce`；阶段文案逐字对源 `:424`） */}
+            <button
+              type="button"
+              className={shared.btn}
+              disabled={busy}
+              title={GALLERY_TEXT.scan}
+              onClick={() => void onScan()}
+            >
+              {busy && phase ? (phase.phase === 'working' ? phase.message : GALLERY_TEXT.scanReading) : GALLERY_TEXT.scan}
             </button>
             <span className={styles.sep} />
             {/* ★ 全选 / 反选 / 清空选择（原 427-435，**禁用条件逐字**） */}
@@ -188,15 +300,27 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
               {GALLERY_TEXT.clearSelection}
             </button>
             <span className={styles.sep} />
+            {/* ★ 「导入图片」（原 436：源是隐藏 file input，本仓走端口 —— 见 `onImport`） */}
+            <button
+              type="button"
+              className={shared.btn}
+              disabled={busy}
+              title={GALLERY_TEXT.importTitle}
+              onClick={() => void onImport()}
+            >
+              {GALLERY_TEXT.importImages}
+            </button>
             {/*
               ★ 「加入画布选中素材」（原 `Ie` 336-359）—— 2026-10-11 接通：
                 写入方（`addLovartImages`）早已就位，缺的只是"从选中节点取字段"这一步
                 （现在落在纯层 `canvasMaterialBookmarks`，可测）。
-              ⚠️ 三条提示与源版**逐字相同**（含那条 4500ms 的"尚未选中"）。
+              ⚠️ 三条提示与源版**逐字相同**（含那条 4500ms 的"尚未选中"）；语气/时长对齐
+                `onImport`（同一个源 `h`：`'ok'` → `success`、默认 3500ms）。
             */}
             <button
               type="button"
               className={shared.btn}
+              disabled={busy}
               title={GALLERY_TEXT.addSelectedTitle}
               onClick={() => {
                 const picked = canvasMaterialBookmarks(nodes);
@@ -205,10 +329,8 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
                   return;
                 }
                 const added = addLovartImages(accountId, picked);
-                // ⚠️ 源版这句的 `'ok'` 是**面板内本地 banner** 的语气（它那个 `h` 是 `setMsg`），
-                //   不是 store toast 的等级 ⇒ 落到最近的一档 `info`（成功）。
-                if (added > 0) pushToast(GALLERY_TEXT.addSelectedOk(added), undefined, 'info');
-                else pushToast(GALLERY_TEXT.addSelectedDup, undefined, 'warn');
+                if (added > 0) pushToast(GALLERY_TEXT.addSelectedOk(added), GALLERY_TEXT.msgMs, 'success');
+                else pushToast(GALLERY_TEXT.addSelectedDup, GALLERY_TEXT.msgMs, 'warn');
               }}
             >
               {GALLERY_TEXT.addSelected}
@@ -217,7 +339,7 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
             <button
               type="button"
               className={`${shared.btn} ${styles.danger}`}
-              disabled={items.length === 0}
+              disabled={busy || items.length === 0}
               title={GALLERY_TEXT.clearTitle}
               onClick={() => clearLovartGallery(accountId)}
             >

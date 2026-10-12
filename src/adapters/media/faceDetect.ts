@@ -37,6 +37,8 @@ import {
   FACE_LOAD_WIDTH,
   FACE_MIN_SCORE,
   type PixelFaceBox,
+  // ⚠️ 统计形状住纯层（`MediaPort.faceDetectStats` 也要它 ⇒ 端口只有类型，原则 3）
+  type FaceDetectStats,
 } from '@/core/rules/faceDetect';
 import { createCanvas, loadImage } from '@/lib/image';
 import { withThumb } from '@/stable/protocols/img';
@@ -54,22 +56,17 @@ interface Detectors {
   short: MpFaceDetector;
 }
 
-/** 检测统计（原 `Rs`，经 `LD` 读取）—— 供人脸/指纹诊断面板显示 */
-export interface FaceDetectStats {
-  /** 已尝试的检测次数 */
-  tried: number;
-  /** 抛异常的检测次数 */
-  failed: number;
-  /** 去重后的错误原文 */
-  errors: string[];
-}
-
 /** 懒加载单例（原 `bl`）；失败时置回 `null` 以便重试 */
 let detectors: Promise<Detectors> | null = null;
 /** 统计（原 `Rs`）—— **每次检测重置** */
 let stats: FaceDetectStats = { tried: 0, failed: 0, errors: [] };
 
-/** 读取统计（原 `LD` 39477）—— 返回**副本**，防外部改内部状态 */
+/**
+ * 读取统计（原 `LD` 39477）—— 返回**副本**，防外部改内部状态
+ *
+ * ⚠️ **消费者**：`adapters/media/facePort.faceDetectStats` → `MediaPort` → `state/hostOps` →
+ *   `ui/panels/ImageEditor`（检测**一张脸都没有**时区分「检测器全失败」与「没脸」，原 `G3.jsx:346-350`）。
+ */
 export function faceDetectStats(): FaceDetectStats {
   return { ...stats, errors: [...stats.errors] };
 }

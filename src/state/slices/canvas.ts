@@ -8,10 +8,12 @@
 
 import type { CanvasNode, NodeType } from '@/stable/model/node';
 import type { CanvasEdge, LibraryItem, Preset, VideoShare } from '@/stable/model/project';
+import type { OperationLogEvent } from '@/core/ports/host.port';
 import {
   commitSnapshot,
   initialUndoStack,
   redo as redoStack,
+  shouldRecordOperation,
   undo as undoStack,
   type UndoStack,
 } from '@/core/rules/undo';
@@ -122,6 +124,15 @@ export interface CanvasSliceDeps {
    * ⚠️ 与 `GallerySliceDeps.normalizeImage` 是**同一个东西**（同一处注入实现）。
    */
   persistImage(dataUrl: string): string;
+  /**
+   * ★ **操作日志**（原 `commit` 尾部的 `window.api.logProjectOperation`，`shared.js:26912-26928`）
+   *
+   * ⚠️ `type` = **撤销 key**（用户操作种类，如 `'delete'` / `'library'` / `'replace-mat-<id>'`），
+   *   缺省 `'edit'`（源 `type: n || 'edit'`）。
+   * ⚠️ 「当前工程有没有保存路径」的守卫与 `projectId` 由**注入方**补（见 `bootstrap/container`）——
+   *   源是在 `commit` 里现读 store；本仓把这两件交给注入实现，slice 只给 `type` 与画布规模。
+   */
+  logOperation?(e: Omit<OperationLogEvent, 'projectId'>): void;
 }
 
 export interface CanvasSlice extends ApiLandingActions {
@@ -133,7 +144,7 @@ export interface CanvasSlice extends ApiLandingActions {
    * ★ **无水印视频分享**（原 `videoShares`，`shared.js:27900-27939` 的 `addVideoShare` 写入）
    *
    * 随 `ProjectData` 持久化（`setPartial` 镜像进 `projects[activeId].data.videoShares`）。
-   * ⚠️ 消费者 = 「无水印资源」面板（原 `SD.jsx`，未落 —— 见 `docs/13` §2.3）。
+   * ⚠️ 消费者 = 「无水印资源」面板（原 `SD.jsx`，未落 —— 见 `docs/过程.md` §2.3）。
    */
   videoShares: VideoShare[];
   addVideoShare: (input: Omit<VideoShare, 'id' | 'createdAt'>) => void;
@@ -668,7 +679,17 @@ export function createCanvasSlice(
 
     commit: (key) => {
       const s = get();
-      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), key, deps.now()) });
+      const now = deps.now();
+      // ⚠️ 源的合并守卫在压栈前 `return`（⇒ **跳过日志**）—— 与 `commitSnapshot` 内部同一判据
+      const record = shouldRecordOperation(s.undo, key, now);
+      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), key, now) });
+      if (!record) return;
+      // 操作日志（原 26912-26928）：`type` = 撤销 key（空 ⇒ `'edit'`）；`detail` 用**提交前**的画布规模
+      deps.logOperation?.({
+        at: now,
+        type: key || 'edit',
+        detail: { nodes: s.nodes.length, edges: s.edges.length, library: s.library.length },
+      });
     },
 
     undoAction: () => {
@@ -1377,12 +1398,13 @@ export function createCanvasSlice(
       get().patchNodeData(id, patch);
     },
 
-    // ★ API 任务事件的落点（`addToLibrary` / `attachImageResultToNode` / `attachVideoResultToNode`）
+    // ★ API 任务事件的落点（`addToLibrary` / `attachImageResultToNode` / `addVideoNode`）
     //   —— 主体在 `./apiLanding.ts`（同片片段；`canvas.ts` 已到 `max-lines` 上限〔该规则 2026-10-11 已关闭〕）
     ...createApiLandingActions(set, get, {
       now: () => deps.now(),
       persistImage: deps.persistImage,
       nextLibraryId: () => makeLibraryId(deps.now(), ++nodeSeq),
+      nextVideoNodeId: () => makeNodeId('video', deps.now(), ++nodeSeq),
     }),
   };
 }

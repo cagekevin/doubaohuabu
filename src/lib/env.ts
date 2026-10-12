@@ -13,7 +13,8 @@
  *     ⇒ 构建期 `DEV=false`，dev server 期 `DEV=true`；
  *   - 测试（vitest，`environment: 'node'`）同样由 Vite 注入 ⇒ 测试期 `DEV=true`。
  *
- * ⚠️ **与 `lib/hostEnv.ts` 的区别**（名字像，职责不同）：那个是**宿主能力探测**（GPU 缓存等），
+ * ⚠️ **别与宿主探测混淆**（名字像，职责不同）：那类实现归 `adapters/host/`（例：
+ *   `adapters/host/shared/env.ts` 读 GPU / 窗口尺寸），
  *   本文件是**构建期常量**，不碰任何宿主对象、不 import 任何东西。
  * ⚠️ 本模块**无状态、无副作用**（`vite.config.ts` 的"不得有跨文件共享的模块级可变状态"前提不受影响）。
  */

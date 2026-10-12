@@ -89,7 +89,6 @@
 /* 空态 —— 复用真源 `.isInline`（`padding` / 字色 / 字号），只补**布局** */
 .empty {
   composes: empty isInline from '../common/shared.module.css';
-  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
@@ -271,7 +270,6 @@
 .live {
   composes: dot from '../common/shared.module.css';
   margin-left: var(--space-1);
-  background: var(--color-success);
 }
 
 /* 折叠把手（原 `.nip-fold-toggle`） */

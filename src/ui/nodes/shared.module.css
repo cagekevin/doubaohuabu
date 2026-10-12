@@ -698,6 +698,27 @@
   color: var(--color-text-strong);
 }
 
+/*
+ * 账号节点的「已过时长」计时器（原 `.timer-inline` / `.timer-red` / `.timer-yellow`，`OL.jsx:415`）
+ *
+ * ⚠️ `mockup.css` **未收录**这三条 ⇒ 按 token 自写（同 `.view` 的先例：不假装有真身）。
+ * ⚠️ 档位色走 `*-text` 那几个（对比度已校过）：红 = `--color-danger-text`，黄 = `--color-warning-text`。
+ */
+.timerInline {
+  font-size: var(--font-size-xs);
+  /* 等宽数字：秒位跳动时不抖（不影响语义） */
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+.timerYellow {
+  color: var(--color-warning-text);
+}
+
+.timerRed {
+  color: var(--color-danger-text);
+}
+
 /* 原 `.account-summary`（`OL.jsx:521`） */
 .accountSummary {
   color: var(--color-text-faint);
@@ -710,10 +731,28 @@
   flex: none;
 }
 
-/* 原 `.account-feedback`（四态：sending / ok / err） */
+/*
+  原 `.account-feedback`（三档：`sending` / `success` / `error`）—— 语义类是
+  `st_<BatchItemStatus>`（**状态名来自 `state`**，不是源那三个 `feedback-*`）⇒ 类名必须与
+  `BATCH_ITEM_STATUSES` 对齐，否则查出来的类是空的（曾写成 `st_ok`/`st_err` ⇒ **静默不着色**）。
+  条内是「消息 + （失败时）✕」两件，故走一行。
+*/
 .accountFeedback {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: var(--space-1);
   border-radius: var(--radius-sm);
+}
+
+.accountFeedbackMsg {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ✕ —— ★ 关闭钮只有一种：compose 全仓唯一真源（`ui/common` 的 `.panelClose`） */
+.accountFeedbackClose {
+  composes: panelClose from '../common/shared.module.css';
 }
 
 .st_sending {
@@ -721,12 +760,12 @@
   background: var(--color-surface-sunken);
 }
 
-.st_ok {
+.st_success {
   color: var(--color-surface-raised);
   background: var(--color-success);
 }
 
-.st_err {
+.st_error {
   color: var(--color-surface-raised);
   background: var(--color-danger);
 }
@@ -1038,8 +1077,9 @@
   font-size: var(--font-size-xs);
 }
 
+/* ★ 复用**唯一**的关闭钮（`ui/common` 的 `.panelClose`） */
 .videoPanelClose {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  composes: panelClose from '../common/shared.module.css';
 }
 
 .videoPanelBody {
@@ -1275,7 +1315,7 @@
 
 .faceMarkMasking {
   border-style: solid;
-  background: var(--color-mask-weak, rgb(0 0 0 / 0.25));
+  background: var(--color-mask-weak);
 }
 
 /* 四个角标（原 `.fc.fc-tl/tr/bl/br`）—— 只画 L 形短边 */
@@ -1364,4 +1404,117 @@
 
 .sendStatusError {
   color: var(--color-danger);
+}
+
+/*
+ * ── 回复提示条（原 `.reply-notice`，`CL.jsx:713-729`）──
+ * 样式真源 = `docs/mockup/assets/mockup.css:474-489`（逐字译）。
+ * ⚠️ 浮在**节点上方**（`bottom: calc(100% + …)`）；`absolute` 的 containing block 是
+ *    `.node`（不是 `.nodeBody`）⇒ 逃出正文区的 `overflow: hidden`，能在框外显示。
+ * ⚠️ base = `warn` 档（源 `h.level || 'warn'`）；只为**有视觉差异**的 `-error` / `-info`
+ *    输出修饰类（与 `.sendStatus` 同法）。
+ */
+.replyNotice {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + var(--space-2));
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: min(420px, 92vw);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  box-shadow: var(--panel-shadow);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+}
+
+.replyNoticeError {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.replyNoticeInfo {
+  border-color: var(--color-info);
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.replyNoticeIcon {
+  flex-shrink: 0;
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-snug);
+}
+
+.replyNoticeBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+}
+
+.replyNoticeTitle {
+  font-weight: var(--font-weight-bold);
+}
+
+.replyNoticeText {
+  font-weight: var(--font-weight-medium);
+  opacity: 0.92;
+  word-break: break-word;
+}
+
+/*
+ * 回复提示条的关闭钮 —— ★ 复用**唯一**的关闭钮（`ui/common` 的 `.panelClose`，
+ * 判据「关闭钮只有一种 ✕」）。`composes` 必须在其它声明之前。
+ */
+.replyNoticeClose {
+  composes: panelClose from '../common/shared.module.css';
+}
+
+/*
+ * ── 等待倒计时（原 `.wait-countdown`，`CL.jsx:763-767`）──
+ * ⚠️ mockup **未收录** `.wait-countdown`（同 `TD-16-87`）⇒ 按 mockup 的 `.node-chip.is-info`
+ *    语义推断（tokens 的 `--color-info` 注释亦把「等待倒计时」列为信息态）。
+ * ⚠️ 数字走 `tabular-nums` —— 否则每秒跳动时宽度会抖。
+ */
+.waitCountdown {
+  composes: btn btnSm from '../common/shared.module.css';
+  color: var(--color-info-text);
+  background: var(--color-info-bg);
+  border: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.waitDone {
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+}
+
+/*
+ * ── 换号状态行（原 `.switch-status` + `switch-${state}`，`CL.jsx:768-772`）──
+ * ⚠️ mockup **未收录**它（`docs/13` 里"样式已就绪（mockup.css:330）"是**过时信息**）⇒
+ *    与 `.waitCountdown` **同族**（同款胶囊），三档只换**文字色**（背景沿用同族）——
+ *    用的是反馈色的**文字版 token**（`docs/17` §8.3：反馈色当文字要单独给 `-text` 档）。
+ */
+.switchStatus {
+  composes: waitCountdown;
+}
+
+.switchSwitching {
+  color: var(--color-warning-text);
+}
+
+.switchDone {
+  color: var(--color-success-text);
+}
+
+.switchFailed {
+  color: var(--color-danger-text);
 }

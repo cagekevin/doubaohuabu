@@ -1,5 +1,5 @@
 /**
- * 无水印资源面板（原 `SD.jsx` 160 行）—— ★ **2026-10-12 落（`docs/14` §10 的 ⛔ 阻塞）**
+ * 无水印资源面板（原 `SD.jsx` 160 行）—— ★ **2026-10-12 落（`docs/过程.md` §10 的 ⛔ 阻塞）**
  *
  * ⚠️ **范围如实标注**：源 `SD` 展示「图 + 视频」两类（图来自 `onDolaMedia` 后端推送，未落），
  *   本仓 `VideoShare` **只有视频**（`url`/`vid`/`poster`）⇒ **只展示视频**，不假装有图。
@@ -30,7 +30,7 @@ export function WatermarkPanel({ onClose }: WatermarkPanelProps) {
   const download = async (item: VideoShare) => {
     if (!item.url) return;
     setDownloading(item.id);
-    const r = await hostOps.downloadFile(item.url, item.vid || '视频');
+    const r = await hostOps.downloadFile(item.url, item.vid || WATERMARK_PANEL_TEXT.typeVideo);
     setDownloading(null);
     if (!r.ok) {
       pushToast(COMMON_TEXT.downloadFailed(r.message || COMMON_TEXT.unknownReason), 5000, 'warn');
@@ -46,7 +46,6 @@ export function WatermarkPanel({ onClose }: WatermarkPanelProps) {
       title={WATERMARK_PANEL_TEXT.title}
       meta={WATERMARK_PANEL_TEXT.count(videoShares.length)}
       onClose={onClose}
-      closeLabel={WATERMARK_PANEL_TEXT.close}
     >
         {videoShares.length === 0 ? (
           <div className={shared.empty}>{WATERMARK_PANEL_TEXT.empty}</div>

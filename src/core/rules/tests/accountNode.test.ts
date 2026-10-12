@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { collectAccountNodeInputs, collectUpstreamOrder } from '../accountNode';
+import { accountSendFeedback, collectAccountNodeInputs, collectUpstreamOrder } from '../accountNode';
 import type { LibraryItem } from '@/stable/model/project';
 
 const text = (id: string, t: string, extra: Record<string, unknown> = {}) => ({
@@ -211,5 +211,64 @@ describe('collectAccountNodeInputs（原 RL 40531-40680）', () => {
       library: lib,
     });
     expect(out.materials[0]).toEqual({ id: 'ghost', label: 'ghost', dataUrl: '', refIndex: 1 });
+  });
+});
+
+describe('accountSendFeedback（原 `OL.jsx:339-359` 的摘要三目）', () => {
+  const base = {
+    textCount: 1,
+    imagesAttached: 3,
+    imagesTotal: 3,
+    autoSend: true,
+    autoClicked: true,
+  };
+
+  it('★ 三段齐 ⇒ 用 ` · ` 连（**不带**那句"仅填入"）', () => {
+    expect(accountSendFeedback(base)).toEqual({
+      status: 'ok',
+      msg: '文本已填 · 图片 3/3 · 已自动发送',
+    });
+  });
+
+  it('★ 没点到（自动发送关 / 没成功）⇒ 末尾补「（仅填入，未发送）」（**全角括号**）', () => {
+    expect(accountSendFeedback({ ...base, autoSend: false, autoClicked: false }).msg).toBe(
+      '文本已填 · 图片 3/3（仅填入，未发送）',
+    );
+    // ⚠️ 开关开着但 `autoClicked=false` ⇒ 同样算"没发出去"（源 `oe = !!t.autoSend && ne.autoClicked`）
+    expect(accountSendFeedback({ ...base, autoClicked: false }).msg).toBe(
+      '文本已填 · 图片 3/3（仅填入，未发送）',
+    );
+  });
+
+  it('★ 只有文本 ⇒ 一段 + 仅填入后缀；**只有图** ⇒ 图片那段（源 `if (x.texts.length)` 判的是文本条数）', () => {
+    expect(accountSendFeedback({ ...base, imagesAttached: null, imagesTotal: 0, autoClicked: false }).msg).toBe(
+      '文本已填（仅填入，未发送）',
+    );
+    expect(accountSendFeedback({ ...base, textCount: 0, autoClicked: false }).msg).toBe(
+      '图片 3/3（仅填入，未发送）',
+    );
+  });
+
+  it('★ **三段全空** ⇒ 用另一句兜底「已填入（仅填入，未发送）」（与 `filledOnly` 不是同一句）', () => {
+    // ⚠️ 全空**必然**含"没自动发送"（否则 `已自动发送` 本身就是一段）—— 这条也是该分支的可达性证明
+    expect(
+      accountSendFeedback({
+        textCount: 0,
+        imagesAttached: null,
+        imagesTotal: 0,
+        autoSend: false,
+        autoClicked: false,
+      }),
+    ).toEqual({ status: 'ok', msg: '已填入（仅填入，未发送）' });
+  });
+
+  it('★ `imagesAttached` 为 `null` / `undefined` ⇒ **整段不出现**（源 `!= null` 判据）', () => {
+    expect(accountSendFeedback({ ...base, imagesAttached: undefined }).msg).toBe('文本已填 · 已自动发送');
+  });
+
+  it('★ 图总数取**回执给的**值（源 `ne.imagesTotal ?? x.materials.length` 由调用方兜）', () => {
+    expect(accountSendFeedback({ ...base, imagesAttached: 2, imagesTotal: 5 }).msg).toBe(
+      '文本已填 · 图片 2/5 · 已自动发送',
+    );
   });
 });

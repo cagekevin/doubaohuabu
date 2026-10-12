@@ -6,7 +6,7 @@
  *   - `sO` shared.js:42998-43133 —— 页内发送脚本（已落 `./scripts.ts`）
  *   - `aO` 43170-43313 —— **参考图附加**那段（3 次重试 + 1500ms 间隔 + 成功后等 2000ms）
  *
- * ★ **`aO` 不是站点层**（`docs/14` 曾错标）：它是**编排**（选号 → 占号 → `vr` 准备会话 →
+ * ★ **`aO` 不是站点层**（`docs/过程.md` 曾错标）：它是**编排**（选号 → 占号 → `vr` 准备会话 →
  *   附参考图 → `oO` 发送 → 释放）⇒ 归 `core/usecases/generateImage.ts`（M11）。
  *   本文件只承接其中**与站点交互**的两段：附参考图 + 跑页内脚本。
  *
@@ -22,9 +22,9 @@
 
 import type { Account } from '@/stable/model/account';
 import type { HostPort } from '@/core/ports/host.port';
+import type { SiteSendPayload } from '@/core/rules/payload';
 import type {
   ScanResult,
-  SendPayload,
   SendResult,
   SitePort,
   SiteProbe,
@@ -57,9 +57,9 @@ export function createGptSite(host: HostPort): SitePort {
   return {
     kind: 'gpt',
 
-    async send(account: Account, payload: SendPayload): Promise<Result<SendResult>> {
+    async send(account: Account, payload: SiteSendPayload): Promise<Result<SendResult>> {
       // ⚠️ 与源一致（原 `oO` 用 `Xn`）：**找不到页面返回 `page-not-open`，不抛**
-      const view = findWebview({ id: account.id, partition: account.partition, type: account.type });
+      const view = findWebview({ id: account.id, partition: account.partition });
       if (!view || typeof view.executeJavaScript !== 'function') {
         return err('page-error', GPT_TEXT.pageNotOpen);
       }
@@ -122,7 +122,7 @@ export function createGptSite(host: HostPort): SitePort {
     },
 
     async probe(account: Account): Promise<Result<SiteProbe>> {
-      const view = findWebview({ id: account.id, partition: account.partition, type: account.type });
+      const view = findWebview({ id: account.id, partition: account.partition });
       if (!view || typeof view.executeJavaScript !== 'function') {
         // ⚠️ 与源一致：页面没开 ⇒ **不是"未登录"**，而是"不可用"
         return ok({ usable: false, loggedIn: false, pageKind: 'other' });

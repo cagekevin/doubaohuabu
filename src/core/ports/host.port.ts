@@ -5,12 +5,14 @@
  * 切分依据：docs/11 §4.1「按用途切分，不是照抄 83 个方法」（接口隔离）
  *
  * ⚠️ 原则 6（错误透传）：**所有方法必须返回 Result，不得抛异常给上层**
- *    —— 这正是 docs/10 那条「lovartFetchImages 一抛错整批失败」的架构解法
+ *    —— 这正是 docs/过程.md 那条「lovartFetchImages 一抛错整批失败」的架构解法
  */
 
 import type { Result } from '@/core/model/result';
 import type { LicenseStatus } from '@/core/model/license';
 import type { FaceBox, FaceMaskOpts, FaceMaskResult } from '@/core/rules/facemask';
+// ⚠️ `FaceDetectStats` 的形状住 `core/rules/faceDetect`（纯层；端口只引用它 —— 原则 3）
+import type { FaceDetectStats } from '@/core/rules/faceDetect';
 import type { HostOS } from '@/constants';
 import type { Project } from '@/stable/model/project';
 import type {
@@ -151,6 +153,49 @@ export interface LovartContainerPayload extends PlainSessionPayload {
 }
 
 /** 媒体（图片 / 视频外置存储） */
+/**
+ * 站点页里**检测到的一条视频**（原 `detect-videos` handler 的 `entry`，`electron/main.js:2350`）
+ *
+ * ⚠️ 字段**逐字对后端**（它是契约真源）：
+ *   `key/id/name/created_at/ready/url/width/height/duration/poster`。
+ *   `key` 是**归属匹配的左值**（`core/rules/media.matchVideosToNodes` 的 `vids[].key`），
+ *   `created_at` 是**时间线索**（同上 `vids[].created_at`）。
+ */
+export interface DetectedVideo {
+  /** 站点侧唯一键（原 `it.key`）—— 归属匹配的**左值** */
+  key: string;
+  /** 站点侧资源 id（原 `it.id`） */
+  id: string;
+  name: string;
+  /** 创建时间（秒 / 毫秒 / 字符串；原 `it.created_at || it.updated_at || 0`） */
+  created_at: unknown;
+  /** 是否已取到可播放直链（原 `entry.ready`） */
+  ready: boolean;
+  url: string | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  poster: string | null;
+}
+
+/**
+ * Dola/CDP 媒体推送里的一条（后端 `dola-media` 在 guest webview 里捕获到的网络响应）
+ *
+ * ⚠️ 字段**逐字对后端**（未知项用 `?` 收）。`wcId` 是**来源 webview 的 `webContentsId`**
+ *   —— 源用它反查账号（`S.current.get(wcId)`，`_Component43.jsx:192/242`）。
+ */
+export interface DolaMediaItem {
+  type: 'image' | 'video';
+  url: string;
+  /** 来源 webview 的 `webContentsId`（缺 ⇒ 视作「全局」，源 `_global`） */
+  wcId?: number;
+}
+
+/** 一次 Dola 媒体推送（源 `onDolaMedia` 回调的载荷：`{items}`） */
+export interface DolaMediaEvent {
+  items: DolaMediaItem[];
+}
+
 export interface MediaPort {
   /**
    * 图片落盘 → `img://` 引用（⚠️ `sendSync`，**同步**；供持久化链路直接使用）
@@ -171,7 +216,6 @@ export interface MediaPort {
    */
 
   imageFetchDataUrl(url: string): Promise<Result<string | null>>;
-  imageFetchDataUrl(url: string): Promise<Result<string | null>>;
   captureRect(rect: CaptureRect): Promise<Result<string | null>>;
   showInFolder(ref: string): Promise<Result<void>>;
   /**
@@ -180,12 +224,12 @@ export interface MediaPort {
    * ⚠️ **本方法的 `Result` 只能表达两件事**：宿主缺失（`window.api` 不在）/ 调用本身抛出。
    *    **「拖拽有没有真的成功」本仓无从判定** —— 后端走的是 `ipcRenderer.send`（**无回执**），
    *    失败只 `console.warn`（`main.js:1232,1246,1254`）。
-   *    ⇒ **调用方不得据此报「已拖出」**（如实登记：`docs/16` · 母体 M5「失败不可见」的新实例）。
+   *    ⇒ **调用方不得据此报「已拖出」**（如实登记：`docs/过程.md` · 母体 M5「失败不可见」的新实例）。
    * ⚠️ **payload 只有 `dataUrl` + `name`**：**不传缩略图** —— icon 由**后端**从原图 resize 到 64px
-   *    （`docs/10` #53「拖拽预览 icon 必须是 64px」；`main.js:1239-1244`）。
+   *    （`docs/过程.md` #53「拖拽预览 icon 必须是 64px」；`main.js:1239-1244`）。
    *    ⛔ **不要声明 `thumbDataUrl?`** —— **后端从不读它**（它在那边的注释里被写成"会额外落盘
    *    缩略图"，属**假承诺**）⇒ 2026-10-11 **删除**（幽灵字段，母体 M6）。
-   * ⚠️ 后端另支持 `path`（`docs/10` #64「传 path 优先」）—— 本仓**不暴露**：我们手上的引用是
+   * ⚠️ 后端另支持 `path`（`docs/过程.md` #64「传 path 优先」）—— 本仓**不暴露**：我们手上的引用是
    *    `img://`，后端 `persistImageDataUrl` 对它**原样返回**（非 data URL 早退）⇒ 不会重复写盘，
    *    与传 `path` 等价（判据 B5：不留没人调的字段）。
    */
@@ -195,14 +239,14 @@ export interface MediaPort {
    *
    * ⚠️ **保留登录态**（与 `clearSession` 不是一回事）；返回**清理计数** ——
    *    源版 UI 要显示「已清理 N 个缓存目录（M 个被占用，下次启动会自动清理）」。
-   * ⚠️ 这是 `docs/14` §1.4 记的「端口早有、UI 未用」那一条（2026-10-11 接通）。
+   * ⚠️ 这是 `docs/过程.md` §1.4 记的「端口早有、UI 未用」那一条（2026-10-11 接通）。
    */
   clearBrowserCache(): Promise<Result<{ cleared: number; failed?: number }>>;
   /**
    * **多帧扫描**：主进程遍历页面的全部 frame（含嵌套 / 跨域）执行同一脚本（原 `lovart-scan-frames`，`lovart-scan.js:83`）
    *
-   * ⚠️ **必须显式调用** —— 不得自启定时器（docs/10 #4：自动轮询会被判机器人）
-   * ⚠️ `script` 必须是**纯读取**脚本（零注入，docs/10 #2）
+   * ⚠️ **必须显式调用** —— 不得自启定时器（docs/过程.md #4：自动轮询会被判机器人）
+   * ⚠️ `script` 必须是**纯读取**脚本（零注入，docs/过程.md #2）
    * ⚠️ 后端要求 `webContentsId`（**不是** partition）⇒ 调用方先取 `<webview>.getWebContentsId()`
    */
   scanFrames(req: {
@@ -212,6 +256,63 @@ export interface MediaPort {
     /** 上限（后端夹在 1–24，默认 12） */
     maxFrames?: number;
   }): Promise<Result<{ items: unknown[]; href?: string }>>;
+
+  /**
+   * **检测站点页里的视频**（原 `detect-videos` handler，`electron/main.js:2224`）
+   *
+   * ⚠️ **必须显式调用**（同 `scanFrames`：不得自启定时器 —— `docs/过程.md` #4）
+   * ⚠️ **零注入**：后端只在 webview 里跑只读取数脚本
+   * ⚠️ 后端要求 `webContentsId`（**不是** partition）⇒ 调用方先取 `<webview>.getWebContentsId()`
+   * ⚠️ `seenKeys` 是**已见集合**（后端据此跳过已见视频 —— `main.js:2348`）
+   * ⚠️ 后端**每条 return 都带 `ok`** ⇒ 适配器判**内层** `ok`（fail-closed，TD-04-5）
+   */
+  detectVideos(
+    webContentsId: number,
+    seenKeys: readonly string[],
+  ): Promise<Result<{ videos: DetectedVideo[] }>>;
+
+  /**
+   * ★ **订阅 Dola/CDP 媒体推送**（原 `window.api.onDolaMedia`，`_Component43.jsx:130-133`）
+   *
+   * ⚠️ 只有**宿主侧挂了 CDP 调试器**的 webview 才会推（`attachDolaDebugger`，由 `_Component25` 调）
+   * ⚠️ **订阅是唯一写入点之外的东西** —— 收到事件后**必须**由 `state/subscriptions.ts` 转发给
+   *   `state/dolaMedia` 控制器落 store（原则 2）。
+   * @returns 取消订阅（必须调用，否则泄漏）
+   */
+  onDolaMedia(cb: (event: DolaMediaEvent) => void): () => void;
+
+  /**
+   * ★ **给某个 guest webview 挂 CDP 调试器**（原 `window.api.attachDolaDebugger`，`_Component25.jsx:136`）
+   *
+   * 用途：后端 `dola-media` 借此在 guest 里捕获**图 / 视频**的网络响应 ⇒ 推 `onDolaMedia`
+   *   （⇒ `state/dolaMedia` 的**唯一数据来源**；没挂 ⇒ `onDolaMedia` 永不触发）。
+   * ⚠️ 源只在**豆包 / Dola** 的 webview 上挂（按 `type` 或 URL 判 —— `_Component25.jsx:135`）。
+   * ⚠️ 后端 handler 恒返 `{ok, error?}` ⇒ 适配器判**内层** `ok`（TD-04-5）。
+   */
+  attachDolaDebugger(webContentsId: number): Promise<Result<void>>;
+
+  /**
+   * ★ **Dola「30s 时长」诊断回传**（原 `ct` / `window.api.dolaDurationDiag`，`_Component43.jsx:628-636`）
+   *
+   * 后端把它**落盘**到 `~/dola-duration-debug.log`（`main.js:2549-2559`，注释原文：
+   *   「便于排查『30s 失效』时真实的生成接口路径与 model 取值」）
+   *   —— 它是 `docs/过程.md（原 plan/03）` 批 7（Dola 30s 强开）那条链**唯一**的可观测面。
+   * ⚠️ **fire-and-forget**（源 `ct` 就是 `try{ void … }catch{}`）—— 诊断写不进去没有可做的补救，
+   *   故调用方**忽略返回值**即可；实现侧失败**照常返 `Result`**（不静默吞，谁想看谁看）。
+   */
+  logDolaDuration(message: string): Promise<Result<void>>;
+
+  /**
+   * ★ **往某个 guest 里注入 Dola「30s 主世界钩子」**（原 `window.api.injectDolaDurationMain`，
+   *   `_Component25.jsx:144/169`）
+   *
+   * 后端做三件事（`main.js:2501-2540`）：① 打开页内 30s 开关（`localStorage['intl_doubao_enable_30s_v1']='1'`）
+   *   ② 注入 `dola-duration-main.js`（官方 30s 钩子）③ 主进程每 3s dump 一次时长 DOM。
+   * ⚠️ **不是** `SitePort.genConfirm`/`dolaForce` 那条补丁式路径的第二份 —— 那条是**改请求体**；
+   *   这条走**页面自己的 30s 开关 + 主世界钩子**（源两条都在，互不替代）。
+   * ⚠️ 源在 **`dom-ready`（延迟 600ms）** 与 **`did-navigate`** 两处调（`_Component25.jsx:144/169`）。
+   */
+  injectDolaDurationMain(webContentsId: number): Promise<Result<void>>;
 
   // ── 人脸检测 / 遮脸（★ **渲染层本地能力**，与上面各方法**不同源**：不走 IPC）──
   /**
@@ -229,6 +330,16 @@ export interface MediaPort {
    */
   detectFaces(src: string): Promise<Result<FaceBox[]>>;
   /**
+   * ★ **上一次检测的统计**（原 `LD`）—— **同步只读**（纯内存计数，不经 IPC）
+   *
+   * 用途（原 `G3.jsx:346-350`）：检测**一张脸都没返回**时，用它区分「检测器整个失败」
+   *   （`failed >= tried` ⇒ 可能 GPU/WebGL 不可用）与「跑通了但没脸」—— 少了它，
+   *   真失败会被报成「未识别到人脸」（**说反了**）。
+   * ⚠️ 分档判据是纯的 ⇒ 住 `core/rules/faceDetect.explainEmptyFaceDetect`（可测），
+   *   本端口只把**原始计数**交上去。
+   */
+  faceDetectStats(): FaceDetectStats;
+  /**
    * 对人脸框应用遮罩（原 `nL`）—— 同 `detectFaces`，**渲染层本地能力**（Canvas）。
    * ⚠️ **失败必须返 `Result`**：底层对空源 / 非法框 / 尺寸为 0 都会抛。
    */
@@ -243,7 +354,7 @@ export interface MediaPort {
  *   `main.js:2692/2805` 读 `acc.partition` / `acc.proxy`，读不到就**回落到 `persist:lovart`**。
  *   ⚠️ **必须传对象** —— 传字符串 ⇒ `'abc'.partition === undefined` ⇒ **分区与指纹目录全错**（静默）。
  *
- * ⚠️ **约束 #5（`docs/10`）：cookie 由后端管理，前端一律不碰** ——
+ * ⚠️ **约束 #5（`docs/过程.md`）：cookie 由后端管理，前端一律不碰** ——
  *    本端口**没有**、也**不得新增**「读/写 cookie」的方法（会话态由主进程的
  *    `session.fromPartition` 持有）。唯一的例外是**账号数据导入导出**那组
  *    （`exportCookies` / `importCookies`，它是后端主动提供的整包迁移能力）。
@@ -382,8 +493,12 @@ export interface ApiPort {
  * 目的：用例只依赖它需要的那一组（接口隔离），而不是 83 个方法的全集
  */
 export interface HostPort {
-  /** ★ 真实宿主平台：来自 preload 的 `process.platform`，**不读 navigator**（docs/10 #59） */
-  readonly os: HostOS;
+  /**
+   * ★ 真实宿主平台：来自 preload 的 `process.platform`，**不读 navigator**（docs/过程.md #59）。
+   * ⚠️ **可选**：宿主没报时**如实留空**（`undefined`）—— 兜底（navigator → `'macos'`）由
+   *   `adapters/host/shared/env.readHostOs` 做；端口**不得**编一个默认 OS（母体 M5：静默兜底 = 失败不可见）。
+   */
+  readonly os?: HostOS;
 
   readonly file: FilePort;
   readonly clipboard: ClipboardPort;

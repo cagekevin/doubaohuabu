@@ -9,11 +9,11 @@
  *   · **决策（本文件）**：纯 —— 输入「事件 + 当前节点」，输出「要做哪些事」；
  *   · **落（`state/subscriptions.ts`）**：唯一写入点。
  *
- * ⚠️ 因此本文件**零 store 依赖**：节点列表由 state 传入（`docs/16` §2.5 的 D1）。
+ * ⚠️ 因此本文件**零 store 依赖**：节点列表由 state 传入（`docs/过程.md` §2.5 的 D1）。
  * ⚠️ 原则 4：`now` 由调用方注入（源版的 `new Date()` 全部改为注入）。
  * ⚠️ **`null` 的语义**（与源版 `if (!n || !n.jobId) return;` 逐字对应）：
  *    事件缺 `jobId` ⇒ **什么都不做**。这不是"失败"，故不用 `Result` 造一个假 reason。
- *    （`docs/16` §2.5 写的是「返回 Result」—— 那是读源码前的写法；源码这里是**提前 return**。）
+ *    （`docs/过程.md` §2.5 写的是「返回 Result」—— 那是读源码前的写法；源码这里是**提前 return**。）
  */
 
 import type { ApiJobAttempt, ApiJobEvent, ApiJobStatus } from '@/stable/model/gen';

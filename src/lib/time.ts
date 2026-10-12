@@ -7,6 +7,10 @@
  *    放 `core/rules` 也能跑，但 `lib` 更贴"通用工具"的归属，且避免 `core` 里出现 `new Date`。
  */
 
+// ★ 相对时间的四句是**用户可见文案** ⇒ 走 SSOT（原则 5；`lib` → `constants` 与
+//   `lib/url.ts` → `constants/dedupe.ts` 同法，它俩同属 L0、不成环）。
+import { RELATIVE_TIME_TEXT } from '@/constants/text';
+
 /** 秒/毫秒的分界（原实现写死 `1000000000000`）：小于它按**秒**处理 */
 const SECOND_CUTOFF = 1000000000000;
 
@@ -131,4 +135,30 @@ export function formatMonthDayMinute(ms?: number | null): string {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return '';
   return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+// ⚠️ 只用到「分钟」这一个毫秒基数：源是 `floor(diff/60000)` → `floor(minutes/60)`
+//   → `floor(hours/24)`（**逐级取整**，不是各自除毫秒再取整 —— 两者在边界上不同）
+const MINUTE = 60_000;
+
+/**
+ * 相对时间（原 `UP` 34366-34385）
+ *
+ * 五档（**逐字对齐**）：
+ *   `< 1 分钟` ⇒ `刚刚` · `< 60 分钟` ⇒ `N 分钟前` · `< 24 小时` ⇒ `N 小时前`
+ *   · `< 30 天` ⇒ `N 天前` · 否则 ⇒ **`YYYY-MM-DD`（本地时区）**
+ * ⚠️ 各档都是 `Math.floor`（**向下取整**：59.9 分钟仍是「59 分钟前」）。
+ * ⚠️ `ts` 在**未来**时差值为负 ⇒ 落进「刚刚」（源版如此，照抄）。
+ * ⚠️ `now` **必须注入**（本文件是纯工具：不读 `Date.now()`）；文案走 `RELATIVE_TIME_TEXT`（原则 5）。
+ */
+export function formatRelativeTime(ts: number, now: number): string {
+  const diff = now - ts;
+  const minutes = Math.floor(diff / MINUTE);
+  if (minutes < 1) return RELATIVE_TIME_TEXT.justNow;
+  if (minutes < 60) return RELATIVE_TIME_TEXT.minutesAgo(minutes);
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return RELATIVE_TIME_TEXT.hoursAgo(hours);
+  const days = Math.floor(hours / 24);
+  if (days < 30) return RELATIVE_TIME_TEXT.daysAgo(days);
+  return formatLocalDate(ts);
 }

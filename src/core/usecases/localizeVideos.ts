@@ -5,12 +5,12 @@
  *   - `localizeNodeVideos` shared.js:31017-31054
  *   - `backfillLocalVideos` shared.js:31055-31067
  *
- * ⚠️ 链 18 硬约束（`docs/10` #9）：**视频必须落盘** —— 站点直链会过期/需要 referer。
+ * ⚠️ 链 18 硬约束（`docs/过程.md` #9）：**视频必须落盘** —— 站点直链会过期/需要 referer。
  *
  * ⚠️ 原则 1：本文件**不写 store**。它返回**回写后的完整 `data`**，
  *    由 state 用**已存在**的 `patchNodeData(nodeId, data)` 落下 —— 不新增 store action。
  *
- * ⚠️ **本用例不返回 `Result`（有意，与 `docs/16` §1.6 的「全部返回 Result」不同）**：
+ * ⚠️ **本用例不返回 `Result`（有意，与 `docs/过程.md` §1.6 的「全部返回 Result」不同）**：
  *    源实现是「逐 URL `try{}catch{}`，**单条失败不影响其余**，整体恒成功」⇒
  *    **不存在"整体失败"语义**。为它编一个 `err` 分支＝造错（原则 6 禁止）。
  *    单条失败**如实进 `failures`**（源版是静默吞掉，重写改为上报）。

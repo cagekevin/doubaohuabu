@@ -1,7 +1,7 @@
 /**
  * 启动加载（**接线**，属 bootstrap 层）
  *
- * 依据：docs/03-人类版.md §0.10 + docs/11 §八
+ * 依据：docs/过程.md §0.10 + docs/11 §八
  *
  * 职责边界：
  *   - 读键 / 写键的**编排**在 bootstrap（唯一可 import 全部的地方）
@@ -25,13 +25,16 @@ import { PERSIST, type AppStore } from '@/state';
 import { resetStaleJobs } from '@/stable/migrations';
 import { validateNodes } from '@/core/rules/node';
 import { ensureLovartGalleries } from '@/core/rules/lovartGallery';
-import { pickInitialActiveAccount } from '@/core/rules/accountPick';
+import { normalizePoolStrategy, pickInitialActiveAccount } from '@/core/rules/accountPick';
 import {
+  LS_ACCOUNT_GROUPS,
+  LS_ACCOUNT_POOL_STRATEGY,
   LS_ACCOUNTS,
   LS_LOVART_GALLERIES,
   LS_PRESETS,
   LS_PROJECTS,
   LS_FACE_MASK_OPTS,
+  LS_PROXY_POOL,
   LS_SCAN_HISTORY,
   LS_STYLES,
   type LsKey,
@@ -86,6 +89,17 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   //    ★ TD-06-1：读结果是**三态**（`missing` / `ok` / `corrupt`）—— `corrupt` 走默认值**并记账**（防覆盖）
   const projects = readOrDefault(PERSIST[LS_PROJECTS].read(storage), LS_PROJECTS, [], notes, corruptKeys);
   const accounts = readOrDefault(PERSIST[LS_ACCOUNTS].read(storage), LS_ACCOUNTS, [], notes, corruptKeys);
+  // ★ **账号分组 / 出口代理池 / 选号策略**（`doubao-account-groups` / `doubao-proxy-pool` /
+  //   `doubao-account-pool-strategy`）—— **2026-10-12 补读回**。
+  //   ⚠️ 此前这三键**只写不读**（`usecases/persistAccounts` 写 · 本文件不读）⇒ **重启即丢**
+  //     （与 `docs/过程.md` §2 的 ⭐ 同型；那次只修了 accounts / 画廊 / 体检历史 / 预设 / 风格 / 遮脸）。
+  //   ⚠️ 源读方：`CT()`（groups，26600）· `hT()`（proxyPool，26251）· `Ou()`（策略，34480）。
+  const groups = readOrDefault(PERSIST[LS_ACCOUNT_GROUPS].read(storage), LS_ACCOUNT_GROUPS, [], notes, corruptKeys);
+  const proxyPool = readOrDefault(PERSIST[LS_PROXY_POOL].read(storage), LS_PROXY_POOL, [], notes, corruptKeys);
+  // 策略另有**合法性校验**（源 `Ou`：不在选项表 ⇒ 回落 `'round-robin'`）—— 与 `faceMaskOpts` 同法
+  const poolStrategy = normalizePoolStrategy(
+    readOrDefault(PERSIST[LS_ACCOUNT_POOL_STRATEGY].read(storage), LS_ACCOUNT_POOL_STRATEGY, null, notes, corruptKeys),
+  );
   // ★ Lovart 画廊（原 `ET` 26637：读不到 ⇒ `{}`）
   //   ⚠️ **2026-10-12（`TD-02-3`）接线**：源 `ET` 的判据是「**是对象才收，否则 `{}`**」——
   //     此前该判据半**无任何消费者**，而 `readOrDefault` 的 ok 分支**不做形状判定**
@@ -103,7 +117,7 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   // ★ 指纹体检历史（源 `fT` 26232：读不到 ⇒ 空数组）
   const scanHistory = readOrDefault(PERSIST[LS_SCAN_HISTORY].read(storage), LS_SCAN_HISTORY, [], notes, corruptKeys);
   // ★ 节点 / 提示词预设（源 `Tk` 26618：读不到 ⇒ 空数组）
-  //   ⚠️ 此前该键**读都不读** ⇒ 用户已有预设重启即不可见（`docs/15` §1 #5）
+  //   ⚠️ 此前该键**读都不读** ⇒ 用户已有预设重启即不可见（`docs/过程.md` §1 #5）
   const presets = readOrDefault(PERSIST[LS_PRESETS].read(storage), LS_PRESETS, [], notes, corruptKeys);
   /**
    * ★ **风格预设**（`doubao-styles`，源 store 的 `styles: kT()`）—— 2026-10-11 补：
@@ -162,6 +176,9 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   store.useStore.getState().loadHydrated({
     projects: reset.value,
     accounts,
+    groups,
+    proxyPool,
+    poolStrategy,
     lovartGalleries,
     scanHistory,
     presets,

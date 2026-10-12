@@ -11,7 +11,6 @@
 
 import type { Project } from '@/stable/model/project';
 import type { StoragePort } from '@/core/ports/storage.port';
-import type { OperationLogEvent } from '@/core/ports/host.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { LS_PROJECTS } from '@/stable/contracts/keys';
 import { PROJECT_SIZE_WARN_BYTES } from '@/constants';
@@ -29,15 +28,11 @@ export interface PersistDeps {
   saveBackup?: (json: string) => Result<void>;
   /** 工程快照（仅当 storagePath 非空；返 `Result`，同上） */
   saveSnapshot?: (project: Project) => Result<void>;
-  /** 操作日志（返 `Result`，同上） */
-  logOperation?: (e: OperationLogEvent) => Result<void>;
 }
 
 export interface PersistInput {
   projects: Project[];
   activeId: string | null;
-  /** 触发来源（写入操作日志） */
-  reason?: string;
 }
 
 export interface PersistOk {
@@ -48,7 +43,7 @@ export interface PersistOk {
   /** 被外置的工程数 */
   externalized: boolean;
   /**
-   * ★ **副作用失败**（备份 / 快照 / 操作日志）—— 主保存已成功，但这些**失败了**
+   * ★ **副作用失败**（备份 / 快照）—— 主保存已成功，但这些**失败了**
    *
    * ⚠️ 原则 6：**如实上报**，不静默（否则"备份没更新"用户永远不知道）
    * ⚠️ 每条的 `message` 都是**原始错误原文**
@@ -66,7 +61,7 @@ export interface PersistOk {
  *   4. 写 `doubao-projects` → 触发备份 + 快照
  */
 export function persistProject(input: PersistInput, deps: PersistDeps): Result<PersistOk> {
-  const { projects, activeId, reason = 'persist' } = input;
+  const { projects, activeId } = input;
 
   // 1. 图片外置（幂等）—— `saveImage` 返 `Result` ⇒ **不需要在调用点加 try**
   const ext = externalizeProjectImages<Project>(projects, deps.migrationCtx);
@@ -89,8 +84,8 @@ export function persistProject(input: PersistInput, deps: PersistDeps): Result<P
     return err('unknown', toMessage(e), e);
   }
 
-  // 4. 备份 + 快照 + 日志
-  //    ⚠️ 三者都**返 `Result`**（TD-04-2：契约声明会失败）⇒ **不需要在调用点加 `try`**。
+  // 4. 备份 + 快照
+  //    ⚠️ 两者都**返 `Result`**（TD-04-2：契约声明会失败）⇒ **不需要在调用点加 `try`**。
   //    主保存已成功 ⇒ **不因副作用失败而回滚**，但**必须如实上报**（原则 6：不静默）
   const active = ext.value.find((p) => p.id === activeId);
   // ★ 外置失败（图片保持内联）**如实上报**（原则 6）
@@ -103,20 +98,6 @@ export function persistProject(input: PersistInput, deps: PersistDeps): Result<P
     const snap = deps.saveSnapshot?.(active);
     if (snap && !snap.ok) sideErrors.push(`快照失败：${snap.message}`);
   }
-
-  const logged = deps.logOperation?.({
-    at: deps.migrationCtx.now(),
-    projectId: activeId ?? '',
-    type: reason,
-    detail: active
-      ? {
-          nodes: active.data.nodes.length,
-          edges: active.data.edges.length,
-          library: active.data.library.length,
-        }
-      : undefined,
-  });
-  if (logged && !logged.ok) sideErrors.push(`操作日志失败：${logged.message}`);
 
   return ok({ bytes, oversized, externalized: ext.changed, sideErrors });
 }

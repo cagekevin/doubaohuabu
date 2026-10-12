@@ -1,9 +1,9 @@
 /**
  * 20 个键的**「怎么读 / 怎么写」映射**（★ 键的**唯一落点**）
  *
- * 依据：`docs/16` §1.8 + §4.1（**用结构穷尽替代 `keys-coverage` 闸**）
+ * 依据：`docs/过程.md` §1.8 + §4.1（**用结构穷尽替代 `keys-coverage` 闸**）
  *
- * **三层分工**（`docs/16` §3 裁决 3）：
+ * **三层分工**（`docs/过程.md` §3 裁决 3）：
  *   - **形状** → `stable/contracts/lsValues.ts`（冻结契约）
  *   - **怎么存** → `core/usecases/persistProject`（工程 data：序列化 + 图片外置）
  *   - **怎么读/写** → **本文件**（`adapters/storage/local` 只管 localStorage，不碰业务 —— 见 `docs/11` §6.5 越权 3）

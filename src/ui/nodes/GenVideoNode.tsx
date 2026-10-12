@@ -1,6 +1,6 @@
 /**
  * 文生视频节点（`type: 'genvideo'`）—— 对应原 `YL.jsx`
- * 依据：`docs/12` §1.7（源结构树）+ `docs/13` §1.7（缺口登记）
+ * 依据：`docs/12` §1.7（源结构树）+ `docs/过程.md` §1.7（缺口登记）
  *
  * ★ **2026-10-11**：
  *   · 补 `gv-stage` + `gv-waiting` + `gv-preview-empty` + `gv-media-fallback`（原 485-530）；
@@ -13,7 +13,7 @@
  *   · ★ **本刀（2）**：补 **`gv-dl` 下载**（原 349-400,513-524）—— 走 `hostOps.downloadFileAs`
  *     （「另存为」）+ 成功 toast 带 **「在文件夹中显示」操作按钮**（`hostOps.revealPath`）。
  *     该操作按钮**顺带接通**了 toast 的 `action` 机制（`state/slices/ui` + `ToastHost`，
- *     原 `_Component42.jsx:1474-1488` 的 `.app-toast-action`）—— `docs/13` §3 的那条缺口。
+ *     原 `_Component42.jsx:1474-1488` 的 `.app-toast-action`）—— `docs/过程.md` §3 的那条缺口。
  *   · ★ **本刀（3）**：补 **`gv-apijob` API 任务状态条**（原 561-563）—— 纯层 `apiJobLabel`
  *     （六态文案 + `progress`/`error` 分支，`null` = 不渲染）；数据来自 `applyApiJobEvent` 的
  *     `nodePatch`（`state/subscriptions` 唯一写入点）。
@@ -39,7 +39,7 @@
  * ⚠️ 源的 `<video>` 带 `crossOrigin="anonymous"`（供三帧取帧的 canvas 不污染）—— 本刀**照抄**（同一后端）。
  * ⚠️ 源另有两个**状态类**（`gv-play.is-playing` / `gv-dur-real`）**未输出**（mockup 无样式）—— **TD-16-87**。
  * ⚠️ `_pendingAttempt` / `_pendingAttempts` / 未完成 `apiJob` 由**启动归位清理**
- *    （`stable/migrations/resetStaleJobs`）—— 重启即放弃，docs/06 视角 4。
+ *    （`stable/migrations/resetStaleJobs`）—— 重启即放弃，docs/过程.md 视角 4。
  *
  * 外壳统一走 `NodeShell`（判据 C1）
  */

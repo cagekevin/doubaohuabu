@@ -13,7 +13,8 @@ import { ACCOUNT_PICK_TEXT } from '@/constants/text';
 import { FAIL_LABEL } from '@/constants/failure';
 import { ok, err } from '@/core/model/result';
 import type { Account } from '@/stable/model/account';
-import type { SitePort, SiteRegistry, SendPayload } from '@/core/ports/site.port';
+import type { SitePort, SiteRegistry } from '@/core/ports/site.port';
+import type { SiteSendPayload } from '@/core/rules/payload';
 import type { ApiPort, HostPort } from '@/core/ports/host.port';
 import type { ClockPort } from '@/core/ports/clock.port';
 
@@ -37,7 +38,7 @@ const clock: ClockPort = {
 
 /** 造一个可编排的假 SitePort */
 function makeSite(script: Array<{ reason: Parameters<typeof err>[0]; message: string } | { ok: true }>) {
-  const calls: Array<{ accountId: string; payload: SendPayload }> = [];
+  const calls: Array<{ accountId: string; payload: SiteSendPayload }> = [];
   let i = 0;
   const site: SitePort = {
     kind: 'doubao',
@@ -172,7 +173,7 @@ describe('generateImage · 网页通道（成功路径）', () => {
 /**
  * ★ 新增（2026-10-10）：**账号占用 / 释放**（原 `Fi` / `tn`）
  *
- * 这一组的存在理由 = `docs/14` §8「`setBusyAccounts` 零调用 ⇒ `all-busy` 排队永不触发」：
+ * 这一组的存在理由 = `docs/过程.md` §8「`setBusyAccounts` 零调用 ⇒ `all-busy` 排队永不触发」：
  * 占用必须发生在「选号之后、发送之前」，而选号在用例内部 ⇒ 用例必须调注入的占用回调。
  */
 describe('generateImage · 账号占用与释放（原 Fi / tn）', () => {

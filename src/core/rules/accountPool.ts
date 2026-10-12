@@ -1,7 +1,7 @@
 /**
  * 账号池选号（★ 纯函数，必测 —— §6.5 原则 7）
  *
- * 依据：docs/03-人类版.md §4（`doubao-account-pool-strategy` 34467 / 34482）
+ * 依据：docs/过程.md §4（`doubao-account-pool-strategy` 34467 / 34482）
  *   - 策略 `round-robin` / `least-load`
  *   - 只从**可用**账号里选（`isAccountUsable`）
  *   - 可排除已失败的账号（配合 `core/rules/failure` 的 `retry-switch`）

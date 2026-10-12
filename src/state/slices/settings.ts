@@ -1,5 +1,5 @@
 /**
- * Settings slice（① 全局共享 —— 见 `docs/11` §5.1 / `docs/16` §1.8）
+ * Settings slice（① 全局共享 —— 见 `docs/11` §5.1 / `docs/过程.md` §1.8）
  *
  * **为什么从 `global` 拆出来**（判据 C2 / `docs/11` §5.3）：
  *   `global` 字段数逼近 25 上限 ⇒ 按**共享范围**再分（「API 配置族」自成一片）。

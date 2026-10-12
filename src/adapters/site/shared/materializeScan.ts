@@ -9,7 +9,7 @@
  * 依据（**逐行回源** `wp` 32493-32941 的取值半）：
  *   | 源 | 语义 | 本仓 |
  *   |---|---|---|
- *   | `Lc(account, url)` | 取图 → `{ok, dataUrl}`。**活路径是「页内取图」**（`mp` 脚本在页面里把图转成 dataUrl，超时 `Vo`）；`chrome-cdp` 那档按 `docs/09` C2 是**死代码**（`lovartChromeIsOpen` 恒 false） | `HostPort.media.imageFetchDataUrl(url)`（**主进程**下载转 base64 —— 端口注释就是为它写的，且不受跨源 canvas 污染影响） |
+ *   | `Lc(account, url)` | 取图 → `{ok, dataUrl}`。**活路径是「页内取图」**（`mp` 脚本在页面里把图转成 dataUrl，超时 `Vo`）；`chrome-cdp` 那档按 `docs/过程.md` C2 是**死代码**（`lovartChromeIsOpen` 恒 false） | `HostPort.media.imageFetchDataUrl(url)`（**主进程**下载转 base64 —— 端口注释就是为它写的，且不受跨源 canvas 污染影响） |
  *   | `Tn(dataUrl)` 29261 | 内联 base64 → `img://` | `HostPort.media.saveImageSync`（**同步 IPC**，不得 await） |
  *   | `wp.failed` | 逐张失败计数 | `ScannedImage` 落不出来 ⇒ `failed++`（本文件返回给调用方） |
  *
@@ -17,7 +17,7 @@
  *    不塞假值、不回落成原 URL —— 契约说 `ref` 是「已落盘」，那就只能是 `img://`
  *    （已经是 `img://` 的原样透传）。★ TD-16-48：此前**只留一个 `failed` 计数**，
  *    「下载超时 / 非图片 / 宿主 IPC 失败」三者**不可分**（无日志无痕迹）。
- * ⚠️ 这也是 `docs/14` §5「Lovart / Tapnow 图库抓取无落点」里**能独立完成的那一半**：
+ * ⚠️ 这也是 `docs/过程.md` §5「Lovart / Tapnow 图库抓取无落点」里**能独立完成的那一半**：
  *    页面脚本与四阶段编排不在本文件（见 `materializeScannedImages` 的头注）。
  */
 
@@ -26,6 +26,8 @@ import type { ScannedImage, UnreadRoot } from '@/core/ports/site.port';
 // ★ 扫描枚举的**运行时真源**在 `core/rules/scanChain.ts`（从端口迁出，TD-04-4）——
 //   本文件只消费真源，**不自持副本**（同一真相抄两份 = 母体 M3 / TD-16-24）。
 import { SCAN_SCOPES, type ScanScope, type ScanStrategy } from '@/core/rules/scanChain';
+// ★ 已见过滤（原 `wp:32588`）—— **必须在下面取图之前**（源顺序：清洗 → 过滤 → 截断 → 取图）
+import { excludeSeenImages } from '@/core/rules/scanClean';
 import { log } from '@/lib/log';
 import { isRecord } from '@/lib/object';
 import { isImgRef, isInlineImage } from '@/stable/protocols/img';
@@ -139,10 +141,10 @@ async function materializeOne(host: HostPort, url: string): Promise<MaterializeO
  * ⚠️ **逐张失败就地留痕**（`console.warn`，读者 = 开发者）：`why` 是分类、第三参是**原文** ——
  *    ★ TD-16-48：此前只有 `failed++`，原因**全丢**（下载超时 / 非图片 / 宿主 IPC 失败不可分）。
  */
-async function materializeScannedImages(
+export async function materializeScannedImages(
   host: HostPort,
   raws: readonly unknown[],
-  via: ScanStrategy,
+  via: ScannedImage['via'],
 ): Promise<{ items: ScannedImage[]; failed: number }> {
   const items: ScannedImage[] = [];
   let failed = 0;
@@ -166,7 +168,12 @@ async function materializeScannedImages(
       fail('empty-url', '');
       continue;
     }
-    const out = await materializeOne(host, url);
+    // ★ 候选**已带 `img://`**（如画布扫描的 DOM 那半已经落过盘）⇒ 原样采用，**不重复下载**
+    //   （与 `materializeOne` 的幂等同一判据：`isImgRef`）
+    const out =
+      typeof raw.ref === 'string' && isImgRef(raw.ref)
+        ? ({ ok: true, ref: raw.ref } as const)
+        : await materializeOne(host, url);
     if (!out.ok) {
       fail(out.why, url, out.detail);
       continue;
@@ -191,16 +198,27 @@ async function materializeScannedImages(
   return { items, failed };
 }
 
+/** 归一 + 落盘的入参（原 `ScanOptions` 里与**取图**有关的那几项） */
+export interface ScanAttemptOptions {
+  /** 已在库 / 已取过的 url（原 `haveUrls` ＋ `seen`）—— **下载前**滤掉，省掉重复下载 */
+  seenUrls?: readonly string[];
+}
+
 /**
  * 把「一档的原始返回」归一成 `ScanAttempt` **并落盘**（**两档共用此一份**）
  *
  * `scanFrames` 的 `{items, href}` 与页内脚本的 `{images, href}` 形状不同 ⇒ 调用方把它们
  * **包装成脚本形状**（`{ok:true, images, href}`）再进来，两条路共用这一处。
+ *
+ * ★ **下载前过滤**（原 `wp:32588-32592` 的顺序：`Yh` → 已见 / 已在库过滤 → `slice(limit)` → **取图**）：
+ *   源的页面脚本只采集 url，取图在编排里；本仓取图在本函数 ⇒ 过滤必须落在这里，
+ *   否则"已在库的图"会被真真切切地重下一遍（值守每轮 / 手动每次）。
  */
 export async function scanAttemptFromRaw(
   host: HostPort,
   via: ScanStrategy,
   raw: unknown,
+  opts: ScanAttemptOptions = {},
 ): Promise<ScanAttempt> {
   if (!isRecord(raw)) return { via, ok: false, error: '通道返回空' };
   // ★ **TD-05-3**：用 `ok !== true` —— 漏 `ok` 或形状变了都**不能当成功**（否则 0 张会被读成"没扫到"）；
@@ -213,14 +231,17 @@ export async function scanAttemptFromRaw(
   const unread: UnreadRoot[] = Array.isArray(raw.unread)
     ? raw.unread.map(toUnreadRoot).filter((u): u is UnreadRoot => u !== null)
     : [];
-  const m = await materializeScannedImages(host, raws, via);
+  // ★ 已在库的**不下载**（原 `wp` 的 `x = b.filter(...)`）
+  const fresh = excludeSeenImages(raws, opts.seenUrls);
+  const m = await materializeScannedImages(host, fresh.items, via);
   return {
     via,
     ok: true,
     count: m.items.length,
     items: m.items,
     href: typeof raw.href === 'string' ? raw.href : undefined,
-    skipped: typeof raw.skipped === 'number' ? raw.skipped : 0,
+    // 被"已见"滤掉的也算扫描阶段跳过（`ScanResult.skipped` 的语义＝重复 / 过小 / 占位）
+    skipped: (typeof raw.skipped === 'number' ? raw.skipped : 0) + fresh.skipped,
     unread,
     failed: m.failed,
   };

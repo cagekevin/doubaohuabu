@@ -10,7 +10,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   busyIdsOf,
-  clearBusy,
   holdAccount,
   isAccountBusy,
   pruneBusy,
@@ -123,18 +122,4 @@ describe('isAccountBusy / busyIdsOf / pruneBusy（原 Hk + store accountBusy）'
   });
 });
 
-describe('clearBusy（原 qP 34630）', () => {
-  it('全清（无 itemId 约束）', () => {
-    const m = holdAccount(holdAccount({}, 'a', { now: T0 })!, 'b', { now: T0 })!;
-    expect(clearBusy(m)).toEqual({});
-  });
 
-  it('★ 带 itemId ⇒ 只清"我的"那些（逐个 `tn` 的语义）', () => {
-    const m = holdAccount(holdAccount({}, 'a', { now: T0, itemId: 'mine' })!, 'b', {
-      now: T0,
-      itemId: 'other',
-    })!;
-    const out = clearBusy(m, { itemId: 'mine' });
-    expect(Object.keys(out)).toEqual(['b']);
-  });
-});

@@ -99,7 +99,7 @@ const RETIRED = ['已取代', '已弃用', '已否决', '已毕业'];
  *
  * 【为什么放渲染层，而不是去改 15 个源文件标题】（2026-09-22）
  *   - **实证**：`ADR-0054` 的标题「…存量一律不动」被当判据引用，把"因契约变更同步断言"误报成
- *     须用户签字的例外（`docs/plan/143`）。
+ *     须用户签字的例外（`docs/过程.md`）。
  *   - **是通病不是个案**：15 条已退出里 **7 条标题本身就是命令句**
  *     （0010/0017/0020/0030/0037/0046/0047）⇒ 一被 `search` 命中就会被当判据。
  *   - **放渲染层的理由**：`状态` 是头部字段（**真源**）⇒ 状态改了前缀自动跟随，**零同步成本**；
@@ -940,7 +940,7 @@ function cmdHygiene() {
  * ★ 分类判据（= ADR守护者 §回改适用范围）：**这份文档会不会被后人当入口再查一次**。
  *     ① 生效判据 = `docs/adr/*.md` 的其他条 ⇒ **必须回改**（后人是把它当论据查的）
  *     ② 活跃文档 = `docs/`（含 `docs/11-架构与契约定稿.md`）`src/` `.codebuddy/` ⇒ **必须回改**
- *     ③ 过程文档 = `daily/**` **+ `docs/plan/**`** ⇒ **不动**（当时快照，回改反而失真）
+ *     ③ 过程文档 = `daily/**` **+ `docs/过程.md`** ⇒ **不动**（当时快照，回改反而失真）
  *
  * ★ 豁免（必须**同行**命中 —— 理由同 `check-doc-refs`：豁免要写成可 grep 的形态）：
  *   历史叙述（"ADR-0043 已删号"是在讲过去）· 索引行（`](ADR-0044-` 是 README 产物）·
@@ -965,19 +965,19 @@ const REFS_SKIP = new Set(['node_modules', 'dist', '.git', '.probe']);
 const REFS_EXT = /\.(md|ts|tsx|js|jsx|mjs|cjs)$/;
 const REFS_ROOTS = ['docs', 'src', '.codebuddy', 'daily'];
 /**
- * 【过程文档的判定（2026-09-25 修 · 用户指令）】—— 与 `daily/**` **同类**的还有一个：`docs/plan/**`。
+ * 【过程文档的判定（2026-09-25 修 · 用户指令）】—— 与 `daily/**` **同类**的还有一个：`docs/过程.md`。
  *
  * 判据 = ADR守护者「回改的适用范围」两列：**"会不会被当入口再查一次"**。
- *   · `daily/**`（区域日志）· `docs/plan/**`（施工方案与轮次快照）⇒ **不会** ⇒ 过程文档 ⇒ **不回改**；
+ *   · `daily/**`（区域日志）· `docs/过程.md`（施工方案与轮次快照）⇒ **不会** ⇒ 过程文档 ⇒ **不回改**；
  *   · `docs/adr/**`（现行判据）· `docs/*.md`（`11-架构与契约定稿` 等）· `.codebuddy/commands/**` · 代码文件头 ⇒ **会** ⇒ 活跃文档 ⇒ 必须回改。
  *
- * ⚠️ **本节原来只排除 `daily/`，漏了 `docs/plan/`** —— 后果是 `--check` 把 `docs/plan/145/146`
+ * ⚠️ **本节原来只排除 `daily/`，漏了 `docs/过程.md`** —— 后果是 `--check` 把 `docs/过程.md`
  *   里「本批新增 ADR-0060」这类**当时快照**当成活跃引用报红，**14 处**（实证 2026-09-25）。
  *   而 ADR-0060 是个**从未落盘的构想号**（其内容被 ADR-0061 泛化吸取）—— 于是这条红**永远消不掉**：
  *   它要求的动作（回改过程文档）**与规程相反**。这正是本文件自己在 `scanAdrRefs` 注里写的
  *   「扫过程文档 = **常红判据**（形态⑤：跑到没人看）」—— 只是当时**分类分漏了一半**。
  */
-const PROCESS_DOC_RE = /^(daily\/|docs\/plan\/)/;
+const PROCESS_DOC_RE = /^(daily\/|docs\/过程\.md$)/;
 function isProcessDoc(rel) {
   return PROCESS_DOC_RE.test(rel);
 }
@@ -1031,7 +1031,7 @@ function walkRefs(target, out = []) {
  *
  * ⚠️ `includeProcessDocs`（默认 true）—— **两种模式必须分开**：
  *   · `refs <NNNN>` 要**含过程文档**：它要显示"过程文档（不动）"这一类，提醒你别去改它；
- *   · `refs --check` 必须**排除过程文档**（`daily/**` **+ `docs/plan/**`**）：它们天然会提历史编号
+ *   · `refs --check` 必须**排除过程文档**（`daily/**` **+ `docs/过程.md`**）：它们天然会提历史编号
  *     （"ADR-0022 已删号"、体检报告里的举例 `ADR-0099`、"本批新增 ADR-0060"这类当时快照）
  *     ⇒ 扫它 = **常红判据**（形态⑤：跑到没人看）。判定见 `isProcessDoc`。
  */
@@ -1058,7 +1058,7 @@ function cmdRefs() {
   const known = new Set(adrFiles().map((f) => f.slice(4, 8)));
 
   // ── 模式 A：无参 / `--check` ⇒ 全仓断链（引用了**已不存在**的编号）────────────
-  // ⚠️ 只扫"会被当入口再查"的位置（**不含过程文档** `daily/**` + `docs/plan/**`）
+  // ⚠️ 只扫"会被当入口再查"的位置（**不含过程文档** `daily/**` + `docs/过程.md`）
   //    —— 理由见 scanAdrRefs 的 includeProcessDocs 注与 isProcessDoc 的判据。
   if (!arg || arg === '--check') {
     const rows = scanAdrRefs({ includeProcessDocs: false });
@@ -1091,7 +1091,7 @@ function cmdRefs() {
       `🔗 adr refs --check（断链：编号是否还存在）｜ 扫到 ${rows.length} 处引用 · 有效编号 ${known.size} 个`,
     );
     console.log(
-      '   范围：docs/ src/ .codebuddy/ —— **不含过程文档**（`daily/**` + `docs/plan/**`；它们必带历史编号，扫 = 常红）',
+      '   范围：docs/ src/ .codebuddy/ —— **不含过程文档**（`daily/**` + `docs/过程.md`；它们必带历史编号，扫 = 常红）',
     );
     if (!ghosts.size) {
       console.log('   ✅ 0 断链（所有引用都指向存在的 ADR）');
@@ -1106,7 +1106,7 @@ function cmdRefs() {
     console.log(`
    ── 怎么修 ──
    ① 生效判据 / 活跃文档里的 ⇒ **改指现编号**（整句已作废则删该引用）；
-   ② 过程文档（\`daily/**\` + \`docs/plan/**\`）里的 ⇒ **不动**（当时快照，回改反失真）；
+   ② 过程文档（\`daily/**\` + \`docs/过程.md\`）里的 ⇒ **不动**（当时快照，回改反失真）；
    ③ 是"**ADR-00xx 已删号**"这类**历史叙述** ⇒ 已豁免，无需处理。`);
     process.exit(1);
   }
@@ -1121,7 +1121,7 @@ function cmdRefs() {
   const self = `docs/adr/ADR-${no}-`;
   const mine = rows.filter((r) => r.refs.includes(`ADR-${no}`) && !r.rel.startsWith(self));
   const g1 = mine.filter((r) => r.rel.startsWith('docs/adr/'));
-  const g3 = mine.filter((r) => isProcessDoc(r.rel)); // 过程文档：daily/** + docs/plan/**
+  const g3 = mine.filter((r) => isProcessDoc(r.rel)); // 过程文档：daily/** + docs/过程.md
   const g2 = mine.filter((r) => !r.rel.startsWith('docs/adr/') && !isProcessDoc(r.rel));
 
   console.log(
@@ -1134,7 +1134,7 @@ function cmdRefs() {
   };
   dump('① 生效判据（其他 ADR）—— 必须回改：', g1);
   dump('② 活跃文档 —— 必须回改：', g2);
-  dump('③ 过程文档（daily/ · docs/plan/）—— **不动**：', g3);
+  dump('③ 过程文档（daily/ · docs/过程.md）—— **不动**：', g3);
   if (!mine.length) console.log('   （无引用 —— 这条还没被别处当论据用过）');
   console.log('\n   ⇒ 回改：①② 每处都改；③ 一律不动。改完 `index --write && audit` 必须 0 问题。');
 }

@@ -21,23 +21,22 @@
  *   ⇒ 这消掉了源版最脆的一环（注册表与组件生命周期耦合）。
  *
  * ⚠️ 原则 1：本组件**不写 store**（`activeAccountId` 由账号面板改）
- * ⚠️ 零注入（`docs/10` #2）：这里**不碰** `navigator`/`screen`/`webgl`；
+ * ⚠️ 零注入（`docs/过程.md` #2）：这里**不碰** `navigator`/`screen`/`webgl`；
  *    指纹伪装是宿主 preload（`preload=<file://…>`）的活。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAccountOps, useHostOps, useStore } from '@/state';
-import type { Account } from '@/stable/model/account';
+import { isAccountUsable, type Account } from '@/stable/model/account';
 // ★ 容器钩子类名的 SSOT（`findWebview` 靠它定位；见下方 `className`）
 import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
-import { BACKEND_VIEW_TEXT, WATERMARK_PANEL_TEXT } from '@/constants/text';
+import { ACCOUNT_PANEL_TEXT, BACKEND_VIEW_TEXT, WATERMARK_PANEL_TEXT } from '@/constants/text';
 import { NEW_IMAGES_SITES } from '@/core/rules/accountPick';
 // ★ 默认会话分区的**唯一真源**（`TD-04-11`：同一语义此前 5 处定义 3 套值）
 import { defaultPartitionOf } from '@/core/rules/partition';
 import { NewImagesPanel } from './NewImagesPanel';
 import { WatermarkPanel } from './WatermarkPanel';
 import styles from './BackendView.module.css';
-import shared from '@/ui/common/shared.module.css';
 
 /**
  * `<webview>` 的 `src`（原 `_Component25.jsx:355` 的六路三目）
@@ -65,10 +64,22 @@ function partitionOf(account: Account): string {
   return account.partition || defaultPartitionOf(account.type);
 }
 
+/** `<webview>`（Electron 自定义元素）上我们需要的**最小面** —— React 无精确类型 ⇒ 结构化声明 */
+interface WebviewElementLike {
+  addEventListener(type: string, cb: () => void): void;
+  removeEventListener(type: string, cb: () => void): void;
+}
+
 function AccountWebview({ account, active }: { account: Account; active: boolean }) {
   // ★ 2026-10-11：原先两处 `usePorts()` 直调（`host.account.ensureFingerprint` / `sites[].chatUrl`）
   //   已收口到 `accountOps`（TD-16-8）—— 组件不再持有 `Ports`。
   const accountOps = useAccountOps();
+  /**
+   * ★ `partition`（真源 `partitionOf`）在**组件体**算一次，effect 与 `<webview>` 标签共用。
+   * ⚠️ 不能让 effect 内联调用 `partitionOf(account)` —— 那会把**整个 `account` 对象**带进依赖
+   *    （eslint 看不出 `partitionOf` 只读哪几个字段）⇒ 对象标识每次 store 更新都变 ⇒ effect 每轮重跑。
+   */
+  const partition = partitionOf(account);
   /** 宿主产出的指纹 preload 地址（原 `_Component25` 的 `preload={h}`） */
   const [preloadUrl, setPreloadUrl] = useState<string | null>(null);
 
@@ -88,7 +99,7 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
           //   session**（探债段症状①：指纹 HTTP 层头注入被跳过、却仍报成功）。而同一个组件的
           //   `<webview>` 用的**已经是** type-aware 的 `partitionOf(account)` ⇒ 现在两边**同一个来源**
           //   （真源 `core/rules/partition.defaultPartitionOf`），后端不必再猜。
-          partition: partitionOf(account),
+          partition,
           fingerprint: account.fingerprint,
         });
         if (cancelled) return;
@@ -103,10 +114,41 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
     // ⚠️ 指纹或盐一变就要**重新准备**（换指纹 = 换身份）
     //   ⚠️ **必须用字段级依赖**（不是 `account` 对象）：`accounts` 每次 store 更新都会换对象标识，
     //      用整个 `account` 会让本 effect 每轮重跑 ⇒ 重复打 `ensureFingerprint` IPC。
-  }, [accountOps, account.id, account.partition, account.fingerprint, account.type]);
+  }, [accountOps, account.id, partition, account.fingerprint, account.type]);
+
+  /**
+   * ★ `<webview>` 元素引用 —— 只为挂 **`dom-ready`**（原 `_Component25.jsx:113-142` 的 `F`）
+   *
+   * ⚠️ `ui` **不 import `adapters`**（铁律②）⇒ 事件里只调**控制器**（`accountOps.onWebviewDomReady`），
+   *   由它经端口去挂 CDP 调试器（`onDolaMedia` 的唯一数据来源）。
+   */
+  const wvRef = useRef<WebviewElementLike | null>(null);
+  // ⚠️ 抽局部量：effect 里若直接闭包 `account`，`react-hooks/exhaustive-deps` 要求把整个对象入依赖
+  const accountId = account.id;
+  useEffect(() => {
+    const el = wvRef.current;
+    if (!el) return;
+    const onReady = (): void => accountOps.onWebviewDomReady(accountId);
+    /**
+     * ★ `did-navigate`（原 `_Component25.jsx:163-171`）—— SPA 换页后**重注入** Dola 30s 钩子
+     * （钩子装在页面主世界里，换页就没了）。⚠️ 源的 did-navigate 还注入 `c0`（拖放兜底），
+     * 那件**未落**（站点层注入，需先定性 —— `docs/过程.md` #2）。
+     */
+    const onNavigated = (): void => accountOps.onWebviewNavigated(accountId);
+    el.addEventListener('dom-ready', onReady);
+    el.addEventListener('did-navigate', onNavigated);
+    return () => {
+      el.removeEventListener('dom-ready', onReady);
+      el.removeEventListener('did-navigate', onNavigated);
+    };
+  }, [accountOps, accountId]);
 
   return (
     <webview
+      ref={(el) => {
+        // ⚠️ 自定义元素：React 的 ref 类型是 `HTMLElement`，这里跨一次断言到我们需要的最小面
+        wvRef.current = el as unknown as WebviewElementLike | null;
+      }}
       /**
        * ⚠️ **`key` 含 `fpSalt`**（与原版 355 行逐字一致）：换指纹必须**重挂元素**，
        *    否则 guest 页面仍是旧身份（preload 只在导航时生效）。
@@ -117,7 +159,7 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
        * ⚠️ **属性顺序有意义**：`partition` 必须在 `src` 之前生效，
        *    否则会先在错误的 session 里起一次导航（Electron 的已知行为）。
        */
-      partition={partitionOf(account)}
+      partition={partition}
       src={backendUrlOf(account, accountOps.chatUrlOf(account.type))}
       // 原版：有指纹就用指纹的 UA；否则交给引擎默认（不编一个）
       {...(account.fingerprint ? { useragent: account.fingerprint.userAgent } : {})}
@@ -163,6 +205,15 @@ export interface BackendViewProps {
 
 export function BackendView({ visible, onClose }: BackendViewProps) {
   const accounts = useStore((s) => s.accounts);
+  /** 占用表（原 `Fi`/`Hk` 那套；`key` 即"正在用这个账号"）—— 挂载集合的一档守卫 */
+  const accountBusy = useStore((s) => s.accountBusy);
+  /**
+   * ★ **后台页「还活着」的账号 id**（原 `_Component43` 的 `d` = `oT()`，`shared.js:25973`）
+   * —— 由 `state/subscriptions.ts` 订阅端口写入（原则 2），`ui` **只读**。
+   */
+  const leasedAccounts = useStore((s) => s.leasedAccounts);
+  /** 恢复静默（源 `Ve`）—— 把 `autoStart` 置回 `true` ⇒ 该账号重新进挂载集合 */
+  const setAccountAutoStart = useStore((s) => s.setAccountAutoStart);
   const activeAccountId = useStore((s) => s.activeAccountId);
   /** 头部折叠（原 `se`）—— 键 `doubao-view-head-collapsed`，**读盘初始化 / 切换即写盘** */
   const headCollapsed = useStore((s) => s.viewHeadCollapsed);
@@ -172,8 +223,35 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
   /** 外链转发口（`ui` 不持端口 —— 铁律②）—— 原 `window.api.openExternal` 的接线 */
   const hostOps = useHostOps();
 
-  /** 当前选中的账号（原 `_Component43:3220-3222` 的 `Ke`） */
-  const active = accounts.find((a) => a.id === activeAccountId) ?? null;
+  /**
+   * 当前显示的账号（原 `_Component43:3220-3222` 的 `Ke = s.find(id===o) || s[0]`）。
+   * ⚠️ **必须带 `|| s[0]` 兜底**：源在「没选账号」时**回落到第一个账号**（`s` = **全部** accounts，不是已登录集）
+   *   ⇒ 否则标题恒显「未选择账号」、四个按钮全不可用。
+   */
+  const active = accounts.find((a) => a.id === activeAccountId) ?? accounts[0] ?? null;
+  /**
+   * **已登录账号**（原 `_Component43.jsx:23-25` 的 `c`）——
+   * 空态 / `SD` / 出新图条**三条条件的共同判据**。
+   * ⚠️ 判据走真源 `isAccountUsable`（原 `(status || '已登录') === '已登录'`），**不另写一份**。
+   */
+  const loggedIn = accounts.filter(isAccountUsable);
+  /**
+   * **要挂 `<webview>` 的账号**（原 `_Component43.jsx:37-46` 的 `h` = `c ∩ (autoStart ∪ 租约快照)`）。
+   *
+   * ⚠️ 没人用的账号**不挂** `<webview>`：元素不在 ⇒ guest 进程不在 ⇒ 这才叫"不占用内存 / CPU"。
+   * ★ **2026-10-13 修**：源那半边是**租约状态记录快照**（原 `Jn.keys()`，含 **drain 宽限** 1500ms）。
+   *   此前本仓用 `accountBusy` 顶 —— 它**漏了「只持租约、不占 busy」的那一类**：
+   *   `state/autoConfirm` 申请的是**独立租约**（`purpose: 'gen-confirm'`）⇒ 源会保持挂载，
+   *   而按旧的判据页面会被**卸载** ⇒ 它的页内脚本全打在空元素上。现改用端口快照
+   *   （`BackendPagePort.leases/subscribeLeases` → `state/subscriptions.ts` → `leasedAccounts`）。
+   * ⚠️ 仍 **OR 上 `accountBusy`**（**有意的本仓差异**）：本仓的 busy 在**取租约之前**就置好
+   *   （`holdAccount` 在选号阶段），若只留快照，`hold` 到租约之间会**瞬时卸载再重挂**
+   *   （源是"先租约、后 busy"，没有这个窗口）⇒ 宁可多挂一个，不要闪一下。
+   */
+  const mounted = loggedIn.filter(
+    (a) =>
+      a.autoStart === true || leasedAccounts.includes(a.id) || Object.hasOwn(accountBusy, a.id),
+  );
 
   /** ★ 「无水印资源」面板开合（原 `_Component43` 的「无水印资源（N）」按钮 `Ie(v => !v)` toggle） */
   const [watermarkOpen, setWatermarkOpen] = useState(false);
@@ -221,7 +299,30 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
     });
   }, [accountOps, active, hostOps, pushToast]);
 
+  /**
+   * 头部高度（原 `pe`）—— `ResizeObserver` 量 `.headInner`（源 `_Component43.jsx:99-117`），
+   * 供 `.headClip` 内联 `height` 做折叠过渡（源 `:3226-3228`）。
+   */
+  const headRef = useRef<HTMLDivElement>(null);
+  const [headH, setHeadH] = useState(0);
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setHeadH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const headTitle = headCollapsed ? BACKEND_VIEW_TEXT.expandHead : BACKEND_VIEW_TEXT.collapseHead;
+
+  /**
+   * ★ **静默底图**（原 `_Component43.jsx:3277` 的 `UT(Ke.id)` → `<img className="silent-snap">`）
+   *
+   * 静默那一刻由 `BackendPagePort.captureSnapshot`（原 `je`）截下；`ui` **不持端口**（铁律②）
+   * ⇒ 经 `accountOps.snapshotOf` 取（`ui → state → ports`）。
+   * ⚠️ 只在**当前账号处于静默**时取（`autoStart !== true`）—— 其余情况遮罩根本不渲染。
+   */
+  const silentSnap = active && active.autoStart !== true ? accountOps.snapshotOf(active.id) : null;
 
   return (
     /*
@@ -230,7 +331,7 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
       ⚠️ 源还有第三态 `dv-send-overlay`（**隐藏但仍有发送任务**时叠一个"发送中"覆盖层）——
         本仓的发送链是 `state/sendQueue` 的后台泵、不依赖视图可见性 ⇒ 暂无该态（如实登记，不造空壳）。
     */
-    <div className={`${styles.view} ${visible ? styles.viewVisible : styles.viewHidden}`}>
+    <div className={visible ? styles.view : `${styles.view} ${styles.viewHidden}`}>
       {/*
         ★ **头部工具栏**（原 `_Component43.jsx:3225-3271`）—— 2026-10-11 前**整条没落**，
           于是 `LS_VIEW_HEAD_COLLAPSED` 这个跨层契约键、`BACKEND_VIEW_TEXT` 的文案、
@@ -239,35 +340,45 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
           （可见即渲染），账号未选中时由内部的 `Ke` 兜底（`s.find(id===active) || s[0]`）⇒ 改回 `visible`。
       */}
       {visible && (
-        <div className={`${styles.head} ${headCollapsed ? styles.headCollapsed : ''}`}>
-          <div className={styles.headClip}>
-            <div className={styles.headInner}>
-              <div className={shared.panelTitle}>
+        <div className={styles.head}>
+          {/* 折叠高度**内联**（原 `:3226-3228` 的 `style={{ height: se ? 0 : pe }}`） */}
+          <div
+            className={styles.headClip}
+            style={headH ? { height: headCollapsed ? 0 : headH } : undefined}
+          >
+            <div className={styles.headInner} ref={headRef}>
+              <div className={styles.headTitle}>
                 {/* 原 `3231-3232`：站点标题 · 账号名（未选账号 ⇒ `未选择账号`） */}
                 {BACKEND_VIEW_TEXT.title[active?.type ?? ''] ?? BACKEND_VIEW_TEXT.title.doubao} ·{' '}
                 {active?.name || BACKEND_VIEW_TEXT.noAccount}
               </div>
               <div className={styles.actions}>
-                {/* 原 `dv-actions`（`:3247-3266`）：`刷新` · `浏览器打开` · `无水印资源（N）` · `返回画布`
-                    ⚠️ 本仓当前只落 `刷新` 与 `返回画布`（另两项属未落功能，见 `docs/13` §2.3）。 */}
-                <button type="button" className={styles.btn} onClick={onRefresh}>
+                {/* 原 `dv-actions`（`:3235-3264`）—— ★ 按钮类名**逐字对源**：`btn sm` / `btn sm primary`
+                    ⇒ 一律 `composes` 真源（`docs/17` 查 6），不自造小按钮。 */}
+                {/* 原 `:3243` 的 `disabled={Ke?.autoStart !== true}` —— 静默中的账号**没有挂载**，刷新无从谈起 */}
+                <button
+                  type="button"
+                  className={styles.headBtn}
+                  onClick={onRefresh}
+                  disabled={active?.autoStart !== true}
+                >
                   {BACKEND_VIEW_TEXT.refresh}
                 </button>
-                <button type="button" className={styles.btn} onClick={onOpenInBrowser}>
+                <button type="button" className={styles.headBtn} onClick={onOpenInBrowser}>
                   {BACKEND_VIEW_TEXT.openInBrowser}
                 </button>
                 {/*
-                  ★ 「无水印资源（N）」按钮（原 `_Component43.jsx:3260`）—— 2026-10-12 落
-                    （`docs/13` §2.3 的 `SD` 面板）。条件 = 非 lovart（原 `Ke?.type !== 'lovart'`）。
+                  ★ 「无水印资源（N）」按钮（原 `_Component43.jsx:3255-3261`）——
+                    条件**逐字照源** = `type === 'dola' || type === 'doubao'`（**不是**「非 lovart」）。
                 */}
-                {active && active.type !== 'lovart' ? (
-                  <button type="button" className={styles.btn} onClick={() => setWatermarkOpen(!watermarkOpen)}>
+                {active && (active.type === 'dola' || active.type === 'doubao') ? (
+                  <button type="button" className={styles.headBtn} onClick={() => setWatermarkOpen(!watermarkOpen)}>
                     {WATERMARK_PANEL_TEXT.title}
                     {watermarkOpen ? '' : `（${watermarkCount}）`}
                   </button>
                 ) : null}
                 {/* 「返回画布」= 源的 `onClose` 入口（`_Component48.jsx:178` 的 `onClose={() => a(false)}`） */}
-                <button type="button" className={styles.btn} onClick={onClose}>
+                <button type="button" className={styles.headBtnPrimary} onClick={onClose}>
                   {BACKEND_VIEW_TEXT.backToCanvas}
                 </button>
               </div>
@@ -287,43 +398,72 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
         </div>
       )}
 
-      {/*
-        ★ 「出新图」条（原 `_Component26`）—— **源里它是本视图的子节点**（`_Component43.jsx:3301`）：
-        ```jsx
-        {t && c.length>0 && (Ke?.type==='lovart'||Ke?.type==='tapnow'||Ke?.type==='other')
-          && <_Component26 account={Ke} active={t} />}
-        {t && c.length>0 && Ke?.type!=='lovart' && <_SD items={ce} open={…} onClose={…} />}   // ← 另一支
-        ```
-        ⚠️ **2026-10-12 修正（我上一版写错了）**：上一版只写 `{visible && <NewImagesPanel />}` ⇒
-           **无条件渲染**，而源**只在 lovart / tapnow / other** 三站渲染它；其余站点（doubao/dola/gpt）
-           那一支是 **`SD`（「无水印资源」面板）** —— 见下方 `SD` 的未落登记。
-        ⚠️ 它靠"把图拖进后台页面"交互 ⇒ 必须紧贴下面的 webview 区（源即如此）。
-      */}
-      {visible && NEW_IMAGES_SITES.includes(active?.type ?? '') && <NewImagesPanel />}
-
-      {/*
-        ★ 「无水印资源」面板（原 `SD.jsx`）—— 源 `_Component43.jsx:3298` 的另一支：
-          `{t && c.length>0 && Ke?.type!=='lovart' && <_SD items={ce} …/>}`。
-          2026-10-12 落（`docs/13` §2.3 的 `SD`）—— 只展示视频（`videoShares`），图来自
-          `onDolaMedia`（未落），如实标注。
-      */}
-      {visible && watermarkOpen && active && active.type !== 'lovart' ? (
-        <WatermarkPanel onClose={() => setWatermarkOpen(false)} />
-      ) : null}
-      {/*
-        ⏳ **未落的那一支**（源 `:3298`）：`{t && c.length>0 && Ke?.type!=='lovart' && <_SD …/>}` ——
-           `SD` 就是「**无水印资源**」面板（`SD.jsx` 160 行：`dola-media-panel` / `dmp-head` / `dmp-title`
-           `无水印资源` / `dmp-count` / `dmp-path-row`（下载到） / `docked` 态）⇒ 与 `dv-actions` 的
-           「无水印资源（N）」按钮（toggle）、`fetchWatermarkFree`、`videoShares` **是同一个功能块**。
-      */}
-
       {/* ★ 这个**字面量类**不是装饰：`adapters/site/shared/webview.ts` 的 `findWebview` 靠它定位容器
           （`WEBVIEWS_HOST_CLASS` = SSOT）。2026-10-11 前这里只挂 CSS-module 哈希类 ⇒ 定位恒失效。 */}
       <div className={`${WEBVIEWS_HOST_CLASS} ${styles.webviews}`}>
-        {accounts.map((a) => (
-          <AccountWebview key={a.id} account={a} active={a.id === activeAccountId} />
+        {mounted.map((a) => (
+          <AccountWebview
+            key={a.id}
+            account={a}
+            /* 原 `isActive={t && ee.id === o && ee.autoStart === true}`（`_Component43.jsx:3274`） */
+            active={visible && a.id === activeAccountId && a.autoStart === true}
+          />
         ))}
+
+        {/*
+          静默遮罩（原 `_Component43.jsx:3276-3295`）——
+          条件 = `c.length>0 && Ke && Ke.autoStart !== true`：当前账号**没挂载**（静默中）时，
+          给一句说明 + 一个恢复入口。恢复 = `setAccountAutoStart(id, true)`（源 `Ve`，`:516-524`）。
+        */}
+        {loggedIn.length > 0 && active && active.autoStart !== true ? (
+          <div className={styles.silentOverlay}>
+            {/*
+              ★ 底图（原 `_Component43.jsx:3278` 的 `<img className="silent-snap" src={ee} />`）——
+              静默那一刻截下的页面样子；截不到就没有它（遮罩退化为纯色底）。
+              ⚠️ **不落源的 `has-snap` 类**（`:3277` 的 `silent-overlay${ee ? ' has-snap' : ''}`）：
+              `mockup.css` 无该条、全仓 **0 读者** ⇒ 建它就是造一个没有消费者的状态
+              （同 `dv-wv-*` 的既有裁定，`daily/架构日志/16-…-2026-10-12.md` §10.2）。
+            */}
+            {silentSnap && (
+              <img className={styles.silentSnap} src={silentSnap} alt="" draggable={false} />
+            )}
+            <div className={styles.silentMask} />
+            <div className={styles.silentCenter}>
+              <button
+                type="button"
+                className={styles.silentResume}
+                title={BACKEND_VIEW_TEXT.resume}
+                aria-label={BACKEND_VIEW_TEXT.resume}
+                onClick={() => setAccountAutoStart(active.id, true)}
+              >
+                <span className={styles.silentPauseIcon} aria-hidden="true">
+                  <i />
+                  <i />
+                </span>
+              </button>
+              <div className={styles.silentTip}>{BACKEND_VIEW_TEXT.silent(active.name)}</div>
+            </div>
+          </div>
+        ) : null}
       </div>
+
+      {/* 空态（原 `_Component43.jsx:3297`：`{c.length === 0 && …}`，`c` = **已登录账号**列表） */}
+      {loggedIn.length === 0 && <div className={styles.emptyHint}>{ACCOUNT_PANEL_TEXT.emptyHint}</div>}
+
+      {/*
+        ★ 「无水印资源」面板（原 `SD`，`_Component43.jsx:3298`）——
+        ★ 位置照源：在 **webviews 之后**（视图底部）；条件 = `t && c.length>0 && Ke?.type !== 'lovart'`。
+      */}
+      {visible && loggedIn.length > 0 && active && active.type !== 'lovart' && watermarkOpen ? (
+        <WatermarkPanel onClose={() => setWatermarkOpen(false)} />
+      ) : null}
+
+      {/*
+        ★ 「出新图」条（原 `_Component26`，`_Component43.jsx:3301`）——
+        ★ 位置照源：在 **webviews 之后**（它靠"把图拖进后台页面"交互，源就把它摆在 webview 下方）；
+        条件 = `t && c.length>0 && Ke?.type ∈ {lovart, tapnow, other}`。
+      */}
+      {visible && loggedIn.length > 0 && NEW_IMAGES_SITES.includes(active?.type ?? '') && <NewImagesPanel />}
     </div>
   );
 }

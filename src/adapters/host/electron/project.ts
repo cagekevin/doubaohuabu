@@ -2,7 +2,7 @@
  * ProjectPort 的 Electron 实现（磁盘侧）
  *
  * ⚠️ **`activateProjectStorage` 是 `sendSync`** —— **同步**返回 `{path}`，
- *    不得 `await`（docs/10 + W1）。它是 `img://` 首帧能读对目录的前提。
+ *    不得 `await`（docs/过程.md + W1）。它是 `img://` 首帧能读对目录的前提。
  *
  * ⚠️ `saveProjectsBackup` / `saveProjectSnapshot` / `logProjectOperation` 是 `send`（**无返回**）
  *    ⇒ 签名是 `void`，不是 `Promise`

@@ -5,7 +5,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { commitSnapshot, initialUndoStack, redo, shouldMerge, undo, type UndoStack } from '../undo';
+import {
+  commitSnapshot,
+  initialUndoStack,
+  redo,
+  shouldMerge,
+  shouldRecordOperation,
+  undo,
+  type UndoStack,
+} from '../undo';
 import { UNDO_LIMIT, UNDO_MERGE_MS } from '@/constants';
 
 /** 模拟「节点位置」这一被快照的状态 */
@@ -54,6 +62,20 @@ describe('W5 · shouldMerge', () => {
   it('key 为空 → 不合并（源码：`if (n && ...)`）', () => {
     const s: UndoStack<Snap> = { past: [], future: [], lastKey: '', lastAt: 1000 };
     expect(shouldMerge(s, '', 1100)).toBe(false);
+  });
+});
+
+describe('shouldRecordOperation（原 `commit` 的合并分支 `return` ⇒ **不记日志**）', () => {
+  it('★ 被合并掉的那次 ⇒ 不记（同 key 且窗口内）', () => {
+    const s: UndoStack<Snap> = { past: [], future: [], lastKey: 'graph-move', lastAt: 1000 };
+    expect(shouldRecordOperation(s, 'graph-move', 1500)).toBe(false);
+  });
+
+  it('不同 key / 超出窗口 / 空 key ⇒ 记（判据 = `shouldMerge` 的补集）', () => {
+    const s: UndoStack<Snap> = { past: [], future: [], lastKey: 'graph-move', lastAt: 1000 };
+    expect(shouldRecordOperation(s, 'delete', 1100)).toBe(true);
+    expect(shouldRecordOperation(s, 'graph-move', 1800)).toBe(true); // 恰好 800ms ⇒ 不合并 ⇒ 记
+    expect(shouldRecordOperation(s, '', 1100)).toBe(true); // 空 key（源 `if (n && …)`）⇒ 记
   });
 });
 

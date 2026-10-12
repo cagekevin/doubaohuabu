@@ -9,6 +9,7 @@
  */
 
 import type { HostPort } from '@/core/ports/host.port';
+import type { StoragePort } from '@/core/ports/storage.port';
 import type { SiteRegistry } from '@/core/ports/site.port';
 import { createDoubaoSite } from './doubao';
 import { createLovartSite } from './lovart';
@@ -26,10 +27,11 @@ import { createGptSite } from './gpt';
  * | `gpt` | **发送**（附参考图 + 页内脚本）；**不抓素材** |
  * | `other` | **有意不提供适配器** —— `other` = 用户自填 URL 的**未知站点**，选择器未知 ⇒ 无从适配；**原版亦无** `other` 适配器（取证：`shared.js` 里 `other` 无任何 send/scan/site 分支）⇒ 注册表缺项，调用方报明确错误、**不静默回落**；**不要为"补全"去造一个** |
  */
-export function createSiteRegistry(host: HostPort): SiteRegistry {
+export function createSiteRegistry(host: HostPort, storage: StoragePort): SiteRegistry {
   return {
-    doubao: createDoubaoSite('doubao', host),
-    dola: createDoubaoSite('dola', host),
+    // ⚠️ `storage` 只有豆包 / Dola 用得上（跨会话去重表）—— 其余站点拿不到也不该拿
+    doubao: createDoubaoSite('doubao', host, storage),
+    dola: createDoubaoSite('dola', host, storage),
     lovart: createLovartSite(host),
     tapnow: createTapnowSite(host),
     gpt: createGptSite(host),

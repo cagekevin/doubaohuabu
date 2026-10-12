@@ -33,6 +33,7 @@ import type { Ports, PickedFile } from '@/core/ports';
 import type { ClipboardImage } from '@/core/ports/host.port';
 import type { Result } from '@/core/model/result';
 import type { FaceBox, FaceMaskOpts, FaceMaskResult } from '@/core/rules/facemask';
+import type { FaceDetectStats } from '@/core/rules/faceDetect';
 
 export interface HostOpsController {
   /**
@@ -47,7 +48,7 @@ export interface HostOpsController {
   /**
    * 写**纯文本**剪贴板。
    *
-   * ⚠️ 走端口而非 `navigator.clipboard`：端口实现内部保证 `docs/10` #8 的
+   * ⚠️ 走端口而非 `navigator.clipboard`：端口实现内部保证 `docs/过程.md` #8 的
    *    **`clear()` → `writeText()` → `await`** 序列（`host.port.ts:74`「实现内部必须…」）——
    *    直调浏览器 API 会漏掉 `clear()`（旧内容可能残留）。
    */
@@ -66,7 +67,7 @@ export interface HostOpsController {
    *
    * 用途（**与源一致**）：只把「剪贴板变过」这件事记成**时间戳** —— `Ctrl+V` 靠它判断
    * 「用户是刚复制的节点、还是在别处复制了图」（源 `V.current < ke.current`）。
-   * ⚠️ **回调本身不读图片**（读图是 `readImage` 的事，那条路**未落** —— 见 `docs/13` §3）。
+   * ⚠️ **回调本身不读图片**（读图是 `readImage` 的事，那条路**未落** —— 见 `docs/过程.md` §3）。
    *
    * @returns 取消订阅（W1：`on*` 必须取取消函数）
    */
@@ -130,6 +131,13 @@ export interface HostOpsController {
    * ⚠️ 底层会抛 ⇒ 端口已包成 `Result`，**错误原文照带**（原则 6）。
    */
   detectFaces(src: string): Promise<Result<FaceBox[]>>;
+  /**
+   * ★ **上一次检测的统计**（原 `LD`）—— 同步只读
+   *
+   * 消费者只有一个：`ImageEditor` 的「识别脸框」在**一张脸都没返回**时用它分档
+   *   （原 `G3.jsx:346-350`）—— 分档判据在纯层 `core/rules/faceDetect.explainEmptyFaceDetect`。
+   */
+  faceDetectStats(): FaceDetectStats;
   /** 对人脸框应用遮罩（原 `nL`）—— 同 `detectFaces`，渲染层本地能力（Canvas） */
   applyFaceMask(src: string, face: FaceBox, opts: FaceMaskOpts): Promise<Result<FaceMaskResult>>;
 }
@@ -153,6 +161,7 @@ export function createHostOps(ports: Ports): HostOpsController {
     openExternal: (url) => ports.host.file.openExternal(url),
     // ★ 人脸（`TD-16-107`）：**只转发**（无编排、无第二份判据 —— 与上面各方法同法）
     detectFaces: (src) => ports.host.media.detectFaces(src),
+    faceDetectStats: () => ports.host.media.faceDetectStats(),
     applyFaceMask: (src, face, opts) => ports.host.media.applyFaceMask(src, face, opts),
   };
 }

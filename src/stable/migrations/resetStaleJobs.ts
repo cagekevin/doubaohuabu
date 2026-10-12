@@ -4,7 +4,7 @@
  * ⚠️ **这不是"迁移"** —— 它**每次启动都要跑**：
  *    上一次运行被关掉/崩掉时，`genvideo` 的 `_pendingAttempt(s)` 与
  *    `apiJob`（queued/submitting/running）会**残留在 localStorage 里**。
- *    重启后它们永远不会有结果 ⇒ 必须清掉（docs/06 视角 4：重启即放弃）。
+ *    重启后它们永远不会有结果 ⇒ 必须清掉（docs/过程.md 视角 4：重启即放弃）。
  *
  * ⚠️ 与"为旧版本兼容"的区别（铁律 2）：
  *    旧版本的 `puretext → text` / 补 `height` / 补 `position` **已删除** ——

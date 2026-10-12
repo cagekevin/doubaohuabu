@@ -58,8 +58,13 @@ export type LovartGalleries = LovartGalleriesMap;
  */
 export const LOVART_ITEM_DEFAULT_NAME = 'Lovart 图';
 const DEFAULT_NAME = LOVART_ITEM_DEFAULT_NAME;
-/** 出处兜底（原 29274 的 `f.source || 'import'`） */
-const DEFAULT_SOURCE = 'import';
+/**
+ * 出处 `'import'` —— 源里**两处同一字面量**：`addLovartImages` 的兜底（原 29274 的
+ *   `f.source || 'import'`）与画廊「导入图片」（原 `_Component23:320` 的 `source: 'import'`）
+ *   ⇒ 导出复用（判据 C1）。
+ */
+export const LOVART_SOURCE_IMPORT = 'import';
+const DEFAULT_SOURCE = LOVART_SOURCE_IMPORT;
 
 /** 抓来的图**命名**（原 `XT` 33039-33057）—— `wp` 32493-32941 逐张抓到时用它取名 */
 export function captureImageName(url: string, index = 0): string {
@@ -90,6 +95,21 @@ export function captureSource(url: string): string {
 }
 
 /**
+ * **画布 API** 抓来的图的命名（原 `s0` 33669-33676）
+ *
+ * 规则（逐字）：取 url 末段、去掉 `?` 之后、**截前 8 个字符**；取不到就用 `index + 1` 顶上；
+ * 有画布名 ⇒ `` `${画布名} · ${片段}` ``，没有 ⇒ `` `Tapnow 图 ${片段}` ``。
+ *
+ * ⚠️ 与 `captureImageName`（原 `XT`，页面扫描那条路）**不是同一套命名**：源里两条路各有一份
+ *   （`XT` 用 URL 尾段的**完整文件名**；`s0` 用**前 8 字**并带画布名前缀）⇒ 照抄两份，不合并。
+ */
+export function captureCanvasImageName(url: string, canvasName: string, index = 0): string {
+  const tail = String(url).split('/').pop() ?? '';
+  const seg = (tail.split('?')[0] ?? '').slice(0, 8) || String(index + 1);
+  return canvasName ? `${canvasName} · ${seg}` : `Tapnow 图 ${seg}`;
+}
+
+/**
  * 解析落盘的画廊 JSON（原 `ET` 26637-26649）
  * ⚠️ 与源一致：**空 / 坏数据 / 不是对象 ⇒ `{}`**（**不抛** —— 画廊丢了不该挡住启动）。
  * ⚠️ 数组也是 `'object'`（源版判据就是 `typeof === 'object'`）⇒ 会被返回；照抄。
@@ -97,7 +117,7 @@ export function captureSource(url: string): string {
 /**
  * ★ **`TD-07-3` 结清（2026-10-11，回源）**：本函数**当前 0 生产消费**（`grep` 全仓只有定义处与本文档行）。
  *   · 「坏数据 ⇒ `{}`」的兜底**逐字对源**（原 `ET` 26637 同形，见本文件 `:17` 的表）⇒ **不在此改**；
- *   · 它是否**删除 / 接线**归**死代码批**（`docs/14` §1.9 一类），不属"兜底不留痕"。
+ *   · 它是否**删除 / 接线**归**死代码批**（`docs/过程.md` §1.9 一类），不属"兜底不留痕"。
  */
 /**
  * 源 `ET` 26637 的**形状判据半**：「是对象才收，否则 `{}`」（**不抛** —— 画廊丢了不该挡住启动）
@@ -324,6 +344,44 @@ export function removeLovartAccount(
 export const LOVART_SOURCE_CANVAS = 'canvas-bookmark';
 /** 素材没有名字时的兜底（原 346 的 `'素材节点'`） */
 const CANVAS_MATERIAL_FALLBACK = '素材节点';
+
+/** 一条**已读好**的本地图片（原 `Pu` 的产物形状） */
+export interface ImportedGalleryImage {
+  /** 文件名（**已去扩展名** —— `lib/readDroppedFile.stripExtension`） */
+  name: string;
+  /** 内联 base64（读失败 ⇒ 空串 ⇒ 本条被丢） */
+  dataUrl: string;
+  natW: number;
+  natH: number;
+}
+
+/** 「从磁盘导入」的默认名（原 `_Component23:316` 的 `|| 'Tapnow 图'`） */
+const IMPORT_DEFAULT_NAME = 'Tapnow 图';
+
+/**
+ * 把**从磁盘读好的图片**转成画廊条目（原 `_Component23` 的 `he` 306-322 的 map 半）
+ *
+ * 过滤（源 `:312` 的 `.filter(Ve => Ve && Ve.dataUrl)`）：`dataUrl` 为空的**整条丢掉**；
+ * 名字兜底 `'Tapnow 图'`；出处固定 `'import'`。
+ * ⚠️ 与 `canvasMaterialBookmarks` 的差异是**有意的**（那个从**节点**取字段、名字取 `label || name`）
+ *   —— 各自逐字对各自的源，**不合并**。
+ */
+export function importedGalleryItems(
+  read: readonly ImportedGalleryImage[] | null | undefined,
+): LovartImageInput[] {
+  const out: LovartImageInput[] = [];
+  for (const f of read || []) {
+    if (!f || !f.dataUrl) continue;
+    out.push({
+      name: f.name || IMPORT_DEFAULT_NAME,
+      dataUrl: f.dataUrl,
+      natW: f.natW || 0,
+      natH: f.natH || 0,
+      source: LOVART_SOURCE_IMPORT,
+    });
+  }
+  return out;
+}
 
 /**
  * 把**画布上选中的素材节点**转成画廊条目（原 `Ie` 337-352）

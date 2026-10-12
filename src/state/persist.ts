@@ -36,7 +36,7 @@ import type { StylePreset } from '@/constants/stylePresets';
 export interface PersistSnapshot {
   projects: Project[];
   activeId: string | null;
-  /** ★ 账号族 —— 原实现**只读不写**（`docs/14` §2 ⭐：账号增删改刷新即丢） */
+  /** ★ 账号族 —— 原实现**只读不写**（`docs/过程.md` §2 ⭐：账号增删改刷新即丢） */
   accounts: Account[];
   groups: AccountGroup[];
   proxyPool: string[];
@@ -76,9 +76,9 @@ export interface PersistControllerDeps {
 
 export interface PersistController {
   /** 安排一次落盘（防抖 600ms；同窗口内多次调用只写一次） */
-  schedule(reason?: string): void;
+  schedule(): void;
   /** 立即落盘（`beforeunload` / 切项目时用） */
-  flush(reason?: string): void;
+  flush(): void;
   /** 是否有待写入 */
   pending(): boolean;
   /**
@@ -94,21 +94,20 @@ export interface PersistController {
 
 export function createPersistController(deps: PersistControllerDeps): PersistController {
   let timer: Cancel | null = null;
-  let reason = 'persist';
   /**
    * ★ **因数据损坏而跳过写回的键**（TD-06-1）—— 默认**空集**；由 `container.hydrate()` 填。
    * ⚠️ 空集 ⇒ 行为与从前**完全一致**（零炸：只有真的读到损坏时才有差异）。
    */
   let skipKeys = new Set<LsKey>();
 
-  const doWrite = (r: string): void => {
+  const doWrite = (): void => {
     timer = null;
     const s = deps.readState();
     const skip = skipKeys;
 
     // ① 工程（原实现只做这一步）
     if (!skip.has(LS_PROJECTS)) {
-      const res = persistProject({ projects: s.projects, activeId: s.activeId, reason: r }, deps.persist);
+      const res = persistProject({ projects: s.projects, activeId: s.activeId }, deps.persist);
       if (!res.ok) {
         // ★ 原样透传（原则 6）
         deps.onError(res.message);
@@ -116,7 +115,7 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
       }
     }
 
-    // ② ★ 账号族（`docs/14` §2 ⭐ 缺口：原实现只读不写 ⇒ 账号增删改刷新即丢）
+    // ② ★ 账号族（`docs/过程.md` §2 ⭐ 缺口：原实现只读不写 ⇒ 账号增删改刷新即丢）
     if (!skip.has(LS_ACCOUNTS)) {
       const acc = persistAccounts(
         {
@@ -185,22 +184,21 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
     deps.onOk?.();
   };
 
-  const schedule = (r = 'persist'): void => {
-    reason = r;
+  const schedule = (): void => {
     if (timer) timer(); // 重置防抖窗口
-    timer = deps.clock.setTimeout(() => doWrite(reason), PERSIST_DEBOUNCE_MS);
+    timer = deps.clock.setTimeout(() => doWrite(), PERSIST_DEBOUNCE_MS);
   };
 
-  const flush = (r?: string): void => {
+  const flush = (): void => {
     if (timer) {
       timer();
       timer = null;
     }
-    doWrite(r ?? reason);
+    doWrite();
   };
 
   const onBeforeUnload = (): void => {
-    if (timer) flush('beforeunload');
+    if (timer) flush();
   };
 
   if (typeof window !== 'undefined') {

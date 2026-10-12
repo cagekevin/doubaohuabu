@@ -9,7 +9,7 @@
  *
  * ⚠️ **只移植快路径**：`bL` 还有一条"富文本路径"（正文里已经带 HTML 标签/实体时，
  *   用 `R0` 逐段归一）。本工程的契约是**纯文本** `data.text: string`
- *   （`docs/16` 记的迁移已把老富文本洗过一遍）⇒ 富文本路径不移植；
+ *   （`docs/过程.md` 记的迁移已把老富文本洗过一遍）⇒ 富文本路径不移植；
  *   **但保留同样的判定条件**（`hasRichMarkup`）⇒ 真遇到老数据**不静默走错分支**，
  *   由 `textToEditorHtml` 显式降级为"整段转义"（见下）。
  */
@@ -111,7 +111,7 @@ export function textToEditorHtml(
   const src = String(text ?? '');
   if (!src) return '';
 
-  // ⚠️ 老数据里真带 HTML/实体（`docs/16` 的迁移理论上已洗过）⇒ **不猜**：
+  // ⚠️ 老数据里真带 HTML/实体（`docs/过程.md` 的迁移理论上已洗过）⇒ **不猜**：
   //    整段转义成纯文本（宁可"显示成标签原文"，也不要渲染不可信的 HTML —— 铁律②零注入）
   if (hasRichMarkup(src)) return escapeHtml(src).replace(/\n/g, '<br/>');
 

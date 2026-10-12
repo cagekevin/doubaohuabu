@@ -59,6 +59,22 @@ export function createMockMedia(): MediaPort {
      */
     scanFrames: async () => err('unknown', 'mock: 多帧扫描需要 Electron 主进程（浏览器里不可用）'),
 
+    // mock：浏览器里没有"主进程在 webview 里取数"这回事 ⇒ 明确 `notImplemented`，**不返回空数组冒充成功**
+    detectVideos: async () => err('unknown', 'mock: 视频检测需要 Electron 主进程（浏览器里不可用）'),
+
+    // mock：浏览器里没有 CDP 调试器 ⇒ 永不推送（返回空取消函数）
+    onDolaMedia: () => () => undefined,
+
+    // mock：浏览器里没有 CDP 调试器 ⇒ 明确 `notImplemented`
+    attachDolaDebugger: async () => err('unknown', 'mock: CDP 调试器需要 Electron 主进程（浏览器里不可用）'),
+
+    // mock：浏览器里没有那个诊断日志文件 ⇒ 收下即丢（**不是失败**：诊断本来是 best-effort）
+    logDolaDuration: async () => ok(undefined),
+
+    // mock：浏览器里没有 30s 钩子那套注入 ⇒ 明确 `notImplemented`（同 `attachDolaDebugger`）
+    injectDolaDurationMain: async () =>
+      err('unknown', 'mock: Dola 30s 钩子注入需要 Electron 主进程（浏览器里不可用）'),
+
     // ★ 人脸检测 / 遮脸：**渲染层本地**（MediaPipe WASM ＋ Canvas）⇒ 浏览器里**能跑**，
     //   与 electron 实现**共用**一份（`TD-16-107`）
     ...facePortFns,

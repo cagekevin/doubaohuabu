@@ -30,8 +30,7 @@ import { SEND_DEDUP_MS } from '@/constants';
  * ⚠️ **为什么这次可以合并（与 `TD-02-8` 相反）**——回源定案：
  *   源里只有**一个**常量 `N3 = 90000`（`shared.js:41835`），且它**只有一个读者**
  *   `shared.js:41895` 的 `!force && d && f && f.fp === d && now - f.at < N3` ——
- *   而本仓 `sendGuard`（判定）与 `sendQueuePlan`（入队）**是同一句的两个落点**
- *   （`sendGuard.ts` 头注自述判定式即此句）⇒ 同一条规则被本仓拆成两处才出现两份。
+ *   ⇒ 本仓把这条判定式收在**本文件一处**（此前 `sendGuard.ts` 里另有一份、零生产消费者，已删）。
  *   （对照 `TD-02-8`：那里源是 `lt` 与 `s(x)` **两个不同函数**，才判"不得合并"。）
  */
 export const DEDUPE_WINDOW_MS = SEND_DEDUP_MS;

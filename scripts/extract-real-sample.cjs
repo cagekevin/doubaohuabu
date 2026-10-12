@@ -2,7 +2,7 @@
 /**
  * 从原应用的 leveldb 提取 localStorage 真值（W2 / W14 的 golden sample）
  *
- * 依据：docs/11 §十二「真实数据样本」
+ * 依据：docs/11 §十二（数据契约的真实样本背书）
  *   - Chromium 的 Local Storage leveldb：条目键形如 `_<origin>\x00\x01<key>`
  *   - 值：首字节 0x00 = UTF-16LE，0x01 = Latin-1/UTF-8，其后是字符串字节
  *

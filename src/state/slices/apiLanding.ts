@@ -9,7 +9,7 @@
  * **依据（逐行回源抄录）**：
  *   - `addToLibrary` shared.js:27101-27128
  *   - `attachImageResultToNode` shared.js:27227-27290
- *   - `addVideoNode` 的 **genvideo 源分支** shared.js:28114-28160（经 `applyApiJobEvent` 30773 调用）
+ *   - `addVideoNode` shared.js:28009-28336（**两条分支**：genvideo 源 28050-28111 · 网格新建 28112-28335）
  *
  * ⚠️ 原则 1：只有 state 能写 store —— 本文件属 `state/**`，且写的是**具名 action**。
  * ⚠️ 原则 4：`now` / `persistImage` / id 生成全部**注入**（不在本文件碰 `Date.now()` / 宿主）。
@@ -17,20 +17,28 @@
  * ── 未落（如实标注，判据 B5：不留「落了但没人调」）──────────────────────────
  * | 缺 | 源 | 原因 |
  * |---|---|---|
- * | `addVideoNode` 的「**源节点非 genvideo ⇒ 网格新建视频节点**」分支 | 28162-28330 | 唯一调用方是**网页（doubao）视频流程**，该流程**未接线**；而 API 通道的视频任务源节点**必为 `genvideo`**（`state/generate.ts` 按节点类型分派）⇒ 该分支**不可达** ⇒ 不落（已登记 TD-16-83） |
  * | `imageGenKeyParams[u]` 查表（`u = genKey || jobId`） | 27247 / 27280 | 该表**无生产者**（`bindImageGenKey` / `bindImageGenJobs` 未接线）⇒ 恒为 `null` ⇒ 全走节点自身兜底 ⇒ 与源在「无绑定」时**逐字等价**（已登记 TD-16-84） |
- * | `pushImageGenFeed` / `imageGenFeed` | 27131-27167 | 源把它当 state 维护（去重 + 上限 80），但**119 个展开组件里无任何读者** ⇒ `docs/16` §2.9 已裁定为「派生视图」⇒ 不落（判据 B5；已登记 TD-16-85） |
+ * | `pushImageGenFeed` / `imageGenFeed` | 27131-27167 | 源把它当 state 维护（去重 + 上限 80），但**119 个展开组件里无任何读者** ⇒ `docs/过程.md` §2.9 已裁定为「派生视图」⇒ 不落（判据 B5；已登记 TD-16-85） |
  * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | ⚠️ **2026-10-11 回写**：`localizeNodeVideos` **已接线** —— `state/localizeOps`（← `state/generate` 写完 `resultUrl` 后 · 启动 5s 的 `container.startVideoBackfill()`）；**只剩海报抓取**（`_cmp_bk`）未落（需宿主能力，TD-02-5 家族） |
  */
 
-import type { CanvasNode } from '@/stable/model/node';
+import type { CanvasNode, XY } from '@/stable/model/node';
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
 import type { LibraryItem } from '@/stable/model/project';
 import type { ApiJobAttempt } from '@/stable/model/gen';
 import { appendGenHistoryAttempt, patchGenHistoryAttempt } from '@/core/rules/genHistory';
-import { IMAGE_GEN_RESULT_LIMIT } from '@/constants';
+import {
+  IMAGE_GEN_RESULT_LIMIT,
+  VIDEO_GRID_COLS,
+  VIDEO_GRID_GAP,
+  VIDEO_GRID_OFFSET,
+  VIDEO_NODE_WIDTH,
+} from '@/constants';
 import { NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
 import { clampImageCount } from '@/core/rules/prompt';
+
+/** 缺尺寸时的兜底比例（原 `addVideoNode` 内的 `16/9`，`shared.js:28025`） */
+const VIDEO_FALLBACK_RATIO = 16 / 9;
 
 /** 落库的一张图（原 `addToLibrary` 的入参项） */
 export interface LibraryAddItem {
@@ -53,15 +61,31 @@ export interface ImgAttachResult {
 }
 
 /**
- * 落到 `genvideo` 源节点的视频结果（原 `addVideoNode` 的入参，**只用 API 通道会给的那几个**）
+ * 视频结果落画布的入参（原 `addVideoNode` 28009-28018 的解构）
  *
- * ⚠️ 源还传 `name` / `accountName`，但它们**只在「网格新建」分支**被读（genvideo 分支**忽略**）
- *    ⇒ 这里不收（那条分支未落，见文件头）。
+ * ⚠️ **两条分支共用它**：`genvideo` 源分支只用 `url`/`vid`/`attempt`/尺寸/海报；
+ *    网格新建分支还会读 `name`/`accountName`/`recipe`/`sourceLabel`。
  */
-export interface VideoAttachResult {
-  url: string;
-  /** 原 `{...attempt, status:'success'}`；无 ⇒ `null` */
-  attempt: (ApiJobAttempt & { status: string }) | null;
+export interface VideoNodeInput {
+  url: string | null;
+  /** 站点侧视频 id（去重键；已有同 `vid` 的 video 节点 ⇒ 不建） */
+  vid: string | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  poster: string | null;
+  accountId: string | null;
+  accountName: string;
+  /** 节点 label（原 `name`，兜底「视频」） */
+  name: string;
+  /** 源节点：是 `genvideo` ⇒ 更新它；否则（含 `null`）⇒ **网格新建** */
+  sourceNodeId: string | null;
+  /** 原 `d0()` 派生的配方（网格分支落进 `data.recipe`） */
+  recipe?: unknown;
+  /** 原 `d0()` 派生的来源标签（网格分支落进 `data.sourceLabel`） */
+  sourceLabel?: string | null;
+  /** 原 `attempt`（有 ⇒ 追加进 `genHistory`） */
+  attempt?: (ApiJobAttempt & { status?: string }) | null;
 }
 
 export interface ApiLandingActions {
@@ -83,15 +107,15 @@ export interface ApiLandingActions {
    */
   attachImageResultToNode: (nodeId: string, result: ImgAttachResult) => boolean;
   /**
-   * ★ **把视频结果落到 `genvideo` 源节点**（原 `addVideoNode` 28114 的 genvideo 分支）
+   * ★ **视频结果落画布**（原 `addVideoNode` 28009-28336）—— **两条分支一个入口**
    *
-   * 顺序（逐行对源）：① `commit('graph-add')` ② 有 `attempt` ⇒ **追加**进 `genHistory`（`U$`）并按 id
-   * **打补丁**（`Uy`：`vid`/`status:'success'`/`url`/`poster`/`width`/`height`/`duration`）
-   * ③ `selVer = 尝试数 - 1` ④ 写 `resultUrl` / `resultPoster` / `resultVid` / `resultAt`
-   * ⑤ 清 `_pendingAttempt`（若在）与 `_pendingAttempts[accountId]`（若命中）。
-   * ⚠️ 源节点**不是 `genvideo`** ⇒ **不落**（源会走「网格新建」分支，那条未落，见文件头）。
+   * ① **`vid` 去重**：已有同 `vid` 的 `video` 节点 ⇒ 不建（返回 `null`）
+   * ② **`genvideo` 源节点** ⇒ 更新它（`genHistory` 追加 + `Uy` 补丁 / `selVer` / `result*` / 清 `_pending*`）
+   * ③ **其余源节点（含账号节点 / 无源）** ⇒ **网格新建**视频节点
+   *    （`gridAnchor` = 源节点 id · `gridSlot` 递增槽位 · `gridPos` 落点；会按行高**重排**同网格旧节点）
+   * @returns 新建节点 id；走 ① / ② ⇒ `null`
    */
-  attachVideoResultToNode: (nodeId: string, result: VideoAttachResult) => void;
+  addVideoNode: (input: VideoNodeInput) => string | null;
 }
 
 /** 本片段**读**的字段（运行期就是整个 store；这里只声明用到的那几个） */
@@ -113,6 +137,8 @@ export interface ApiLandingDeps {
   persistImage(dataUrl: string): string;
   /** 原 `Pt('lib')` */
   nextLibraryId(): string;
+  /** 原 `Pt('vid')` —— 网格新建视频节点的 id */
+  nextVideoNodeId(): string;
 }
 
 export function createApiLandingActions(
@@ -197,62 +223,234 @@ export function createApiLandingActions(
       return true;
     },
 
-    attachVideoResultToNode: (nodeId, result) => {
+    addVideoNode: (input) => {
       const s = get();
-      const node = s.nodes.find((n) => n.id === nodeId);
-      // ⚠️ 非 `genvideo` 源 ⇒ 源版走「网格新建」分支（**未落**，见文件头）⇒ 此处不落。
-      if (!node || node.type !== 'genvideo') return;
+      const {
+        url,
+        vid,
+        width,
+        height,
+        duration,
+        poster,
+        accountId,
+        accountName,
+        name,
+        sourceNodeId,
+        recipe,
+        sourceLabel,
+        attempt,
+      } = input;
 
-      const { url, attempt } = result;
-      const prevData = node.data;
-      let data: Record<string, unknown> = { ...prevData };
-
-      if (attempt) {
-        data = appendGenHistoryAttempt(data, attempt);
-        data = patchGenHistoryAttempt(data, attempt.id, {
-          vid: (attempt.vid as string | undefined) || null,
-          status: 'success',
-          url: url || null,
-          poster: null,
-          width: null,
-          height: null,
-          duration: null,
-        });
+      // ① `vid` 去重（源 28020-28024）
+      if (
+        vid &&
+        s.nodes.some((n) => n.type === 'video' && (n.data as Record<string, unknown>).vid === vid)
+      ) {
+        return null;
       }
 
-      const history = data[GEN_HISTORY_KEY] as { attempts?: unknown[] } | undefined;
-      const attempts = history && Array.isArray(history.attempts) ? history.attempts : [];
-      data.selVer = attempts.length - 1;
-      data.resultUrl = url || null;
-      data.resultPoster = null;
-      data.resultVid = null;
-      data.resultAt = deps.now();
+      // ② 新节点尺寸（源 28025-28027：宽 `b = 1280`，高按比例）
+      const ratio = width && height && height > 0 ? width / height : VIDEO_FALLBACK_RATIO;
+      const W = VIDEO_NODE_WIDTH;
+      const H = Math.round(W / ratio);
 
-      // `_pendingAttempt(s)` 清理（原 28138-28147）：本仓这两个字段**无生产者**
-      // （启动归位即清）⇒ 目前恒为无操作；照抄源是为了将来 sendQueue 接线时不必回改。
-      const hadPending = !!prevData._pendingAttempt;
-      const pending =
-        prevData._pendingAttempts && typeof prevData._pendingAttempts === 'object'
-          ? { ...(prevData._pendingAttempts as Record<string, unknown>) }
-          : null;
-      const acc = (attempt && (attempt.accountId as string | undefined)) || null;
-      if (pending && acc && pending[acc]) delete pending[acc];
+      /** 绝对坐标（源 `k`：有 `parentId` ⇒ 相对父节点） */
+      const absPos = (n: CanvasNode): XY => {
+        const pos = n.position ?? { x: 0, y: 0 };
+        const parentId = (n as { parentId?: string }).parentId;
+        if (!parentId) return { x: pos.x || 0, y: pos.y || 0 };
+        const parent = s.nodes.find((x) => x.id === parentId);
+        if (!parent) return { x: pos.x || 0, y: pos.y || 0 };
+        return {
+          x: (pos.x || 0) + (parent.position?.x || 0),
+          y: (pos.y || 0) + (parent.position?.y || 0),
+        };
+      };
+      /** 尺寸（源 `N`：`width/height` 或 `measured`，兜 200×180） */
+      const dims = (n: CanvasNode): { w: number; h: number } => {
+        const m = (n as { measured?: { width?: number; height?: number } }).measured;
+        return { w: n.width ?? m?.width ?? 200, h: n.height ?? m?.height ?? 180 };
+      };
 
-      get().commit('graph-add');
-      set({
-        nodes: s.nodes.map((n) =>
-          n.id === nodeId
-            ? ({
-                ...n,
-                data: {
-                  ...data,
-                  ...(hadPending ? { _pendingAttempt: undefined } : {}),
-                  ...(pending ? { _pendingAttempts: pending } : {}),
-                },
-              } as CanvasNode)
-            : n,
-        ),
+      const C = VIDEO_GRID_GAP;
+      const S = VIDEO_GRID_COLS;
+      const E = W + C;
+      const P = Math.round(W / VIDEO_FALLBACK_RATIO) + C;
+      const off = VIDEO_GRID_OFFSET;
+
+      const sourceNode = sourceNodeId ? s.nodes.find((n) => n.id === sourceNodeId) : null;
+
+      // ③ `genvideo` 源节点分支（源 28050-28111）—— 更新它，不新建
+      if (sourceNode && sourceNode.type === 'genvideo') {
+        const prevData = sourceNode.data as Record<string, unknown>;
+        let data: Record<string, unknown> = { ...prevData };
+
+        if (attempt) {
+          data = appendGenHistoryAttempt(data, attempt);
+          data = patchGenHistoryAttempt(data, attempt.id, {
+            vid: vid || (attempt.vid as string | undefined) || null,
+            status: 'success',
+            url: url || null,
+            poster: poster || null,
+            width: width || null,
+            height: height || null,
+            duration: duration || null,
+          });
+        }
+
+        const history = data[GEN_HISTORY_KEY] as { attempts?: unknown[] } | undefined;
+        const attempts = history && Array.isArray(history.attempts) ? history.attempts : [];
+        data.selVer = attempts.length - 1;
+        data.resultUrl = url || null;
+        data.resultPoster = poster || null;
+        data.resultVid = vid || null;
+        data.resultAt = deps.now();
+
+        // `_pendingAttempt(s)` 清理（原 28091-28101）
+        const hadPending = !!prevData._pendingAttempt;
+        const pending =
+          prevData._pendingAttempts && typeof prevData._pendingAttempts === 'object'
+            ? { ...(prevData._pendingAttempts as Record<string, unknown>) }
+            : null;
+        const acc = accountId || (attempt && (attempt.accountId as string | undefined)) || null;
+        if (pending && acc && pending[acc]) delete pending[acc];
+
+        get().commit('graph-add');
+        set({
+          nodes: s.nodes.map((n) =>
+            n.id === sourceNode.id
+              ? ({
+                  ...n,
+                  data: {
+                    ...data,
+                    ...(hadPending ? { _pendingAttempt: undefined } : {}),
+                    ...(pending ? { _pendingAttempts: pending } : {}),
+                  },
+                } as CanvasNode)
+              : n,
+          ),
+        });
+        return null;
+      }
+
+      // ④ **网格新建**（源 28112-28335）
+      const gridAnchor = sourceNode ? String(sourceNodeId) : '';
+      let anchorX: number;
+      let anchorY: number;
+      if (sourceNode) {
+        const p = absPos(sourceNode);
+        anchorX = p.x + dims(sourceNode).w + off;
+        anchorY = p.y;
+      } else {
+        let right = 0;
+        for (const n of s.nodes) {
+          if (n.type === 'video') continue;
+          const p = absPos(n);
+          right = Math.max(right, p.x + dims(n).w);
+        }
+        anchorX = right + off;
+        anchorY = 40;
+      }
+
+      const mates = s.nodes.filter(
+        (n) =>
+          n.type === 'video' &&
+          (((n.data as Record<string, unknown>).gridAnchor as string) || '') === gridAnchor,
+      );
+      const slotOf = (n: CanvasNode): number => {
+        const v = (n.data as Record<string, unknown>).gridSlot;
+        return typeof v === 'number' && v >= 0 ? v : -1;
+      };
+      let maxSlot = -1;
+      for (const n of mates) maxSlot = Math.max(maxSlot, slotOf(n));
+      let slot = maxSlot + 1;
+
+      /** 行高表（源 `M`） */
+      const rowHeights = (s0: number): number[] => {
+        const hs: number[] = [];
+        for (const n of mates) {
+          const sl = slotOf(n);
+          if (sl < 0) continue;
+          const row = Math.floor(sl / S);
+          hs[row] = Math.max(hs[row] || 0, dims(n).h);
+        }
+        const row0 = Math.floor(s0 / S);
+        hs[row0] = Math.max(hs[row0] || 0, H);
+        return hs;
+      };
+      /** 槽位 → 坐标（源 `U`） */
+      const slotPos = (s0: number, hs: readonly number[]): XY => {
+        const col = s0 % S;
+        const row = Math.floor(s0 / S);
+        let y = anchorY;
+        for (let i = 0; i < row; i++) y += (hs[i] || P) + C;
+        return { x: anchorX + col * E, y };
+      };
+      const approx = (a: XY, b: XY): boolean =>
+        Math.abs((a.x || 0) - (b.x || 0)) <= 1 && Math.abs((a.y || 0) - (b.y || 0)) <= 1;
+      const hasGridPos = (n: CanvasNode): boolean => {
+        const gp = (n.data as Record<string, unknown>).gridPos as XY | undefined;
+        return !!gp && approx(n.position, gp);
+      };
+
+      // 已占用矩形（源 `J`：跳过「有 gridPos 的网格成员」——它们要跟着重排）
+      const occupied: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+      for (const n of s.nodes) {
+        if (mates.includes(n) && hasGridPos(n)) continue;
+        const p = absPos(n);
+        const d = dims(n);
+        occupied.push({ x1: p.x, y1: p.y, x2: p.x + d.w, y2: p.y + d.h });
+      }
+      const collides = (x: number, y: number): boolean =>
+        occupied.some((r) => x < r.x2 - 1 && x + W > r.x1 + 1 && y < r.y2 - 1 && y + H > r.y1 + 1);
+
+      let hs = rowHeights(slot);
+      let pos = slotPos(slot, hs);
+      for (let i = 0; i < 60 && collides(pos.x, pos.y); i++) {
+        slot += 1;
+        hs = rowHeights(slot);
+        pos = slotPos(slot, hs);
+      }
+
+      // 同网格旧节点按新行高重排（源 `ne` / `pe`）
+      const repositioned = s.nodes.map((n) => {
+        if (!mates.includes(n) || !hasGridPos(n)) return n;
+        const sl = slotOf(n);
+        if (sl < 0) return n;
+        const np = slotPos(sl, hs);
+        if (approx(n.position, np)) return n;
+        return { ...n, position: np, data: { ...n.data, gridPos: np } } as CanvasNode;
       });
+      const nextNodes = repositioned.some((n, i) => n !== s.nodes[i]) ? repositioned : s.nodes;
+
+      const id = deps.nextVideoNodeId();
+      get().commit('graph-add');
+      const created = {
+        id,
+        type: 'video',
+        position: pos,
+        width: W,
+        height: H,
+        data: {
+          label: name || '视频',
+          vid: vid || null,
+          url: url || null,
+          width: width || null,
+          height: height || null,
+          duration: duration || null,
+          poster: poster || null,
+          accountId: accountId || null,
+          accountName: accountName || '',
+          gridAnchor,
+          gridSlot: slot,
+          gridPos: pos,
+          ...(recipe ? { recipe } : {}),
+          ...(sourceLabel ? { sourceLabel } : {}),
+          ...(attempt ? { genHistory: { v: 1, attempts: [attempt] } } : {}),
+        },
+      } as CanvasNode;
+      set({ nodes: [...nextNodes, created] });
+      return id;
     },
   };
 }

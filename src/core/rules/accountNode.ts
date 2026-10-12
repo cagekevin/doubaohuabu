@@ -27,6 +27,8 @@
 
 import type { LibraryItem } from '@/stable/model/project';
 import { DEFAULT_VIDEO_MODEL, NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
+// ★ 反馈条文案是**用户可见文案** ⇒ 取 SSOT（原则 5）
+import { ACCOUNT_NODE_TEXT } from '@/constants/text';
 import { parseRefChips, refsToReferenceLabels } from './refs';
 import { stripHtml } from '@/lib/text';
 
@@ -60,6 +62,55 @@ export interface AccountNodeInputs {
   params: { aspectRatio: string | null; duration: number | null; model: string | null };
   /** `materials.length + texts.length`（原 40678） */
   total: number;
+}
+
+/**
+ * 账号节点发送后的**反馈条文案**（原 `OL.jsx:339-359`）—— ★ 纯函数，可测
+ *
+ * 源逐字：
+ * ```js
+ * const ce = [];
+ * if (x.texts.length)                    ce.push('文本已填');
+ * if (ne.imagesAttached != null)         ce.push(`图片 ${ne.imagesAttached}/${ne.imagesTotal ?? x.materials.length}`);
+ * const oe = !!t.autoSend && ne.autoClicked;
+ * if (oe)                                ce.push('已自动发送');
+ * const he = ce.length ? ce.join(' · ') + (oe ? '' : '（仅填入，未发送）') : '已填入（仅填入，未发送）';
+ * S({ status: 'ok', msg: he });
+ * ```
+ *
+ * ⚠️ 源这里还有一档 `precheck && !precheck.pass` ⇒ `status:'err'` + `precheckWarn(issue)`；
+ *   本仓**不可达**（校验不过时 `send` 直接返回 `err`，见 `adapters/site/doubao`）⇒ 不落那一支
+ *   （判据 B5：不留没有生产者的分支）。
+ * ⚠️ 摘要里的三段与那句 `（仅填入，未发送）` 都是**用户可见文案** ⇒ 取 `ACCOUNT_NODE_TEXT`（原则 5）。
+ */
+export interface AccountSendFeedbackInput {
+  /** 上游文本条数（原 `x.texts.length`） */
+  textCount: number;
+  /** 参考图回执（原 `ne.imagesAttached`）—— `null`/`undefined` ⇒ **不报这一段** */
+  imagesAttached?: number | null;
+  /** 图总数（原 `ne.imagesTotal ?? x.materials.length`） */
+  imagesTotal: number;
+  /** 节点上的自动发送开关（原 `t.autoSend`） */
+  autoSend: boolean;
+  /** 有没有**真的点到**发送按钮（原 `ne.autoClicked`） */
+  autoClicked?: boolean;
+}
+
+export function accountSendFeedback(input: AccountSendFeedbackInput): {
+  status: 'ok';
+  msg: string;
+} {
+  const autoSent = input.autoSend && !!input.autoClicked;
+  const parts: string[] = [];
+  if (input.textCount > 0) parts.push(ACCOUNT_NODE_TEXT.textsFilled);
+  if (input.imagesAttached != null) {
+    parts.push(ACCOUNT_NODE_TEXT.imagesAttached(input.imagesAttached, input.imagesTotal));
+  }
+  if (autoSent) parts.push(ACCOUNT_NODE_TEXT.autoSent);
+  const msg = parts.length
+    ? parts.join(' · ') + (autoSent ? '' : ACCOUNT_NODE_TEXT.filledOnly)
+    : ACCOUNT_NODE_TEXT.filledNoText;
+  return { status: 'ok', msg };
 }
 
 /** 本模块只读节点的这几个字段（保持入参最小） */

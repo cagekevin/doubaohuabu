@@ -11,6 +11,7 @@ import {
   deleteGroup,
   moveAccountsToGroup,
   renameGroup,
+  setAccountAutoStart,
   setGroupAutoStart,
   setGroupColor,
 } from '../accountGroup';
@@ -116,6 +117,21 @@ describe('moveAccountsToGroup（原 32006-32023）', () => {
     const accounts = [acc('a1'), acc('a2')];
     const r = moveAccountsToGroup(accounts, ['a1'], null);
     expect(r[1]).toBe(accounts[1]);
+  });
+});
+
+describe('setAccountAutoStart（源 `Ve`：`updateAccount(id, {autoStart:true})`，`_Component43.jsx:516-524`）', () => {
+  it('★ 只改该账号；未命中的**引用不变**、不重编号', () => {
+    const accounts = [acc('a1', { name: '豆包09' }), acc('a2')];
+    const r = setAccountAutoStart(accounts, 'a1', true);
+    expect(r[0]?.autoStart).toBe(true);
+    expect(r[1]).toBe(accounts[1]);
+    // 名称不被动过（源那里不跑重编号）
+    expect(r.map((a) => a.name)).toEqual(['豆包09', 'a2']);
+  });
+
+  it('可关闭（恢复的反向）', () => {
+    expect(setAccountAutoStart([acc('a1', { autoStart: true })], 'a1', false)[0]?.autoStart).toBe(false);
   });
 });
 

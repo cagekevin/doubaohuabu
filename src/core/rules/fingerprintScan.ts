@@ -6,7 +6,6 @@
  *   这是 `scanHistory` 那条链的**参数来源** —— 没有它，那份历史永远只能读不能写。
  *
  * ★★ **它整体是纯的**（没有时间、没有宿主、没有随机）⇒ 完全可测。
- *   `now` 只在 `formatScanAge` 里用到（相对时间显示），也是注入的。
  *
  * 依据（**逐行回源**）：
  *   | 件 | 源 | 语义 |
@@ -17,7 +16,7 @@
  *   | 逐维命中 | 34322-34329 | 两边**都非空且字符串相等**才算命中 |
  *   | 分级 | 34330-34335 | **全命中 ⇒ `critical`**；`命中比例 >= 0.7` ⇒ `warn`；否则**不入列表** |
  *   | 统计 | 34349-34363 | `critical`/`warn` 各自计数；**`totalPairs = n(n-1)/2`**（**与有没有撞车无关**） |
- *   | 相对时间 | `UP` 34366-34385 | 「刚刚」→「N 分钟前」→「N 小时前」→「N 天前」→ 日期 |
+ *   | ~~相对时间~~ | `UP` 34366-34385 | ★ **不属本模块**：`UP` 是**通用**相对时间（源里唯一消费者是启动页项目行）⇒ 落 `lib/time.formatRelativeTime` |
  *
  * ⚠️ **三处容易写错、已用测试锁住**：**(a)** `totalPairs` 是**组合数**而非"实际比出的对数"
  *   （0 撞车时它仍然很大）；**(b)** 空串与 `null` **都不算取值**（`!== '' && != null`）——
@@ -26,8 +25,6 @@
  */
 
 /** 一条维度（原 `Jl` 的元素） */
-import { formatLocalDate } from '@/lib/time';
-
 export interface FingerprintDimension {
   /** 短键（原 `key`；`distinct` 与 `matched` 用的是 `label`，`key` 只作标识） */
   key: string;
@@ -176,27 +173,4 @@ export function scanFingerprintCollisions(
   };
 }
 
-// ⚠️ 只用到「分钟」这一个毫秒基数：源版是 `floor(diff/60000)` → `floor(minutes/60)`
-//   → `floor(hours/24)`（**逐级取整**，不是各自除毫秒再取整 —— 两者在边界上不同）
-const MINUTE = 60_000;
 
-/**
- * 相对时间（原 `UP` 34366-34385）
- *
- * 五档（**逐字对齐**）：
- *   `< 1 分钟` ⇒ `刚刚` · `< 60 分钟` ⇒ `N 分钟前` · `< 24 小时` ⇒ `N 小时前`
- *   · `< 30 天` ⇒ `N 天前` · 否则 ⇒ **`YYYY-MM-DD`（本地时区）**
- * ⚠️ 各档都是 `Math.floor`（**向下取整**：59.9 分钟仍是「59 分钟前」）。
- * ⚠️ 用的是 `Date.now() - ts` ⇒ **`ts` 在未来**时得到负数 ⇒ 落进「刚刚」（源版如此，照抄）。
- */
-export function formatScanAge(ts: number, now: number): string {
-  const diff = now - ts;
-  const minutes = Math.floor(diff / MINUTE);
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes} 分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  return formatLocalDate(ts);
-}

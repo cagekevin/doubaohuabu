@@ -43,6 +43,22 @@ export function shouldMerge(
 }
 
 /**
+ * 本次 `commit` 是否要写**操作日志**（原 `commit` 的合并分支直接 `return`）
+ *
+ * 依据（**逐字回源**）：源把日志写在 `commit` **尾部**（`shared.js:26912-26928`），
+ * 而合并分支在它**之前**就 `return`（`:26898`）⇒ **合并掉的那次不记日志**
+ * （同一操作在 800ms 内连续触发时不会刷日志）。
+ */
+export function shouldRecordOperation(
+  stack: UndoStack<unknown>,
+  key: string,
+  now: number,
+  windowMs: number = UNDO_MERGE_MS,
+): boolean {
+  return !shouldMerge(stack, key, now, windowMs);
+}
+
+/**
  * 提交一次快照（原 `commit`）
  *
  * @param snapshot **变更前**的状态

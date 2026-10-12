@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { AUTO_WATCH_IDLE_ROUNDS_MAX } from '@/constants';
 import {
   advanceAutoWatch,
+  advanceAutoWatchNoCanvas,
   autoWatchBaseDelay,
   autoWatchJitter,
   initialAutoWatchProgress,
@@ -90,6 +92,30 @@ describe('advanceAutoWatch（原 `Ee` 的增减）', () => {
   it('不改原对象（纯函数）', () => {
     const p = initialAutoWatchProgress();
     advanceAutoWatch(p, 1);
+    expect(p).toEqual({ idleRounds: 0, autoCount: 0 });
+  });
+});
+
+describe('advanceAutoWatchNoCanvas（原 `Ee:538-543` 的 `Math.max(idleRounds, xl-1)`）', () => {
+  it('★ 空转计数**直接顶到上限前一位**（不是 `+1`）—— 于是下一轮也走退避', () => {
+    expect(advanceAutoWatchNoCanvas({ idleRounds: 0, autoCount: 5 })).toEqual({
+      idleRounds: AUTO_WATCH_IDLE_ROUNDS_MAX - 1,
+      autoCount: 5,
+    });
+  });
+
+  it('★ 已经更多/相等 ⇒ **不降**（`Math.max` 语义）', () => {
+    expect(advanceAutoWatchNoCanvas({ idleRounds: AUTO_WATCH_IDLE_ROUNDS_MAX, autoCount: 0 }).idleRounds)
+      .toBe(AUTO_WATCH_IDLE_ROUNDS_MAX);
+  });
+
+  it('★ `autoCount` **不动**（喂饱判据只看它 —— 没扫不等于喂饱）', () => {
+    expect(advanceAutoWatchNoCanvas({ idleRounds: 2, autoCount: 39 }).autoCount).toBe(39);
+  });
+
+  it('不改原对象（纯函数）', () => {
+    const p = initialAutoWatchProgress();
+    advanceAutoWatchNoCanvas(p);
     expect(p).toEqual({ idleRounds: 0, autoCount: 0 });
   });
 });

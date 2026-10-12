@@ -5,7 +5,7 @@
  *   - `Fi` shared.js:34596-34610 —— 占用（`Er` Set + `Kc` 计数 + `markAccountBusy(id, HP)`）
  *   - `tn` shared.js:34614-34629 —— 释放（`itemId` 校验 + `releaseAccountBusy`）
  *   - `Hk` shared.js:34611 —— 是否忙
- *   - `HP` = `ACCOUNT_BUSY_TIMEOUT_MS`（1h，`docs/14` §3）
+ *   - `HP` = `ACCOUNT_BUSY_TIMEOUT_MS`（1h，`docs/过程.md` §3）
  *
  * ⚠️ **双源收口（有意偏离，与 `accountPick.ts` 同一决策）**：
  *    原版「忙」有**两个来源** —— store 的 `accountBusy`（**带 1h TTL**）与模块级
@@ -130,11 +130,4 @@ export function releaseAccount(
   return { map: rest, released: true };
 }
 
-/** 全清（原 `qP` 34630：把当前 `Er` 里的 key 逐个 `tn`） */
-export function clearBusy(map: BusyMap, opts: ReleaseOptions = {}): BusyMap {
-  let out = map;
-  for (const id of Object.keys(map)) {
-    out = releaseAccount(out, id, opts).map;
-  }
-  return out;
-}
+

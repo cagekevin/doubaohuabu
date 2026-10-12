@@ -24,7 +24,7 @@
  *
  * ⚠️ **两处如实差异（都因本仓既有的架构约束，不是偷懒）**：
  *   ① **自动检测的机制**：源版每 2s 读 `<webview>` 的 **cookie**（`session.cookies.get({})`）。
- *      本仓 `AccountPort` 的契约里写死了「**cookie 由后端管理，前端一律不碰**」（`docs/10` #5）
+ *      本仓 `AccountPort` 的契约里写死了「**cookie 由后端管理，前端一律不碰**」（`docs/过程.md` #5）
  *      ⇒ 改用**同义的 `SitePort.probe`**（`accountOps.probeLoginOf`）—— 行为一致、机制不同。
  *   ② **载入失败事件**：源版挂 React 的 `onLoadCommit`（`nativeEvent.errorCode`）；
  *      本仓用 ref + `addEventListener('did-fail-load')`（同一份字段，Electron 的标准事件名）。

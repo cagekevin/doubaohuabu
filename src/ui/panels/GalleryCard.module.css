@@ -63,13 +63,10 @@
 }
 
 .remove {
-  composes: btn btnSm from '../common/shared.module.css';
+  composes: btn btnSm btnDanger from '../common/shared.module.css';
   position: absolute;
   top: var(--space-half);
   right: var(--space-half);
-  color: var(--color-text-on-danger);
-  background: var(--color-danger);
-  border: 0;
 }
 
 /* ★ 原 `.lovart-card-preview`（`⤢`）—— 悬停时出现在**左下角**（左上角让给勾选框） */

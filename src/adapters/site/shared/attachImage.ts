@@ -11,7 +11,7 @@
  * ⚠️ **经 `ClipboardPort`，不直调 `window.api`**（TD-05-1 铁律）
  * ⚠️ 粘贴那一步包在 **`withInputLock`** 里（原 `hS` 38927 的 `dS(e, ...)`）——
  *    否则页面自己的脚本/handler 会和外来的粘贴打架
- * ⚠️ 这是**唯一允许的注入例外**链上的动作（见 `docs/16` 链 17）；除此之外零注入
+ * ⚠️ 这是**唯一允许的注入例外**链上的动作（见 `docs/过程.md` 链 17）；除此之外零注入
  */
 
 import type { ClipboardPort } from '@/core/ports/host.port';

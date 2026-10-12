@@ -35,7 +35,7 @@ export function AppShell({ canvas }: AppShellProps) {
   const clearBackendErrors = useStore((s) => s.clearBackendErrors);
   /**
    * 「API 服务」弹窗开合 —— ★ **组件局部 state**（原 `_Component48` 的 `c` / `l`）
-   * 依据：`docs/16` §2.9「面板开合 … ⇒ `useState` 组件局部」（不入 store）。
+   * 依据：`docs/过程.md` §2.9「面板开合 … ⇒ `useState` 组件局部」（不入 store）。
    */
   const [apiOpen, setApiOpen] = useState(false);
   /**
@@ -43,7 +43,7 @@ export function AppShell({ canvas }: AppShellProps) {
    *
    * ⚠️ **默认隐藏**（源初值 `false`）：后台视图是**与画布并列**的视图块，靠顶栏「豆包后台」入口打开、
    *   靠它头部的「返回画布」关闭（源的 `onOpenDoubaoView` / `onClose`）。
-   * ⚠️ 住 `AppShell` 而不是 store：源就是宿主的 `useState`（`docs/16` §2.9：面板开合 ⇒ 组件局部）。
+   * ⚠️ 住 `AppShell` 而不是 store：源就是宿主的 `useState`（`docs/过程.md` §2.9：面板开合 ⇒ 组件局部）。
    */
   const [doubaoViewVisible, setDoubaoViewVisible] = useState(false);
   /**

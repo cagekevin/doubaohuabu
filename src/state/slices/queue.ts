@@ -17,6 +17,7 @@
  * ⚠️ 原则 1：**只有 state 能写 store**。
  */
 
+import { DEFAULT_ACCOUNT_CONCURRENCY } from '@/constants';
 import type { QueueItem } from '@/core/rules/sendQueuePlan';
 import type { QueueItemPatch } from '@/core/rules/sendQueueOps';
 
@@ -95,7 +96,7 @@ export const createQueueSlice =
     get: () => QueueSlice,
   ): QueueSlice => ({
     sendQueue: { items: [], paused: false },
-    accountConcurrency: 1,
+    accountConcurrency: DEFAULT_ACCOUNT_CONCURRENCY,
 
     setSendQueue: (patch) => {
       // 原 30441：`if (!!n && typeof n == 'object')` —— 非对象直接忽略
@@ -118,7 +119,7 @@ export const createQueueSlice =
     setAccountConcurrency: (n) => {
       // 原 30452-30455：`Number.isFinite(r) && r >= 1 ? Math.floor(r) : 1`
       const r = Number(n);
-      set({ accountConcurrency: Number.isFinite(r) && r >= 1 ? Math.floor(r) : 1 });
+      set({ accountConcurrency: Number.isFinite(r) && r >= 1 ? Math.floor(r) : DEFAULT_ACCOUNT_CONCURRENCY });
     },
 
     // ── 排队追问进度（原 `31240` / `31241-31254` / `31255-31267`）★ `TD-16-103` ──

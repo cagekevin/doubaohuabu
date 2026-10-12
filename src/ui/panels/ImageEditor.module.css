@@ -163,7 +163,7 @@
   position: relative;
   flex: 1;
   overflow: hidden;
-  background: var(--color-canvas-subtle);
+  background: var(--color-surface-sunken);
 }
 
 .cursorBrush {

@@ -2,8 +2,8 @@
  * 视频本地化控制器 —— ★ 它是 `core/usecases/localizeVideos` 的**唯一调用方**
  *
  * ★★ **为什么需要它**：`core/usecases/localizeVideos.ts`（**有实现、有测试**）此前**零调用方** ——
- *   而链 18 硬约束（`docs/10` #9）是「**视频必须落盘**」：站点直链会过期 / 需要 referer。
- *   缺了这条接线 ⇒ `MediaPort.saveVideoFromUrl` 也一直"无人消费"（`docs/14` §1.4）。
+ *   而链 18 硬约束（`docs/过程.md` #9）是「**视频必须落盘**」：站点直链会过期 / 需要 referer。
+ *   缺了这条接线 ⇒ `MediaPort.saveVideoFromUrl` 也一直"无人消费"（`docs/过程.md` §1.4）。
  *
  * 依据（**逐行回源**，四处触发点）：
  *   | 源调用点 | 语义 | 本仓落点 |

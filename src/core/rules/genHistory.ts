@@ -3,7 +3,7 @@
  *
  * 依据（**逐行回源抄录**）：原 `Uy` `shared.js:25577-25605` · 原 `Fc`（尝试构造器）`shared.js:25518-25552`
  *
- * ⚠️ **与 `docs/16` §1.3 的「撤销 `genHistory.ts`」不冲突**：
+ * ⚠️ **与 `docs/过程.md` §1.3 的「撤销 `genHistory.ts`」不冲突**：
  *    那条撤销针对的是「**追加 / 切换版本**」—— 现已确认它们是**散在 store action 里的副作用**
  *    （`selVer` 切换、`_pendingAttempt` 回填），确实不该有独立 rules 模块。
  *    但 `Uy`（按 attemptId 打补丁）与 `Fc`（构造一条尝试）**输入输出都是纯数据** ⇒ 是纯函数，故落在这里。
@@ -25,7 +25,7 @@ import { normalizeModelLabel } from './prompt';
  * ★ **谁用它**：API 通道提交任务时随报文带上（`Z3_1.jsx:810-828` 的单发 / `:904-927` 的批量），
  *   后端把它存进 `job.attempt`（`job-manager.js:442`），出片事件再带回来
  *   ⇒ `applyApiJobEvent` 才能 `appendGenHistoryAttempt`（成功）/ `patchGenHistoryAttempt`（失败、取消）。
- *   ⚠️ **不带它 ⇒ 版本历史对 API 出片永远是空的**（`docs/14` §4 的 `TD-03-6`）。
+ *   ⚠️ **不带它 ⇒ 版本历史对 API 出片永远是空的**（`docs/过程.md` §4 的 `TD-03-6`）。
  *
  * ⚠️ 与源逐字对齐（含两处怪癖）：
  *   · `params` 为**假值** ⇒ `null`（不是 `{}`）；真值 ⇒ **浅拷贝**一份
@@ -366,6 +366,17 @@ export interface PullTarget {
   attemptId: string;
   /** 视频 id（原 `ve.vid`）—— **有它才走「按 vid 拉无水印」那条路** */
   vid: string;
+  /**
+   * 会话 id（原 `ve.conversationId`）
+   * ★ **只有它（没有 `vid`）⇒ 走「回对话页 → 登记 `pull:true` 任务 → 交给发送后检测」那条路**
+   *   （`_Component43.jsx:3180-3210`）。
+   */
+  conversationId: string;
+  /**
+   * 该次尝试的写入时刻（原 `ve.at`）—— 检测任务的 `sendTime` 基准（源 `ve.at || Date.now()`）。
+   * ⚠️ 老数据可能没有 ⇒ `0`（调用方回落「当前时刻」）。
+   */
+  at: number;
   /** 该次生成用的账号（原 `ve.accountId`；缺 ⇒ `null`，由调用方回落「当前账号」） */
   accountId: string | null;
 }
@@ -395,6 +406,8 @@ export function pullTargetOf(data: Record<string, unknown>): PullTarget | null {
   return {
     attemptId: typeof a.id === 'string' ? a.id : '',
     vid,
+    conversationId,
+    at: typeof a.at === 'number' && a.at > 0 ? a.at : 0,
     accountId: typeof a.accountId === 'string' && a.accountId ? a.accountId : null,
   };
 }

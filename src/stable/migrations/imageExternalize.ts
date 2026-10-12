@@ -2,7 +2,7 @@
  * 迁移 1 · 图片外置（原 `mT` 26267-26302）
  *
  * 做什么：递归把工程数据里的 **base64 图片**换成 `img://` 引用
- * 为什么：docs/10 #37 —— **base64 全塞 JSON 是 localStorage 配额超限的根因**
+ * 为什么：docs/过程.md #37 —— **base64 全塞 JSON 是 localStorage 配额超限的根因**
  *
  * ⚠️ 幂等：已是 `img://` 的值不动；同 dataUrl 只落盘一次（靠 `saveImage` 的幂等）
  * ⚠️ 不可变：返回新结构，不改入参

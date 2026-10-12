@@ -2,10 +2,12 @@ import type { HostOS } from '@/constants';
 /**
  * `window.api` 的类型声明（**冻结契约** —— 由 `electron/preload.js` 暴露）
  *
- * ⚠️ 本文件是**唯一**允许直接引用 `window.api` 的类型处。
- * ⚠️ **方法名必须与 `preload.js` 完全一致**（W1）：
- *    原 `scripts/check-host-api.cjs` 会做差集核对；该闸已于 2026-10-11 退役
- *    （判据交由人工 + `scripts/extract-host-api.cjs` 抽取比对）。
+ * ⚠️ 本文件是**唯一**允许直接引用 `window.api` 的类型处（全仓唯一读者 = `./host-api.ts`，
+ *    它用**局部** `(window as { api?: HostApi })` 取用 ⇒ **本文件不声明 `declare global`**，
+ *    否则任何层写 `window.api.X` 都能编译，红线①（原则 3 / `TD-05-1`）就失守）。
+ * ⚠️ **方法名必须与 `preload.js` 完全一致**（W1）：本接口**无索引签名**
+ *    ⇒ 读写任何**未声明**的成员**编译不过**（这就是 W1 的机器守卫）。
+ *    与 preload 的**差集核对**用 `scripts/extract-host-api.cjs` 抽取比对（人工）。
  *
  * 实测（2026-10-10，`node scripts/extract-host-api.cjs`）：
  *   **82 个成员** = 71 `invoke` + 4 `send` + **2 `sendSync`** + **5 `on`** + 若干普通值
@@ -17,12 +19,9 @@ import type { HostOS } from '@/constants';
  * ⚠️ **5 个 `on*` 订阅返回取消函数**，必须调用（否则泄漏）
  */
 
-/** 未在本工程使用的宿主方法的兜底（避免 `any`；用到时按需补类型） */
-type UnusedHostMethod = (...args: unknown[]) => Promise<unknown>;
-
 export interface HostApi {
   // ── 普通值 ──
-  /** 真实宿主平台（**不读 navigator** —— docs/10 #59） */
+  /** 真实宿主平台（**不读 navigator** —— docs/过程.md #59） */
   readonly hostOS: HostOS;
 
   // ── 文件 ──
@@ -68,6 +67,8 @@ export interface HostApi {
   resolveImageRef(ref: string): Promise<unknown>;
   imageFetchDataUrl(url: string): Promise<unknown>;
   captureRect(rect: unknown): Promise<unknown>;
+  /** ★ 检测站点页里的视频（`preload.js:69` → `detect-videos` handler） */
+  detectVideos(webContentsId: number, seenKeys: readonly string[]): Promise<unknown>;
   startFileDrag(payload: unknown): void;
   clearBrowserCache(): Promise<unknown>;
 
@@ -130,14 +131,4 @@ export interface HostApi {
   attachDolaDebugger(webContentsId: number): Promise<unknown>;
   injectDolaDurationMain(webContentsId: number): Promise<unknown>;
   dolaDurationDiag(message: unknown): Promise<unknown>;
-
-  // ── 兜底：未使用但存在的方法（禁止调用不存在的 —— W1） ──
-  readonly [k: string]: unknown | UnusedHostMethod;
-}
-
-declare global {
-  interface Window {
-    /** 仅在 Electron 宿主里存在（`preload.js` 注入） */
-    api?: HostApi;
-  }
 }

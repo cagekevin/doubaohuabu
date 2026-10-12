@@ -39,7 +39,6 @@
 /* ── 实时隔离体检状态按钮（原 `.fp-health`，三态：crit / warn / ok）── */
 .fpHealth {
   composes: btn btnSm btnBlock from '../common/shared.module.css';
-  justify-content: center;
 }
 
 .fpHealthCrit {
@@ -112,7 +111,7 @@
   background: var(--color-surface-sunken);
   color: var(--color-text-strong);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semi);
+  font-weight: var(--font-weight-bold);
   line-height: var(--line-height-none);
   user-select: none;
 }
@@ -150,21 +149,14 @@
   background: transparent;
 }
 
-/* 图标钮（原 `.lib-icon`）—— 方块，不占宽度 */
+/* 图标钮（原 `.lib-icon`）—— ★ 收口到 `ui/common` 的共享图标钮真源（判据「能一种的别搞两种」） */
 .iconBtn {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
-  flex: none;
-  width: var(--dim-5);
-  height: var(--dim-5);
-  color: var(--color-text-muted);
-}
-.iconBtn:hover:not(:disabled) {
-  color: var(--color-text-strong);
+  composes: libIcon from '../common/shared.module.css';
 }
 
 /* 移除（原 `.lib-icon.del`）—— 悬停走危险色 */
-.iconDel:hover:not(:disabled) {
-  color: var(--color-danger-text);
+.iconDel {
+  composes: libIconDel from '../common/shared.module.css';
 }
 
 /* ── 面板底部操作条（原 `.panel-foot`）── */
@@ -198,4 +190,41 @@
 
 .footDanger {
   composes: btn btnSm btnDanger btnBlock from '../common/shared.module.css';
+}
+
+/*
+ * ── 静默开关（原 `.autostart-switch` + `.autostart-knob`，`OP.jsx:767-772`）──
+ * ⚠️ `mockup.css` **未收录**这两条 ⇒ 按 token 自写（同 `.timerInline` 的先例：不假装有真身）。
+ * ⚠️ 开启态的底色：源是**内联分组色**（`style={{ background: Ce }}`）；没有分组色时走这里的 `--color-brand`。
+ */
+.autoStartSwitch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  background: var(--color-border-strong);
+  transition: background 0.15s ease;
+}
+
+.autoStartOn {
+  background: var(--color-action-primary);
+}
+
+.autoStartKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  transition: transform 0.15s ease;
+}
+
+.autoStartOn .autoStartKnob {
+  transform: translateX(14px);
 }

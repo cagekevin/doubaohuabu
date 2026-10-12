@@ -11,11 +11,11 @@
 import { create } from 'zustand';
 import type { Ports } from '@/core/ports';
 import { EDGE_MARKER, EDGE_STYLE } from '@/constants';
-import { createCanvasSlice, type CanvasSlice } from './slices/canvas';
+import { createCanvasSlice, type CanvasSlice, type CanvasSliceDeps } from './slices/canvas';
 import { createGlobalSlice, type GlobalSlice, type GlobalSliceDeps } from './slices/global';
 import { createUiSlice, type UiSlice, type UiFlagKey } from './slices/ui';
 import { PERSIST } from './persistKeys';
-import { LS_CANVAS_DEFAULTS } from '@/stable/contracts/keys';
+import { LS_AUTO_VIDEO_DETECT, LS_CANVAS_DEFAULTS } from '@/stable/contracts/keys';
 import { makeId } from '@/core/rules/project';
 import { createQueueSlice, type QueueSlice } from './slices/queue';
 import { createGallerySlice, type GallerySlice } from './slices/gallery';
@@ -80,6 +80,23 @@ export interface AppStore {
 export interface AppStoreDeps {
   /** 新增账号所需环境（**getter**：源版就是调用时才读，见 `slices/global.ts`） */
   roster: GlobalSliceDeps['roster'];
+  /**
+   * ★ **操作日志**（原 `commit` 尾部的 `window.api.logProjectOperation`，`shared.js:26912-26928`）
+   *
+   * ⚠️ 由 `bootstrap/container` 注入：它补 `projectId` 与「当前工程有保存路径」的守卫，
+   *   并把端口失败上报（源那里是 `try{}catch{}` 静默）—— 与 `persistImage` 同法，
+   *   `state` 不 import adapters。
+   */
+  logOperation?: CanvasSliceDeps['logOperation'];
+  /**
+   * ★ **激活工程存储目录**（原 `activateProjectStorage`）—— 新建 / 打开 / 重命名当前工程时调
+   *
+   * ⚠️ 由 `bootstrap/container` 注入（它调 `core/usecases/projectStorage.activateProjectStorage`
+   *   并补「当前工程列表」）—— 与 `logOperation` 同法，`state` 不 import adapters。
+   */
+  activateStorage?: GlobalSliceDeps['activateStorage'];
+  /** 立即落盘（`PersistController.flush`）—— 回启动页前先落盘（源 `showStartup` 30146） */
+  flushPersist?: GlobalSliceDeps['flushPersist'];
 }
 
 /**
@@ -106,7 +123,12 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
   const persistImage = (url: string): string => {
     if (!isInlineImage(url)) return url;
     const r = ports.host.media.saveImageSync(url);
-    return r.ok ? r.value : url;
+    if (r.ok) return r.value;
+    // ★ 原则 6 / 母体 M5：落盘失败**不静默** —— 源 `Tn` 的 `catch { return e }` 把失败吞成「回内联」
+    //   （后果：大 base64 混进工程 JSON，用户无感；同后端侧 TD-13-7）。本仓保留源的**回内联**行为
+    //   （图仍可见），但把失败**如实上报**到错误横幅。
+    useStore.getState().pushBackendError('unknown', r.message);
+    return url;
   };
 
   // ★ 显式标成 `AppStoreHook`（对外句柄）⇒ 返回出去的 `useStore` **不带 `setState`**
@@ -125,7 +147,7 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       set((s) => {
         const touchesCanvas = 'nodes' in partial || 'edges' in partial || 'library' in partial || 'videoShares' in partial;
         /**
-         * ★ **同一批里换了 `activeId` ⇒ 绝不镜像**（`docs/14` §2 的 ⭐⭐ 数据损坏 bug）
+         * ★ **同一批里换了 `activeId` ⇒ 绝不镜像**（`docs/过程.md` §2 的 ⭐⭐ 数据损坏 bug）
          *
          * 不设这道闸的话：`setActiveId(newId)` 之后任何画布改动都会把**旧画布**
          * 写进**新工程** ⇒ 切项目即串数据。
@@ -149,7 +171,12 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
     const getState = () => get() as AppState;
 
     return {
-      ...createGlobalSlice(setPartial, getState, { now: () => ports.clock.now(), roster: deps.roster }),
+      ...createGlobalSlice(setPartial, getState, {
+        now: () => ports.clock.now(),
+        roster: deps.roster,
+        activateStorage: deps.activateStorage,
+        flushPersist: deps.flushPersist,
+      }),
       ...createCanvasSlice(setPartial, getState, {
         now: () => ports.clock.now(),
         makeEdge: (conn) => ({
@@ -164,6 +191,7 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
         }),
         // ⚠️ 与下面的 `GallerySliceDeps.normalizeImage` 是**同一个东西**（原 `Tn`）
         persistImage,
+        logOperation: deps.logOperation,
       }),
       // ★ UI 开关（折叠 / 只留本画布）的读写在 `persistKeys` 的**唯一落点**上（原版直接 `localStorage`）
       ...createUiSlice({
@@ -216,8 +244,18 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       ...createStylesSlice({ now: () => ports.clock.now() })(setPartial, getState),
       // ★ faceMask：遮脸族（角标层 / 参数面板 / 检测结果，见 slices/faceMask.ts 头注释）
       ...createFaceMaskSlice()(setPartial, getState),
-      // ★ nodeStatus：节点状态五族（`TD-16-93` 数据层 —— 通知 / 等待 / 换号 / 计时器）
-      ...createNodeStatusSlice({ now: () => ports.clock.now() })(setPartial, getState),
+      // ★ nodeStatus：节点状态族（`TD-16-93` 数据层 —— 通知 / 等待 / 换号 / 计时器 / 检测调试）
+      ...createNodeStatusSlice({
+        now: () => ports.clock.now(),
+        // ★ 自动视频检测开关（原 `autoVideoDetect`，键 `doubao-auto-video-detect`）
+        readAutoDetect: () => {
+          const r = PERSIST[LS_AUTO_VIDEO_DETECT].read(ports.storage);
+          return r.kind === 'ok' && r.value === '1';
+        },
+        writeAutoDetect: (on: boolean) => {
+          PERSIST[LS_AUTO_VIDEO_DETECT].write(ports.storage, on ? '1' : '0');
+        },
+      })(setPartial, getState),
     };
   });
 

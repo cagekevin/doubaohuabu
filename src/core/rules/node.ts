@@ -15,7 +15,6 @@
  */
 
 import type { CanvasNode, NodeType } from '@/stable/model/node';
-import { NODE_DEFAULTS } from '@/core/model/defaults';
 
 /** 一条不变量问题 */
 export interface NodeIssue {
@@ -43,9 +42,6 @@ const REQUIRED: Record<NodeType, Record<string, 'string' | 'number' | 'array'>> 
   download: { folder: 'string' },
   group: { label: 'string' },
 };
-
-/** 8 类节点全集（用于判断类型是否合法） */
-export const NODE_TYPES = Object.keys(REQUIRED) as NodeType[];
 
 function checkField(nodeId: string, type: string, field: string, kind: 'string' | 'number' | 'array', v: unknown): NodeIssue | null {
   const ok =
@@ -100,17 +96,4 @@ export function validateNode(node: CanvasNode): NodeIssue[] {
 /** 批量校验（加载老数据后体检用） */
 export function validateNodes(nodes: readonly CanvasNode[]): NodeIssue[] {
   return nodes.flatMap(validateNode);
-}
-
-/** 与 `NODE_DEFAULTS` 的一致性自检：默认值必须满足自身的不变量 */
-export function selfCheckDefaults(): NodeIssue[] {
-  const issues: NodeIssue[] = [];
-  for (const type of NODE_TYPES) {
-    const d = NODE_DEFAULTS[type] as Record<string, unknown>;
-    for (const [field, kind] of Object.entries(REQUIRED[type])) {
-      const issue = checkField(`<default:${type}>`, type, `data.${field}`, kind, d[field]);
-      if (issue) issues.push(issue);
-    }
-  }
-  return issues;
 }

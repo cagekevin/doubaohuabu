@@ -100,3 +100,18 @@ export function setGroupAutoStart(
   const gid = groupId || null;
   return accounts.map((a) => ((a.groupId || null) === gid ? { ...a, autoStart: value } : a));
 }
+
+/**
+ * **单账号**设自启动（源 `Ve` 的落点：`_Component43.jsx:516-524` 的
+ * `updateAccount(id, { autoStart: true })` —— 静默遮罩的「恢复该账号页面」按钮）
+ *
+ * ⚠️ 与整组版一致：**不重编号**（源的 `updateAccount` 只是字段更新）。
+ * ⚠️ 未命中的账号**引用不变**（与族内其它函数同款，便于 React 跳过无谓渲染）。
+ */
+export function setAccountAutoStart(
+  accounts: readonly Account[],
+  id: string,
+  value: boolean,
+): Account[] {
+  return accounts.map((a) => (a.id === id ? { ...a, autoStart: value } : a));
+}

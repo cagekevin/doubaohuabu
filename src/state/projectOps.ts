@@ -10,7 +10,7 @@
  *
  * ★ **为什么需要它**：这些用例**落地已久**（部分还有单测），但**生产 0 消费**；对应的
  *   `HostPort.file.loadFile` / `HostPort.project.pickStorage·revealStorage·getStorageSize`
- *   也**全都未用** ⇒ 功能链**断在最后一段**（`docs/14` §1.1 / §2）。本控制器就是**缺的那一层**。
+ *   也**全都未用** ⇒ 功能链**断在最后一段**（`docs/过程.md` §1.1 / §2）。本控制器就是**缺的那一层**。
  *
  * ⚠️ **本控制器不写 store**（原则 1）：读盘 / 写盘时序在此，**状态写入只经 store 的 action**。
  * ⚠️ 原则 6：失败 `message` **原样透传**（含 `storageError` —— 源版那里是 `try{}catch{}` 静默）。
@@ -61,7 +61,7 @@ export interface ProjectOpsController {
 /** `createProjectOps` 需要的注入（时序 / 落盘 —— `state` 自己不持 `PersistController`） */
 export interface ProjectOpsDeps {
   /** 立即落盘（`PersistController.flush`）—— 选保存路径前必须先落盘（源版 `flushPersist()`） */
-  flush: (reason?: string) => void;
+  flush: () => void;
 }
 
 export function createProjectOps(
@@ -129,7 +129,7 @@ export function createProjectOps(
       const s = store.useStore.getState();
       const project = s.projects.find((p) => p.id === s.activeId);
       if (!project) return;
-      deps.flush('storage-pick'); // 源版 `flushPersist()`：先落盘当前画布，再切目录
+      deps.flush(); // 源版 `flushPersist()`：先落盘当前画布，再切目录
       const r = await pickProjectStorage({ project: ports.host.project }, project, s.projects);
       if (!r.ok) {
         s.pushToast(PROJECT_STORAGE_TEXT.storageSetFailed(r.message), 5000, 'error');

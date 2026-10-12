@@ -89,6 +89,21 @@ export function advanceAutoWatch(p: AutoWatchProgress, added: number): AutoWatch
 }
 
 /**
+ * 「当前不在画布页」这一轮的进度推进（原 `Ee:538-543` 的
+ * `je.idleRounds = Math.max(je.idleRounds, xl - 1)`）
+ *
+ * ⚠️ 源不是"`idleRounds += 1`"，而是**直接顶到上限前一位**（`AUTO_WATCH_IDLE_ROUNDS_MAX - 1`）——
+ *   于是**下一轮**的 `autoWatchBaseDelay` 也返回退避值。这是源对"用户没停在画布页"的处理：
+ *   别每 6 秒去敲一次页面，直接放慢；`autoCount` **不动**（没喂饱，喂饱判据只看它）。
+ */
+export function advanceAutoWatchNoCanvas(p: AutoWatchProgress): AutoWatchProgress {
+  return {
+    idleRounds: Math.max(p.idleRounds, AUTO_WATCH_IDLE_ROUNDS_MAX - 1),
+    autoCount: p.autoCount,
+  };
+}
+
+/**
  * 这一轮**还要不要真的去扫**（原 `Ee` 486-489：`if (je.autoCount >= QR) { 顺延; return; }`）
  *
  * ⚠️ 与源一致：**喂饱了就只顺延、不再打页面**（不是"换个间隔继续扫"）。

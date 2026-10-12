@@ -13,7 +13,6 @@
 
 .head {
   composes: panelHead from '../common/shared.module.css';
-  /* 仅追加真源未设的属性 */
   color: var(--color-text-muted);
 }
 
@@ -104,26 +103,19 @@
   font-size: var(--font-size-xs);
 }
 
-/* ☆ / ✕（原 `.lib-icon`）—— 图标方块，走真源图标按钮 */
+/* ☆ / ✕（原 `.lib-icon`）—— ★ 收口到 `ui/common` 的共享图标钮真源（判据「能一种的别搞两种」） */
 .icon {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
-  flex: none;
-  width: var(--dim-5);
-  height: var(--dim-5);
-  color: var(--color-text-muted);
-}
-.icon:hover:not(:disabled) {
-  color: var(--color-text-strong);
+  composes: libIcon from '../common/shared.module.css';
 }
 
 /* 已收藏（原 `.lib-icon.fav`）—— 用警告色把 ★ 点亮 */
 .fav {
-  color: var(--color-warning);
+  composes: libIconFav from '../common/shared.module.css';
 }
 
 /* 删除（原 `.lib-icon.del`）—— 悬停走危险色 */
-.del:hover:not(:disabled) {
-  color: var(--color-danger-text);
+.del {
+  composes: libIconDel from '../common/shared.module.css';
 }
 
 /* 底部提示（原 `.library-tip`） */

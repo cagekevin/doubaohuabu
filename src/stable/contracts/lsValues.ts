@@ -1,15 +1,14 @@
 /**
  * 20 个 localStorage 键的**值形状**（★ 冻结契约 · 唯一真源）
  *
- * 依据：`docs/03-人类版.md` §0.8（键表）+ `docs/15-数据与持久化缺口登记.md` §1（落地矩阵）
+ * 依据：`docs/过程.md` §0.8（键表）+ `docs/过程.md` §1（落地矩阵）
  *      `docs/11` §六 把「20 键 + **值形状**」列为 ❌ 冻结项（老用户数据在磁盘上）。
  *
  * ⚠️ **为什么不塞进 `schemas.ts`**：
- *    `schemas.ts` 是**零依赖的字面量 SSOT**；本文件要引用 `../model/*` 的**值形状**。
- *    若合并 ⇒ 与 `model/project.ts → contracts/schemas.ts`（引 `SNAPSHOT_FORMAT`）形成**环**
- *    （depcruise `no-circular` 会拦）。故单独成文件。
+ *    `schemas.ts` 是**零依赖的字面量 SSOT**（不引任何模型）；本文件要引用 `../model/*` 的
+ *    **值形状** ⇒ 合并会让那份"零依赖"失守（depcruise `no-circular` 亦会拦）。故单独成文件。
  *
- * ⚠️ **结构穷尽（这是"不建闸"的替代物，见 `docs/16` §4.1）**：
+ * ⚠️ **结构穷尽（这是"不建闸"的替代物，见 `docs/过程.md` §4.1）**：
  *    `LsValueMap` 的键必须与 `keys.ts` 的 `LsKey` 联合**双向相等** —— 少一个键**编译不过**。
  *    ⇒ 「键声明了却没有值形状」在结构上不可能发生，**不需要 `keys-coverage` 闸**。
  *
@@ -30,10 +29,22 @@ export interface CanvasDefaults {
   ratio: string;
 }
 
-/** 文生图去重表（`imggen_recurring_assets_v1`；原 `TR` 36238 / `PR` 36251） */
+/**
+ * 文生图去重表（`imggen_recurring_assets_v1`；原 `TR` 36238 读 / `PR` 36251 写）
+ *
+ * ⚠️ 逐字对源：`urls` / `hashes` 两个桶都是 `Record<键, {n, last}>`（计数 `p0` `:36273-36285`
+ *   写 `n` 与 `last`），**不是数组** —— 形状写错就读不回源写的表、也做不了 `PR` 的
+ *   「条目 > 400 时按 `last` 升序砍掉前一半」。
+ */
 export interface ImggenDedupTable {
-  urls: string[];
-  hashes: string[];
+  urls: Record<string, ImggenDedupEntry>;
+  hashes: Record<string, ImggenDedupEntry>;
+}
+
+/** 去重表的一项（源 `p0`：`n` = 命中计数，`last` = 最近一次时间戳） */
+export interface ImggenDedupEntry {
+  n: number;
+  last: number;
 }
 
 /** 发送队列浮窗位置（`doubao-sendqueue-pos-v2`；原 `Pp` 42568） */
@@ -47,7 +58,7 @@ export type FlagValue = '1' | '0';
 
 /**
  * 人脸遮罩选项（`doubao-face-mask-opts`；原 25463 / 25493）
- * ⚠️ 形状 `[待确认]` —— `docs/03` §0.8 只记了行号，未记字段。
+ * ⚠️ 形状 `[待确认]` —— `docs/过程.md` §0.8 只记了行号，未记字段。
  *    默认值在 `constants/facemask.ts` 的 `FACE_MASK_DEFAULTS`（那是**默认**，不是**持久化形状**）。
  */
 export type FaceMaskOpts = Readonly<Record<string, unknown>>;
@@ -80,7 +91,7 @@ export interface ScanHistoryEntry {
 /**
  * Lovart 画廊里的一张图（原 `addLovartImages` 29267-29278 逐字段写出的形状）
  *
- * ★ **2026-10-11 定形**：`LsValueMap` 此前把它标成 `[待确认]`（`docs/15` §1 #7 ——
+ * ★ **2026-10-11 定形**：`LsValueMap` 此前把它标成 `[待确认]`（`docs/过程.md` §1 #7 ——
  *   当时只证明了「有读」）。源实现的**写侧**（29267-29278）给出了完整字段表 ⇒ 现在定形。
  * ⚠️ 放 `stable/contracts` 而不是 `core/rules`：**持久化形状是契约**，
  *   而 `stable` 是底层（`core` 可以 import 它，反过来不行）。
@@ -119,7 +130,7 @@ export interface LsValueMap {
   'doubao-lovart-galleries': LovartGalleriesMap;
   /**
    * ★ **2026-10-11 定形**（原 `jk` 26223 读 / `Fy` 26225 写 / `recordScan` 30362 写侧）
-   * —— 此前是 `unknown[]` + `[待确认]`（`docs/15` §1 #8）。
+   * —— 此前是 `unknown[]` + `[待确认]`（`docs/过程.md` §1 #8）。
    * ⚠️ 它是**指纹撞车体检**的历史，**不是**画廊扫描（两者别混）。
    */
   'doubao-scan-history': ScanHistoryEntry[];
@@ -129,7 +140,7 @@ export interface LsValueMap {
   'doubao-account-pool-strategy': PoolStrategy;
   'doubao-sendqueue-pos-v2': SendQueuePos;
   'imggen_recurring_assets_v1': ImggenDedupTable;
-  /** 旧版单工程（**只读**；`docs/15` §5 已裁定不做迁移 ⇒ 保留形状仅为"能读"） */
+  /** 旧版单工程（**只读**；`docs/过程.md` §5 已裁定不做迁移 ⇒ 保留形状仅为"能读"） */
   'doubao-canvas': unknown;
   /** 令牌（**只读**；原 33237） */
   access_token: string;

@@ -290,6 +290,8 @@
   --shadow-lg: 0 8px 32px var(--color-shadow-strong); /* 重：对话框 / 浮层卡片 */
   --color-mask:          rgb(var(--p-gray-100-ch) / 0.6);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.32);
+  /* 轻遮挡（人脸遮罩那类「盖一层但还看得见」）—— 家族第三档，两主题同值（黑 25%） */
+  --color-mask-weak:     rgb(var(--p-black-ch) / 0.25);
   /**
    * ★ 媒体遮罩：压在**图片 / 缩略图**上的半透明底（图上说明条），保证其上白字可读。
    *   与 `--color-mask*`（**界面遮罩**：模态 / 加载）职责不同 ⇒ 必须能"只改它、不动别的"：
@@ -376,6 +378,8 @@
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.56);
   --color-mask:          rgb(var(--p-black-ch) / 0.45);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.62);
+  /* 轻遮挡 —— 与亮主题同值（黑 25%）：它盖在图片上，不随主题变 */
+  --color-mask-weak:     rgb(var(--p-black-ch) / 0.25);
   --color-scrim:         rgb(var(--p-black-ch) / 0.62);
 }
 

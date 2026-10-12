@@ -1,7 +1,7 @@
 /**
  * 工程规则（★ 纯函数，必测 —— §6.5 原则 7）
  *
- * 依据：docs/03-人类版.md §2（工程 CRUD）+ `Pt('p')` 的 id 生成规则
+ * 依据：docs/过程.md §2（工程 CRUD）+ `Pt('p')` 的 id 生成规则
  *   - id 格式：`p_<base36 时间>_<计数>`（真实样本实测 `p_mv1raqbo_1` ✅）
  *   - 新工程名默认「未命名项目」
  *
@@ -174,6 +174,24 @@ export function renameProject(project: Project, name: string, now: number): Proj
 }
 
 /**
+ * 重命名后**要不要**重新激活存储目录（原 `renameProject` 30075 的 `n === t().activeId`）
+ *
+ * ⚠️ 源**只对当前工程**重新激活（工程名参与磁盘目录名与「已知路径清单」，改名后要同步）。
+ */
+export function shouldReactivateOnRename(projectId: string, activeId: string | null): boolean {
+  return activeId === projectId;
+}
+
+/**
+ * 删除某工程后新的 `activeId`（原 `deleteProject` 30120 / 30123）
+ *
+ * ⚠️ 源：删的是**当前**工程 ⇒ `null`（**回启动页**），**不是**切到列表里的下一个。
+ */
+export function activeIdAfterDelete(activeId: string | null, deletedId: string): string | null {
+  return activeId === deletedId ? null : activeId;
+}
+
+/**
  * 设置保存路径（原 `setProjectStoragePath` 30096-30113）
  *
  * ⚠️ 与源逐字对齐：`typeof path === 'string' ? path.trim() : ''` ⇒ **空串即「用默认目录」**
@@ -260,4 +278,15 @@ export function mergeImportedPresets(
 /** 触碰 `updatedAt`（任何数据变更都该调） */
 export function touchProject(project: Project, now: number): Project {
   return { ...project, updatedAt: now };
+}
+
+/**
+ * 启动页历史列表的**展示顺序**：按 `updatedAt` **倒序**（原 `_Component47.jsx:25-27` 逐字：
+ * `[...e].sort((m, w) => w.updatedAt - m.updatedAt)`）
+ *
+ * ⚠️ 源的 `.sort` 是**就地在临时数组上**做的（`[...e]`）⇒ 本函数同样**返回新数组**，不动入参。
+ * ⚠️ 只用于**展示**：store 里的 `projects` 顺序（插入序）不动 —— 否则每次落盘都会重排。
+ */
+export function orderProjectsByUpdatedAt(projects: readonly Project[]): Project[] {
+  return [...projects].sort((a, b) => b.updatedAt - a.updatedAt);
 }

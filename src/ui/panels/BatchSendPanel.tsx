@@ -247,7 +247,6 @@ export function BatchSendPanel() {
             ) : undefined
           }
           onClose={phase === 'running' ? undefined : () => setPhase('idle')}
-          closeLabel={BATCH_SEND_TEXT.close}
         >
 
           {phase === 'running' && (

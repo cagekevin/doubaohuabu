@@ -1,7 +1,7 @@
 /**
  * usecase · 持久化账号族（**怎么存**）
  *
- * 依据：`docs/14` §2 的 ⭐ 缺口「`doubao-accounts` **只读不写**」——
+ * 依据：`docs/过程.md` §2 的 ⭐ 缺口「`doubao-accounts` **只读不写**」——
  *   实测 `PERSIST[LS_ACCOUNTS]` **全仓只在 `bootstrap/hydrate` 被读**，无任何写入点
  *   ⇒ **账号增删改一刷新就丢**（用户级数据丢失，与「切项目串数据」同级）。
  *

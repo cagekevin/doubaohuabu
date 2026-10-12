@@ -24,7 +24,25 @@ import {
 } from '@/constants/dedupe';
 import { exactHashFromDataUrl, hammingDistance, hashFromImgRef } from '@/lib/hash';
 
-/** 去重表（对应 localStorage `imggen_recurring_assets_v1` = `{urls, hashes}`） */
+/**
+ * 去重表（本仓形状：两个**数组**）
+ *
+ * ⚠️ 这是**会话内**去重器的形状 —— 对齐源 `sm` 的入参（`shared.js:25788-25789`：
+ *   `new Set(e.exact||[])` ＋ `e.phash||[]`）。
+ *   **别和另一张表混**：持久化那张（键 `imggen_recurring_assets_v1`，`Qk` `:36236`）是
+ *   `{ urls: Record<_,{last}>, hashes: Record<_,{last}> }`（`TR()` `:36238` 读、`PR()` `:36251` 写，
+ *   **> 400 条按 `last` 升序砍掉前一半**），管的是**跨会话**去重。
+ *   ⇒ 两者是**两件事**，接线时各自要接，别把一张表当成另一张。
+ *
+ * ★ **本仓接线现状**（消费者各不相同，别当成一件）：
+ *   - `isPlaceholder`（原 `Nk`，`:25776`）**已接** —— 出片轮询取回后先过它
+ *     （`adapters/site/doubao` 的 `toGenResult`，感知哈希注入 `lib/phash.perceptualHash`）
+ *     ⇒ **豆包默认占位图不入结果**。
+ *   - `isDuplicate`（原 `sm`，`:25787`）**仍无生产消费者**：源里 `sm` 有 **3 个**调用点
+ *     （`wp` `:32508` · `wP` `:33799` · `NR` `:36081`，**都在画廊 / 素材扫描链**，
+ *     入参带 `allowedScopes`/`maxCanvases`/`haveHashes`），本仓那条链的去重由
+ *     `addLovartImages` 按 `dataUrl` 承担 ⇒ **两条链尚未逐条对齐**（见 `docs/过程.md` §14）。
+ */
 export interface DedupeState {
   /** 精确哈希（SHA-1 前 16 位） */
   exact: string[];

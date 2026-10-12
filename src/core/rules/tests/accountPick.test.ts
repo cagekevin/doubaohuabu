@@ -11,8 +11,11 @@ import {
   deriveChannelFromGroup,
   filterPoolAccounts,
   hasExecutableAccount,
+  nextPoolStrategy,
+  normalizePoolStrategy,
   pickActiveAccountFallback,
   pickInitialActiveAccount,
+  pickSwitchCandidates,
   resolveSendAccount,
   UNGROUPED,
 } from '../accountPick';
@@ -364,5 +367,51 @@ describe('pickActiveAccountFallback（原 `_Component42.jsx:463-475` 的 `tt`）
     ).toBeNull();
     // 对照：同一条输入，**初始化**那条规则会取"首个（不看状态）"
     expect(pickInitialActiveAccount(allOut)).toBe('a');
+  });
+});
+
+describe('normalizePoolStrategy（原 `Ou` 34480-34490）', () => {
+  it('★ 在选项表里 ⇒ 原样收', () => {
+    expect(normalizePoolStrategy('round-robin')).toBe('round-robin');
+    expect(normalizePoolStrategy('least-load')).toBe('least-load');
+  });
+
+  it('★ 不在表里 / 非字符串 / 空 ⇒ 回落 `round-robin`（源 `BP`，静默不报错）', () => {
+    expect(normalizePoolStrategy('fastest')).toBe('round-robin');
+    expect(normalizePoolStrategy(null)).toBe('round-robin');
+    expect(normalizePoolStrategy(undefined)).toBe('round-robin');
+    expect(normalizePoolStrategy(1)).toBe('round-robin');
+    expect(normalizePoolStrategy('')).toBe('round-robin');
+  });
+});
+
+describe('nextPoolStrategy（原 `z3.jsx:273`）', () => {
+  it('★ 两值互切（源**写死**，不是按选项表循环）', () => {
+    expect(nextPoolStrategy('round-robin')).toBe('least-load');
+    expect(nextPoolStrategy('least-load')).toBe('round-robin');
+  });
+});
+
+describe('pickSwitchCandidates（自动换号的候选，原 `be` 的 `listNextIdleAccounts` + 同类型优先，`:2448-2465`）', () => {
+  it('★ 只留「已登录 · 未试过 · 不忙」—— 三者缺一即排除', () => {
+    const list = [acc('a', 'doubao'), acc('b', 'doubao', { status: '未登录' }), acc('c', 'dola')];
+    expect(pickSwitchCandidates(list, 'doubao', new Set(['a']), ['c'])).toEqual([]);
+  });
+
+  it('★ 同类型排在前（其余不丢，只是靠后）', () => {
+    const list = [acc('x', 'dola'), acc('y', 'doubao'), acc('z', 'doubao')];
+    expect(pickSwitchCandidates(list, 'doubao', new Set(), []).map((a) => a.id)).toEqual([
+      'y',
+      'z',
+      'x',
+    ]);
+  });
+
+  it('当前类型未知 ⇒ 保持原顺序（源 `!Te` 那一支）', () => {
+    const list = [acc('x', 'dola'), acc('y', 'doubao')];
+    expect(pickSwitchCandidates(list, undefined, new Set(), []).map((a) => a.id)).toEqual([
+      'x',
+      'y',
+    ]);
   });
 });

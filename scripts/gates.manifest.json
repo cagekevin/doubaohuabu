@@ -11,9 +11,7 @@
     "health"
   ],
   "_disabled_help": "闸的开/关开关：把想关的闸 id 列在这里（闸**仍在 gates 里登记**，只是被跳过 —— 所以不会变成孤儿闸）。改它别手写，用 `npm run gate:off -- <id>` / `npm run gate:on -- <id>`（`npm run gate:status` 看当前开关）。全关 = 拒绝通过。",
-  "disabled": [
-    "dead-code"
-  ],
+  "disabled": [],
   "gates": [
     {
       "id": "typecheck",

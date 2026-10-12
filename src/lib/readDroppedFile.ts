@@ -68,23 +68,29 @@ export interface DroppedImage {
   natH: number;
 }
 
+/**
+ * 量一个**已读好的 `dataUrl`** 的原始尺寸（原 `Pu` 的 `<img>` 那半）
+ *
+ * ⚠️ **两次都不 reject**（源同法：只丢尺寸，不丢图）—— 加载失败 / `naturalWidth` 为 0
+ *    都给兜底 `200 × 160`。
+ * ⚠️ 消费者两处（判据 C1）：`readImageFile`（拖放 / 粘贴）与画廊「导入图片」——
+ *    后者从系统对话框拿到的是**现成 dataUrl**（没有 `File` 可读）。
+ */
+export function measureImageSize(dataUrl: string): Promise<{ natW: number; natH: number }> {
+  return loadImage(dataUrl).then(
+    (img) => ({ natW: img.naturalWidth || FALLBACK_W, natH: img.naturalHeight || FALLBACK_H }),
+    () => ({ natW: FALLBACK_W, natH: FALLBACK_H }),
+  );
+}
+
 export function readImageFile(file: File): Promise<DroppedImage> {
   return new Promise((resolve) => {
     const name = stripExtension(file.name);
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || '');
-      loadImage(dataUrl).then(
-        (img) =>
-          resolve({
-            name,
-            dataUrl,
-            natW: img.naturalWidth || FALLBACK_W,
-            natH: img.naturalHeight || FALLBACK_H,
-          }),
-        // ⚠️ 量尺寸失败**照样给图**（源如此：只丢尺寸，不丢 dataUrl）
-        () => resolve({ name, dataUrl, natW: FALLBACK_W, natH: FALLBACK_H }),
-      );
+      // ⚠️ 量尺寸失败**照样给图**（源如此：只丢尺寸，不丢 dataUrl）
+      measureImageSize(dataUrl).then((size) => resolve({ name, dataUrl, ...size }));
     };
     // ⚠️ 读文件失败 ⇒ `dataUrl` 空串（调用方过滤掉这一条）
     reader.onerror = () => resolve({ name, dataUrl: '', natW: FALLBACK_W, natH: FALLBACK_H });

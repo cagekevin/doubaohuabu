@@ -1,15 +1,16 @@
 /**
  * UI 文案（★ SSOT：全部面向用户的字符串的唯一真源）
  *
- * 依据：docs/03-人类版.md §8（文案归类）+ docs/04-AI协议版.md 附表（14 项失败分类）
+ * 依据：docs/过程.md §8（文案归类）+ docs/过程.md 附表（14 项失败分类）
  * 铁律：**文案只允许出现在本文件**（store / core / ui 都不得硬编码）
  *
  * ⚠️ 原则 6（错误透传）：这里的文案是**展示层映射**，**不得覆盖**原始错误 message。
  *    原始 message 必须一路透传到 UI，本表只提供「按 reason 分类的提示语」。
  */
 
-// 文案只依赖 L0（constants）内的 kind 联合，不依赖 core（分层：L0 不得依赖 L2）
-export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure';
+// ⚠️ 失败 / 后端错误 label 的**真源是 `./failure`** —— 公开入口由 `constants/index.ts` 的 `export *` 统一提供。
+//    ⛔ 本文件**不得**再 `export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure'`：会与
+//    `constants/index.ts` 的 `export * from './failure'` **歧义重名** ⇒ TS 静默丢名（`@/constants` 拿不到，TD-11-3）。
 // ⚠️ 发送/面板文案的**分片转发**（定义在 `sendPanelText.ts`，见那里的头注释）
 export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, AUTO_MATCH_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EDGE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FUZZY_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_IMAGE_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, IMAGE_EDITOR_TEXT, MATERIAL_NODE_TEXT, MEDIA_PLAYER_TEXT, NODE_CTX_TEXT, NODE_TITLE_TEXT, PRESET_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, STYLE_LIB_TEXT, VIDEO_NODE_TEXT, WATERMARK_PANEL_TEXT } from './sendPanelText';
 // ⚠️ 以下三处分片由 eslint `max-lines`(400) 触发 —— **该规则已于 2026-10-11 关闭**（分片的"各组彼此内聚"理由仍成立，但不再有"必须 <400 行"的硬约束）。
@@ -97,6 +98,11 @@ export const COMMON_TEXT = {
   generating: '生成中…',
   /** 关闭按钮的无障碍名（**本工程新增** —— 源里没有对应 aria） */
   closeAria: '关闭',
+  /**
+   * 关闭按钮的 `title`（原 `Z0.jsx:25` 的保存失败横幅 ＋ `CL.jsx:723` 的回复提示条
+   * **两处逐字相同** ⇒ 收到此处，判据 C1）
+   */
+  closeTitle: '关闭提示',
 } as const;
 
 /** 品牌 / 启动页 */
@@ -108,6 +114,21 @@ export const BRAND = {
   emptyHistory: '暂无历史项目，点击上方新建一个吧',
   importProject: '导入项目文件（.json）',
   untitledProject: '未命名项目',
+} as const;
+
+/**
+ * 相对时间（原 `UP` 34366-34385）—— **跨域复用**：启动页项目行（`_Component47.jsx:89`）
+ * ＋ 指纹体检历史条目
+ *
+ * ⚠️ **为什么在 SSOT**：这四句是**用户可见文案**，原先硬编码在纯规则
+ *   `core/rules/fingerprintScan.ts` 里（规则层出现中文文案 ⇒ 违反原则 5）⇒ 归位到此，
+ *   由 `lib/time.formatRelativeTime` 消费。
+ */
+export const RELATIVE_TIME_TEXT = {
+  justNow: '刚刚',
+  minutesAgo: (n: number) => `${n} 分钟前`,
+  hoursAgo: (n: number) => `${n} 小时前`,
+  daysAgo: (n: number) => `${n} 天前`,
 } as const;
 
 /**
@@ -172,8 +193,9 @@ export const LICENSE_TEXT = {
   msgMachineExported: (path: string) => `机器码已导出：${path}`,
   msgEnterCode: '请输入激活码',
   msgActivated: (at: string) => `激活成功，有效期至 ${at}`,
-  msgTampered: (reason: string) =>
-    `拒绝激活：检测到系统时间异常（${reason}）。请恢复正确的系统时间后重试。`,
+  /** 原 `W3.jsx:88`（`(E.tamperReason || '时间篡改')` —— 缺省也归本函数持有） */
+  msgTampered: (reason?: string) =>
+    `拒绝激活：检测到系统时间异常（${reason || '时间篡改'}）。请恢复正确的系统时间后重试。`,
   msgUsed:
     '激活失败：该激活码已被使用，无法重复激活。每个激活码仅可成功激活一次，请使用新的激活码。',
   msgActivateFailed: (err: string) => `激活失败：${err}`,
@@ -232,6 +254,8 @@ export const CANVAS_TEXT = {
    * ⚠️ 只有 `ensureMaterialNode` 返回 `reused: true` 时才提示（此时节点是被**移动**到落点的）。
    */
   materialReused: (name: string) => `「${name}」已在画布上，已移到落点（同一素材不重复创建）`,
+  /** 拖入的素材 id 在资源库查不到（**本工程新增** —— 源无此守卫；失败可见，原则 6） */
+  materialMissing: (libId: string) => `拖入的素材不在资源库中（libId=${libId}）`,
   /** 拖入 `.md` 文件时**文件名取空**的兜底标题（原 `_Component42.jsx:1416` 的 `|| 'Markdown'`） */
   mdFallbackTitle: 'Markdown',
   /** `s` 快捷键截图**失败**（控制器一般会带 `reason`，这是兜底） */
@@ -255,6 +279,8 @@ export const CIRCULAR_REF_MESSAGE = '这样连会形成循环引用，已阻止'
 /** 项目 / 顶栏（⚠️ 保存路径那一族已拆到 `PROJECT_STORAGE_TEXT` —— 见本文件末的转发） */
 export const PROJECT_TEXT = {
   renameHint: '双击重命名项目',
+  /** 删除按钮 `title`（原 `_Component47.jsx:91` 的 `title="删除项目"`，逐字） */
+  deleteTitle: '删除项目',
   deleteConfirm: (name: string) => `删除项目「${name}」？此操作不可撤销。`,
   /** 原 `_Component47.jsx:39` 的 `alert('项目文件解析失败')` */
   parseFailed: '项目文件解析失败',
@@ -307,8 +333,8 @@ export const PERSIST_TEXT = {
   /** ⚠️ 查 7：原文案含实现黑话「序列化」—— 本工程自造，非源版原文，已改写为用户语 */
   serializeFailed: '保存失败：工程数据无法写入本地存储，本次改动未生效',
   quotaExceeded: '保存失败：工程数据未能写入本地存储（本地存储空间不足）',
-  /** 保存失败横幅的关闭按钮 `title`（原 `Z0.jsx:25` 逐字） */
-  close: '关闭提示',
+  /** 保存失败横幅的关闭按钮 `title`（原 `Z0.jsx:25` 逐字；真源 = `COMMON_TEXT.closeTitle`） */
+  close: COMMON_TEXT.closeTitle,
 } as const;
 
 /** 错误横幅按钮 */
@@ -418,7 +444,10 @@ export const BACKEND_VIEW_TEXT = {
   openInBrowser: '浏览器打开',
   watermarkFree: (n: number) => `无水印资源（${n}）`,
   backToCanvas: '返回画布',
-  silent: (name: string) => `「${name}」处于静默状态 · 页面已暂停（不占用内存 / CPU）`,
+  /** 静默遮罩的说明（原 `_Component43.jsx:3291`，逐字） */
+  silent: (name: string) => `「${name}」处于静默状态 · 页面已暂停（不占用内存 / CPU），点击上方按钮恢复`,
+  /** 静默遮罩里恢复钮的 `title`／`aria-label`（原 `:3282`，逐字） */
+  resume: '恢复该账号页面',
   /**
    * 站点标题（原 `_Component43.jsx:3231` 的**五路三目** —— **源里没有 `gpt` 分支**，它落 else ⇒「豆包对话后台」；
    *   故本仓照源**不列** `gpt`）
@@ -486,10 +515,8 @@ export const FACEMASK_TEXT = {
   strength: '强度',
   expand: '范围外扩',
   hint: (n: number) => `单击角标即按此参数遮脸（当前 ${n} 张脸）`,
-  /** 关闭按钮 `title`（原 `_Component40.jsx:68`，逐字） */
+  /** 关闭按钮 `title`（原 `_Component40.jsx:68`，逐字）—— 字形归 `PanelShell` 真源（`.panelClose`） */
   closeTitle: '关闭（Esc）',
-  /** 关闭字形（原 69） */
-  closeGlyph: '✕',
   /** 强度值的后缀（原 88：`{t.strength.toFixed(1)}×`） */
   strengthSuffix: '×',
   // ── 角标层（原 `iL.jsx:170-190`）──
@@ -508,6 +535,8 @@ export const FACEMASK_TEXT = {
   masking: '遮脸中…',
   /** 遮脸后给素材名加的后缀（原 `iL.jsx:127`，逐字） */
   nameSuffix: '·已遮脸',
+  /** 素材名缺省（原 `iL.jsx:126` 的 `String(s || '素材')`，逐字） */
+  defaultName: '素材',
   /** 外置失败（原 `iL.jsx:124` 抛的 `图片保存失败`，逐字 —— 生产者原文，不得改写） */
   saveFailed: '图片保存失败',
   /**
@@ -647,6 +676,119 @@ export const NODE_EDIT_TEXT = {
   sendSuccessIcon: '✓ ',
   /** 其余（含 `waiting` / `skipped` / 未知）一律这个（原 760，逐字） */
   sendErrorIcon: '⚠ ',
+} as const;
+
+/**
+ * 节点状态提示（文本节点 —— 原 `CL.jsx` 的 `reply-notice` 713-729、
+ * `wait-countdown` 37-64,763-767 与 `switch-status`）
+ *
+ * ⚠️ `switch-status` 的**原因文案**在此（`be` 会把它写进 `nodeSwitches.reason`）；
+ *   它那块 UI（`CL.jsx` 的行渲染）仍未落。
+ */
+export const NODE_STATUS_TEXT = {
+  /**
+   * 回复提示条的语气图标（原 `CL.jsx:717`）—— `info` ⇒ `ℹ`、`error` ⇒ `✕`、其余 ⇒ `⚠`。
+   * ⚠️ 源是嵌套三目，即**兜底档是 `⚠`**（`warn` 及一切未识别值都走它）。
+   */
+  noticeIcon: { info: 'ℹ', warn: '⚠', error: '✕' },
+  /** 回复提示条的关闭钮 `title`（原 `CL.jsx:723`，逐字；真源 = `COMMON_TEXT.closeTitle`） */
+  noticeClose: COMMON_TEXT.closeTitle,
+  /** 倒计时结束（原 `CL.jsx:766`，逐字） */
+  waitEnded: '⏳ 等待已结束',
+  /** 倒计时进行中（原 `CL.jsx:766`：`` `⏳ 预计等待 ${minutes} 分钟 · ${clock}` ``） */
+  waitRunning: (minutes: number, clock: string) => `⏳ 预计等待 ${minutes} 分钟 · ${clock}`,
+  /**
+   * 倒计时 `title`（原 `CL.jsx:763`，逐字）
+   * ⚠️ `\u3000` 是源里的**全角空格**，别换成半角（`'（倒计时已结束）' : '\u3000倒计时结束后自动停止'`）。
+   */
+  waitTitle: (text: string, minutes: number, ended: boolean) =>
+    `来自豆包回复：「${text || `预计等待时长 ${minutes} 分钟`}」${ended ? '（倒计时已结束）' : '\u3000倒计时结束后自动停止'}`,
+
+  /**
+   * 自动换号的**失败原因**（原 `be` 里五处 `setNodeSwitch({state:'failed', reason})`）
+   * —— 都是用户可见的原文，逐字抄源：`:2434` · `:2443` · `:2453` · `:2493` · `:2533`。
+   */
+  switchMaxTries: '已达最大自动换号次数',
+  switchNoPayload: '缺少原始发送载荷，无法自动重发',
+  switchNoIdle: '没有其他已登录的可用账号',
+  /** 候选都没挂上（原 `:2493` 的 `（${ot.join('、')}）`） */
+  switchNoPage: (names: string) => `其他账号后台未加载且自动加载失败（${names}）`,
+  switchResendFailed: '重发失败',
+
+  /**
+   * 换号状态行（原 `CL.jsx:768-772`）—— `title` 与三档正文**逐字**；
+   * ⚠️ `title` 里那个 `\u3000` 是源里的全角空格，别换半角。
+   */
+  switchTitle: (reason: string, toName?: string) =>
+    `原因：${reason}${toName ? `\u3000已切换至 ${toName}` : ''}`,
+  switchDone: (toName?: string) => `🔁 已切换账号${toName ? `：${toName}` : ''}`,
+  switchFailed: (reason: string) => `🔁 换号失败${reason ? `：${reason}` : ''}`,
+  /** 兜底档（源 `m.state` 既非 `done` 也非 `failed` ⇒ 走它） */
+  switchSwitching: (toName?: string) =>
+    `🔁 额度受限，正在切换账号${toName ? `：${toName}` : ''}…`,
+} as const;
+
+/**
+ * **发送后检测**（原 `it` / `postSendDetect`）的用户可见文案
+ *
+ * ⚠️ 源里全是**内联字面量**（`setDetectDebugInfo({status: '…'})`）⇒ 收口于此（判据 C1）。
+ * ⚠️ `failedNotReady` 的「豆包后台」是**源原文**（dola 也走同一句），不改写。
+ */
+export const DETECT_TEXT = {
+  /** 默认状态（原 `_Component43.jsx:1337`） */
+  running: '发送后检测中…',
+  /** 本仓补（源用占位账号名「豆包」兜底，不报错） */
+  failedNoAccount: '检测失败：账号不存在',
+  /** 原 `:1475` */
+  failedNoView: '检测失败：后台视图未初始化',
+  /** 原 `:1486` */
+  failedNotReady: '检测失败：豆包后台未就绪',
+  /** 原 `:1501` */
+  failedNav: '检测失败：无法导航到创作空间页',
+  /** 原 `:1571` */
+  failedRetry: '检测失败，稍后重试…',
+  /** 首轮（原 `:1638`：`Ce > 0 ? 已添加 N 个新视频 : 检测中…（等待新视频生成）`） */
+  firstRound: (n: number) => (n > 0 ? `✅ 已添加 ${n} 个新视频` : '检测中…（等待新视频生成）'),
+  /** 后续轮（原 `:1686`） */
+  round: (n: number) => (n > 0 ? `✅ 已添加 ${n} 个新视频，继续检测…` : '等待新视频生成…'),
+  /** 异常结束（原 `:1700`） */
+  errorEnded: '检测异常已结束',
+  /** 正常结束（源只 `console.log`，无 UI 文案；本仓给调试面板一个终态） */
+  ended: '检测已结束',
+} as const;
+
+/**
+ * **生成确认**（原 `kt` / `autoConfirm`，`_Component43.jsx:1738-2052`）的用户可见文案
+ *
+ * ⚠️ 源里全是**内联字面量**（`Le('…')` / `Ge('…')` / 两处 `setNodeNotice`）⇒ 收口于此（判据 C1）。
+ * ⚠️ **逐字对源** —— 包括全角引号 `“已提交/正在生成”`。
+ */
+export const GEN_CONFIRM_TEXT = {
+  /** 自动回复的确认语（原 `qe`，`:1740`） */
+  confirmReply: '确认，直接生成完整的一段视频',
+  /** 通知标题（源两处：等待 / 正在确认） */
+  titleWaiting: '后台等待生成确认',
+  titleConfirming: '正在确认后台生成',
+  /** 发送前没取到基线（原 `:2990`） */
+  noBaseline: '无法建立后台回复基线，请打开账号页面检查是否需要手动确认。',
+  /** 命中「要确认」、准备动作（原 `Ge('后台要求确认生成参数，…')`，`:1924`） */
+  confirmRequired: '后台要求确认生成参数，正在自动回复确认；收到接单回执后才开始生成。',
+  /** 循环跑完仍未命中（原 `Le('任务仍在等待，但 12 分钟内…')`，`:1910`） */
+  detectTimeout: '任务仍在等待，但 12 分钟内未识别到生成确认/已提交回复，请到该账号后台核对。',
+  /** 点了内联按钮但没回执（原 `:1945`） */
+  clickedNoAck: '已点击确认按钮，但未收到“已提交/正在生成”回执，请检查后台。',
+  /** 输入框尚有内容或读不到（原 `:1972`） */
+  composerNotEmpty: '检测到后台要求确认，但输入框尚有内容或无法读取；为避免混发，请手动核对并确认。',
+  /** 剪贴板写不进去（原 `:1979`） */
+  clipboardFail: '自动确认失败：无法写入剪贴板，请手动在后台回复确认。',
+  /** 确认语没准确进输入框（原 `:1996`） */
+  inputMismatch: '自动确认语未能准确填入输入框，已停止自动发送，请到后台手动确认。',
+  /** 确认语没发出去（原 `:2022`） */
+  sendFail: '检测到后台要求确认，但自动发送确认语失败，请手动处理。',
+  /** 确认语发出去了但没回执（原 `:2016`） */
+  repliedNoAck: '确认语已发出，但未收到“已提交/正在生成”回执，请检查后台。',
+  /** 整段异常（原 `:2026`：`自动确认异常：${msg}。请到后台手动确认。`） */
+  exception: (detail: string) => `自动确认异常：${detail}。请到后台手动确认。`,
 } as const;
 
 
@@ -873,8 +1015,6 @@ export const LOGIN_MODAL_TEXT = {
   done: '完成登录',
   /** `other` 的完成钮（原 262 的 `c ? '保存' : '完成登录'`，逐字） */
   save: '保存',
-  /** 「关闭」（原 264，逐字） */
-  close: '关闭',
   /** `other` 的网址输入占位（原 270，逐字） */
   urlPlaceholder: '输入网址，如 www.bing.com 或 https://example.com',
   /** `other` 的「进入」（原 280，逐字） */
@@ -919,7 +1059,7 @@ export const ACCOUNT_PANEL_TEXT = {
    * ⚠️ **2026-10-12 口径更正**：它此前被写成"建号后的引导"（因为那时是**先建号再登录**）。
    *   现在建号改回源版顺序（**登录成功才建号**，见 `ui/panels/LoginModal.tsx`）⇒
    *   新建的账号恒 `已登录`，这颗钮只对**两种账号**有用：
-   *   ① 从文件**导入**的账号（`docs/10` 的账号迁移）；② 会话过期后被标成 `未登录` 的账号。
+   *   ① 从文件**导入**的账号（`docs/过程.md` 的账号迁移）；② 会话过期后被标成 `未登录` 的账号。
    */
   probe: '检测登录',
   probing: '检测中…',
@@ -964,6 +1104,12 @@ export const ACCOUNT_PANEL_TEXT = {
     `✓ 已清理 ${cleared} 个缓存目录${failed ? `（${failed} 个被占用，下次启动会自动清理）` : ''}`,
   /** 失败（原 201 / 204 —— 统一成「后端原文」一句，不编造） */
   clearCacheFailed: (msg: string) => `清理失败：${msg}`,
+
+  // ── 静默开关（原 `OP.jsx:767-772` 的 `.autostart-switch`，逐字两句）──
+  /** `autoStart === true` 时（点击 = 恢复按需模式） */
+  autoStartOnTitle: '本会话保持开启（下次启动仍默认关闭）— 点击恢复按需模式',
+  /** `autoStart !== true` 时（点击 = 本会话保持开启） */
+  autoStartOffTitle: '按需模式：任务需要时自动加载，完成后释放 — 点击可在本会话保持开启',
 } as const;
 
 /**
@@ -1014,6 +1160,12 @@ export const SEND_TEXT = {
   noSiteAdapter: (site: string) => `无 ${site} 站点适配器`,
   /** 站点没声明会话页（`SitePort.chatUrl` 缺项）—— **明确报错，不回落**（判据 B4） */
   noChatUrl: (site: string) => `站点 ${site} 未声明会话页（chatUrl），无法准备后台页`,
+  /**
+   * 站点**没声明某个可选能力**（`SitePort` 的可选成员缺项）—— **明确报错，不回落**（判据 B4 · 原则 6）。
+   *
+   * ★ 判据 C1（同一形态到第 3 次即抽出）——**`message` 由本表产，用例只转发**（原则 6）。
+   */
+  noCapability: (site: string, capability: string) => `站点 ${site} 不支持${capability}`,
 } as const;
 
 /**

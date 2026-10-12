@@ -12,7 +12,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   FINGERPRINT_DIMENSIONS,
-  formatScanAge,
   scanFingerprintCollisions,
   type FingerprintShape,
   type ScannableAccount,
@@ -37,7 +36,6 @@ const acc = (id: string, name: string, fingerprint?: FingerprintShape | null): S
 });
 
 const DIM_TOTAL = FINGERPRINT_DIMENSIONS.length; // 7
-const NOW = 1_700_000_000_000;
 
 describe('FINGERPRINT_DIMENSIONS（原 `Jl` 34253）', () => {
   it('★ 恰好 **7** 个维度，label 逐字', () => {
@@ -191,26 +189,5 @@ describe('scanFingerprintCollisions（原 `zk` 34300）', () => {
   });
 });
 
-describe('formatScanAge（原 `UP` 34366）', () => {
-  it('★ 五档：刚刚 / 分钟 / 小时 / 天 / 日期', () => {
-    expect(formatScanAge(NOW - 30_000, NOW)).toBe('刚刚'); // < 1 分钟
-    expect(formatScanAge(NOW - 5 * 60_000, NOW)).toBe('5 分钟前');
-    expect(formatScanAge(NOW - 3 * 3_600_000, NOW)).toBe('3 小时前');
-    expect(formatScanAge(NOW - 2 * 86_400_000, NOW)).toBe('2 天前');
-  });
-
-  it('★ 各档都是 `Math.floor`（59.9 分钟仍是「59 分钟前」）', () => {
-    expect(formatScanAge(NOW - (59 * 60_000 + 59_000), NOW)).toBe('59 分钟前');
-    expect(formatScanAge(NOW - 23 * 3_600_000 - 3_599_000, NOW)).toBe('23 小时前');
-  });
-
-  it('★ **>= 30 天** ⇒ `YYYY-MM-DD`（本地时区、月日补零）', () => {
-    const ts = new Date(2026, 0, 5, 12, 0, 0).getTime();
-    const later = ts + 31 * 86_400_000;
-    expect(formatScanAge(ts, later)).toMatch(/^2026-01-05$/);
-  });
-
-  it('⚠️ **`ts` 在未来** ⇒ 负数 ⇒ 落进「刚刚」（源版如此，照抄）', () => {
-    expect(formatScanAge(NOW + 60_000, NOW)).toBe('刚刚');
-  });
-});
+// ⚠️ 相对时间（原 `UP`）的单测**不在这里**：`UP` 是通用工具（源里唯一消费者是启动页项目行）
+//   ⇒ 落 `lib/time.formatRelativeTime`，单测在 `lib/tests/time.test.ts`。

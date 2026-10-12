@@ -127,7 +127,7 @@ export function FaceMarksLayer({ nodeId, src, natW, natH, label }: FaceMarksLaye
         setFaceMasking(nodeId, null);
         return;
       }
-      const name = label || '素材';
+      const name = label || FACEMASK_TEXT.defaultName;
       const nextName = name.includes(FACEMASK_TEXT.nameSuffix) ? name : `${name}${FACEMASK_TEXT.nameSuffix}`;
       const done = replaceMaterialImage(nodeId, r.value.dataUrl, { name: nextName, w: r.value.w, h: r.value.h });
       // 原 `124`：外置失败 ⇒ 报「图片保存失败」（原文，不改写）

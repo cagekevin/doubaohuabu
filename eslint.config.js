@@ -16,48 +16,13 @@ const SSOT_KEY_SELECTORS = [
     selector: 'Literal[value="imggen_recurring_assets_v1"]',
     message: '原则5：冻结契约字符串只能出现在 stable/contracts/',
   },
+  {
+    // ★ `access_token` 是 20 键里**另一个非 `doubao-` 前缀**的键 —— 不单列它就在守卫外
+    //   （曾让 `adapters/site/tapnow/scripts.ts` 的注入脚本写死第二份，已收口到 `LS_ACCESS_TOKEN`）。
+    selector: 'Literal[value="access_token"]',
+    message: '原则5：冻结契约字符串只能出现在 stable/contracts/',
+  },
 ];
-
-/**
- * ── 原则 6（`docs/11` §六·五 = 红线）：catch **不得静默吞错**（TD-14-3 的「多行空 catch」缺口）──
- *
- * 【缺口实证】`no-empty`（`allowEmptyCatch:false`）**放过「仅注释」的 catch**：
- *   实测块内只有注释 ⇒ 0 报错。而本仓**全部 4 处**零语句 catch 正是这种形态
- *   （`lib/hostEnv.ts` ×3 的 best-effort 读数 · `state/sendQueue.ts` ×1 的 TD-07-3）
- *   ⇒ 「**预期内失败**」与「**忘了处理**」在机器眼里**不可分**（声索 > 覆盖 = 母体 M2）。
- *
- * 【判据】catch 块内**零语句**时，必须留下**机器可识别**的痕迹：
- *   ① 块内做实际处理（`reportDegrade` / `logger.warn` / 上报）；或
- *   ② 显式标 `// catch-ok: <理由>`。
- *   ⚠️ 标 ② 前**必须回读被捕获的代码**（SOP Step 4 红线③）—— 本规则只保证"标了"，**不保证"理由对"**。
- *   ⚠️ 这是**反向判据**（判"缺痕迹"），不是白名单；本规则是**独立规则名**，
- *      不会被别处 `no-restricted-syntax` 块的 flat-config 覆盖语义掩盖。
- */
-const noSilentCatch = {
-  meta: {
-    type: 'problem',
-    docs: { description: '原则6：catch 不得静默吞错（零语句必须标 catch-ok）' },
-    schema: [],
-    messages: {
-      silent:
-        '原则6（TD-14-3）：catch 块内**零语句** = 静默吞错，机器无法与「忘了处理」区分。' +
-        '请① 块内做实际处理（reportDegrade / logger.warn / 上报），或② 标 `// catch-ok: <理由>`' +
-        '（写前必回读被捕获的代码）。',
-    },
-  },
-  create(context) {
-    return {
-      CatchClause(node) {
-        if (node.body.body.length > 0) return;
-        const src = context.sourceCode ?? context.getSourceCode();
-        const marked = src
-          .getCommentsInside(node.body)
-          .some((c) => /^\s*catch-ok\s*:/.test(c.value));
-        if (!marked) context.report({ node: node.body, messageId: 'silent' });
-      },
-    };
-  },
-};
 
 /**
  * ESLint flat config
@@ -65,7 +30,7 @@ const noSilentCatch = {
  * 依据：docs/11-架构与契约定稿.md
  *   §9.1  机器强制（StrictMode + eslint-plugin-react-hooks）
  *   §5.3  slice 规模约束
- *   §6.5  职责归位七原则
+ *   §6.5  职责归位八原则
  */
 export default tseslint.config(
   {
@@ -78,6 +43,7 @@ export default tseslint.config(
       'public/**', // ★ 第三方静态资源（mediapipe：wasm 加载器 + .tflite 模型），非重写范围
       'docs/**', // 设计文档（Markdown + 少量脚本）
       '.codebuddy/**', // 工作区命令/技能
+      '.tmp/**', // ★ 本地临时验证脚本（Playwright 截图 / 探针，未追踪、非交付物）
       '*.log',
     ],
   },
@@ -92,8 +58,12 @@ export default tseslint.config(
       globals: { ...globals.browser },
     },
     rules: {
-      // ── §6.5 原则 6：错误透传 —— 禁止吞错 ──
-      'no-empty': ['error', { allowEmptyCatch: false }],
+      // ── §6.5 原则 6：错误透传 —— 禁吞错 ──
+      // 载体**只有标准 `no-empty` 一份**（默认即 `allowEmptyCatch:false`；零维护、**无豁免逃逸口**）。
+      // ⚠️ 不给"零语句 catch"另挂自造规则：它必须开一个"标个理由就放行"的出口，而那种出口
+      //    **无法校验理由**（闸只认 token，不认内容）⇒ 等于把「处理错误」降级成「写一句话」，
+      //    正是「合法通过成本 ≈ 0 ⇒ 形同虚设」。修法只有一条：**去处理它**。
+      'no-empty': 'error',
 
       // ── §5.3 slice 规模约束 ──
       // ★ 2026-10-11 关闭（用户裁定）：行数是"**代理指标**"、不是"好设计的度量" ——
@@ -101,8 +71,8 @@ export default tseslint.config(
       //   逼出"为拆而拆"（text.ts → sendPanelText → newImagesText → projectStorageText 四片链，
       //   每拆一次多一个文件 + 一层 re-export 间接）。
       //   ⇒ 规模约束改由**人工 review** 把关（docs/11 §5.3 的「单 slice 建议 ≤300 行」仍生效）。
-      //   ⚠️ 留痕：原规则 = ['error', { max: 400, skipBlankLines: true, skipComments: true }]。
-      //      要恢复：把下行改回上面那串（并同步 AGENTS.md §三 / docs/11 §5.3 措辞）。
+      //   ⚠️ 要恢复：把下行改回 ['error', { max: 400, skipBlankLines: true, skipComments: true }]
+      //      （并同步 AGENTS.md §三 / docs/11 §5.3 措辞）。
       'max-lines': 'off',
 
       // ── 类型纪律 ──
@@ -198,15 +168,20 @@ export default tseslint.config(
   },
 
   {
-    // ── §6.5 原则 6：usecases 不得自造 message 字面量（只能转发上游 Result）──
-    // ⚠️ 本块**覆盖**上面全仓块（flat config 覆盖语义）⇒ **必须重带 `SSOT_KEY_SELECTORS`**，
-    //    否则 usecases 目录会静默丢掉 ssot-keys 覆盖。
+    // ── §6.5 原则 6（usecases 不得自造 message）+ TD-05-1（不得直调 window.api）──
+    // ⚠️ 本块**覆盖**上面全仓块（flat config 覆盖语义）⇒ **必须重带上面块的两条**：
+    //    ① `SSOT_KEY_SELECTORS`；② `window.api` 选择器（`TD-14-4`：此前只带了 ①，
+    //    于是「全仓适用」的声明在 usecases 目录**不成立** —— 声索 > 覆盖，正是母体 M2）。
     files: ['src/core/usecases/**/*.ts'],
     ignores: ['**/tests/**'],
     rules: {
       'no-restricted-syntax': [
         'error',
         ...SSOT_KEY_SELECTORS,
+        {
+          selector: "MemberExpression[object.name='window'][property.name='api']",
+          message: 'TD-05-1：不得直调 window.api —— 宿主能力必须经注入的 HostPort',
+        },
         {
           selector: "Property[key.name='message'] > Literal",
           message: '原则6：usecases 不得自造 message 字面量（只能转发 e.message / 上游 Result）',
@@ -231,14 +206,5 @@ export default tseslint.config(
         },
       ],
     },
-  },
-
-  {
-    // ── §6.5 原则 6（TD-14-3）：catch 不得静默吞错（零语句必须留痕迹）──
-    //   ⚠️ 独立规则名（本地内联插件）⇒ 不受其它块的 `no-restricted-syntax` 覆盖语义影响；
-    //     范围 = `src/**`（与全仓块一致；`electron/**` 在顶层 ignores，不在本规则范围）。
-    files: ['src/**/*.{ts,tsx}'],
-    plugins: { local: { rules: { 'no-silent-catch': noSilentCatch } } },
-    rules: { 'local/no-silent-catch': 'error' },
   },
 );

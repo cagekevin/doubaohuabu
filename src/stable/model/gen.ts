@@ -1,6 +1,6 @@
 /**
  * AI 生成模型（API 通道 / provider）—— ★ 冻结契约（**值形状**不可改）
- * 依据：docs/04-AI协议版.md 单元 4 + docs/05-配置契约层.md §五
+ * 依据：docs/过程.md 单元 4 + docs/05-配置契约层.md §五
  * 归属说明：数据形状属 `stable`（L1）—— 见 `./node.ts` 头部说明
  */
 
@@ -175,6 +175,4 @@ export interface GenResult {
   poster?: string;
 }
 
-/** 生成轮询终止原因（原 `DR` 36335+） */
-export const GEN_END_REASONS = ['settled', 'no-real-image', 'timeout', 'already-finished', 'manual'] as const;
-export type GenEndReason = (typeof GEN_END_REASONS)[number];
+

@@ -1,7 +1,7 @@
 /**
  * 指纹相关常量（★ SSOT）
  *
- * 依据：docs/06-账号与站点集成.md §3 + `zk`（shared.js:34296-34336）
+ * 依据：docs/过程.md-账号与站点集成.md §3 + `zk`（shared.js:34296-34336）
  */
 
 /**
@@ -13,8 +13,5 @@ export const FINGERPRINT_WARN_RATIO = 0.7;
 /** 指纹维度数（原 `Jl.length`）—— 比较分母 */
 export const FINGERPRINT_DIMENSION_COUNT = 7;
 
-/**
- * 当前指纹版本（原 `Zh = 3`，shared.js:25120）
- * ⚠️ 与 `stable/model/account.ts` 的 `isFingerprintStale` 共用
- */
+/** 当前指纹版本（原 `Zh = 3`，shared.js:25120） */
 export const FINGERPRINT_VERSION = 3;

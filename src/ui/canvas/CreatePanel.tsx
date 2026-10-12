@@ -89,7 +89,7 @@ export type CreatePanelState =
       flowPos: { x: number; y: number };
       /**
        * 右键时画布上**有没有**选中节点（原 `hasSelection`）
-       * ⚠️ **源只存不用** —— 面板标题/三个选项都没读它（逐字保留，见 `docs/13` §3）
+       * ⚠️ **源只存不用** —— 面板标题/三个选项都没读它（逐字保留，见 `docs/过程.md` §3）
        */
       hasSelection: boolean;
     };

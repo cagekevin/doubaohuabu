@@ -95,10 +95,6 @@ export function sourceTag(type: string | undefined): string {
  *
  * ⚠️ 与源一致：只看 `new URL()` **成不成功** —— 相对路径 / 乱码 ⇒ 抛 ⇒ 空串（**不编造**）；
  *    而 `img://abc` 是**合法 URL**（scheme `img` + host `abc`）⇒ 会返回 `abc`（源版同）。
- * ⚠️ **为什么它住这里而不是 `lib/url.ts`**：`lib/url.ts` 当前**整个文件在死代码基线里**
- *   （无生产消费者）—— 一旦 import 它，knip 会把该文件**变为可达**，从而**暴露**它那 4 个
- *   只有测试引用的导出（`normalizeUrl`/`stripSignature`/`shouldDiscardImage`/`fileNameFromUrl`）
- *   ⇒ 平白把别人的死代码台账搅红。等那个文件有自己的消费者时，本函数应搬回去。
  */
 export function hostnameFromUrl(url: string | null | undefined): string {
   if (!url) return '';

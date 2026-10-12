@@ -7,6 +7,7 @@
  *   ⇒ 抽成一份，两处 `...facePortFns` 展开复用，避免抄第二份。
  *
  * ⚠️ 底层 `detectFaces`（`./faceDetect`）与 `applyFaceMask`（`./facemask`）都会**抛**
+ *   （`faceDetectStats` 是**同步直通**：读内存计数，不会失败 ⇒ 不包 `Result`）
  *   （WASM 加载 / 解码失败 / 空源 / 非法框 / 尺寸为 0）⇒ 这里统一包成 `Result`
  *   （原则 6：契约声明"会失败"，调用方才被编译器逼着处理；**错误原文照带**，不重写 message）。
  *
@@ -17,10 +18,10 @@
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import type { FaceBox, FaceMaskOpts, FaceMaskResult } from '@/core/rules/facemask';
 import type { MediaPort } from '@/core/ports/host.port';
-import { detectFaces } from './faceDetect';
+import { detectFaces, faceDetectStats } from './faceDetect';
 import { applyFaceMask } from './facemask';
 
-export const facePortFns: Pick<MediaPort, 'detectFaces' | 'applyFaceMask'> = {
+export const facePortFns: Pick<MediaPort, 'detectFaces' | 'faceDetectStats' | 'applyFaceMask'> = {
   detectFaces: async (src: string): Promise<Result<FaceBox[]>> => {
     try {
       return ok(await detectFaces(src));
@@ -28,6 +29,8 @@ export const facePortFns: Pick<MediaPort, 'detectFaces' | 'applyFaceMask'> = {
       return err('unknown', toMessage(e), e);
     }
   },
+  // ★ **同步直通**（不经 IPC、不会失败 ⇒ 不包 `Result`）—— 与 `detectFaces` 同属渲染层本地能力
+  faceDetectStats,
   applyFaceMask: async (
     src: string,
     face: FaceBox,

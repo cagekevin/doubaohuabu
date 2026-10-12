@@ -180,3 +180,19 @@ export const SEND_WATCH_WINDOW_MS = 180000;
 export const SEND_WATCH_POLL_MS = 2000;
 /** 每 N 轮打一条「监测中…」日志（原 `:2664` 的 `at % 15 === 0`） */
 export const SEND_WATCH_LOG_EVERY = 15;
+
+// ─────────────────────────── 自动换号（原 `be` 2420-2559）───────────────────────────
+
+/**
+ * 换号的**动作名**（原 `be` 的第二参 `W`，只进日志）
+ *
+ * ⚠️ 与「原因」分开：原因是随读数变化的一句话（`quotaLowText` / 通知原文），动作名是固定标签。
+ * ⚠️ **只有两处会换号**（逐字对源）：额度预警（`:2636`）与「今日免费次数用尽」（`:2577`）。
+ */
+export const SWITCH_ACTION = {
+  quotaExhausted: '额度用尽',
+  quotaLow: '额度不足',
+} as const;
+
+/** 自动换号的次数上限（原 `:2310` 的 `typeof ve.maxSwitches == 'number' ? ve.maxSwitches : 3`） */
+export const SWITCH_MAX_TIMES = 3;

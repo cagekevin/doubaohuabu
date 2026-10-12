@@ -28,7 +28,7 @@
  *   —— 面板位置的读写经控制器，`ports.storage` 不进 `ui`（TD-16-8）。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSendQueue, useStore } from '@/state';
 import { clampPanelPosition } from '@/core/rules/sendQueuePanel';
 import {
@@ -39,12 +39,17 @@ import {
   type GenReplyLite,
 } from '@/core/rules/genProgress';
 import { queueStats } from '@/core/rules/sendQueueOps';
+import { nextPoolStrategy } from '@/core/rules/accountPick';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
 import styles from './SendQueuePanel.module.css';
 import shared from '@/ui/common/shared.module.css';
 import { PanelShell } from '@/ui/common/PanelShell';
 
-/** 面板假想尺寸（原 `Qd(e, t, n, r)` 的 `n`/`r`）—— 用于把坐标夹进视口 */
+/**
+ * 面板尺寸（★ **唯一真源** —— `SendQueuePanel.module.css` 经 `--sq-panel-w` ／ `--sq-panel-h` 消费）
+ *
+ * 依据：原 `Qd(e, t, n, r)` 的 `n`/`r` —— 用于把坐标夹进视口（`clampPanelPosition`）。
+ */
 const PANEL_W = 320;
 const PANEL_H = 260;
 /** tick 间隔（原 61-65 的 `setTimeout(…, 1000)`） */
@@ -74,6 +79,12 @@ export function SendQueuePanel() {
   const queueProgress = useStore((s) => s.queueProgress);
   const concurrency = useStore((s) => s.accountConcurrency);
   const nodes = useStore((s) => s.nodes);
+  /**
+   * ★ **选号策略**（原 `z3.jsx:273` 的 `b`）—— 初值由 `bootstrap/hydrate` 从
+   *   `doubao-account-pool-strategy` 读回；写方 = foot 的切换按钮。
+   */
+  const poolStrategy = useStore((s) => s.poolStrategy);
+  const setPoolStrategy = useStore((s) => s.setPoolStrategy);
 
   const items = useMemo(() => queue?.items ?? [], [queue]);
   const paused = !!queue?.paused;
@@ -194,7 +205,14 @@ export function SendQueuePanel() {
       wrapperRef={panelRef}
       className={`${styles.panel} ${dragging ? styles.dragging : ''}`}
       // 没拖过时贴左下角（源版默认也是屏幕左下，位置来自 `U3` 的兜底）
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      // ★ 尺寸经 CSS 变量下发（唯一真源 = 上面的 PANEL_W ／ PANEL_H）—— 防"夹取尺寸与实渲染尺寸"漂移
+      style={
+        {
+          ...(pos ? { left: pos.x, top: pos.y } : {}),
+          '--sq-panel-w': `${PANEL_W}px`,
+          '--sq-panel-h': `${PANEL_H}px`,
+        } as unknown as CSSProperties
+      }
       testId="send-queue-panel"
       title={SEND_QUEUE_TEXT.title}
       meta={
@@ -312,6 +330,16 @@ export function SendQueuePanel() {
           </div>
 
           <div className={styles.foot}>
+            {/* ★ **选号策略**（原 `z3.jsx:271-276`）—— foot 最左一颗；点一下在两种策略间切换 */}
+            <button
+              type="button"
+              className={styles.btn}
+              title={SEND_QUEUE_TEXT.strategyToggleTitle}
+              onClick={() => setPoolStrategy(nextPoolStrategy(poolStrategy))}
+            >
+              {SEND_QUEUE_TEXT.pickAccountPrefix}
+              {SEND_QUEUE_TEXT.strategyLabels[poolStrategy]}
+            </button>
             <button type="button" className={styles.btn} onClick={() => (paused ? q.resume() : q.pause())}>
               {paused ? SEND_QUEUE_TEXT.resume : SEND_QUEUE_TEXT.pause}
             </button>

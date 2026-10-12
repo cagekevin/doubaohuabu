@@ -1,8 +1,8 @@
 /**
  * SitePort —— 站点适配（★ 最易变层；只有类型，零实现）
  *
- * 依据：docs/11 §4.2 + docs/06-账号与站点集成.md
- * 铁律（来自 docs/10 的硬约束，★ 必须体现在契约注释里）：
+ * 依据：docs/11 §4.2 + docs/过程.md-账号与站点集成.md
+ * 铁律（来自 docs/过程.md 的硬约束，★ 必须体现在契约注释里）：
  *   - **选择器不外泄**：四级降级 / `data-input-engine-*` / `ability_type=17` 全在 adapter 内部
  *   - **不开自动轮询抓取**（#4）：`scan` 必须**显式调用**，不得自启定时器
  *   - **零注入**（#2）：不得用 JS 改 navigator/screen/webgl
@@ -13,25 +13,77 @@ import type { GenResult } from '@/stable/model/gen';
 import type { Result } from '@/core/model/result';
 // ★ **2026-10-11（TD-04-4）**：扫描枚举的**运行时真源**已搬到 `core/rules/scanChain.ts`
 //   （端口只能有类型，原则 3）⇒ 本文件只 `import type` 转发给既有消费者。
-import type { ScanPhase, ScanScope } from '@/core/rules/scanChain';
+import type { PageKind, ScanPhase, ScanScope } from '@/core/rules/scanChain';
+// ★ 宿主面（`detectVideos` 的返回项 —— 形状真源在 `core/ports/host.port`）
+import type { DetectedVideo } from '@/core/ports/host.port';
+// ★ 发送入参 = **已组装形态**（品牌类型，只由 `toSitePayload` 产出）—— 见下方 `send` 的契约注释
+import type { SiteSendPayload } from '@/core/rules/payload';
 
 export type { ScanPhase, ScanScope };
 
-/** 扫描选项 */
+/**
+ * 扫描选项 —— **只留确实有落点的那几项**
+ *
+ * ⚠️ 源 `wp` 还有 `haveHashes` / `allowedScopes` / `skipNonCanvas`，本仓**不收**：
+ *   · 「只留画布图」已是 `core/rules/scanClean.ts` 的**默认**（`SCAN_CLEAN_DEFAULT_SCOPE`），
+ *     再开一个可覆盖的旋钮 = 同一件事两个入口；
+ *   · 内容去重（`haveHashes`）由落库方 `addLovartImages` 按 `dataUrl` 承担（`h0` 的 `phash` 恒空
+ *     ⇒ 源实际也只比精确哈希，两边等价）；
+ *   · `skipNonCanvas`（拒非画布页）在源**手动**抓取那条路上就是 `false`（`_Component26.jsx:366`），
+ *     而本仓值守只覆盖 Tapnow —— 源头 Tapnow 那条路用轻量探测（`Yl`/`dP`）判页、**不用**这个开关。
+ *   ⇒ 三者在本仓**都没有调用方**（留着就是"看着支持、其实空转"）。
+ */
 export interface ScanOptions {
-  /** 已见过的 URL（去重） */
+  /** 已在库 / 已取过的 url（原 `haveUrls` ＋ `seen`）—— 适配器在**取图之前**滤（原 `wp:32588`） */
   seenUrls?: readonly string[];
-  /** 已见过的内容哈希（去重） */
-  seenHashes?: readonly string[];
-  /** 允许的作用域（默认只取画布） */
-  allowedScopes?: readonly ScanScope[];
-  /** 跳过非画布页 */
-  skipNonCanvas?: boolean;
-  /** 最小边长（px） */
+  /** 最小边长（px）—— 交页内脚本（原 `wp.minSide`） */
   minSide?: number;
+  /**
+   * 候选上限（原 `wP` 的 `v.slice(0, o)`）—— ⚠️ **只有 `scanCanvas` 用它**。
+   *
+   * ⚠️ 为什么不在 `scan` 上用：源里截断在 **`Yh` 清洗之后、取图之前**（`wp:32592`），
+   *    而本仓的 `Yh`（`cleanScannedImages`）跑在**落盘之后**（用例侧）⇒ 在适配器里截断会
+   *    截到"还没清洗过的候选"，与源不等价（见 `usecases/scanGallery` 的说明）。
+   *    画布 API 那条链**没有 `Yh` 这一步**（源也不做）⇒ 截断可以、也应该在取图前做。
+   */
+  limit?: number;
   /** 阶段回调（只上报，不写 store —— 原则 2；形状对齐原 `onStatus({phase,message})`） */
   onPhase?: (event: ScanPhaseEvent) => void;
 }
+
+/**
+ * 可选的「**探测当前画布**」能力（原 `dP` 33430-33460 的画布支 = `Yl` + `qc`）
+ *
+ * ★ **一次调用给出值守需要的两个事实**（源里是 `Yl` 与 `dP` 两次调用；本仓合成一次，
+ *   少一趟跨进程 `executeJavaScript` —— 两档 idle 语义**都在**）：
+ *   · `canvasId === ''` ⇒ 当前**不在画布页**（源 `Ee:538-543`：`idleRounds = Math.max(idleRounds, xl-1)`）
+ *   · `canvasId !== ''` 且 `urls` 为空 ⇒ 画布上**还没有图**（源 `Ee:554`：`idleRounds += 1`）
+ * ⚠️ **缺项 ⇒ 该站点没有这个概念**（如 lovart 的画布 id 只活在 URL 路径里）⇒ 值守**不做**这道门槛。
+ * ⚠️ 空画布/不在画布页**都不是错误** ⇒ 返回 `ok`（不拿错误表达"期望内的状态"）。
+ */
+export type PeekCanvasFn = (account: Account) => Promise<Result<PeekCanvasResult>>;
+
+/** `peekCanvas` 的结果 */
+export interface PeekCanvasResult {
+  /** 当前画布 id —— **空串 = 不在画布页**（与源 `Yl` 的空串语义一致） */
+  canvasId: string;
+  /**
+   * 当前画布里的图片 url
+   * ⚠️ **不与 `seenUrls` 比对**（源 `dP` 只看它决定"攒满 12 张就早退"；本仓只用它判"空不空"）
+   */
+  urls: string[];
+}
+
+/**
+ * 可选的「**扫当前画布（站点接口）**」能力（原 `wP` 的画布半 · `qc`）
+ *
+ * ★ 与 `scan` 的区别：`scan` 读**页面 DOM**（`hp` 脚本），本能力读**站点接口**（画布节点 API）
+ *   ⇒ 两件事，结果的**形状相同**（`ScanResult`，`via: 'api'`）。
+ * ⚠️ **缺项 ⇒ 该站点没有这条链** ⇒ 用例**明确报错**（`SEND_TEXT.noCapability`），不回落 DOM 扫描
+ *   （源也没有这条回落：`xp` 与 `wp` 是两条独立函数）。
+ * ⚠️ `opts.seenUrls` 同样有效：**取图之前**先滤（与 `scan` 的语义一致）。
+ */
+export type ScanCanvasFn = (account: Account, opts: ScanOptions) => Promise<Result<ScanResult>>;
 
 /** 抓取阶段机（原 `onStatus`）—— `ScanPhase` 的类型见文件头说明（已迁至 `core/rules/scanChain.ts`） */
 export interface ScanPhaseEvent {
@@ -47,8 +99,8 @@ export interface ScannedImage {
   scope: ScanScope;
   natW?: number;
   natH?: number;
-  /** 走的哪条通道 */
-  via: 'frames' | 'webview';
+  /** 走的哪条通道（`api` = 站点接口读画布节点，见 `ScanCanvasFn`） */
+  via: 'frames' | 'webview' | 'api';
 }
 
 /**
@@ -85,26 +137,45 @@ export interface ScanResult {
   failed?: number;
 }
 
-/** 发送载荷（原 `$L` 40236-40317） */
-export interface SendPayload {
-  /** 已组装的最终文本（换行合并后） */
-  text: string;
-  /** 参考图引用（`img://`） */
-  images: readonly string[];
-  /** 参数（模型 / 时长 / 比例…） */
-  params: Record<string, unknown>;
-  autoSend: boolean;
-  /** 来源标记（原 40230+） */
-  source: 'canvas-account-node' | 'canvas-text-node' | 'canvas-image-gen';
-}
+/**
+ * 发送入参 = `core/rules/payload` 的 **`SiteSendPayload`**（原 `$L` 40236-40317 的**已组装**形态）
+ *
+ * ⚠️ **它不在这里定义**（结构约束 M1，`docs/11` §六·六）：形状与**品牌**都住
+ *   `core/rules/payload`，且**只由 `toSitePayload()` 产出** —— 端口只**引用类型**。
+ *   ⇒ 「把跨进程报文直接传给 `send`」**编译不过**（此前此处另有一个同名 `SendPayload`，
+ *     两者靠名字区分 ⇒ `as` 一糊就传错，正是 `payload.images.length` 抛异常的根因）。
+ */
 
 /** 发送结果 */
 export interface SendResult {
   /** 幂等键（防重复点菜单） */
   sessionId: string;
-  /** 生成轮询终止原因 */
-  endReason: 'settled' | 'no-real-image' | 'timeout' | 'already-finished' | 'manual';
+  /**
+   * 生成轮询终止原因
+   *
+   * ★ **2026-10-12 加 `'filled-only'`**：账号节点的「**仅填入**」（`autoSend === false`）
+   *   —— 只把文本/图填进对话框，**不点发送**、也就**没有轮询**（原 `Be` 的 Phase 3）。
+   * ⚠️ 该字段**目前没有消费者**（各实现写、无人读）—— 如实记在 `docs/过程.md（原 plan/02）` §4。
+   */
+  endReason: 'settled' | 'no-real-image' | 'timeout' | 'already-finished' | 'manual' | 'filled-only';
   results: GenResult[];
+  /**
+   * ★ **2026-10-12（账号节点「填入」）** —— 源 `Be` 的**回执字段**（`_Component43:1288-1302`）：
+   *   账号节点据此拼那条摘要（原 `OL.jsx:340-359`，本仓纯层
+   *   `core/rules/accountNode.accountSendFeedback`）。
+   *
+   * ⚠️ **全部可选**：图片/视频通道只关心 `results`，不填这些（它们没有"只填入"这个概念）。
+   */
+  /** 只填不点（原 `fillOnly`） */
+  fillOnly?: boolean;
+  /** 有没有**真的点到**发送按钮（原 `autoClicked`；`autoSend=false` 时恒 `false`） */
+  autoClicked?: boolean;
+  /** 实际贴上去的参考图数（原 `imagesAttached`） */
+  imagesAttached?: number;
+  /** 参考图总数（原 `imagesTotal`） */
+  imagesTotal?: number;
+  /** 文本有没有填进输入框（原 `textInserted`） */
+  textInserted?: boolean;
 }
 
 /** 站点可用性探测 */
@@ -112,13 +183,62 @@ export interface SiteProbe {
   usable: boolean;
   /** 登录态是否有效 */
   loggedIn: boolean;
-  /** 探测到的页面类型 */
-  pageKind?: 'canvas' | 'feed' | 'other';
+  /** 探测到的页面类型（真源 = `core/rules/scanChain.ts` 的 `PageKind`） */
+  pageKind?: PageKind;
 }
 
 /** 站点适配器（每个站点一个实现） */
+/** 「生成确认」链的**回复计数**读数（原 `Hd`/`A0` 的返回；探针失败时**只带 `error`**） */
+export interface ReplyCountReading {
+  hit?: boolean;
+  count?: number;
+  /** **最后一条**命中的原文（原 `text`；`Hd` 里是 `sample`） */
+  text?: string;
+  bodyLen?: number;
+  inputLen?: number;
+  error?: string;
+}
+
+/** 输入框内容读数（原 `j0`：`{found, text}`；探针失败时只带 `error`） */
+export interface ComposerTextReading {
+  found?: boolean;
+  text?: string;
+  error?: string;
+}
+
+/** 点内联「确认生成」按钮的返回（原 `lD`：`{found, clicked, label, strategy}`） */
+export interface ClickConfirmReading {
+  found?: boolean;
+  clicked?: boolean;
+  label?: string;
+  strategy?: string;
+  error?: string;
+}
+
+/**
+ * 「把一段文本填进输入框并点发送」的结果
+ *
+ * ⚠️ **只说卡在哪一步**（`stage`），**不自造文案**（原则 6）——
+ *   用户可见文案由调用方（`state`）从 `constants/text.ts` 取。
+ */
+export type ComposerSendOutcome =
+  | { ok: true }
+  | { ok: false; stage: 'no-view' | 'clipboard' | 'paste' | 'mismatch' | 'click'; detail?: string };
+
 export interface SitePort {
   readonly kind: SiteType;
+
+  /**
+   * ★ 可选的「**探测当前画布**」能力（原 `dP` = `Yl` + `qc`）—— 值守轮次的门槛。
+   *    缺项 ⇒ 该站点没有这个概念 ⇒ 值守不做门槛（见 `PeekCanvasFn` 的说明）。
+   */
+  readonly peekCanvas?: PeekCanvasFn;
+
+  /**
+   * ★ 可选的「**扫当前画布（站点接口）**」能力（原 `wP` 的画布半 · `qc`）——
+   *   画廊面板的「扫描 Tapnow 画布」用它（见 `ScanCanvasFn` 的说明）。
+   */
+  readonly scanCanvas?: ScanCanvasFn;
 
   /**
    * 该站点的「会话页」地址 —— 后台页导航目标（原 `aS`/`iS` shared.js:38717-38718）
@@ -185,6 +305,48 @@ export interface SitePort {
   readonly fetchWatermarkFree?: (ctx: ImageQuestionContext, vid: string) => Promise<Result<WatermarkVideo>>;
 
   /**
+   * 可选的「**发送后检测视频**」能力（原 `detect-videos` handler 的取数，`electron/main.js:2224`）
+   *
+   * ★ **只有豆包 / Dola** 有这条链（host `detectVideos` 打的是 `/samantha/aispace/` 的 API）。
+   *   缺项时 `state/postSendDetect` **直接不跑**（不回落、不报假成功）。
+   * ⚠️ **必须先站到 aispace 页**（源注释：homepage API 在 `/chat/` 页返回空数据）—— 本方法
+   *   内部**只在必要时导航**（已在 aispace ⇒ 不导航）；**不还原**（整个检测会话只站一次，
+   *   收尾由 `leaveDetectPage` 负责 —— 逐轮「站过去又站回来」会 4s 一次抖动）。
+   * ⚠️ `ctx.webContentsId` 由 `BackendPagePort.webContentsIdOf` 给（**不占租约** —— 检测可能跑
+   *   50 分钟，占租约会把账号锁死）。
+   * @param seenKeys 已见键（传给后端当跳过集合）
+   */
+  readonly detectVideos?: (
+    ctx: ImageQuestionContext,
+    seenKeys: readonly string[],
+  ) => Promise<Result<{ videos: DetectedVideo[] }>>;
+
+  /** 检测结束 ⇒ 把页面**站回去**（原 `it` 的 `finally` 里 `es(de, La)`）。未站过去 ⇒ 无操作 */
+  readonly leaveDetectPage?: (ctx: ImageQuestionContext) => void;
+
+  /**
+   * ★ **「自动确认生成」用的页内能力**（原 `kt` 的 `Hd`/`A0`/`lD`/`j0`/`Zl`，`_Component43.jsx:1738-2052`）
+   *
+   * ★ **只有豆包 / Dola** 有这条链 —— 后台会先回一句「确认后我再开始生成视频」，
+   *   必须再点一次内联按钮（或回一句确认语）它才真正开工。
+   *   缺项 ⇒ `state/autoConfirm` **直接不跑**（不回落、不报假成功）。
+   * ⚠️ 每个方法都**要求调用方已持有该账号的后台页租约**，且那份租约必须是
+   *   `prepareForSend` **不给 `targetUrl`** 取的（＝**续用当前会话页**，不能把会话刷掉）。
+   */
+  readonly genConfirm?: {
+    /** 读「已提交 / 正在生成」回复**计数**（原 `Hd`，`shared.js:37494`） */
+    probeSubmitted(ctx: ImageQuestionContext): Promise<Result<ReplyCountReading>>;
+    /** 读「请先确认再生成视频」回复**计数**（原 `A0`，`shared.js:37519`） */
+    probeConfirmRequest(ctx: ImageQuestionContext): Promise<Result<ReplyCountReading>>;
+    /** 点**回复消息内联**的「确认生成」按钮（原 `lD`，`shared.js:37223`） */
+    clickConfirm(ctx: ImageQuestionContext): Promise<Result<ClickConfirmReading>>;
+    /** 读输入框**内容**（原 `j0`，`shared.js:37252`） */
+    readComposer(ctx: ImageQuestionContext): Promise<Result<ComposerTextReading>>;
+    /** 把 `text` 填进输入框并点发送（原 `copyTextToClipboard` + `Qe` + `Zl`） */
+    sendComposer(ctx: ImageQuestionContext, text: string): Promise<ComposerSendOutcome>;
+  };
+
+  /**
    * 可选的「**按分享链接批量拉无水印**」能力（原 `resolveThreadAndFetch` 里 `gD` 页内脚本）
    *
    * ⚠️ `threadId` 由**调用方**从分享链接里剥出（`/thread/<id>`），本方法只收 id。
@@ -236,7 +398,7 @@ export interface SitePort {
    *    ⇒ 红线**只针对站点能力**（本项 `autoWatch` 那类）；账号类型的领域判断**本来就在 `core/rules`** ✓。
    *    遵守红线的实例见 `state/accountOps.ts:436`（"只问注册表 `ports.sites[type].autoWatch`，**不写** `type === 'lovart'`"）。
    * ⚠️ **缺项 ⇒ 不支持**（调用方**跳过**该站点，不回落、不报错）。
-   * ⚠️ **`lovart` 故意不声明**：风控 —— `docs/10` #11 · `electron/main.js:2749`「默认关闭
+   * ⚠️ **`lovart` 故意不声明**：风控 —— `docs/过程.md` #11 · `electron/main.js:2749`「默认关闭
    *    **Lovart** 自动抓取，避免每 3 秒执行一次页面脚本被判定为机器人」。⚠️ 该约束**只点名 Lovart**
    *    （那段就叫「Lovart 容器隔离」）；其余站点照常声明（见 `tapnow/index.ts`）。
    * ⚠️ **与 `scan` 的关系**：`scan` = 「能不能抓」；本项 = 「能不能**自动反复**抓 + 什么节奏」。
@@ -253,7 +415,7 @@ export interface SitePort {
 
   /**
    * 抓取素材。
-   * ⚠️ **必须显式调用**，不得自启定时器（docs/10 #4：每 3 秒执行页面脚本会被判机器人）
+   * ⚠️ **必须显式调用**，不得自启定时器（docs/过程.md #4：每 3 秒执行页面脚本会被判机器人）
    * ⚠️ 降级链（frames → webview）在**实现内部**，不外泄
    */
   scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>>;
@@ -261,9 +423,9 @@ export interface SitePort {
   /**
    * 发送到站点。
    * ⚠️ 选择器策略（四级降级）在**实现内部**
-   * ⚠️ 失败必须返回 Result，**不得抛异常**（docs/10 #6）
+   * ⚠️ 失败必须返回 Result，**不得抛异常**（docs/过程.md #6）
    */
-  send(account: Account, payload: SendPayload): Promise<Result<SendResult>>;
+  send(account: Account, payload: SiteSendPayload): Promise<Result<SendResult>>;
 
   /** 探测账号在该站点的可用性 */
   probe(account: Account): Promise<Result<SiteProbe>>;

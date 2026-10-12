@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { base64ToBytes, exactHashFromDataUrl, hammingDistance, hash32, hashFromImgRef, sha1Hex } from '../hash';
-import { fileNameFromUrl, normalizeUrl, shouldDiscardImage, stripSignature } from '../url';
+import { normalizeUrl, stripSignature } from '../url';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -123,44 +123,6 @@ describe('stripSignature（原 `Od`）', () => {
   });
 });
 
-describe('shouldDiscardImage（原 `RR`）', () => {
-  it('svg → 丢弃', () => {
-    expect(shouldDiscardImage('https://a.com/x.svg')).toBe(true);
-    expect(shouldDiscardImage('https://a.com/x.svg?v=1')).toBe(true);
-  });
-  it('头像/logo/icon → 丢弃', () => {
-    expect(shouldDiscardImage('https://a.com/avatar/u1.png')).toBe(true);
-    expect(shouldDiscardImage('https://a.com/logo.png')).toBe(true);
-    expect(shouldDiscardImage('https://a.com/ui/icon-close.png')).toBe(true);
-  });
-  it('长边 <200px → 丢弃', () => {
-    expect(shouldDiscardImage('https://a.com/i.png', { w: 120, h: 90 })).toBe(true);
-    expect(shouldDiscardImage('https://a.com/i.png', { w: 800, h: 600 })).toBe(false);
-  });
-  it('文件 <4KB → 丢弃', () => {
-    expect(shouldDiscardImage('https://a.com/i.png', { bytes: 1000 })).toBe(true);
-    expect(shouldDiscardImage('https://a.com/i.png', { bytes: 50000 })).toBe(false);
-  });
-  it('正常图 → 保留', () => {
-    expect(shouldDiscardImage('https://a.com/gen/abc123.png', { w: 1024, h: 1024, bytes: 300000 })).toBe(false);
-  });
-  it('空 url → 丢弃', () => {
-    expect(shouldDiscardImage('')).toBe(true);
-  });
-});
-
-describe('fileNameFromUrl（原 `kR`）', () => {
-  it('取末段', () => {
-    expect(fileNameFromUrl('https://a.com/x/y/photo.png?sig=1')).toBe('photo.png');
-  });
-  it('无末段 → null', () => {
-    expect(fileNameFromUrl('https://a.com/')).toBeNull();
-    expect(fileNameFromUrl('not a url')).toBeNull();
-  });
-  it('解码百分号转义', () => {
-    expect(fileNameFromUrl('https://a.com/%E5%9B%BE.png')).toBe('图.png');
-  });
-});
 
 describe('hash32（FNV-1a 32 ⇒ base36；`TD-05-6` 收口的会话键哈希段）', () => {
   it('空串 ⇒ FNV-1a 的偏移基 2166136261 的 base36', () => {

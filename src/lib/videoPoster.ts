@@ -4,7 +4,8 @@
  * 用途：文生视频**历史版本**弹层里给「还没有海报」的历次出片**懒生成**一张缩略图
  *   （原 `YL.jsx:439-459` 的 effect）。
  *
- * 归属：纯 DOM 工具（`lib` 层，L0；与 `lib/hostEnv.ts` 同法 —— `lib` 允许接触浏览器能力）。
+ * 归属：⚠️ **待归位** —— 它 `document.createElement('video')`（碰宿主）⇒ 按原则 4 后半「脏归 adapters」
+ *   应进 `adapters/media/`；现暂住 `lib/`（**越权**，已登记 `TD-16-110`）。
  *
  * ⚠️ 与源逐字对齐的行为：
  *   · `url` 为空 / 无 `document` ⇒ **`Promise.resolve(null)`**（不抛）

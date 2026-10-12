@@ -1,5 +1,5 @@
 /**
- * 回复类型分类单测 —— 回源 `FR`(36571) / `BR`(36579) / `HR`(36587) / `WR`(36595) / `VR`(36626)
+ * 回复类型分类单测 —— 回源 `FR`(36571) / `BR`(36579) / `HR`(36587) / `WR`(36595)
  *
  * 原则 7：只测纯逻辑（本文件在 `core/rules/tests/` 下，合规）
  */
@@ -8,10 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyReply,
   isGenerating,
-  isNewReply,
   isNoGeneration,
   isOfferToStart,
-  REPLY_SENTINEL,
   type ReplyKind,
 } from '../replyKind';
 
@@ -81,30 +79,5 @@ describe('三个判定函数（原 `FR` / `BR` / `HR`）—— 直接测，含**
 
   it('判定前先做空白归一（首尾空白不影响）', () => {
     expect(isGenerating('  排队生成中  ')).toBe(true);
-  });
-});
-
-describe('isNewReply（原 `VR` 36626）', () => {
-  it('非空、不等于哨兵句、且与上次不同 → true', () => {
-    expect(isNewReply('上一句', '新一句')).toBe(true);
-    expect(isNewReply('', '新一句')).toBe(true);
-  });
-
-  it('相同 → false', () => {
-    expect(isNewReply('同一句', '同一句')).toBe(false);
-  });
-
-  it('★ 哨兵句不算新回复', () => {
-    expect(isNewReply('', REPLY_SENTINEL)).toBe(false);
-    expect(isNewReply('别的', REPLY_SENTINEL)).toBe(false);
-  });
-
-  it('空白归一后再比较（`a  b` 与 `a b` 视为同一句）', () => {
-    expect(isNewReply('a  b', 'a b')).toBe(false);
-  });
-
-  it('空当前 → false', () => {
-    expect(isNewReply('上一句', '')).toBe(false);
-    expect(isNewReply('上一句', null)).toBe(false);
   });
 });

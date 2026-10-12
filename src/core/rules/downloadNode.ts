@@ -61,7 +61,7 @@ export function downloadFileName(data: { label?: unknown; vid?: unknown } | null
  *   ① **只看直接入边**（`edge.target === nodeId`）—— 不递归上游；
  *   ② 源节点必须是 **`video`** 且 `data.url` 非空（`img`/`material` 一律不是下载目标）；
  *   ③ **不去重** —— 若同一源节点连了两条边，它会**出现两次**（源版就是 `map` 后 `filter`）。
- *      `docs/16` 记的图规则不允许重复边，故正常数据下不会发生；这里**照抄不擅自加去重**
+ *      `docs/过程.md` 记的图规则不允许重复边，故正常数据下不会发生；这里**照抄不擅自加去重**
  *      （加了就等于替源版改行为）。
  */
 export function collectDownloadTargets(

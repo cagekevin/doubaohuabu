@@ -1,8 +1,10 @@
 /**
  * 豆包 / Dola 站点适配器（★ 最易变层）
  *
- * 依据：docs/03-人类版.md §4 §6 + docs/10（后端硬约束）
+ * 依据：docs/过程.md §4 §6 + docs/过程.md（后端硬约束）
  *   - `Bu` shared.js:40411-40530 —— 发送（含 `sessionId` **幂等**）
+ *   - `Be` `_Component43.jsx:807-1318` —— **管线本体**（`Bu` 的 transport 真身）：
+ *     Phase 1 文本填入（`:851-887`）/ 2 附图 / 3a 校验（`:1139-1215`）/ 3b 点发送（`:1237`）
  *   - `DR` shared.js:36335-36553 —— 生成结果轮询（**结果来自 webview 扫描**，不是 `lovartFetchImages`）
  *   - `Xk` shared.js:35949-36035 —— 结果扫描器（`./../shared/scanScripts.ts`）
  *   - `Zl` 37118-37222 —— 发送按钮四级降级（`./scripts.ts`）
@@ -10,26 +12,60 @@
  * 铁律（契约注释）：
  *   - ★ **宿主能力一律经 `HostPort` 注入**，**禁止直调 `window.api`**（TD-05-1）
  *     —— `webview` DOM 操作例外：那是渲染层自己的元素，不是宿主 IPC
- *   - ★ **不开自动轮询抓取**（docs/10 #4）：本适配器**不自启定时器**；轮询只在 `send` 期间存在，`send` 结束即停
- *   - ★ **零注入**（docs/10 #2）
- *   - ★ **失败返 `Result`，不得抛异常**（docs/10 #6）；**禁止 `.catch(() => 空)`**（TD-05-2）
+ *   - ★ **不开自动轮询抓取**（docs/过程.md #4）：本适配器**不自启定时器**；轮询只在 `send` 期间存在，`send` 结束即停
+ *   - ★ **零注入**（docs/过程.md #2）
+ *   - ★ **失败返 `Result`，不得抛异常**（docs/过程.md #6）；**禁止 `.catch(() => 空)`**（TD-05-2）
  *   - ★ **选择器不外泄**（全在 `./scripts.ts`）
  */
 
 import type { Account } from '@/stable/model/account';
 import type { GenResult } from '@/stable/model/gen';
 import type { HostPort } from '@/core/ports/host.port';
-import type { SendPayload, SendResult, SitePort, SiteProbe, ScanResult } from '@/core/ports/site.port';
+import type { StoragePort } from '@/core/ports/storage.port';
+import type { SendResult, SitePort, SiteProbe, ScanResult } from '@/core/ports/site.port';
+// ★ 发送入参 = **品牌类型**（只由 `core/rules/payload.toSitePayload` 产出）—— 见 `docs/11` §六·六 M1
+import type { SiteSendPayload } from '@/core/rules/payload';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
+// ★ 「30s 强开」的**闸**（纯判据）住 `core/rules`（见该文件头注：入参是业务数据，不掺环境）
+import { isDolaForceTarget } from '@/core/rules/dolaForce';
 import { sleep } from '@/lib/async';
+import { log } from '@/lib/log';
 // ★ `TD-05-6`：会话幂等键的哈希段收口到 `lib/hash.hash32`（此前本文件有一份私有副本）
 import { hash32 } from '@/lib/hash';
-import { GEN_POLL_MS, GEN_SILENT_MS, GEN_TIMEOUT_MS } from '@/constants';
+// ★ 源 Phase 1 的 `In(text)`（HTML 实体/标签归一）—— 本仓同一份实现在 `lib/text`
+import { stripHtml } from '@/lib/text';
+import { GEN_POLL_MS, GEN_SCAN_MIN_SIDE, GEN_SEND_GRACE_MS } from '@/constants';
+// ★ 出片轮询的**纯判定**（去重键 / 基线 / 结束三档 / 跨会话去重表 —— 原 `DR` 的四段）
+import {
+  countRecurringAsset,
+  decideScanEnd,
+  emptyRecurringTable,
+  freshScannedItems,
+  isRecurringTable,
+  pruneRecurringAssets,
+  stripScanKeys,
+} from '@/core/rules/resultScan';
+// ★ 占位图判定（原 `Nk`）—— 既有的纯层去重器（`isPlaceholder`）；感知哈希由 `lib/phash` 注入
+import { createDedupe, emptyDedupeState } from '@/core/rules/dedupe';
+import { perceptualHash } from '@/lib/phash';
+// ★ 跨会话去重表（原 `TR`/`PR`）—— 键与形状都是 SSOT 契约
+import { LS_IMGGEN_DEDUP } from '@/stable/contracts/keys';
+import type { ImggenDedupTable } from '@/stable/contracts/lsValues';
+import { fillText } from './fillText';
 import { buildClickSendScript } from './scripts';
 import {
+  enableDolaForce30s,
+  runDolaForcePanelUi,
+  scheduleDolaForceCleanup,
+} from './dolaForce';
+import { applyGenParams } from './setGenParams';
+import { createDoubaoGenConfirm } from './genConfirm';
+import {
   createDoubaoAskWithImage,
+  createDoubaoDetectVideos,
   createDoubaoFetchWatermarkFree,
   createDoubaoFetchWatermarkFreeByThread,
+  createDoubaoLeaveDetectPage,
   createDoubaoPingQueueProgress,
 } from './analyze';
 // ★ 发送后监测的 4 个页内探测（原 `_Component43` 的 `watchSendReply`）
@@ -60,8 +96,19 @@ interface ResultScanItem {
   h: number;
 }
 
-/** 结果扫描脚本（模块级常量 —— 原 `Xk.toString()` 每次重建，这里只建一次） */
-const RESULT_SCAN = buildResultScanScript();
+/**
+ * 结果扫描脚本（模块级常量 —— 原 `Xk.toString()` 每次重建，这里只建一次）
+ *
+ * ⚠️ `minSide` 传 `GEN_SCAN_MIN_SIDE`（220）—— 源 `DR` 就是**带参**调用 `Xk` 的
+ *   （`{minSide: Jk}`，`:36427`），不是用 `Xk` 自己的默认值 96。
+ */
+const RESULT_SCAN = buildResultScanScript(GEN_SCAN_MIN_SIDE);
+
+/**
+ * 占位图判定（原 `Nk`，`:25776`）—— 判定住 `core/rules/dedupe`（SSOT），此处只**注入感知哈希**
+ * （`core` 不得碰 DOM ⇒ 浏览器侧实现 `lib/phash` 只能由适配器接上）
+ */
+const placeholderDetector = createDedupe(emptyDedupeState(), { phash: perceptualHash });
 
 /**
  * 采样一次生成结果（原 `DR` 内层：`webview.executeJavaScript(Xk)`）
@@ -91,27 +138,31 @@ async function sampleOnce(partition: string): Promise<Result<ResultScanItem[]>> 
   }
 }
 
-/** 扫描项 → `GenResult`（落盘拿 `img://` 引用；**落盘失败如实计入 failed**） */
-async function toGenResult(
+/**
+ * 取回一张扫描图的内容（原 `Lc`，`:36481`）
+ *
+ * `data:` 直接可用；`http(s):` 需经宿主带 cookie 取回（CORS 拦不住主进程）。
+ */
+async function fetchScanImage(host: HostPort, item: ResultScanItem): Promise<Result<string>> {
+  if (item.kind === 'data') return ok(item.url);
+  const fetched = await host.media.imageFetchDataUrl(item.url);
+  if (!fetched.ok) return fetched; // ★ 转发原始错误
+  if (!fetched.value) return err('unknown', `无法取得图片内容：${item.url.slice(0, 80)}`);
+  return ok(fetched.value);
+}
+
+/**
+ * 落盘成 `GenResult`（`saveImageSync` 同步返回 `img://` 引用，落盘幂等）
+ *
+ * ⚠️ **失败原样转发**（原则 6）；不在这里做任何过滤 —— 滤网在 `pollResults` 里**按源顺序**排。
+ */
+function saveGenResult(
   host: HostPort,
-  item: ResultScanItem,
+  dataUrl: string,
   ctx: { source: 'doubao' | 'dola'; accountName: string; key: string },
-): Promise<Result<GenResult>> {
-  // `data:` 直接落盘；`http(s):` 需经宿主带 cookie 取回（CORS 拦不住主进程）
-  let dataUrl: string | null = null;
-  if (item.kind === 'data') {
-    dataUrl = item.url;
-  } else {
-    const fetched = await host.media.imageFetchDataUrl(item.url);
-    if (!fetched.ok) return fetched; // ★ 转发原始错误
-    dataUrl = fetched.value;
-  }
-  if (!dataUrl) return err('unknown', `无法取得图片内容：${item.url.slice(0, 80)}`);
-
-  // `sendSync`：同步返回 `img://` 引用（落盘幂等）；失败返 Result（不再 try 兜）
+): Result<GenResult> {
   const saved = host.media.saveImageSync(dataUrl);
-  if (!saved.ok) return saved; // ★ 转发原始错误（原则 6）
-
+  if (!saved.ok) return saved;
   return ok({
     ref: saved.value,
     source: ctx.source,
@@ -136,7 +187,31 @@ const CHAT_URL: Readonly<Record<'doubao' | 'dola', string>> = {
   dola: 'https://www.dola.com/chat/',
 };
 
-export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SitePort {
+/**
+ * 建豆包 / Dola 站点适配器
+ *
+ * ⚠️ `storage` **必须注入**（`adapters` 不得 import `state` —— `.dependency-cruiser.cjs`
+ *   的 `adapters-no-upward`）⇒ 跨会话去重表的读写经 `StoragePort`，键与形状仍取 SSOT
+ *   （`stable/contracts/keys` 的 `LS_IMGGEN_DEDUP` · `lsValues` 的 `ImggenDedupTable`）。
+ */
+export function createDoubaoSite(
+  kind: 'doubao' | 'dola',
+  host: HostPort,
+  storage: StoragePort,
+): SitePort {
+  /**
+   * Dola 30s 诊断回传（原 `ct`，`_Component43.jsx:628-636`）
+   *
+   * ⚠️ **fire-and-forget**：失败只留痕，绝不打断发送（源也是 `try{ void … }catch{}`）。
+   * ⚠️ 只发**本仓真存在**的阶段行 —— 源的「会话 … 参考图 原始=… 去重后=…」那行带
+   *    **去重计数**，而本仓**不做参考图去重** ⇒ 发它就是编数字，**不发**。
+   */
+  const diag = (msg: string): void => {
+    void host.media.logDolaDuration(msg).then((r) => {
+      if (!r.ok) log.warn('[doubao] dolaDurationDiag 失败：', r.message);
+    });
+  };
+
   /** 已发送过的幂等键（原实现用 `sessionId` 防重复点菜单）—— 收进闭包，避免模块级可变状态 */
   const sentSessions = new Set<string>();
 
@@ -147,16 +222,31 @@ export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SiteP
     askWithImage: createDoubaoAskWithImage(host),
     // ★ `TD-16-103`：`store.queueProgress` 的生产者接缝（发送后追问排队进度）
     pingQueueProgress: createDoubaoPingQueueProgress(host),
-    // ★ 无水印拉取（原 `mD`/`gD` 页内脚本）—— 2026-10-12 落（`docs/14` §10 的 ⛔ 阻塞）
+    // ★ 无水印拉取（原 `mD`/`gD` 页内脚本）—— 2026-10-12 落（`docs/过程.md` §10 的 ⛔ 阻塞）
     fetchWatermarkFree: createDoubaoFetchWatermarkFree(),
     fetchWatermarkFreeByThread: createDoubaoFetchWatermarkFreeByThread(),
+    // ★ 发送后检测（原 `it` / `postSendDetect`）—— 站到 aispace ＋ 宿主主进程取数
+    detectVideos: createDoubaoDetectVideos(host),
+    leaveDetectPage: createDoubaoLeaveDetectPage(),
+    // ★ 「生成确认」链（原 `kt` / `autoConfirm`）—— `Hd`/`A0`/`lD`/`j0`/`Zl` 的页内半
+    genConfirm: createDoubaoGenConfirm(host),
     // ★ 发送后监测的 4 个页内探测（原 `_Component43` 的 `watchSendReply` 用 `dD`/`fD`/`pD`/`hD`）
     probeGenAck: createDoubaoProbeGenAck(),
     probeWaitTime: createDoubaoProbeWaitTime(),
     probeReplyNotice: createDoubaoProbeReplyNotice(),
     probeQuotaUsage: createDoubaoProbeQuotaUsage(),
 
-    async send(account: Account, payload: SendPayload): Promise<Result<SendResult>> {
+    /**
+     * 发送（原 `Bu` → transport `kS` → `_Component43` 的 `Be`）—— **本仓落的六段**：
+     *   ⓪ **文本填入**（原 Phase 1）：`In(text)` 归一 → 写剪贴板 → 聚焦＋粘贴 → 验证
+     *   ① 附图（原 Phase 2；本仓走 CDP 直喂，不经剪贴板）
+     *   ② **应用生成参数**（原 Phase 2c；`./setGenParams` 的 `applyGenParams`）—— dola 跳过
+     *   ③ **Dola 面板 UI 自动化**（原 Phase 2d；`./dolaForce` 的 `runDolaForcePanelUi`）
+     *   ④ 点发送（原 Phase 3b）
+     *   ⑤ 等结果（原 `DR` 轮询；**结束即停**，不自启常驻定时器）
+     * ⚠️ 源的 Phase 2b 与 Phase 3a 的**图数/图序**那两档未落（分片见 `docs/过程.md（原 plan/02）`）。
+     */
+    async send(account: Account, payload: SiteSendPayload): Promise<Result<SendResult>> {
       const partition = account.partition;
       if (!partition) return err('account-invalid', '账号缺少 partition');
 
@@ -176,50 +266,133 @@ export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SiteP
       const wcId = view.getWebContentsId?.() ?? 0;
       if (!wcId) return err('page-error', '无法取得 webview 的 webContentsId（视图可能未挂载）');
 
-      // ① 附图（**经 HostPort** —— TD-05-1）
-      if (payload.images.length > 0) {
-        const attached = await host.clipboard.attachImages(
-          wcId,
-          payload.images.map((ref) => ({ dataUrl: ref })),
-        );
-        if (!attached.ok) return attached; // ★ 转发原始错误
-        const attachErrors = attached.value.errors ?? [];
-        if (attachErrors.length > 0) {
-          // ★ 部分失败**如实上报**（不虚报成功）
-          return err('unknown', attachErrors.join(' | '));
-        }
-      }
-
-      // ② 贴文本（**经 HostPort**；顺序与 await 由主进程保证 —— docs/10 #8）
-      const pasted = await host.clipboard.pasteToWebview(wcId);
-      if (!pasted.ok) return pasted; // ★ 转发原始错误
-
-      // ③ 点发送（四级降级，全在脚本内）
-      let click: ClickResult | null;
+      // ★ **Dola「30s 强开」的配对**（原 `Mt`/`zt`，`_Component43.jsx:758-779`）——
+      //   发送前装（`Mt`）／发送后 3s 清（`zt`）。清理**必须**走 `finally`（M4「作用域即配对」）：
+      //   写成"每个出口记得清"必然有人漏；而漏了会让残留配置劫持**下一次非强开**的发送
+      //   （`JP` 的 `cfg()` 只按"`duration>=16` ＋ 未过期"判，不认那一次是不是强开）。
+      const force30s = await enableDolaForce30s(view, account.type, payload.params);
       try {
-        click = (await webviewEval(view, buildClickSendScript())) as ClickResult;
-      } catch (e) {
-        return err('send-stuck', toMessage(e), e);
-      }
-      if (!click?.ok || !click.clicked) {
-        // ★ 原样透传脚本返回的错误（原则 6）
-        return err('send-stuck', click?.error ?? `未找到发送按钮（strategy=${click?.strategy ?? 'none'}）`);
-      }
+        // ⓪ **文本填入**（原 `Be` 的 Phase 1，`_Component43.jsx:851-887`）—— ★ 源顺序：
+        //   **文本 → 图 → 点发送**。源逐字：`In(text).trim()`（HTML 实体/标签归一，本仓 = `stripHtml`）
+        //   → `copyTextToClipboard` → 聚焦＋粘贴 → `Ql` 验证（读 `valueLen`）。
+        //   ⚠️ 本段此前**整段缺失**：那时只有 `pasteToWebview`（= `wc.paste()`，贴的是**系统剪贴板**）
+        //      而**没人写剪贴板** ⇒ 发出去的其实是剪贴板里的旧内容。现按源顺序补上，且填入那段
+        //      **复用提问链的实现**（`./fillText`，判据 C1）—— 不再写第二份。
+        //   ⚠️ 判空用**原文**（源 `if (me.text && me.text.trim())`）—— 归一后变空串**照样走填入**
+        //      （那样会被下面的闸拦下），别在门口把它当"没文本"跳过。
+        let textInserted = true; // 源 `ae` 的初值：无文本 ⇒ 视作"已填入"（`:884`）
+        if (payload.text && payload.text.trim()) {
+          const filled = await fillText(host, view, wcId, stripHtml(payload.text));
+          if (!filled.ok) {
+            // ⚠️ 源**不在此处中止**：它把「文本没进输入框」记为 **Phase 3a 校验不过** ——
+            //   `autoSend` 时那是**硬闸**（`if (Ne) 点击 else return { reason:'precheck-fail' }`，
+            //   `:1238-1276`）；`autoSend=false` 时它照走 `ok` 但带 `precheck.pass=false`，
+            //   由账号节点显示成 `err` + 那句警告（`OL.jsx:353-355`）。**两档 message 同一句**。
+            //   本仓 3a 的**图数/图序**那两档未落（见 `docs/过程.md（原 plan/02）`）⇒ 这里只落**文本那一档**，
+            //   并用源 `:1271` / `:1189` 的**逐字**话术（不再用 `fillText` 那句提问域文案）。
+            return err('precheck-fail', '发送前校验未通过：文本未填入聊天框');
+          }
+          textInserted = true;
+        }
 
-      sentSessions.add(sessionId);
+        // ① 附图（**经 HostPort** —— TD-05-1）
+        //    源 `imagesAttached` = `max(过程计数, 页内计数, 指纹数, 期望数)`（`:1166-1172`）——
+        //    本仓走 **CDP 直喂**，回执带真贴上去的张数 ⇒ 用它（源的页内探测未落，见 `docs/过程.md（原 plan/02）`）。
+        let imagesAttached = 0;
+        if (payload.images.length > 0) {
+          // ★ 诊断回传（原 `ct`，`_Component43.jsx:903`）—— 本仓的附图通路**就是** CDP 直喂
+          diag(`Phase2 主通路 CDP 直喂 ${payload.images.length} 张…`);
+          const attached = await host.clipboard.attachImages(
+            wcId,
+            payload.images.map((ref) => ({ dataUrl: ref })),
+          );
+          if (!attached.ok) return attached; // ★ 转发原始错误
+          const attachErrors = attached.value.errors ?? [];
+          if (attachErrors.length > 0) {
+            // ★ 部分失败**如实上报**（不虚报成功）
+            diag(`Phase2 主通路失败 ${attachErrors.join('；')}`); // 源 `:941`
+            return err('unknown', attachErrors.join(' | '));
+          }
+          imagesAttached = attached.value.count ?? payload.images.length;
+          diag(`Phase2 主通路喂文件成功 ${imagesAttached} 张`); // 源 `:912`（源另有 `nodeId=`，本仓无对应值 ⇒ 不发）
+        }
 
-      // ④ 等结果（轮询只在 `send` 期间存在；**结束即停**，不自启常驻定时器）
-      const { results, endReason, failures } = await pollResults(host, partition, {
-        source: kind,
-        accountName: account.name,
-        key: sessionId,
-      });
+        // ② **应用生成参数**（原 `Be` 的 **Phase 2c**，`:1058-1138`）——
+        //   「把参数写到页面底栏（模型/比例/时长）」。**dola 跳过**（源 `:1058` 的 `if (qe)` —— 该账号没有生成参数控件）。
+        //   ⚠️ **best-effort**：源从不因它中止（失败只记诊断）⇒ `applyGenParams` 恒返 `ok`，失败只留痕。
+        //   ⚠️ 位置照源：在 Phase 2（附图）之后、Phase 2d（Dola 面板）**之前**。
+        if (account.type !== 'dola') {
+          await applyGenParams(view, payload.params);
+        }
 
-      // ★ 全部失败且无结果 ⇒ 如实报错（不伪装成 timeout）
-      if (results.length === 0 && failures.length > 0) {
-        return err('page-error', failures.join(' | '));
+        // ③ **Dola 面板 UI 自动化**（原 `Be` 的 **Phase 2d**，`:1212-1240`）——
+        //   「强开 Seedance 2.5 ＋ 目标时长」。闸与 `Mt` **同一份**（`isDolaForceTarget`，判据 C1）。
+        //   ⚠️ 它只**尽力**：面板没停在「视频生成」模式时 `ok:false` **属正常** —— 网络层（`JP`）兜底
+        //      （源也把它整体包在 `try/catch` 里，失败只记诊断串）。
+        //   ⚠️ 位置照源：在 `autoSend` 分流**之前**（源的 `if (me.autoSend)` 在它之后）。
+        if (isDolaForceTarget(account.type, payload.params)) {
+          await runDolaForcePanelUi(view);
+        }
+
+        // ④ **只填不点**（原 `Be` 的 **Phase 3**，`:1281-1284`）—— `autoSend === false` 时
+        //   到此为止：不点发送、也就没有轮询（源那一路直接走到「填入完成」返回 `:1285-1302`）。
+        //   ⇒ 账号节点的「填入」语义就落在这里（开关 `autoSend` 由节点给）。
+        if (!payload.autoSend) {
+          sentSessions.add(sessionId);
+          return ok({
+            sessionId,
+            endReason: 'filled-only',
+            results: [],
+            fillOnly: true,
+            autoClicked: false,
+            imagesAttached,
+            imagesTotal: payload.images.length,
+            textInserted,
+          });
+        }
+
+        // ⑤ 点发送（四级降级，全在脚本内；原 Phase 3b `:1235-1277`）
+        let click: ClickResult | null;
+        try {
+          click = (await webviewEval(view, buildClickSendScript())) as ClickResult;
+        } catch (e) {
+          return err('send-stuck', toMessage(e), e);
+        }
+        if (!click?.ok || !click.clicked) {
+          // ★ 原样透传脚本返回的错误（原则 6）
+          return err(
+            'send-stuck',
+            click?.error ?? `未找到发送按钮（strategy=${click?.strategy ?? 'none'}）`,
+          );
+        }
+
+        sentSessions.add(sessionId);
+
+        // ⑥ 等结果（轮询只在 `send` 期间存在；**结束即停**，不自启常驻定时器）
+        const { results, endReason, failures } = await pollResults(host, storage, partition, {
+          source: kind,
+          accountName: account.name,
+          key: sessionId,
+        });
+
+        // ★ 全部失败且无结果 ⇒ 如实报错（不伪装成 timeout）
+        if (results.length === 0 && failures.length > 0) {
+          return err('page-error', failures.join(' | '));
+        }
+        return ok({
+          sessionId,
+          endReason,
+          results,
+          fillOnly: false,
+          autoClicked: true,
+          imagesAttached,
+          imagesTotal: payload.images.length,
+          textInserted,
+        });
+      } finally {
+        // ★ **强开清理**（原 `zt`）—— 发送结束（无论成败）后 **3s** 删页面上的配置
+        if (force30s) scheduleDolaForceCleanup(view);
       }
-      return ok({ sessionId, endReason, results });
     },
 
     async scan(): Promise<Result<ScanResult>> {
@@ -251,50 +424,160 @@ export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SiteP
 }
 
 /**
- * 等结果（原 `DR` 的循环骨架）
+ * 等结果（原 `DR` 的循环骨架，`shared.js:36335-36553`）
  *
- * ⚠️ 三个阈值来自 `constants`（SSOT）：轮询 3000ms / 静默 9000ms / 超时 25s
- * ⚠️ **结束即停**：不留下常驻定时器
- * ⚠️ 逐次失败**收集**（不吞）—— 全部失败时由调用方如实报错
+ * 顺序**逐行对源**：
+ *   ① **首轮扫描只记基线**（`:36444-36451`）—— 页面上已有的图不是本轮结果
+ *   ② 之后每轮只处理**新项**（基线外 + 未处理过；键 = `Od` 去签名，`:36452-36455`）
+ *   ③ 取回 → 占位图跳过（`Nk`）→ 落盘出图
+ *   ④ 结束三档由纯层 `decideScanEnd` 判（`:36532-36541`）
+ *
+ * ⚠️ **首轮立即扫**（源 `Promise.resolve().then(N)`）—— 基线取的正是"发送后那一刻"的页面；
+ *   若先 sleep 再扫，这 3 秒内出现的图会被**当基线吞掉**（少收结果）。
+ * ⚠️ **结束即停**：不留下常驻定时器。
+ * ⚠️ 逐次失败**收集**（不吞）—— 全部失败时由调用方如实报错。
+ * ⚠️ 阈值全住 `constants`（SSOT）：轮询 `CR` 3000 · 静默 `ER` 9000 · 仅占位图 `jR` 180000 ·
+ *   总超时 `_R` 600000。
+ */
+/**
+ * 读跨会话去重表（原 `TR`，`:36238`）
+ *
+ * ⚠️ 与 `state/persistKeys` 的 `PERSIST[LS_IMGGEN_DEDUP]` 是**同一个调用**（那里就是 `rw(key)`）
+ *   ⇒ 不是第二份读写；本文件是那条 `rw` 的**唯一消费者**。
+ * ⚠️ 源 `TR` 是 `try/catch` + 形状校验 ⇒ `missing` / `corrupt` / **形状不对**都当**空表**
+ *   （否则写回时会把损坏数据覆盖成"半张表"）。
+ */
+function readDedupTable(storage: StoragePort): ImggenDedupTable {
+  const r = storage.read<ImggenDedupTable>(LS_IMGGEN_DEDUP);
+  if (r.kind !== 'ok' || !isRecurringTable(r.value)) return emptyRecurringTable();
+  return r.value;
+}
+
+/**
+ * 写回跨会话去重表（原 `PR`，`:36251`）—— **先裁后写**
+ *
+ * ⚠️ 源把写盘包在 `try/catch {}` 里**空吞**；本仓**留痕不吞**（原则 6），但**不因此中断**
+ *   —— 表的写失败不影响「图已经拿到了」这个事实。
+ */
+function writeDedupTable(storage: StoragePort, table: ImggenDedupTable): void {
+  pruneRecurringAssets(table);
+  try {
+    storage.write(LS_IMGGEN_DEDUP, table);
+  } catch (e) {
+    log.warn('[pollResults] 跨会话去重表写回失败：', e);
+  }
+}
+
+/**
+ * 等结果（原 `DR` 的循环骨架，`shared.js:36335-36553`）
+ *
+ * 顺序**逐行对源**：
+ *   ① **首轮扫描只记基线**（`:36444-36451`）—— 页面上已有的图不是本轮结果
+ *   ② 之后每轮只处理**新项**（基线外 + 未处理过；键 = `Od` 去签名，`:36452-36455`）
+ *   ③ 每个新项过**两道闸**（`:36466` 那**同一个 `if`**）：发送后前 10 秒内的新图 ·
+ *      **跨会话**已见 ≥ 2 次的固有素材（URL 桶）
+ *   ④ 取回 → 感知哈希也过跨会话表（`hashes` 桶）→ 占位图跳过（`Nk`）→ 落盘出图
+ *   ⑤ 结束三档由纯层 `decideScanEnd` 判（`:36532-36541`）
+ *
+ * ⚠️ **首轮立即扫**（源 `Promise.resolve().then(N)`）—— 基线取的正是"发送后那一刻"的页面；
+ *   若先 sleep 再扫，这 3 秒内出现的图会被**当基线吞掉**（少收结果）。
+ * ⚠️ **去重表整场只读一次、只写一次**（源 `TR()` `:36353` / `PR(p)` `:36367`）。
+ * ⚠️ **结束即停**：不留下常驻定时器。
+ * ⚠️ 逐次失败**收集**（不吞）—— 全部失败时由调用方如实报错。
+ * ⚠️ 阈值全住 `constants`（SSOT）：轮询 `CR` 3000 · 静默 `ER` 9000 · 仅占位图 `jR` 180000 ·
+ *   总超时 `_R` 600000 · 扫描最小边 `Jk` 220 · 发送后宽限 `IR` 10000。
  */
 async function pollResults(
   host: HostPort,
+  storage: StoragePort,
   partition: string,
   ctx: { source: 'doubao' | 'dola'; accountName: string; key: string },
 ): Promise<{ results: GenResult[]; endReason: SendResult['endReason']; failures: string[] }> {
   const started = Date.now();
   const results: GenResult[] = [];
-  const seen = new Set<string>();
   const failures: string[] = [];
-  let lastChange = started;
+  /** 基线（首轮扫描时的去重键）；`null` = 还没扫过 */
+  let baseline: string[] | null = null;
+  /** 基线建立时刻（源 `h`）—— 发送后宽限 `IR` 从它起算 */
+  let baselineAt = started;
+  /** 已处理过的键（源 `u`）—— 含被跳过、不再重试的项 */
+  const processed = new Set<string>();
+  /** 跨会话去重表（整场一份） */
+  const table = readDedupTable(storage);
+  /** `p0` 的「本轮已计过」集合（源 `d`，`:36351`）—— **整场共用**，不是每轮一个 */
+  const counted = new Set<string>();
+  let lastProgress = started;
+  let sawPlaceholder = false;
+
+  /** 每条出口都写回表（源 `x()` 里就是 `PR(p)` —— 所有结束路径共用） */
+  const finish = (endReason: SendResult['endReason']) => {
+    writeDedupTable(storage, table);
+    return { results, endReason, failures };
+  };
 
   for (;;) {
-    await sleep(GEN_POLL_MS);
-
     const sampled = await sampleOnce(partition);
     if (!sampled.ok) {
       // ★ 采样失败**记下原文**（不伪装成"本轮无新图" —— TD-05-2）
       failures.push(sampled.message);
+    } else if (baseline === null) {
+      // ① 首轮：只记基线，**不产出**（源 `if (!h) { …c.add(Od(O)); return }`）
+      baseline = stripScanKeys(sampled.value);
+      baselineAt = Date.now();
+      lastProgress = baselineAt;
     } else {
-      for (const item of sampled.value) {
-        if (seen.has(item.url)) continue;
-        seen.add(item.url);
-        const converted = await toGenResult(host, item, ctx);
-        if (converted.ok) {
-          results.push(converted.value);
-          lastChange = Date.now();
-        } else {
-          failures.push(converted.message);
+      /** 发送后宽限窗口（源 `P - h < IR`；`P` 每轮取一次） */
+      const inGrace = Date.now() - baselineAt < GEN_SEND_GRACE_MS;
+      // ② 新项（保序）
+      for (const { item, key } of freshScannedItems(sampled.value, baseline, [...processed])) {
+        processed.add(key);
+        // 源在过滤之后、取图之前就更新 `m` ⇒ 被跳过 / 失败的项也算"有进展"
+        const at = Date.now();
+        lastProgress = at;
+        // ③ 源 `:36466` 的**同一个 `if`**：前 10 秒的新图 ‖ 跨会话已见 ≥2 次的 URL ⇒ 跳过
+        if (inGrace || countRecurringAsset(table, 'urls', key, counted, at) >= 2) continue;
+
+        const fetched = await fetchScanImage(host, item);
+        if (!fetched.ok) {
+          failures.push(fetched.message);
+          continue;
         }
+        const dataUrl = fetched.value;
+
+        // ④ 源 `:36502-36510`：先算感知哈希，再看 `hashes` 桶
+        const phash = await perceptualHash(dataUrl);
+        if (phash && countRecurringAsset(table, 'hashes', phash, counted, at) >= 2) continue;
+
+        // 源 `:36511-36520`：占位图 ⇒ 记一笔、跳过（**不是失败、也不是结果**）
+        if (await placeholderDetector.isPlaceholder(dataUrl)) {
+          sawPlaceholder = true;
+          continue;
+        }
+
+        const saved = saveGenResult(host, dataUrl, ctx);
+        if (!saved.ok) {
+          failures.push(saved.message);
+          continue;
+        }
+        results.push(saved.value);
       }
     }
 
-    if (results.length > 0 && Date.now() - lastChange >= GEN_SILENT_MS) {
-      return { results, endReason: 'settled', failures };
+    // ⑤ 结束三档（纯层判定）
+    const end = decideScanEnd({
+      sinceLastProgressMs: Date.now() - lastProgress,
+      emitted: results.length,
+      sawPlaceholder,
+      sinceStartMs: Date.now() - started,
+    });
+    if (end) {
+      // ⚠️ 与源的一处**有意差异**：源把结果**流式**交 `onItem`（超时也照样算拿到）；
+      //   本仓是聚合成 `results` 一次交 ⇒ 10 分钟到点时**已拿到的结果照旧算数**（标 `settled`），
+      //   只有「一张都没拿到」才叫 `timeout`。
+      return finish(end === 'timeout' && results.length > 0 ? 'settled' : end);
     }
-    if (Date.now() - started >= GEN_TIMEOUT_MS) {
-      return { results, endReason: results.length > 0 ? 'settled' : 'timeout', failures };
-    }
+
+    await sleep(GEN_POLL_MS);
   }
 }
 

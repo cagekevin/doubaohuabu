@@ -8,8 +8,8 @@
  *
  * ⚠️ 选择器全在 `./scripts.ts`（不外泄）；`input-lock` 只在「粘贴」那一步用（原 `dS`）
  * ⚠️ 宿主能力一律经 `HostPort`（TD-05-1）
- * ⚠️ **不开自动轮询**：这里的轮询只在**本函数调用期间**存在，返回即停（`docs/10` #4）
- * ⚠️ 失败一律返 `Result`（`docs/10` #6）
+ * ⚠️ **不开自动轮询**：这里的轮询只在**本函数调用期间**存在，返回即停（`docs/过程.md` #4）
+ * ⚠️ 失败一律返 `Result`（`docs/过程.md` #6）
  *
  * ★ **一处有意偏离（已留痕）**：源版 `mS` 的"回复稳定"判定是**坏的** ——
  *   `u = h.text; h.text === u ? d += 1 : …`（`39026-39027`）里 `u` 是**刚赋值的同一个值**，
@@ -32,39 +32,22 @@ import {
   ASK_REPLY_STABLE_READS,
   ASK_SEND_CLICK_ATTEMPTS,
   ASK_SEND_CLICK_RETRY_MS,
-  FILL_TEXT_SETTLE_MS,
 } from '@/constants';
 import { buildReplyReadOptions } from '@/core/rules/analyzePrompt';
-import { withInputLock } from '../shared/inputLock';
 import { attachImageToWebview } from '../shared/attachImage';
 import { viewOfContext, type WebviewElement } from '../shared/webview';
 import { navigateAndWait, runProbe } from '../shared/waits';
+// ★ 「文本填入」与发送链**共用一份**（判据 C1）—— 见该文件头注
+import { fillText } from './fillText';
 import { WATERMARK_FREE_BY_THREAD, WATERMARK_FREE_BY_VID } from './scripts';
 import {
-  INPUT_FOCUS_SCRIPT,
   MESSAGE_BASELINE_SCRIPT,
-  READ_INPUT_STATE_SCRIPT,
   buildClickSendScript,
   buildReplyReadScript,
-  buildSetInputScript,
   type MessageBaselineResult,
 } from './scripts';
 
 
-
-/** 读输入框状态（原 `Ql`） */
-interface InputState {
-  found?: boolean;
-  valueLen?: number;
-  focused?: boolean;
-}
-
-/** 写输入框结果（原 `AD`） */
-interface SetInputResult {
-  ok?: boolean;
-  len?: number;
-  reason?: string;
-}
 
 /** 点击发送结果（与 `Zl` 同形） */
 interface ClickResult {
@@ -78,41 +61,6 @@ interface ReplyRead {
   ok?: boolean;
   text?: string;
   reason?: string;
-}
-
-/**
- * 把文本填进输入框（原 `MD` 38948）
- *
- * 两档（**顺序即语义**）：
- *   ① **剪贴板**：`writeText` → `withInputLock(pasteToWebview)` → 静置 600ms → 读 `valueLen > 0` 即成功
- *   ② **setter 回落**：直接写 `value`（React 受控组件走原型 setter）+ 补发 `input` 事件
- *
- * ⚠️ 源版在①失败时**不记账**（直接进②），最终失败统一给 `'提示词填入失败'` —— 照抄。
- */
-async function fillText(
-  host: HostPort,
-  view: WebviewElement,
-  webContentsId: number,
-  text: string,
-): Promise<Result<void>> {
-  // ① 先聚焦（原 `MD` 38949 的 `On(e, Ap)`）—— 失败不致命（下面还有 setter 那条路）
-  await runProbe(view, INPUT_FOCUS_SCRIPT);
-
-  const wrote = await host.clipboard.writeText(text);
-  if (wrote.ok && webContentsId) {
-    // ⚠️ 粘贴包在 input-lock 里（原 `MD` 38953 的 `dS`）
-    await withInputLock(view, async () => {
-      await host.clipboard.pasteToWebview(webContentsId);
-    });
-    await sleep(FILL_TEXT_SETTLE_MS);
-    const state = await runProbe<InputState>(view, READ_INPUT_STATE_SCRIPT);
-    if (state.ok && state.value && (state.value.valueLen ?? 0) > 0) return ok(undefined);
-  }
-
-  // ② setter 回落（原 `MD` 38966）
-  const set = await runProbe<SetInputResult>(view, buildSetInputScript(text));
-  if (set.ok && set.value?.ok && (set.value.len ?? 0) > 0) return ok(undefined);
-  return err('unknown', ANALYZE_TEXT.fillTextFailed);
 }
 
 /**
@@ -308,5 +256,49 @@ export function createDoubaoFetchWatermarkFreeByThread(): NonNullable<SitePort['
     } finally {
       restore();
     }
+  };
+}
+
+/**
+ * 检测会话期的「站过 aispace」还原函数（**按账号记**）—— 收尾由 `leaveDetectPage` 触发
+ *
+ * ⚠️ **为什么要有它**：整个发送后检测（可跑 50 分钟）**只站一次** aispace；逐轮「站过去又站回来」
+ *   会 4s 一次抖动（源只在 `finally` 里站回去 —— `_Component43.jsx:1730-1736`）。
+ */
+const detectRestores = new Map<string, () => void>();
+
+/**
+ * 构造 `SitePort.detectVideos` 的实现（原 `it` 的取数段：`Y.getWebContentsId()` ＋
+ *   `window.api.detectVideos(Me, Array.from(b.current))`，`_Component43.jsx:1561-1590`）
+ *
+ * ⚠️ 取数本身在**宿主主进程**（`electron/main.js:2224` 的 `detect-videos`）；本适配器只负责
+ *   「站到 aispace 页 → 交 `webContentsId` 与已见键 → 转发 `Result`」。
+ */
+export function createDoubaoDetectVideos(host: HostPort): NonNullable<SitePort['detectVideos']> {
+  return async (ctx, seenKeys) => {
+    const view = viewOfContext(ctx);
+    if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
+    const id = ctx.webContentsId;
+    if (!id) return err('page-error', BACKEND_PAGE_TEXT.webContentsIdMissing);
+
+    // ① **只在必要时**站到 aispace（整个检测会话只站一次）
+    if (!detectRestores.has(ctx.account.id) && !AISPACE_RE.test(view.getURL?.() ?? '')) {
+      const restore = await gotoAispacePage(view);
+      if (!restore) return err('page-timeout', BACKEND_PAGE_TEXT.aispaceNavFailed);
+      detectRestores.set(ctx.account.id, restore);
+    }
+
+    // ② 取数（宿主主进程在 webview 里跑只读脚本 —— 零注入）
+    return host.media.detectVideos(id, seenKeys);
+  };
+}
+
+/** 检测结束 ⇒ 把页面站回去（原 `it` 的 `finally` 里 `es(de, La)`，`_Component43.jsx:1730-1736`） */
+export function createDoubaoLeaveDetectPage(): NonNullable<SitePort['leaveDetectPage']> {
+  return (ctx) => {
+    const restore = detectRestores.get(ctx.account.id);
+    if (!restore) return;
+    detectRestores.delete(ctx.account.id);
+    restore();
   };
 }

@@ -15,7 +15,12 @@ import { describe, expect, it } from 'vitest';
 import {
   addLovartImages,
   canvasMaterialBookmarks,
+  captureCanvasImageName,
+  captureImageName,
+  importedGalleryItems,
   LOVART_SOURCE_CANVAS,
+  LOVART_SOURCE_IMPORT,
+  type ImportedGalleryImage,
   isLovartJunk,
   LOVART_MIN_SIDE,
   LOVART_SCOPE_NOT_CANVAS,
@@ -361,5 +366,84 @@ describe('canvasMaterialBookmarks（原 `Ie` 337-352）', () => {
   it('★ 只挑**选中的**，其余原样忽略', () => {
     const list = [mat({ label: 'A' }), { ...mat({ label: 'B' }), selected: false }, mat({ label: 'C' })];
     expect(canvasMaterialBookmarks(list).map((x) => x.name)).toEqual(['A', 'C']);
+  });
+});
+
+describe('抓来图的命名（原 `XT` = 页面扫描路 · 原 `s0` = 画布 API 路）', () => {
+  it('★ `captureImageName`（源 `XT`）：尾段是图片名就用它', () => {
+    expect(captureImageName('https://x/a/b.webp')).toBe('b.webp');
+  });
+
+  it('★ `captureImageName`：非图片尾段 / `blob:` ⇒ 兜底「Lovart 生成图 N」；`data:` ⇒ 「Lovart 内联图 N」', () => {
+    expect(captureImageName('https://x/noext')).toBe('Lovart 生成图 1');
+    expect(captureImageName('blob:https://x/zzz', 2)).toBe('Lovart 生成图 3');
+    expect(captureImageName('data:image/png;base64,AAAA', 4)).toBe('Lovart 内联图 5');
+  });
+
+  it('★ `captureCanvasImageName`（源 `s0`）：尾段 **前 8 字** + 画布名前缀', () => {
+    expect(captureCanvasImageName('https://oss/a/abcdefghij.png', '我的画布')).toBe('我的画布 · abcdefgh');
+  });
+
+  it('★ `captureCanvasImageName`：没有画布名 ⇒ 「Tapnow 图 N」；尾段取不到 ⇒ 用 `index + 1` 顶', () => {
+    expect(captureCanvasImageName('https://oss/a/abcdefghij.png', '')).toBe('Tapnow 图 abcdefgh');
+    expect(captureCanvasImageName('', '')).toBe('Tapnow 图 1');
+    // ⚠️ `?` 之后要砍掉（源先 `split('?')[0]` 再截 8 字）
+    expect(captureCanvasImageName('https://oss/a/1234567890.png?sig=1', '')).toBe('Tapnow 图 12345678');
+  });
+
+  it('★ 两套命名**必须不同**（源里就是两条路各一份，别合并）', () => {
+    const url = 'https://x/a/abcdefghij.png';
+    expect(captureCanvasImageName(url, '')).not.toBe(captureImageName(url));
+  });
+});
+
+describe('importedGalleryItems（原 `_Component23.he` 306-322 的 map 半 · 从磁盘导入）', () => {
+  const read = (over: Partial<ImportedGalleryImage> = {}): ImportedGalleryImage => ({
+    name: '照片',
+    dataUrl: 'data:image/png;base64,AAA',
+    natW: 640,
+    natH: 480,
+    ...over,
+  });
+
+  it('★ 名字 / 尺寸**原样带上**，出处固定 `import`（原 316-321 逐字）', () => {
+    expect(importedGalleryItems([read()])).toEqual([
+      {
+        name: '照片',
+        dataUrl: 'data:image/png;base64,AAA',
+        natW: 640,
+        natH: 480,
+        source: 'import',
+      },
+    ]);
+  });
+
+  it('★ `dataUrl` 为空 ⇒ **整条丢掉**（源 `.filter(Ve => Ve && Ve.dataUrl)`）', () => {
+    expect(importedGalleryItems([read({ dataUrl: '' }), read({ name: 'B' })])).toHaveLength(1);
+  });
+
+  it('★ 名字为空 ⇒ 兜底「Tapnow 图」（原 316 的 `||` 回落）', () => {
+    expect(importedGalleryItems([read({ name: '' })])[0]?.name).toBe('Tapnow 图');
+  });
+
+  it('★ 尺寸为 0 ⇒ 补 0（`natW || 0`，与 `addLovartImages` 同口径）', () => {
+    const out = importedGalleryItems([read({ natW: 0, natH: 0 })]);
+    expect(out[0]).toMatchObject({ natW: 0, natH: 0 });
+  });
+
+  it('空入参 / `null` / `undefined` ⇒ 空数组（不抛）', () => {
+    expect(importedGalleryItems([])).toEqual([]);
+    expect(importedGalleryItems(null)).toEqual([]);
+    expect(importedGalleryItems(undefined)).toEqual([]);
+  });
+
+  it('★ 出处字面量与 `addLovartImages` 的兜底**是同一份**（判据 C1）', () => {
+    const g = addLovartImages({}, 'acc', [{ dataUrl: 'data:image/png;base64,BBB' }], {
+      now: 1,
+      idFactory: () => 'id1',
+      normalizeImage: (d) => d,
+    });
+    expect(g.galleries.acc?.[0]?.source).toBe('import');
+    expect(LOVART_SOURCE_IMPORT).toBe('import');
   });
 });

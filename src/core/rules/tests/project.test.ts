@@ -22,6 +22,9 @@ import {
   readImportedProjectName,
   renameProject,
   setProjectStoragePath,
+  shouldReactivateOnRename,
+  activeIdAfterDelete,
+  orderProjectsByUpdatedAt,
 } from '../project';
 import type { GraphPreset, PromptPreset, Project } from '@/stable/model/project';
 
@@ -61,6 +64,29 @@ describe('makeProjectId / createProject', () => {
     expect(p.data.snap).toBe(false);
     // 未覆盖的字段仍是空默认（`emptyProjectData` 合并）
     expect(p.data.nodes).toEqual([]);
+  });
+});
+
+describe('orderProjectsByUpdatedAt（原 `_Component47.jsx:25-27`）', () => {
+  const withAt = (id: string, updatedAt: number): Project => ({
+    ...makeProject(id, id),
+    updatedAt,
+  });
+
+  it('★ 按 `updatedAt` **倒序**（最新的在最前）', () => {
+    const list = [withAt('a', 100), withAt('b', 300), withAt('c', 200)];
+    expect(orderProjectsByUpdatedAt(list).map((p) => p.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('★ 返回**新数组**，不动入参（源也是 `[...e].sort`）', () => {
+    const list = [withAt('a', 100), withAt('b', 200)];
+    const out = orderProjectsByUpdatedAt(list);
+    expect(out).not.toBe(list);
+    expect(list.map((p) => p.id)).toEqual(['a', 'b']);
+  });
+
+  it('空列表 ⇒ 空', () => {
+    expect(orderProjectsByUpdatedAt([])).toEqual([]);
   });
 });
 
@@ -175,5 +201,27 @@ describe('knownStoragePathsOf（原版四处重复的组装）', () => {
       { path: '/a', name: '甲' },
       { path: '/c', name: '丙' },
     ]);
+  });
+});
+
+describe('shouldReactivateOnRename（原 `renameProject` 30075 的 `id === activeId`）', () => {
+  it('★ 只对**当前工程**重新激活（改名影响磁盘目录名与已知路径清单）', () => {
+    expect(shouldReactivateOnRename('p_1', 'p_1')).toBe(true);
+    expect(shouldReactivateOnRename('p_1', 'p_2')).toBe(false);
+  });
+
+  it('没有当前工程（`null`）⇒ 不激活', () => {
+    expect(shouldReactivateOnRename('p_1', null)).toBe(false);
+  });
+});
+
+describe('activeIdAfterDelete（原 `deleteProject` 30120 / 30123）', () => {
+  it('★ 删的是**当前**工程 ⇒ `null`（回启动页，**不是**切到下一个）', () => {
+    expect(activeIdAfterDelete('p_1', 'p_1')).toBeNull();
+  });
+
+  it('删的不是当前 ⇒ `activeId` 不变', () => {
+    expect(activeIdAfterDelete('p_1', 'p_2')).toBe('p_1');
+    expect(activeIdAfterDelete(null, 'p_2')).toBeNull();
   });
 });

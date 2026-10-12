@@ -124,6 +124,54 @@ export function isUsableFaceBox(box: PixelFaceBox): boolean {
   return box.score >= FACE_MIN_SCORE && box.w > FACE_MIN_SIZE && box.h > FACE_MIN_SIZE;
 }
 
+/**
+ * 一次检测的统计（原 `Rs`）—— **由 `adapters/media/faceDetect` 维护**，本模块只用它的形状
+ *
+ * ⚠️ 形状放这里（而不是适配器里）：`MediaPort.faceDetectStats` 要暴露它，而端口**只有类型**
+ *   （原则 3）—— 与同文件族 `facemask` 的 `FaceBox`/`FaceMaskOpts` 同法（端口 import `core/rules`）。
+ * ⚠️ **每次检测重置**（源 `Rs`；`detectFacesInImage` 在跑计划**之前**清零）。
+ */
+export interface FaceDetectStats {
+  /** 已尝试的检测次数 */
+  tried: number;
+  /** 抛异常的检测次数 */
+  failed: number;
+  /** 去重后的错误原文 */
+  errors: string[];
+}
+
+/** GPU / WebGL 不可用的错误特征（原 `G3.jsx:349` 内联正则） */
+export const FACE_DETECT_GPU_RE = /activeTexture|WebGL|GL_|gpu/i;
+
+/**
+ * 「一张脸都没检测到」时该说哪句话（原 `G3.jsx:346-350` 的三目）—— ★ 纯函数
+ *
+ * 源逐字：
+ * ```js
+ * const K = LD();                      // = faceDetectStats()
+ * const Y = K.errors[0] || '';
+ * K.failed > 0 && K.failed >= K.tried
+ *   ? (/activeTexture|WebGL|GL_|gpu/i.test(Y) ? '…GPU/WebGL 不可用…' : `人脸识别失败：${Y || '检测器异常'}`)
+ *   : '未识别到人脸，可用效果笔刷手动涂抹遮脸'
+ * ```
+ *
+ * ⚠️ 判据是「**全部**尝试都抛」（`failed >= tried` 且 `failed > 0`，`tried` 恒 > 0）——
+ *    「跑通了但没脸」是**另一档**（`no-faces`），不能混（混了就会把真失败说成\"没识别到\"）。
+ * ⚠️ `errors[0]` 可能为空串 ⇒ 交调用方，由文案层兜「检测器异常」（原 `G3:349` 的 `Y || …`）。
+ */
+export type EmptyFaceDetectExplanation =
+  | { kind: 'no-faces' }
+  | { kind: 'gpu' }
+  | { kind: 'failed'; reason: string };
+
+export function explainEmptyFaceDetect(stats: FaceDetectStats): EmptyFaceDetectExplanation {
+  const reason = stats.errors[0] || '';
+  if (stats.failed > 0 && stats.failed >= stats.tried) {
+    return FACE_DETECT_GPU_RE.test(reason) ? { kind: 'gpu' } : { kind: 'failed', reason };
+  }
+  return { kind: 'no-faces' };
+}
+
 /** 夹到 `[0,1]`（原 `kl` 39638） */
 export function clamp01(v: number): number {
   if (v < 0) return 0;

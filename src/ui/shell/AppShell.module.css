@@ -143,12 +143,13 @@
  *   ⇒ 三者统一走 `.topbar-toggle` 那款（判据「能一种的别搞两种」）。
  */
 .topbarProjectLabel {
+  flex: none;
   display: inline-flex;
   align-items: center;
   height: 36px;
   padding: 0 var(--space-4);
   color: var(--color-text-strong);
-  font-weight: var(--font-weight-semi);
+  font-weight: var(--font-weight-bold);
   white-space: nowrap;
   user-select: none;
   cursor: default;
@@ -160,22 +161,14 @@
 
 /*
  * 顶栏「豆包后台」入口（原 `.topbar-toggle` / `.topbar-icon`，`_Component42.jsx:1606`）
- * 真值 = `docs/mockup/assets/mockup.css:1917-1925`。
+ * ★ 与项目名 / 存储区**同一款胶囊**（判据「能一种的别搞两种」）——
+ *   只留 button 特有的差异（可点 / 手型 / 悬停），其余 composes 自 `.topbarProjectLabel`。
+ * ⚠️ 缺 `white-space: nowrap` 时顶栏一挤，文字会竖排（`nowrap` 由真源带来）。
  */
 .topbarToggle {
+  composes: topbarProjectLabel;
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
   gap: var(--space-1);
-  min-height: 36px;
-  padding: 0 var(--space-4);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-full);
-  box-shadow: var(--panel-shadow);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semi);
-  color: var(--color-text-strong);
   cursor: pointer;
 }
 
@@ -215,7 +208,7 @@
   flex: 1 1 auto;
   padding: 0 var(--space-3) 0 var(--space-4);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semi);
+  font-weight: var(--font-weight-bold);
   border: none;
   background: transparent;
   color: var(--color-text-strong);

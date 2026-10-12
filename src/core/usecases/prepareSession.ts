@@ -10,7 +10,7 @@
  *   - 指纹体检：`OP.jsx:100-101`（`fpNetDiag(partition)`）
  *
  * ⚠️ 纯分配半已在 `core/rules/proxy.ts`（`assignProxyPool`）—— 本文件只做**调用与上报**。
- * ⚠️ 约束 #5（`docs/10`）：**cookie 由后端管理，前端不碰** —— 这里只调「准备会话」，
+ * ⚠️ 约束 #5（`docs/过程.md`）：**cookie 由后端管理，前端不碰** —— 这里只调「准备会话」，
  *    不读不写任何 cookie。
  * ⚠️ 原则 1：本文件**不写 store**（返回结果由 state 落）。
  */

@@ -14,11 +14,9 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '@/state';
 import { FP_SCAN_TEXT } from '@/constants/text';
-import {
-  FINGERPRINT_DIMENSIONS,
-  formatScanAge,
-  scanFingerprintCollisions,
-} from '@/core/rules/fingerprintScan';
+import { FINGERPRINT_DIMENSIONS, scanFingerprintCollisions } from '@/core/rules/fingerprintScan';
+// ★ 相对时间（原 `UP`）**不属指纹模块**（源里唯一消费者是启动页项目行）⇒ 通用工具 `lib/time`
+import { formatRelativeTime } from '@/lib/time';
 import styles from './FingerprintScanPanel.module.css';
 import shared from '@/ui/common/shared.module.css';
 import { PanelShell } from '@/ui/common/PanelShell';
@@ -106,7 +104,7 @@ export function FingerprintScanPanel({ onClose }: FingerprintScanPanelProps) {
             <div className={styles.historyTitle}>{FP_SCAN_TEXT.historyTitle(history.length)}</div>
             {history.map((h) => (
               <div className={styles.historyRow} key={`${h.ts}-${h.sig}`}>
-                <span className={styles.historyAge}>{formatScanAge(h.ts, nowMs)}</span>
+                <span className={styles.historyAge}>{formatRelativeTime(h.ts, nowMs)}</span>
                 <span className={styles.historyMeta}>
                   {FP_SCAN_TEXT.historyLine(h.total, h.totalPairs)}
                 </span>

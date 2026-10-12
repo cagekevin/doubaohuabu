@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEPRECATED_SCAN_STRATEGY,
   SCAN_CHAIN,
+  canvasIdFromHref,
   isScanChainExhausted,
   nextScanStrategy,
   remainingScanStrategies,
@@ -86,5 +87,30 @@ describe('W12 · 结果汇总', () => {
   it('空尝试 → 全零', () => {
     const r = summarizeScanAttempts([]);
     expect(r).toEqual({ via: null, ok: false, total: 0, failures: [] });
+  });
+});
+
+describe('canvasIdFromHref（原 `Yl` 33411 的切法 —— 源里这形状有三处，收口一份）', () => {
+  it('★ `/canvas/<8+ 位十六进制或横线>` ⇒ 切出 id', () => {
+    expect(canvasIdFromHref('https://app.tapnow.media/canvas/abcdef12-3456-7890')).toBe('abcdef12-3456-7890');
+  });
+
+  it('★ 不足 8 位 / 不是画布路径 ⇒ 空串（语义即"这不是画布页"）', () => {
+    expect(canvasIdFromHref('https://app.tapnow.media/canvas/abc')).toBe('');
+    expect(canvasIdFromHref('https://app.tapnow.media/home')).toBe('');
+  });
+
+  it('⚠️ **只认 pathname**：查询串里出现 `/canvas/…` **不算**（源 `wP:33930` 是在整个 href 上找 ⇒ 本仓更严）', () => {
+    expect(canvasIdFromHref('https://x/home?next=/canvas/abcdef12-3456')).toBe('');
+  });
+
+  it('★ 非法 / 空 / 非字符串 ⇒ 空串（与源一致，不抛）', () => {
+    expect(canvasIdFromHref('not a url')).toBe('');
+    expect(canvasIdFromHref('')).toBe('');
+    expect(canvasIdFromHref(null)).toBe('');
+  });
+
+  it('★ 大小写不敏感（源正则带 `i`）', () => {
+    expect(canvasIdFromHref('https://x/CANVAS/ABCDEF12-3456')).toBe('ABCDEF12-3456');
   });
 });

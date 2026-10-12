@@ -75,7 +75,6 @@
 
 .autoBtn {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
-  color: var(--color-text-muted);
 }
 
 .autoBtn[data-on='true'] {
@@ -132,6 +131,4 @@
   max-width: 55%;
 }
 
-.closeBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
-}
+

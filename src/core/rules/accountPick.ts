@@ -6,11 +6,11 @@
  *   - `FS` shared.js:42830-42890 —— 把 `sendAccount` 串解析成账号 + 失败原因
  *   - `eO` shared.js:42819-42829 —— 站点显示名（在 `constants/text` 的 `siteDisplayName`）
  *
- * ★ **归属更正（`docs/14` §10 标错）**：那里把 `FS`/`tO` 归入「GPT 站点（整条）」——
+ * ★ **归属更正（`docs/过程.md` §10 标错）**：那里把 `FS`/`tO` 归入「GPT 站点（整条）」——
  *   **错**。`FS` 默认 `type:'doubao'`、`tO` 是 `channel` 参数化 ⇒ 两者都是**通用**的，
  *   只因 `FS` 里那句「所选账号与当前出图通道不匹配」被误关联。真正的 GPT 站点代码只有 `aO`/`sO`。
  *
- * ★ **`docs/14` 另标错一处**：把 `Bk`(34515-34534) 记作「**已登录判定** → `isAccountUsable` ✅」——
+ * ★ **`docs/过程.md` 另标错一处**：把 `Bk`(34515-34534) 记作「**已登录判定** → `isAccountUsable` ✅」——
  *   形状就对不上：`Bk` **返回账号数组**（可用 + 类型 + 分组三层筛），不是一个布尔判定。
  *   ⇒ 本模块的 `filterPoolAccounts` 才是它。
  *
@@ -23,7 +23,7 @@
  */
 
 import type { Account, PoolStrategy, SiteType } from '@/stable/model/account';
-import { isAccountUsable } from '@/stable/model/account';
+import { POOL_STRATEGIES, isAccountUsable } from '@/stable/model/account';
 import { ACCOUNT_PICK_TEXT, siteDisplayName } from '@/constants/text';
 import { pickAccount } from './accountPool';
 
@@ -31,6 +31,28 @@ import { pickAccount } from './accountPool';
 export const UNGROUPED = 'ungrouped';
 /** `auto:group:` 前缀（原 `FS` 的 `slice(11)` ⇒ 长度 11） */
 export const AUTO_GROUP_PREFIX = 'auto:group:';
+
+/**
+ * 归一选号策略（原 `Ou`，`shared.js:34480-34490`）
+ *
+ * 源：读 `localStorage['doubao-account-pool-strategy']`，**在选项表里**才收，
+ *   否则回落 `'round-robin'`（原 `BP`）。
+ * ⚠️ 非法值**不报错、不修数据**，静默回落默认 —— 逐字照抄（供 `hydrate` 读回时用）。
+ */
+export function normalizePoolStrategy(v: unknown): PoolStrategy {
+  return typeof v === 'string' && (POOL_STRATEGIES as readonly string[]).includes(v)
+    ? (v as PoolStrategy)
+    : 'round-robin';
+}
+
+/**
+ * 切换选号策略（原 `z3.jsx:273`：`b === 'round-robin' ? 'least-load' : 'round-robin'`）
+ *
+ * ⚠️ 源**写死这两个值**（不是"按选项表循环"）—— 逐字保留。
+ */
+export function nextPoolStrategy(v: PoolStrategy): PoolStrategy {
+  return v === 'round-robin' ? 'least-load' : 'round-robin';
+}
 
 /** 失败原因（与源一一对应） */
 export type SendAccountReason =
@@ -352,4 +374,31 @@ export function accountPickerLabel(input: {
   }
   const hit = (input.accounts || []).find((a) => a.id === v);
   return hit ? hit.name : '自动';
+}
+
+/**
+ * 挑**自动换号**的候选账号（原 `_Component43.jsx:2448-2465` 的
+ * `listNextIdleAccounts(T)` ＋ **同类型优先**）
+ *
+ * 源顺序（**顺序即语义**）：
+ *   ① 只留「已登录 · 未曾试过 · 不忙」的账号（空 ⇒ 调用方判「没有其他已登录的可用账号」）
+ *   ② **与当前账号同类型**的排在前，其余排在后（`:2461-2465`）
+ *
+ * ⚠️ 归**选号族**（而不是「发送后监测」）：它是"挑下一个用哪个账号"，与
+ *    `resolveSendAccountForChain` / `pickAccount` 同一件事。
+ * ⚠️ `busyIds` 由调用方注入（`core` 不读 store、不读时间 —— 原则 4）。
+ */
+export function pickSwitchCandidates(
+  accounts: readonly Account[],
+  currentType: string | undefined,
+  triedIds: ReadonlySet<string>,
+  busyIds: readonly string[],
+): Account[] {
+  const busy = new Set(busyIds);
+  const idle = accounts.filter(
+    (a) => isAccountUsable(a) && !triedIds.has(a.id) && !busy.has(a.id),
+  );
+  const sameType = idle.filter((a) => !!currentType && a.type === currentType);
+  const others = idle.filter((a) => !currentType || a.type !== currentType);
+  return [...sameType, ...others];
 }

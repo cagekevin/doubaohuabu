@@ -27,10 +27,11 @@
 
 import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
-import type { SendPayload } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { busyIdsOf } from '@/core/rules/accountBusy';
-import { buildVideoPayload } from '@/core/rules/payload';
+// ★ 名字不再重复（结构约束 M1，`docs/11` §六·六）：跨进程报文 = `WirePayload`；
+//   站点入参 = `SiteSendPayload`（品牌类型，只由 `toSitePayload` 产出）
+import { buildVideoPayload, toSitePayload, type WirePayload } from '@/core/rules/payload';
 import { parseRefChips, refsToReferenceLabels } from '@/core/rules/refs';
 import {
   mergeLinkedTexts,
@@ -141,6 +142,14 @@ export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline 
       return err('empty-text', '文本框内容为空，无法发送');
     }
 
+    // ★ 发报**之前**清掉该节点的三样历史状态（原 `shared.js:41384-41392`：`clearNodeWaitTime`
+    //   / `clearNodeNotice` / `clearNodeSwitch` 连着三下）—— 否则上一轮的倒计时 / 回复提示 /
+    //   换号结果会**一直挂在节点上**不消失。⚠️ 源那三处是 `try{}catch{}` 吞；本仓这三个 action
+    //   自身幂等（没东西可清就直接 return）⇒ 不必包 try。
+    s.clearNodeWaitTime(nodeId);
+    s.clearNodeNotice(nodeId);
+    s.clearNodeSwitch(nodeId);
+
     // ④ 报文（原 `TL` = 本工程的 `buildVideoPayload`，与 `generate.ts` 的网页通道**同源**）
     const payload = buildVideoPayload({
       account: { id: choice.account.id, name: choice.account.name, partition: choice.account.partition },
@@ -169,7 +178,14 @@ export function createSendPipeline(store: AppStore, ports: Ports): SendPipeline 
     //   ⚠️ **如实说明**：源 `Bu` 另发 `start` / `retry` / `transport` —— 本实现**没有重试循环**
     //      （`Bu` 的 `maxRetries` 默认 1），故 `retry` **不可达**（不假装：这里只发 `start`/`success`/`error`）。
     opts?.onProgress?.({ type: 'start', attempt: 0, maxRetries: 0 });
-    const res = await site.send(account, operation as SendPayload);
+    // ★ **必须过组装器**：`prepare` 产出的 operation 是**跨进程报文**（字段在 `content` 下），
+    //   而 `site.send` 收的是**扁平形态**。此前这里直接 `as SendPayload` 传下去 ⇒ 适配器读到的
+    //   `payload.text` / `payload.images` 恒为 `undefined`（`payload.images.length` 会**直接抛**）。
+    //   组装器从 `core/rules/payload.toSitePayload` 取（与 `usecases/generate` 同一份，判据 C1）。
+    const res = await site.send(
+      account,
+      toSitePayload(operation as WirePayload<Record<string, unknown>>),
+    );
     if (!res.ok) {
       // 与源同：失败先发 `error`（带原文），再返回结果 —— 两条路都给到调用方
       opts?.onProgress?.({ type: 'error', note: res.message });

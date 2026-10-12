@@ -23,7 +23,7 @@
  *    指纹体检（`FingerprintScanPanel`）· **账号行 🔍 指纹诊断 + ↻ 重新生成指纹** ·
  *    **🧹 清理缓存**（`HostPort.media.clearBrowserCache`）· **实时隔离体检**（`fp-health` 状态按钮）·
  *    面板底部三件（网格吸附 / 返回首页 / 清空画布）。
- * ⚠️ 仍未落地的（见 `docs/13`）：`取消所有选中` —— 它**依赖账号列表多选**（源 `ae = Ie.size`），
+ * ⚠️ 仍未落地的（见 `docs/过程.md`）：`取消所有选中` —— 它**依赖账号列表多选**（源 `ae = Ie.size`），
  *    那是另一个特性（ctrl/meta 点选 + 拖拽入组），本面板没有 ⇒ **不假装有**。
  */
 
@@ -85,8 +85,7 @@ export function AccountPanel() {
   // ★ 底部操作条（原 `OP.jsx:925-941`）：网格吸附 / 返回首页 / 清空画布
   const snap = useStore((s) => s.snap);
   const setSnap = useStore((s) => s.setSnap);
-  const setStarted = useStore((s) => s.setStarted);
-  const setActiveId = useStore((s) => s.setActiveId);
+  const showStartup = useStore((s) => s.showStartup);
   const clearCanvas = useStore((s) => s.clearCanvas);
 
   const [picking, setPicking] = useState(false);
@@ -425,6 +424,32 @@ export function AccountPanel() {
                 >
                   {FP_DIAG_TEXT.regenLabel}
                 </button>
+                {/*
+                  ★ **静默开关**（原 `OP.jsx:767-772` 的 `.autostart-switch` + `.autostart-knob`）
+                  —— 它此前**整颗没落** ⇒ 静默态只能靠"导入账号"（`autoStart` 默认 false）产生，
+                  即：**用户没有任何办法把一个账号静默下来**（而静默遮罩/恢复钮都已就位）。
+                  ⚠️ 源里它在 ↻（重新生成指纹）**之后**、📷（画廊）之前；本仓画廊钮在最前（既有差异）。
+                  ⚠️ 源在开启态**内联组色作底**（`style={{ background: Ce }}`，`Ce` = 分组色）。
+                */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={a.autoStart === true}
+                  className={`${styles.autoStartSwitch}${a.autoStart === true ? ` ${styles.autoStartOn}` : ''}`}
+                  style={a.autoStart === true && tint ? { background: tint } : undefined}
+                  title={
+                    a.autoStart === true
+                      ? ACCOUNT_PANEL_TEXT.autoStartOnTitle
+                      : ACCOUNT_PANEL_TEXT.autoStartOffTitle
+                  }
+                  onClick={(e) => {
+                    // 原 `OP.jsx:769` 的 `ot.stopPropagation()` —— 别让整行的"选中账号"跟着触发
+                    e.stopPropagation();
+                    void accountOps.toggleAutoStart(a.id);
+                  }}
+                >
+                  <span className={styles.autoStartKnob} />
+                </button>
                 <button
                   type="button"
                   className={`${styles.iconBtn} ${styles.iconDel}`}
@@ -467,9 +492,8 @@ export function AccountPanel() {
           type="button"
           className={styles.footBtn}
           onClick={() => {
-            // 原 `showStartup`：回到启动页（`bootstrap/main.tsx` 的 `Root` 按 `started` 切换）
-            setStarted(false);
-            setActiveId(null);
+            // 原 `showStartup`（`shared.js:30143-30158`）：先落盘 → 清存储路径 → 回启动页
+            showStartup();
           }}
         >
           {ACCOUNT_PANEL_TEXT.backHome}

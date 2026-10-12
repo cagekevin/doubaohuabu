@@ -20,6 +20,7 @@ import {
   QUOTA_LOW_FALLBACK_TEXT,
   QUOTA_LOW_TITLE,
   REPLY_NOTICE_RULES,
+  SWITCH_ACTION,
   type ReplyNoticeLevel,
   type ReplyNoticeRule,
 } from '@/constants/sendWatch';
@@ -29,6 +30,7 @@ import type {
   ReplyNoticeReading,
   WaitTimeReading,
 } from '@/core/ports/site.port';
+import { pad2 } from '@/lib/time';
 import type { NodeNotice } from './nodeStatus';
 
 /** 要写进 store 的通知（不含 `at` —— 由 `state/slices/nodeStatus` 的 setter 补） */
@@ -175,6 +177,22 @@ export function countdownOf(
   return { remainingMs, ended: remainingMs <= 0 };
 }
 
+/**
+ * 剩余毫秒 → 倒计时文本（原 `NL` `shared.js:40141-40154`）
+ *
+ * 源（逐字）：`t = Math.max(0, Math.ceil(ms / 1000))`；`h > 0` ⇒ `h:mm:ss`，否则 `mm:ss`
+ *   （分 / 秒都补零两位）。
+ * ⚠️ 与 `lib/time.ts` 的 `formatDuration`（`XmYYs`）**不是同一形态** —— 源就是这个 `mm:ss`，
+ *   逐字保留（唯一消费者 = 文本节点的 `wait-countdown`，原 `CL.jsx:766`）。
+ */
+export function formatCountdown(remainingMs: number): string {
+  const total = Math.max(0, Math.ceil(remainingMs / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
+}
+
 // ─────────────────────────── 监测循环的跨轮状态机 ───────────────────────────
 
 /** 一轮探测的读数（4 个探测；缺项 = 该站点没这个能力 / 本轮没跑） */
@@ -242,6 +260,21 @@ export function seedWatchState(reading: WatchReading, persistedAckCount = 0): Wa
   };
 }
 
+/**
+ * 换号请求（原 `be(reason, action)` 的两个入参，`_Component43.jsx:2420`）
+ *
+ * ⚠️ **只有两处会换号**（逐字对源）：
+ *   · ③ 额度预警命中 —— 源 `Ne` 尾部 `return await be(fe, '额度不足')`（`:2635-2636`）
+ *   · ④a「今日免费次数用尽」命中 —— 源 `ye` 尾部 `return await be(text, '额度用尽')`（`:2577`）
+ *   ④b 其余回复通知**只通知、不换号**（源 `ye` 末尾 `return false`，`:2609`）。
+ */
+export interface SwitchRequest {
+  /** 换号原因（原 `Fe`）—— 落进 `nodeSwitches.reason`，也是日志里「命中「…」」的那句 */
+  reason: string;
+  /** 动作名（原 `W`，只进日志）—— 见 `SWITCH_ACTION` */
+  action: string;
+}
+
 /** 一轮的**要落 store 的东西**（`state` 只负责把这几样写进去 —— 原则 1） */
 export interface WatchEffects {
   /** 要写的通知（按顺序覆盖；空数组 = 不写） */
@@ -258,22 +291,23 @@ export interface WatchEffects {
  * 逐条对齐源版的**顺序即语义**：
  *   ① `ack`（`ae`）—— 只更新计数（不写 store）
  *   ② `waitTime`（`$`）—— 仅当 `!waitTimeDone` 且 `hit && seconds > 0` ⇒ 写；写完置闩
- *   ③ `quota`（`Ne`）—— 仅当 `!quotaDone`；`hit && lowCount > quotaBaseline` ⇒ 写「额度不足」通知 + 置闩
- *   ④ `notices`（`ye`）—— 先看 `quota-exhausted`（增量 ⇒ 写「今日免费次数用尽」）；否则取**语气最高**的一条
+ *   ③ `quota`（`Ne`）—— 仅当 `!quotaDone`；命中 ⇒ 写「额度不足」通知 + 置闩 ⇒ ★ **换号**
+ *   ④ `notices`（`ye`）—— ④a `quota-exhausted` 增量 ⇒ 写「今日免费次数用尽」⇒ ★ **换号**；
+ *      ④b 其余 ⇒ 取**语气最高**的一条，**只通知**
  *   ⑤ `ack` 增量 ⇒ 「本次发送已生效」（调用方据此打日志 / 记 `Wd`）
  *
- * ⚠️ **与源的一处有意偏离（留痕）**：源在 ③④ 命中后 `return`（因为紧接着要**换号重发**，
- *   见 `be`）。本工程**换号重发未落** ⇒ 这两支**只通知、不终止循环、也不假装已切换**
- *   （`stop` 恒为 `false`）—— 否则用户会以为已经换过号了。
+ * ★ 命中 ③ / ④a 时**当轮即返回 `switchRequest`**（逐字对源：那两处都是 `return await be(...)`，
+ *   换号在后，本轮之后的判断**不再执行**）；④b 不返回请求 ⇒ 循环继续。
  *
- * @returns `state` = 新一轮状态（不可变）· `effects` = 要落的 store 写 · `stop` = 是否结束监测
+ * @returns `state` = 新一轮状态（不可变）· `effects` = 要落的 store 写 ·
+ *          `switchRequest` = 命中换号（`null` = 本轮不换，继续监测）
  */
 export function reduceWatchRound(
   state: WatchState,
   reading: WatchReading,
   consumeWarn: number,
   remainWarn: number,
-): { state: WatchState; effects: WatchEffects; stop: boolean } {
+): { state: WatchState; effects: WatchEffects; switchRequest: SwitchRequest | null } {
   const next: WatchState = { ...state, seen: [...state.seen] };
   const effects: WatchEffects = { notices: [], waitTime: null, ackCount: null };
 
@@ -286,39 +320,48 @@ export function reduceWatchRound(
     next.waitTimeDone = true;
   }
 
-  // ③ 额度预警：只预警一次（原 2652 + `Ne` 的 `Me` 闩）
+  // ③ 额度预警：只预警一次（原 2652 + `Ne` 的 `Me` 闩）—— 命中即换号（原 `:2635-2636`）
   if (!next.quotaDone && reading.quota) {
     const q = reading.quota;
     if (q.lowCount > next.quotaBaseline) {
-      effects.notices.push(quotaLowNotice(q, consumeWarn, remainWarn));
+      const notice = quotaLowNotice(q, consumeWarn, remainWarn);
+      effects.notices.push(notice);
       next.quotaDone = true;
+      return { state: next, effects, switchRequest: { reason: notice.text, action: SWITCH_ACTION.quotaLow } };
     }
   }
 
   // ④ 回复通知（原 2658 → `ye`）
   if (reading.notices) {
     const counts = reading.notices.counts;
-    // ④a `quota-exhausted` 的专用分支（原 2569-2577）
+    const sample = reading.notices.samples[QUOTA_EXHAUSTED_CODE];
+    // ④a `quota-exhausted` 的专用分支（原 2569-2577）—— 通知 + **换号**
     const exhausted = counts[QUOTA_EXHAUSTED_CODE] || 0;
     if (exhausted > (next.noticeBaseline[QUOTA_EXHAUSTED_CODE] || 0)) {
       next.seen.push(QUOTA_EXHAUSTED_CODE);
-      const notice = quotaExhaustedNotice(reading.notices.samples[QUOTA_EXHAUSTED_CODE]);
+      const notice = quotaExhaustedNotice(sample);
       if (notice) effects.notices.push(notice);
-    } else {
-      // ④b 其余规则：取语气最高的一条（原 2585-2607）
-      const picked = pickReplyNotice(
-        counts,
-        reading.notices.samples,
-        next.noticeBaseline,
-        new Set(next.seen),
-      );
-      if (picked) {
-        next.seen.push(picked.code);
-        effects.notices.push(picked);
-      }
+      return {
+        state: next,
+        effects,
+        switchRequest: {
+          reason: sample || QUOTA_EXHAUSTED_FALLBACK_TEXT,
+          action: SWITCH_ACTION.quotaExhausted,
+        },
+      };
+    }
+    // ④b 其余规则：取语气最高的一条（原 2585-2607）—— **只通知，不换号**（源 `:2609` `return false`）
+    const picked = pickReplyNotice(
+      counts,
+      reading.notices.samples,
+      next.noticeBaseline,
+      new Set(next.seen),
+    );
+    if (picked) {
+      next.seen.push(picked.code);
+      effects.notices.push(picked);
     }
   }
 
-  // ⚠️ 源在 ③④ 命中后会终止（因为要换号）；本工程**换号未落** ⇒ 恒不终止（见函数头注）
-  return { state: next, effects, stop: false };
+  return { state: next, effects, switchRequest: null };
 }

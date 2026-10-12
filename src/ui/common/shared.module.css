@@ -1,3 +1,10 @@
+/*
+ * ★ 整个真源住 `@layer base`（级联层）。
+ *   组件样式**未分层** ⇒ 按 CSS 规范「未分层 > 分层（同特异性）」⇒ **组件天然压过真源**。
+ *   即：本地写 `background: red` 就生效（＝所有人的直觉写法），**不需要任何人记得一条反直觉的规矩**。
+ *   口径见 docs/17 §5。
+ */
+@layer base {
 /**
  * 共享交互组件的样式（原则 8「三振出局」的落点）
  * ⚠️ 只允许 var(--...) 引用 tokens.css，不得写硬编码色值（原则 5 SSOT）
@@ -26,17 +33,11 @@
   inset: 0;
   background: var(--color-scrim);
 }
-.dialog {
-  min-width: 320px;
-  max-width: 80vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-surface-raised);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
+/* `.dialog` 已删：它是 `.panel` 的旧名（同一张卡片），`Modal` 早已改走 `PanelShell` ⇒ **0 消费者**。
+   ⚠️ 它那套「模态默认尺寸」**不迁到真源**（曾试 `.panelModal`，已撤）：真源规则在构建产物里**排在
+   使用方之后** ⇒ 真源的 `max-width`/`max-height` 会**静默盖掉**各模态自己的值（实证：`GalleryPanel`
+   的 `max-width:880px` · `LoginModal` 的 `720px` · `FingerprintScanPanel` 的 `84vh`）。**模态尺寸归各模态**；
+   边界由 `.overlay` 的 flex + padding 兜住。 */
 /**
  * 面板头 —— **默认 = 面板的多数值**（9 个面板实测都挤在 `padding 4/8` · `gap 8`）。
  * ⚠️ 变体必须在真源内定义（使用方本地覆盖会被真源盖掉，实证见计划 §5 刀 6 铁律）。
@@ -52,7 +53,7 @@
   border-bottom: 1px solid var(--color-border);
   font-size: var(--font-size-sm);
   color: var(--color-text-strong);
-  font-weight: var(--font-weight-semi);
+  font-weight: var(--font-weight-bold);
 }
 .panelBody {
   flex: 1;
@@ -79,7 +80,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 /*
  * 头部中槽（计数 / 账号 / 时长）—— 与 `panelHeadActions` 的区别：**不靠右**（紧跟在标题之后）。
  * ⚠️ plan §4 只列了 `panelHeadActions`；中槽是 `PanelShell` 落 `meta` 时必需的 ⇒ 一并补上。
@@ -105,7 +105,7 @@
   flex: 0 0 auto;
   min-width: 0;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semi);
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-strong);
 }
 .sectionTitleSub {
@@ -384,6 +384,33 @@
   background: var(--color-danger-border);
 }
 
+/*
+ * 小图标钮（原 `.lib-icon`）—— ★ 真源（判据「能一种的别搞两种」）。
+ * 资源库 ☆/★/✕ · 账号行 🖼/🔍/↻/✕ · 启动页工程行 ✕ **三处同一形态** ⇒ 收成一份。
+ * 样式逐字对 `docs/mockup/assets/mockup.css:2057-2061`（`.lib-icon` / `.fav` / `.del`）。
+ * ⚠️ 三条顺序**不可调**（同为单类 / 同特异性 ⇒ 靠源序取胜）：
+ *   `.libIconFav` 在 `.libIcon` 之后（收藏色盖过基础色）；
+ *   `.libIconDel:hover` 在 `.libIcon:hover` 之后（危险色盖过悬停色）。
+ */
+.libIcon {
+  composes: btn btnIcon btnGhost;
+  flex: none;
+  width: var(--dim-5);
+  height: var(--dim-5);
+  color: var(--color-text-muted);
+}
+.libIcon:hover:not(:disabled) {
+  color: var(--color-text-strong);
+}
+/* 收藏点亮（原 `.lib-icon.fav`） */
+.libIconFav {
+  color: var(--color-warning);
+}
+/* 删除 / 危险（原 `.lib-icon.del`）—— 悬停走危险色 */
+.libIconDel:hover:not(:disabled) {
+  color: var(--color-danger-text);
+}
+
 /* Toast 操作按钮（原 `.app-toast-action`）—— ★ 必须定义在 `.btn*` 之后（同文件 `composes` 约束）。
    ⚠️ 颜色随 toast 正文（深底浅字）—— 真源 `.btnGhost` 的 `--btn-ghost-fg` 是**浅色主题的灰**，
       在深色 toast 底上不可读 ⇒ 覆盖为 `--color-surface-raised`（= `.toast` 的正文色）。 */
@@ -560,3 +587,4 @@
  *   避免那两处各自 `composes: pill` 后再手写同一对 `background`/`color`（= 制造第二份真源）。
  */
 .pillBrand { background: var(--color-action-primary); color: var(--color-text-on-brand); }
+}

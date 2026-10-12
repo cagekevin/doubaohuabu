@@ -84,7 +84,6 @@ export const BATCH_SEND_TEXT = {
     `批量发送完成 · 成功 ${ok} · 失败 ${fail}${skipped ? ` · 跳过 ${skipped}` : ''}`,
   /** 原 199-205 */
   abortAll: '全部中止',
-  close: '关闭',
   /** 原 229-232 的决策区 */
   decisionReason: (name: string, msg: string) => `「${name}」发送失败：${msg}`,
   decisionRemaining: (n: number) => `（还有 ${n} 个节点未发送）`,
@@ -140,10 +139,8 @@ export const GEN_PANEL_TEXT = {
   resolutionLabel: '分辨率',
   countLabel: '张数',
   modelLabel: '模型',
-  /** 关闭按钮 `title`（原 `Z3_1.jsx:969`，逐字） */
+  /** 关闭按钮 `title`（原 `Z3_1.jsx:969`，逐字）—— 字形归 `PanelShell` 真源（`.panelClose` 的 `✕`） */
   closeTitle: '保存并关闭（Esc）',
-  /** 关闭按钮字形（原 `Z3_1.jsx:970`，逐字） */
-  closeGlyph: '✕',
 
   // ── 批量出片（原 `Z3_1.jsx:856-944` 的 `st`）─────────────────────────────
   /** 按钮文案（原 1201，逐字） */
@@ -173,6 +170,12 @@ export const GEN_PANEL_TEXT = {
     `已批量提交 ${count} 个任务（多比例 · ${name}），出片后自动连到本节点`,
   /** 提交失败（原 942，逐字；`msg` = **后端原文**，原则 6 不得改写） */
   batchFailed: (msg: string) => `批量提交失败：${msg}`,
+
+  // ── 生成控制器守卫（`state/generate` 前置检查；**本工程新增** —— 源把提交写在组件内，无此独立守卫）──
+  /** 节点 id 找不到（失败可见，原则 6；`id` = 目标节点 id） */
+  nodeMissing: (id: string) => `节点不存在：${id}`,
+  /** 节点类型不能生成（`type` = 节点类型串，如 `imggen`） */
+  nodeTypeUnsupported: (type: string) => `节点类型 ${type} 不支持生成`,
 } as const;
 
 /**
@@ -184,9 +187,7 @@ export const GEN_PANEL_TEXT = {
  */
 export const STYLE_LIB_TEXT = {
   title: '风格库',
-  /** ✕ 的 `title`（原 154） */
-  close: '关闭',
-  /** ✕ 字形（原 155） */
+  /** ✕ 字形（原 155）—— 只给编辑页「返回列表」那颗（`.editClose`）用；模态关闭的 ✕ 归 `PanelShell` */
   closeGlyph: '✕',
   /** 卡片选中勾（原 200） */
   checkGlyph: '✓',
@@ -246,10 +247,9 @@ export const ACCOUNT_NODE_TEXT = {
   /**
    * 重试中（原 `OL.jsx:334`，由 `onProgress.type === 'retry'` 触发）
    *
-   * ★ **`TD-07-9` 结清（2026-10-11，回源）**：本条**当前 0 消费者** —— 它的触发链在
-   *   **「仅填入」半**（`OL.jsx:329` 的 `Bu(pe, {onProgress})`），而该半**未落**：
-   *   `AccountNode.tsx:16-22` ⛔ 如实标注 · `docs/13` §1.3 `[~]` · `docs/14`「3 账号节点发送」`[~]`。
-   *   ⇒ **保留不删**（那条链落时即用）；**也不给它造消费者**（那是另一条链的事）。
+   * ⚠️ **当前 0 消费者**：触发它的 `Bu` **重试循环**本仓**没有实现**
+   *   （`state/batchSend` 只发 `start`/`success`/`error`，见该处注释）⇒ 这条**结构上不可达**。
+   *   ⇒ **保留不删**（源有这句话）；**也不给它造消费者**（判据 B5：不假装有重试）。
    */
   retrying: '重试中…',
   /** 失败兜底（原 `OL.jsx:367`） */
@@ -260,33 +260,37 @@ export const ACCOUNT_NODE_TEXT = {
   autoSent: '已自动发送',
   /** ⚠️ 全角括号（原 352 逐字） */
   filledOnly: '（仅填入，未发送）',
+  /** 摘要**三段全空**时的兜底（原 `:352` 的三目末支，逐字）—— 与 `filledOnly` 不是同一句 */
+  filledNoText: '已填入（仅填入，未发送）',
   /** 发送前校验未通过（原 `OL.jsx:340` 的兜底文案） */
   precheckFallback: '发送前校验未通过',
   /** 校验告警后缀（原 `OL.jsx:355`） */
   precheckWarn: (issue: string) => `；⚠ ${issue}（请人工核对后发送）`,
   /** 按钮 `title`（原 `OL.jsx:501` 逐字） */
   sendTitle: '同步比例/时长/模型，并把文本框与素材填入所选账号对话框（不触发发送）',
+  /** 反馈条上 ✕ 的 `title`（原 `OL.jsx:511` 逐字） */
+  closeTitle: '关闭提示',
   /** 按钮文案（原 `OL.jsx:504-506`：`↑ 发送` / `⟳ 发送中…`）—— 源版标签就是「发送」，语义由 `title` 补 */
   send: '发送',
   sendBusy: '发送中…',
   /** 自动发送开关的 `title`（原 `OL.jsx:418` 逐字） */
   autoSendTitle: '开启后，填入内容+参数后将自动点击发送按钮',
-  /**
-   * ★ **本工程新增**：说明「填入」这条通道还没接通（不静默、不假装）
-   *
-   * 原 `OL.jsx:329` 走的是 `Bu(pe, {onProgress})` —— 它的返回里有
-   * `imagesAttached`/`imagesTotal`/`autoClicked`/`precheck`，语义是**「填入（可选连发送一起做）」**；
-   * 而本工程已落的 `SitePort.send` 是**「发送 + 等生成结果」**（`doubao/index.ts:185` 里带
-   * `pollResults`）⇒ **两者不是同一个操作，不能拿它冒充**（否则"仅填入"会变成"真发出去并等出片"）。
-   * ⇒ 按钮**禁用**并把原因写在 `title` 里（判据 B4：不对用户承诺不存在的能力）。
-   */
-  channelPending: '该通道尚未接通：原 Bu 的「填入」语义与已落的 SitePort.send（发送+等结果）不同',
+  // ⚠️ 2026-10-12：原这里的 `channelPending`（"该通道尚未接通…"）**已删** —— 「填入」通道
+  //   已落（`SitePort.send` 尊重 `payload.autoSend` + 账号节点接线）⇒ 那句说明作废（判据 B4）。
+  //   按钮 `title` 直接用上面的 `sendTitle`（源 `OL.jsx:501` 逐字）。
   /**
    * 汇总行（原 `OL.jsx:522`：`` `已链接 ${x.materials.length} 张素材 · ${x.texts.length} 个文本框` ``，逐字）
    * ⚠️ 与「本工程新增的输入预览」不同 —— 源里**只有这一行**（没有逐条列出"将要填入什么"）。
    */
   linkedSummary: (materials: number, texts: number) =>
     `已链接 ${materials} 张素材 · ${texts} 个文本框`,
+  /**
+   * 「已过时长」计时器的 `title` **三档**（原 `OL.jsx:415` 的嵌套三元，逐字）
+   * —— 与 `core/rules/nodeStatus.timerBand` 的三个档位**一一对应**（别各写一份判断）。
+   */
+  timerTitleRed: '已超过 10 分钟，生成时间较长',
+  timerTitleYellow: '已超过 5 分钟',
+  timerTitleNormal: '自上次成功发送起累计的经过时间',
 } as const;
 
 /**
@@ -747,6 +751,10 @@ export const VIDEO_NODE_TEXT = {
   noPrompt: '（无提示词）',
   /** 规格前缀（原 418-421：`模型 X` / `{n}s` / `{ratio}` …） */
   specModel: (name: string) => `模型 ${name}`,
+  /** 参考图数（原 422：`参考图×{n}`，逐字） */
+  specImages: (n: number) => `参考图×${n}`,
+  /** 引用文本数（原 423：`引用文本×{n}`，逐字） */
+  specTexts: (n: number) => `引用文本×${n}`,
   /** 面板脚（原 437-442） */
   copyRecipe: '复制配方',
   rerunRecipe: '按配方重跑',
@@ -795,7 +803,6 @@ export const VIDEO_NODE_TEXT = {
   pulled: '已拉取到结果',
   pullNoNode: '节点已不存在',
   pullNotAvailable: '该节点没有可拉取的生成记录',
-  pullNeedConversation: '该次生成只记录了会话 id，需回豆包对话页拉取（本工程尚未落地）',
   pullNoAccount: '找不到该次生成所用的账号',
 } as const;
 
@@ -884,6 +891,14 @@ export const SEND_QUEUE_TEXT = {
   resume: '继续',
   /** 清掉已结束的项（原 `A3`；按钮文案源版在 `.sq-foot`，本工程给文字） */
   clearDone: '清除已完成',
+  /**
+   * ★ **选号策略按钮**（原 `z3.jsx:271-276` 的 `.sq-foot` **第一颗**）—— 点一下在两种策略间切换。
+   */
+  pickAccountPrefix: '选号：',
+  /** 策略显示名（原 `am` 的 `label`，`shared.js:34468-34474`，逐字） */
+  strategyLabels: { 'round-robin': '顺序轮转', 'least-load': '按负载' },
+  /** 按钮 `title`（原 `z3.jsx:274`，逐字） */
+  strategyToggleTitle: '账号选取策略：顺序轮转（每个账号轮流）/ 按负载（派发条数最少的优先）',
   /** 状态行：暂停中（**本工程新增**，源版只有图标变色） */
   paused: '已暂停',
   /** 状态行：进行中（源版用 `.sq-statusline` 表达，本工程给文字） */
@@ -963,8 +978,6 @@ export const GALLERY_TEXT = {
   /** 副标题（原 419-421，逐字拼） */
   sub: (selected: number, total: number) =>
     `已选 ${selected} / 共 ${total} 张 · 点「扫描 Tapnow 画布」读取当前打开画布节点里的图片；点缩略图可预览大图`,
-  /** 关闭（原 446 的按钮，源版无文字） */
-  close: '关闭',
   /** 清空（原 443：`btn sm danger`，源版无文字） */
   clear: '清空',
   clearTitle: '清空该账号的画廊（保留条目本身）',
@@ -979,8 +992,36 @@ export const GALLERY_TEXT = {
   bigBadge: (size: string, dims: string) => `尺寸较大：${size} ${dims}`,
   /** 张数（原 417 附近的状态行；本工程给一行计数） */
   count: (n: number) => `共 ${n} 张`,
-  /** 扫描按钮文案（原 423 是无文字按钮 + `title`；本工程给文字 —— 它看起来就是个按钮） */
-  scan: '扫描 Tapnow 画布',
+  /**
+   * 扫描按钮文案（原 424 的三目：待机档 —— **原版图标是 `🔍`**）
+   * ⚠️ 本工程给**文字 + 图标**（源那个是图标钮）—— 但字形**逐字照源**。
+   */
+  scan: '🔍 扫描 Tapnow 画布',
+  /** 扫描中（原 424 的 `phase === 'scanning'` 档，逐字） */
+  scanReading: '读取画布中…',
+  /** ★ 扫描阶段机（原 `wP` 的 `onStatus` 文案，逐字） */
+  scanPhaseReading: '正在读取当前画布节点…',
+  scanPhaseFound: (n: number) => `当前画布含 ${n} 张图`,
+  scanPhasePrepare: (n: number) => `准备获取 ${n} 张原图`,
+  /** 没停在画布页（原 `_Component23.jsx:207`，逐字；`warn` 6500） */
+  scanNeedCanvas: '请先在 Tapnow 里打开要扫描的画布页（/canvas/…），只抓当前画布',
+  /** 找不到该账号的页面（原 `:274` 的 `message` 回落，逐字；`warn` 7000） */
+  scanNotOpen: '没有找到该账号的 Tapnow 页面，请先在左侧选中这个账号',
+  /** 登录态失效（原 `:276`，逐字；`err` 7000） */
+  scanLoginExpired: '登录态已失效：请在该账号的 Tapnow 页面重新登录后再扫描',
+  /** 扫描结果（原 `:283`，逐字拼；有失败 ⇒ `warn` 否则 `ok`，5000） */
+  scanOk: (n: number, skipped: number, failed: number) =>
+    `已获取 ${n} 张原图${skipped ? `，跳过 ${skipped} 张无效图` : ''}${failed ? `，${failed} 张失败` : ''}`,
+  /**
+   * 只失败（原 `:286` `` `${failed} 张取值失败：${首条失败原因}` ``）
+   * ⚠️ **本仓去掉原因**：`ScanResult.failed` 只有**计数**（逐张原因进 `log.warn`，不随结果返回）
+   *   —— 想让界面也报原因，得先给 `ScanResult` 加 `failures[]`（**如实标注**，别编一句"未知原因"）。
+   */
+  scanFailedOnly: (n: number) => `${n} 张取值失败`,
+  /** 没有新的（原 `:288` 的 `message` 回落，逐字；`warn` 6000） */
+  scanNone: '没有新的图片（画布上的图都已在画廊里）',
+  /** 抛异常（原 `:295`，逐字；`err` 6000） */
+  scanException: (msg: string) => `抓取异常：${msg}`,
   /** 张数（原来那个禁用按钮的位置改用它显示） */
   /** 「加入画布选中素材」（原 440 的 `Ie`）—— ★ 2026-10-11 接通（写入方早已就位） */
   addSelected: '加入画布选中素材',
@@ -989,10 +1030,26 @@ export const GALLERY_TEXT = {
   addSelectedNone: '画布上尚未选中任何素材节点（先在画布框选素材，再回到画廊点本按钮）',
   addSelectedOk: (n: number) => `已从画布加入收藏 ${n} 张`,
   addSelectedDup: '这些素材已在画廊中（重复跳过）',
-  /** ⛔ 未落地三条（按钮禁用时的 `title`，如实说明原因） */
-  pendingScan:
-    '「扫描 Tapnow 画布」尚未实现。可先在画布上框选素材，再点「加入选中素材」',
-  pendingImport: '「从磁盘导入」尚未实现。可把图片直接拖入资源库',
+  /**
+   * 「导入图片」（原 436：`btn sm` · `title="从磁盘导入图片"` · 逐字）
+   * ⚠️ 源是**隐藏 `<input type=file>`**（`oe` → `v.current.click()`）；本仓走**系统对话框**
+   *   （`hostOps.importFiles`，与「＋ 添加素材」同一条路 —— 判据 C1：一个入口）。
+   */
+  importImages: '导入图片',
+  importTitle: '从磁盘导入图片',
+  /** 导入成功（原 325，逐字） */
+  importOk: (n: number) => `已导入 ${n} 张图片到画廊`,
+  /** 一份都没进（原 327，逐字） */
+  importDup: '这些图片已在画廊中（重复跳过）',
+  /** 导入失败（原 330：`` `导入失败：${re && re.message ? re.message : '未知错误'}` ``） */
+  importFailed: (msg: string) => `导入失败：${msg}`,
+  /** 抛异常且拿不到 message 时的兜底（原 330 的 `'未知错误'`） */
+  importUnknownError: '未知错误',
+  /**
+   * 面板内提示的停留（原 32 的 `h = (msg, type = 'ok', ms = 3500)`）—— **导入 / 收藏共用**。
+   * ⚠️ 与 store toast 的默认 3000 不同（那是另一条链的默认）⇒ 这里显式传。
+   */
+  msgMs: 3500,
 
   // ── 大图预览 lightbox（原 `_Component23.jsx:550-602` 的 `.tg-lightbox-*`）──
   /** 缩略图上的预览按钮（原 504-509，`title` 逐字） */
@@ -1066,7 +1123,6 @@ export const FP_SCAN_TEXT = {
   /** 按钮（原 `DP.jsx:106` 的「清空」） */
   copyReport: '复制报告',
   clearHistory: '清空历史',
-  close: '关闭',
   /** 历史区标题（**本工程新增**：源版历史列表在面板内，标题由 `.title` 承担） */
   historyTitle: (n: number) => `历史（${n}）`,
   /** 历史一条的摘要（原 118，逐字：`· N 账号 / M 对`） */
@@ -1247,7 +1303,6 @@ export const GROUP_MANAGER_TEXT = {
   trigger: '分组',
   triggerTitle: '管理账号分组（新建 / 重命名 / 颜色 / 自启动 / 移组）',
   title: '分组管理',
-  close: '关闭',
   create: '新建分组',
   /** 原 `OP.jsx:864` 的 placeholder（逐字） */
   namePlaceholder: '输入分组名称',
@@ -1316,8 +1371,6 @@ export const IMAGE_EDITOR_TEXT = {
   tabMask: '一键遮脸',
   /** tab「裁剪」（原 875） */
   tabCrop: '裁剪',
-  /** 关闭按钮 `title`（原 884） */
-  close: '关闭',
   /** 遮脸效果分组 label（原 891） */
   effectLabel: '遮脸效果',
   /** 笔刷分组 label（原 904） */
@@ -1405,7 +1458,7 @@ export const IMAGE_EDITOR_TEXT = {
 } as const;
 
 /**
- * 无水印资源面板（原 `SD.jsx` 160 行）—— ★ **2026-10-12 落（`docs/14` §10 的 ⛔ 阻塞）**
+ * 无水印资源面板（原 `SD.jsx` 160 行）—— ★ **2026-10-12 落（`docs/过程.md` §10 的 ⛔ 阻塞）**
  *
  * ⚠️ 逐字对源；`type`（图/视频）在 `VideoShare` 里**没有**字段 —— 源 `SD` 的「图」来自
  *   `onDolaMedia`（后端推送，未落），本仓**只展示视频**（`videoShares`），如实标注。
@@ -1429,6 +1482,4 @@ export const WATERMARK_PANEL_TEXT = {
   remove: '移除',
   /** 清空（原 87） */
   clear: '清空',
-  /** 关闭（原 90） */
-  close: '关闭',
 } as const;

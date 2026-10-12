@@ -13,6 +13,7 @@
  */
 
 import type { AppStore } from './store';
+import { sendToSiteDeps } from './sendDeps';
 import type { Ports } from '@/core/ports';
 import type { AnalyzeDeps } from '@/core/usecases/analyzePrompt';
 import { analyzeNodePrompt, reviseNodePrompt } from '@/core/usecases/analyzePrompt';
@@ -38,16 +39,7 @@ function originalImageUrlOf(data: Record<string, unknown>): string {
 }
 
 export function createAnalyzeController(store: AppStore, ports: Ports): AnalyzeController {
-  const deps: AnalyzeDeps = {
-    sites: ports.sites,
-    backendPage: ports.backendPage,
-    // ★ 占用 / 释放（原 `Fi` / `tn`）—— 真正的 `set` 在 state（与 `state/generate.ts` 同法）
-    holdAccount: (accountId, nodeId) =>
-      store.useStore.getState().holdAccount(accountId, { itemId: null, nodeId }),
-    releaseAccount: (accountId) => {
-      store.useStore.getState().releaseAccount(accountId);
-    },
-  };
+  const deps: AnalyzeDeps = sendToSiteDeps(store, ports);
 
   /** 落一次结果（patch 写节点 + toast 提示）——源版是 `u({analyzePrompt})` + `showToast` */
   const applyOutcome = (

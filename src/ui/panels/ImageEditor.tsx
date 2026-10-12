@@ -3,21 +3,24 @@
  *
  * ★ **2026-10-12 落（`TD-09-4`）**：a+b 两块纯规则（`imageCrop.ts` / `maskBrush.ts`）早已落，
  *   本文件是最后一块 —— **视图半**（加载 / 双模式状态机 / 指针事件 / 保存）。
- * ★ **`docs/16` §2.2 定稿**：`ui/panels/ImageEditor.tsx`，**动态导入（`lazy`）**，判据 **M3**。
+ * ★ **`docs/过程.md` §2.2 定稿**：`ui/panels/ImageEditor.tsx`，**动态导入（`lazy`）**，判据 **M3**。
  *
  * ⚠️ **分层边界（铁律②：`ui` 不得 import `adapters`）**：
  *   · 遮脸绘制 → `lib/image.ts` 的 `drawMaskEffect`（效果分发，`adapters/media/facemask.ts` 的
  *     `drawMask` 已收口到它）+ `core/rules/facemask.ts` 的 `maskCellSize`（格子公式）；
  *   · 裁剪几何 → `core/rules/imageCrop.ts`；笔刷/撤销 → `core/rules/maskBrush.ts`；
- *   · 人脸检测 → `hostOps.detectFaces`（经 `MediaPort`；`err` 透传原文，`ok`+空 = 未识别）；
+ *   · 人脸检测 → `hostOps.detectFaces`（经 `MediaPort`；`err` 透传原文）+ `hostOps.faceDetectStats`
+ *     （**一张脸都没返回**时分档 —— 判据在纯层 `core/rules/faceDetect.explainEmptyFaceDetect`）；
  *   · 复制到剪贴板 → `hostOps.copyImage`（经 `ClipboardPort.writeImage`）。
  *
- * ⚠️ **与源的三处有意简化/差异（登记 `TD-09-4`）**：
- *   ① 人脸识别失败**不做 GPU/WebGL 正则细分** —— 源让消费者正则匹配 reason（`/gpu/i.test`）
- *      是「消费者替生产者分类」（原则 6 违规），本仓只透传 `Result.reason`；
- *   ② 保存**直接传 base64**（源是编辑器先 `saveImageSync` 外置）—— 本仓外置已收进
+ * ⚠️ **与源的两处有意简化/差异（登记 `TD-09-4`）**：
+ *   ① 保存**直接传 base64**（源是编辑器先 `saveImageSync` 外置）—— 本仓外置已收进
  *      `replaceMaterialImage` / `replaceImageGenImage`（判据 C1：单一外置点）；
- *   ③ Esc 走 **window 级** `keydown`（源同法），**不用** `useEscapeKey`（元素级，焦点在 canvas 不生效）。
+ *   ② Esc 走 **window 级** `keydown`（源同法），**不用** `useEscapeKey`（元素级，焦点在 canvas 不生效）。
+ *   ~~③ 人脸失败不做 GPU/WebGL 细分~~ —— **已按逐字对源补回**（`G3.jsx:346-350` 的三档）：
+ *      原以「消费者替生产者分类」（原则 6）为由省掉，但那同时**把真失败说成了「未识别到人脸」**
+ *      （用户可见的错话）；补回时把判据**收进纯层**（`core/rules/faceDetect`，可测 + 单点），
+ *      而不是留在视图里就地正则。
  *
  * ⚠️ **本组件不可单测**（canvas 实时交互）—— 靠 Electron 内运行时验证；纯几何在 `core/rules` 已有单测。
  */
@@ -35,6 +38,8 @@ import {
   type CropRect,
 } from '@/core/rules/imageCrop';
 import { maskCellSize } from '@/core/rules/facemask';
+// ★ 「一张脸都没检测到」的分档判据（原 `G3.jsx:346-350`）—— 纯层，可测
+import { explainEmptyFaceDetect } from '@/core/rules/faceDetect';
 import { BRUSH_DEFAULT_DIAMETER, BRUSH_UNDO_LIMIT, brushPatchRect, pushUndoSnapshot } from '@/core/rules/maskBrush';
 import { createCanvas, createTmpState, drawMaskEffect, type TmpState } from '@/lib/image';
 import { clamp } from '@/lib/math';
@@ -284,7 +289,17 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
       return;
     }
     if (!r.value.length) {
-      setNotice(IMAGE_EDITOR_TEXT.noFaces);
+      // ★ **一张脸都没有 ≠「没识别到人脸」**（原 `G3.jsx:346-350`，逐字对源）：读本次统计分档 ——
+      //   检测器**整个失败**（`failed >= tried`）时要说「识别失败」（GPU/WebGL 不可用 / 原始错误原文），
+      //   否则才说「未识别到人脸」。判据是纯的 ⇒ 在 `core/rules/faceDetect.explainEmptyFaceDetect`。
+      const how = explainEmptyFaceDetect(hostOps.faceDetectStats());
+      setNotice(
+        how.kind === 'gpu'
+          ? IMAGE_EDITOR_TEXT.gpuUnavailable
+          : how.kind === 'failed'
+            ? IMAGE_EDITOR_TEXT.detectFail(how.reason)
+            : IMAGE_EDITOR_TEXT.noFaces,
+      );
       return;
     }
     setFaces(
@@ -349,7 +364,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
       faceDragRef.current = { index, mode, start: toImagePos(e, overlay), orig: { ...orig } };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [faces, toImagePos, styles.overlay],
+    [faces, toImagePos],
   );
 
   const onFacePointerMove = useCallback(
@@ -403,7 +418,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
       cropDragRef.current = { mode, start: toImagePos(e, overlay), orig: { ...cropRect } };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [cropRect, toImagePos, styles.overlay],
+    [cropRect, toImagePos],
   );
 
   const onCropPointerMove = useCallback(
@@ -631,7 +646,6 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
     <PanelShell
       overlay
       onClose={onClose}
-      closeLabel={IMAGE_EDITOR_TEXT.close}
       className={styles.panel}
       bodyClassName={styles.body}
       testId="image-editor"

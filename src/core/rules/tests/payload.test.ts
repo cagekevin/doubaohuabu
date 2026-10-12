@@ -6,7 +6,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildAccountNodePayload, buildImagePayload, buildVideoPayload, SEND_SOURCES } from '../payload';
+import {
+  buildAccountNodePayload,
+  buildImagePayload,
+  buildVideoPayload,
+  toSitePayload,
+  SEND_SOURCES,
+} from '../payload';
 
 const ACC = { id: 'acc_1', name: '豆包01', partition: 'persist:doubao' };
 const NOW = 1_700_000_000_000;
@@ -144,5 +150,67 @@ describe('buildAccountNodePayload（原 `$L`）', () => {
   it('params 原样透传', () => {
     const p = buildAccountNodePayload({ account: ACC, texts: ['x'], params: { foo: 1 }, now: NOW });
     expect(p.content.params).toEqual({ foo: 1 });
+  });
+});
+
+describe('toSitePayload（跨进程报文 → `SitePort.send` 的扁平入参）', () => {
+  it('★ 三个字段**从 `content` 里取**（不是整份报文直接传下去）', () => {
+    const p = buildVideoPayload({
+      account: ACC,
+      text: '正文',
+      images: ['img://a.png'],
+      stylePrefix: '',
+      now: NOW,
+    });
+    const site = toSitePayload(p);
+    expect(site).toMatchObject({
+      text: p.content.text,
+      images: ['img://a.png'],
+      params: p.content.params,
+      autoSend: true,
+      source: 'canvas-text-node',
+    });
+    // ★ **品牌在**（结构约束 M1）：`SiteSendPayload` 带一个**非导出的 symbol 键**
+    //   ⇒ 别的模块造不出这个形状（`send` 也因此只可能收到 `toSitePayload` 的产物）。
+    //   ⚠️ symbol 名**故意不导出** ⇒ 这里只能按"有且仅有一个 symbol 键、值为 true"验。
+    const brand = Object.getOwnPropertySymbols(site);
+    expect(brand).toHaveLength(1);
+    expect(Object.getOwnPropertyDescriptor(site, brand[0] as symbol)?.value).toBe(true);
+  });
+
+  it('★ 图**归一成 `string[]`**：对象取 `dataUrl`（视频/账号节点那条路传的是 `{label,dataUrl}`）', () => {
+    const p = buildAccountNodePayload({
+      account: ACC,
+      texts: ['x'],
+      images: [{ label: '素材', dataUrl: 'img://b.png' }],
+      now: NOW,
+    });
+    expect(toSitePayload(p).images).toEqual(['img://b.png']);
+  });
+
+  it('★ 混装也能收：字符串原样、**空串丢掉**、非法项丢掉（不留 `undefined` 给适配器）', () => {
+    const p = buildAccountNodePayload({
+      account: ACC,
+      texts: ['x'],
+      images: ['img://a.png', '', null, 42, { label: 'no-url' }, { dataUrl: 'img://c.png' }],
+      now: NOW,
+    });
+    expect(toSitePayload(p).images).toEqual(['img://a.png', 'img://c.png']);
+  });
+
+  it('★ `autoSend` 取**报文顶层**那个（与 `content.autoSend` 同值 —— 源 `$L` 两处都写）', () => {
+    const off = buildAccountNodePayload({ account: ACC, texts: ['x'], autoSend: false, now: NOW });
+    expect(toSitePayload(off).autoSend).toBe(false);
+  });
+
+  it('★ `source` 原样带（适配器/幂等键要用它）', () => {
+    const p = buildImagePayload({
+      account: ACC,
+      text: '画',
+      stylePrefix: '',
+      images: [],
+      now: NOW,
+    });
+    expect(toSitePayload(p).source).toBe('canvas-image-gen');
   });
 });

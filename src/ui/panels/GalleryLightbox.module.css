@@ -29,7 +29,6 @@
 
 .nav {
   composes: btn btnIcon btnGhost from '../common/shared.module.css';
-  flex: none;
   font-size: var(--font-size-xl);
 }
 

@@ -54,11 +54,6 @@ export function GroupManagerModal({ onClose }: GroupManagerModalProps) {
       open
       onClose={onClose}
       title={GROUP_MANAGER_TEXT.title}
-      footer={
-        <button type="button" className={styles.closeBtn} onClick={onClose}>
-          {GROUP_MANAGER_TEXT.close}
-        </button>
-      }
     >
       {/* ── 新建分组（原 `OP.jsx:862-889`）── */}
       <div className={styles.newRow}>

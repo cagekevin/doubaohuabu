@@ -7,7 +7,7 @@
  *   画廊那个「扫描 Tapnow 画布」是**另一件事**（走站点页内脚本）。
  *
  * ★ **它顺带关掉了第二个 `[待确认]`**：`LsValueMap` 里 `'doubao-scan-history'` 此前是
- *   `unknown[]`（`docs/15` §1 #8，当时只证明了「有读」`jk`/`Fy`）—— 源 `recordScan` 的**写侧**
+ *   `unknown[]`（`docs/过程.md` §1 #8，当时只证明了「有读」`jk`/`Fy`）—— 源 `recordScan` 的**写侧**
  *   给出了完整字段表 ⇒ 本轮定形为 `ScanHistoryEntry[]`。
  *
  * 依据（**逐行回源**）：

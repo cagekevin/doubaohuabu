@@ -1,5 +1,5 @@
 /**
- * 无水印视频拉取用例（原 `_Component43.jsx` 的 `xt`/`resolveThreadAndFetch`，`docs/16` §1.6）
+ * 无水印视频拉取用例（原 `_Component43.jsx` 的 `xt`/`resolveThreadAndFetch`，`docs/过程.md` §1.6）
  *
  * ★ **它做什么**：指定账号 → 占后台页租约（`withBackendPage`）→ 调 `SitePort.fetchWatermarkFree`
  *   （adapter 内部执行 `mD`/`gD` 页内脚本，走 aispace 三步链拉无水印直链）→ 释放。
@@ -11,8 +11,9 @@
  */
 
 import type { Account } from '@/stable/model/account';
-import type { WatermarkThreadOutcome, WatermarkVideo } from '@/core/ports/site.port';
+import type { WatermarkVideo } from '@/core/ports/site.port';
 import { err, type Result } from '@/core/model/result';
+import { SEND_TEXT } from '@/constants/text';
 import { withBackendPage, type SendToSiteDeps } from './sendToSite';
 
 /** 注入（`bootstrap/container.ts` 组装）—— 与 `sendToSite` 同一套（选号 + 占用 + 后台页） */
@@ -46,39 +47,8 @@ export async function fetchWatermarkFreeByVid(
     },
     async (ctx) => {
       const fetch = ctx.site.fetchWatermarkFree;
-      // 站点没这条链 ⇒ 明确报错（不回落、不静默）
-      if (!fetch) return err('unknown', `${ctx.site.kind} 站点不支持无水印拉取`);
+      if (!fetch) return err('unknown', SEND_TEXT.noCapability(ctx.site.kind, '无水印拉取'));
       return fetch({ account: ctx.account, webContentsId: ctx.page.webContentsId }, vid);
-    },
-  );
-}
-
-/** 按分享链接批量拉取（原 `resolveThreadAndFetch`，`_Component43.jsx:3045`） */
-export async function fetchWatermarkFreeByThread(
-  deps: FetchWatermarkFreeDeps,
-  account: Account,
-  threadUrl: string,
-  nodeId: string | null = null,
-): Promise<Result<WatermarkThreadOutcome>> {
-  // 原 `Q = (url || '').replace(/.*\/thread\//, '').replace(/\?.*/, '').trim()`
-  const threadId = (threadUrl || '').replace(/.*\/thread\//, '').replace(/\?.*/, '').trim();
-  if (!threadId) return err('page-error', 'invalid-thread-input');
-
-  return withBackendPage(
-    deps,
-    {
-      accounts: [account],
-      sendAccount: account.id,
-      chain: [account.type],
-      jobId: `watermark-free-thread:${threadId}`,
-      purpose: 'result-pull',
-      nodeId,
-      timeoutMs: 30000,
-    },
-    async (ctx) => {
-      const fetch = ctx.site.fetchWatermarkFreeByThread;
-      if (!fetch) return err('unknown', `${ctx.site.kind} 站点不支持无水印拉取`);
-      return fetch({ account: ctx.account, webContentsId: ctx.page.webContentsId }, threadId);
     },
   );
 }

@@ -11,7 +11,7 @@
  *
  * ⚠️ 原则 1：本文件**不写 store**（占用/释放走注入回调，与 `generate.ts` 同一套）。
  * ⚠️ 原则 6：失败一律**原样转发**；只有"选不到号"用 SSOT 文案（源版本就是自造这两句）。
- * ⚠️ 链 18 / `docs/10` #4：**不自启轮询**（轮询只在 `prepareForSend` 期间存在）。
+ * ⚠️ 链 18 / `docs/过程.md` #4：**不自启轮询**（轮询只在 `prepareForSend` 期间存在）。
  */
 
 import type { Account, PoolStrategy, SiteType } from '@/stable/model/account';

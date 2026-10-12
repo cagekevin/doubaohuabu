@@ -18,7 +18,7 @@
  *      ⚠️ `libId` 直接写 `item.id` —— 从文件选来的条目**没有 id** ⇒ 该键为 `undefined`（源同样）
  *
  * ⚠️ **不改资源库**：换的是"节点绑到哪张图"，库条目本身不动（源也是分开的 ——
- *    库条目换图是另一条链 `replaceLibrary`，见 `docs/13` §2.2）。
+ *    库条目换图是另一条链 `replaceLibrary`，见 `docs/过程.md` §2.2）。
  * ⚠️ **撤销 key 由调用方给**（原 `commit(\`replace-mat-${n}\`)` —— 按节点分区）。
  * ⚠️ 返回走 `core/model/result.ts` 的 `Result` 契约：`reason: 'bad-input'` 已登记进
  *    `SEND_FAIL_KINDS`（`constants/failure.ts`，2026-10-12 随本模块补 —— 源里约 60 个

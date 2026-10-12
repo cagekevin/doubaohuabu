@@ -1,7 +1,7 @@
 /**
  * 剪贴板 / 账号会话 / 许可 —— Electron 实现
  *
- * ⚠️ docs/10 #8「剪贴板 clear→writeText→await」的坑**已在主进程内解决**：
+ * ⚠️ docs/过程.md #8「剪贴板 clear→writeText→await」的坑**已在主进程内解决**：
  *    宿主暴露的是**单一** `copyTextToClipboard`（invoke），顺序与 await 都在主进程里。
  *    ⇒ 前端**不得**自己拆成 clear + writeText（那是把后端已修好的坑重新踩一遍）。
  *
@@ -54,7 +54,7 @@ export function createElectronClipboard(): ClipboardPort {
       }
     },
 
-    // ★ 顺序与 await 由主进程保证（docs/10 #8）——前端只调这一个
+    // ★ 顺序与 await 由主进程保证（docs/过程.md #8）——前端只调这一个
     writeText: async (text: string) => {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);

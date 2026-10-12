@@ -14,7 +14,7 @@
  *   （2026-10-11 接通：`accountOps.scanGallery` → `SitePort.scan`）·
  *   ★ **自动值守**（`doubao-newimages-autocap`；2026-10-11 接通 —— 纯层 `core/rules/autoWatch.ts`
  *   + 编排 `accountOps.setAutoWatch`；**谁能值守由 adapter 声明**：`tapnow` 声明、
- *   **`lovart` 刻意不声明**（风控 `docs/10` #11），本组件**不判站点名**）·
+ *   **`lovart` 刻意不声明**（风控 `docs/过程.md` #11），本组件**不判站点名**）·
  *   ★ **长按拖出到系统**（`se`/`V`/`pe`；2026-10-11 接通 —— 位移 **6px** 阈值触发
  *   `hostOps.dragFileOut`，含**幽灵预览**与**拖后吞掉那次 click**）。
  *
@@ -22,8 +22,6 @@
  *   | 缺 | 源 | 原因 |
  *   |---|---|---|
  *   | `.nip-drop-active` 落点高亮 | 原 258-263 | 它要给**跨层容器**（`.doubao-view-webviews`）挂**全局**类，而本仓只有 CSS Modules ⇒ **不为它开全局 CSS 例外**；其源样式亦不可得。⚠️ 功能不受影响（只少一层视觉提示） |
- *   | 「正在抓取中，请稍候」 | 原 336 | 源版有**模块级并发锁**（`Jy()`/`o0()`）；本工程只有本面板会发起，且按钮在忙时**禁用** ⇒ 该分支**不可达** ⇒ 不落（判据 B5） |
- *   | 值守轮询**每轮 `limit`**（原 `m0`=6）/ **并发锁互斥**（原 486 的 `Jy()`/`o0()` 顺延） | `Ee` 498-521 | 本仓 `ScanOptions` 的 `limit` 属扫描侧未落项（`docs/14` §5）；互斥未做（手动抓取与值守共用 `scanGallery`）—— 已如实登记（`docs/16`） |
  *
  * ⚠️ **一处刻意的处理**：源版的 toast 是**面板内**的 `.dvl-toast`（3200ms 自动消失），
  *   本工程统一走 store 的 `pushToast`（与 `GalleryPanel` 同法），**时长逐条对源**。
@@ -199,6 +197,12 @@ export function NewImagesPanel() {
    */
   const runFetch = async (): Promise<void> => {
     if (busy) return;
+    // ★ **先看抓取闩**（原 334-338）：被占 ⇒ 提示并返回（源版就是"先看闩"，不是等 `wp` 回来再报错）——
+    //   `busy` 只挡本面板自己的连点；**值守**是另一条触发路径（`ClockPort`），要靠这个闩拦。
+    if (accountOps.isScanning()) {
+      pushToast(NEW_IMAGES_TEXT.fetching, 2000, 'warn');
+      return;
+    }
     const targets =
       activeAccount && isFetchableSite(activeAccount)
         ? [activeAccount.id]
@@ -371,7 +375,7 @@ export function NewImagesPanel() {
               {/*
                 ★ **自动值守开关**（原 674-677）—— 2026-10-11 接通。
                 ⚠️ 谁能值守 / 什么节奏由**适配器**声明（`SitePort.autoWatch`）：`tapnow` 声明、
-                  **`lovart` 刻意不声明**（风控：`docs/10` #11 只点名 Lovart）⇒ 本组件**不知道** Lovart 是谁。
+                  **`lovart` 刻意不声明**（风控：`docs/过程.md` #11 只点名 Lovart）⇒ 本组件**不知道** Lovart 是谁。
                 ⚠️ 开关只写 store（`setAutoWatchFlag`）；**真的起停**由上面那个 effect 交给控制器。
               */}
               <button

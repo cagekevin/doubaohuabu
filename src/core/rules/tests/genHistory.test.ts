@@ -404,14 +404,29 @@ describe('latestAttempt / pullTargetOf（原 `xk` 25606 + `z$` 25614）', () => 
     expect(pullTargetOf(withHistory([{ id: 'a9', vid: 'v0abc', accountId: 'acc_1' }]))).toEqual({
       attemptId: 'a9',
       vid: 'v0abc',
+      // ★ 新增字段：无 `conversationId` ⇒ 空串；无 `at` ⇒ 0
+      conversationId: '',
+      at: 0,
       accountId: 'acc_1',
     });
   });
 
-  it('★ 只有 `conversationId` ⇒ 仍是目标，但 `vid` 为空（那条路本工程未落）', () => {
+  it('★ 只有 `conversationId` ⇒ 目标带 `conversationId`、`vid` 为空（走「回会话页」那条路）', () => {
     expect(pullTargetOf(withHistory([{ id: 'a9', conversationId: 'c1' }]))).toEqual({
       attemptId: 'a9',
       vid: '',
+      conversationId: 'c1',
+      at: 0,
+      accountId: null,
+    });
+  });
+
+  it('★ 尝试带 `at` ⇒ 带出来（检测任务的 `sendTime` 基准）', () => {
+    expect(pullTargetOf(withHistory([{ id: 'a9', vid: 'v0', at: 12345 }]))).toEqual({
+      attemptId: 'a9',
+      vid: 'v0',
+      conversationId: '',
+      at: 12345,
       accountId: null,
     });
   });

@@ -1,7 +1,7 @@
 # AGENTS.md · 豆包画布（渲染层重写）
 
 > 给 AI 代理的项目说明书：**先读它，再动手**。
-> 红线真源 = `docs/11-架构与契约定稿.md`（§三 依赖规则 · §六 契约边界 · §六·五 八原则）；CSS 真源 = `docs/17-CSS规范.md`。本文件**只做索引**，不复述判据正文；冲突以真源为准。
+> **真源集（只维护这几份）** = `docs/架构与契约定稿.md`（§三 依赖规则 · §六 契约边界 · §六·五 八原则）· `docs/CSS规范.md` · `docs/判据登记表.md` · `docs/DATAFLOW.md` · `docs/adr/`（判据决议**完整系统**）。**其余文档一律是参考资料**。本文件**只做索引**，不复述判据正文；冲突以真源为准。
 
 ---
 
@@ -11,7 +11,7 @@
 - 目标：**行为等价 + 数据兼容**（不是代码等价）。
 - 技术栈：React 19 · `@xyflow/react` 12 · zustand 5 · Vite 8 · Vitest 5 · TS 6（strict）· `@mediapipe/tasks-vision`。
 - 宿主能力经 `HostPort` 抽象，DEV 走 mock；**无 SSR / RSC**。
-- 编号约定：**M0~M14** 里程碑（`docs/16` §7）· **W1~W17** 验收用例（`docs/08`）· **TD-xx** 技术债 · **ADR-xxxx** 判据决议。
+- 编号约定：**M0~M14** 里程碑（`docs/架构与契约定稿.md` §十）· **W1~W17** 验收用例 · **TD-xx** 技术债 · **ADR-xxxx** 判据决议（`docs/adr/`）。
 
 ---
 
@@ -28,7 +28,7 @@ npm run gate:off -- <id> # 临时关某道闸（例 `npm run gate:off -- dead-co
 npm run lint:gates       # 元层闸（闸的闸）：扫描根存在 + 基数自检 + 申诉口三问
 npm run lint:dead-code   # knip 死代码闸（基线「永不复涨」；新增即红）
 npm run test             # vitest run
-npm run spec:ui          # 生成 docs/12 UI 对照表
+npm run spec:ui          # 生成 UI 对照表（产物）
 npm run pack:win         # 打包（另有 pack:dir / pack:mac / icon）
 ```
 
@@ -43,6 +43,11 @@ node scripts/adr.mjs doctor            # ADR 体检（add --user-approved 落一
 node scripts/mv-sync-refs.mjs rename|move|move-dir   # 移动/改名（禁手写 mv）
 node scripts/probe.mjs                 # 先红后绿探针（闸会咬的凭证）
 node scripts/check-dead-code.mjs --update-baseline   # 死代码基线重生成（清偿后跑；有新增会拒绝）
+npm run css -- <命令>                  # ★ CSS 效率工具箱（**手动、非闸**）：
+                                       #   check [名称] 诊断（override/missing/order/dead/dupe/near/vars/hard；不填=全跑）
+                                       #   show <类> 一个类全貌（定义 · composes 链 · 消费者 · 最终生效声明）
+                                       #   rename <旧> <新> [--write] 三处同步改名 · stats 总览
+                                       #   全局开关：--json · --top N · --changed（只报 git 改动文件）
 ```
 
 ---
@@ -69,56 +74,27 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 
 ---
 
-## 四、职责归位八原则（`docs/11` §六·五）
+## 四、职责归位八原则
 
-| # | 原则 | 要点 |
-|---|---|---|
-| 1 | 谁拥有状态谁写 | 只有 `state/**` 写 store；`usecases`/`adapters` 绝不；`ui` 只调 state action。 |
-| 2 | 事件只订阅转发 | adapter 暴露 `subscribeXxx(cb): () => void`；**state 是唯一写入点**。 |
-| 3 | 端口只有类型 | `core/ports/**` 零实现；实现只在 `adapters/**`。 |
-| 4 | 纯归 core，脏归 adapters | `core/**` 无 `window`/`Date.now()`/`Math.random()`/`localStorage`/`setTimeout`。 |
-| 5 | SSOT | 文案/常量/token/键名唯一真源，见 §五。 |
-| 6 | 错误透传 | 生产者产错、消费者只转发；禁吞错/改 message/编 reason/兜底造错。 |
-| 7 | 只测纯逻辑 | 见 §六。 |
-| 8 | 三振出局 | 同段代码第 3 次出现 ⇒ 抽出。 |
+> **判据正文 + 机器守卫载体 = `docs/架构与契约定稿.md` §六·五**（谁拥有状态谁写 · 事件只订阅转发 · 端口只有类型 · 纯归 core 脏归 adapters · SSOT · 错误透传 · 只测纯逻辑 · 三振出局）。**本文件不复述**。
 
 交付契约（`core/model/result.ts`）：`{ ok:true, value } | { ok:false, reason, message }`（`message` = 原始原文）。
 
-> **机器守卫的载体**（2026-10-11 调整）：原则 4（core 禁宿主/时间/随机）· 原则 5（冻结契约字符串）· 原则 6（usecases 禁自造 message）· TD-05-1（禁直调 `window.api`）**已由 eslint（AST）承载**；原则 7（测试边界）由 eslint 原生规则承载。**grep 型 `check-invariants.cjs` 已退役**（行级文本匹配 → 形态漏检，见 TD-14-1/14-2/04-4/16-9）。
-
-**React 规约**：`<StrictMode>` + `eslint-plugin-react-hooks` 为机器强制（`docs/11` §9.1）；**渲染期禁 `Date.now()` / `Math.random()`**（收进 `useState(() => …)`）。
+**React 规约**：`<StrictMode>` + `eslint-plugin-react-hooks` 为机器强制（`docs/架构与契约定稿.md` §9.1）；**渲染期禁 `Date.now()` / `Math.random()`**（收进 `useState(() => …)`）。
 
 ---
 
-## 五、SSOT 真源清单（禁裸字面量）
+## 五、SSOT（禁裸字面量）
 
-| 内容 | 唯一真源 | 机器守卫 |
-|---|---|---|
-| 20 个 localStorage 键名（`LsKey`） | `src/stable/contracts/keys.ts` | eslint（`doubao-*` 字面量选择器） |
-| 20 键的值形状 | `src/stable/contracts/lsValues.ts` | 编译期穷尽断言 |
-| 工程 JSON / 快照格式 | `src/stable/contracts/schemas.ts` | — |
-| `img://` 协议规则（sha1 前 16 位 + `?w=`） | `src/stable/protocols/img.ts` | — |
-| 数据形状（Node/Project/Account/Gen） | `src/stable/model/` | — |
-| 数据归一（落盘前外置 / 启动归位） | `src/stable/migrations/` | — |
-| UI 文案 / 失败 label / 错误横幅映射 | `src/constants/text.ts` | — |
-| 模型表 / 风格预设 | `src/constants/models.ts` · `stylePresets.ts` | — |
-| 失败分类 kind + label（14 项） | `src/constants/failure.ts` | 表驱动单测 |
-| 失败分类表 + 决策 | `src/core/rules/failure.ts` | 表驱动单测 |
-| 设计 token（颜色 / 间距 / 圆角） | `src/styles/tokens.css` | 人工（`docs/17-CSS规范.md`；机器闸已按「只留非常可靠的」弃用） |
-| 端口类型 | `src/core/ports/`（`clock`/`host`/`site`/`storage`/`backendPage`） | 人工（原 `ports-type-only` 会误伤合法 `as const`，已弃） |
-| 依赖方向 | `.dependency-cruiser.cjs`（10 条） | `npm run lint:boundaries` |
+> ★ **每件事的唯一真源 + 机器守卫 = `docs/判据登记表.md`**（那张表**只在那份文件里**，本文件不复述）。要用某个常量 / 键名 / 文案，先去那里看它归谁。
 
-**样式**：原生 CSS + CSS Modules；ReactFlow 只用官方 `--xy-*` 变量（不写 `.react-flow__*` 覆写）；组件禁硬编码色值/间距，只引用 `var(--...)`。
+**铁律**：**禁裸字面量** —— 文案 / 常量 / token / 键名 / 依赖方向一律引真源。`core/usecases` 禁自造 `message` 字面量。
 
-★ **「能一种的别搞两种」**（2026-10-12 用户裁定 —— 界面统一的总原则）：
-同一形态**有 N 份实现时收成一份**，**不要**用「变体 / 分档 / 别名 / 本地覆盖」去保留**不影响功能**的差别 ——
-那只会**越漂移越不统一**。判据一句话：**它影响用户什么功能吗？** 不影响 ⇒ **并掉**。
-落点：**节点 → `ui/nodes/NodeShell.tsx`**（8 类节点全走它）· **面板 / 弹窗 → `ui/common/PanelShell.tsx`**
-（★ **遮罩只有一种**、**关闭钮只有一种 `✕`**、头只有一种）· 样式真源 → `ui/common/shared.module.css`
-（token 四层契约见 `docs/17-CSS规范.md`）。⚠️ 面板模块**只许保留尺寸 / 定位**（`className`），
-**禁止用本地 `padding` 等覆盖表达差异**（构建产物里使用方的规则在真源之前 ⇒ 覆盖**不生效且不报错**）。
+**样式**：唯一契约 = **`docs/CSS规范.md`**（token 四层 · 新样式放哪 · `composes` 规则 · 例外表；**那份文件可改** —— 改它 + 写理由，别绕过它自造）。
+原生 CSS + CSS Modules；ReactFlow 只用官方 `--xy-*` 变量（不写 `.react-flow__*` 覆写）；组件禁硬编码色值 / 间距，只引用 `var(--...)`。
 
-> ★ **CSS 唯一契约 = `docs/17-CSS规范.md`**：token 四层（L1 原始值 → L2 语义 → L3 组件旋钮）· 新样式放哪 · `composes` 规则 · 例外表。**那份文件可改**（改它 + 写理由，别绕过它自造）。
+★ **「能一种的别搞两种」**（用户裁定 · 界面统一的**总原则**）：同一形态有 N 份实现 ⇒ **收成一份**；**不要**用「变体 / 分档 / 别名 / 本地覆盖」保留**不影响功能**的差别。判据一句话：**它影响用户什么功能吗？** 不影响 ⇒ **并掉**。
+落点：**节点 → `ui/nodes/NodeShell.tsx`**（8 类全走它）· **面板 / 弹窗 → `ui/common/PanelShell.tsx`**（**遮罩只有一种 · 关闭钮只有一种 `✕`**）。
 
 ---
 
@@ -129,33 +105,32 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 - 测试位置 `src/**/tests/**/*.test.ts`（Vitest, node）；`ui/` 与 `adapters/` 下不得有测试文件。
 - UI 用端到端冒烟验（`scripts/verify-*.cjs`）。
 - 断言红线：**实现一变必红**；自证式断言（仅验不崩 / mock 被调用）无效。
-- ⚠️ **闸绿 ≠ 健康**：闸只查形式。已知盲区 —— `state/**` 可藏测试（原则 7 只拦 `ui`/`adapters`）· depcruise 拦不到**类型重复** · 已弃的 grep 型不变量（色值 / 端口纯净 / `.catch` 形态）现**无机器守卫**（见 `daily/架构日志/债务.md`）。
+- ⚠️ **闸绿 ≠ 健康**：闸只查形式。已知盲区 —— `state/**` 可藏测试（原则 7 只拦 `ui`/`adapters`）· depcruise 拦不到**类型重复** · 已弃的 grep 型不变量（色值 / 端口纯净 / `.catch` 形态）现**无机器守卫**。
 - **死代码闸**（`lint:dead-code`，knip `--production`）：只被测试引用的导出 / 文件 / 依赖判死。存量在 `scripts/dead-code-baseline.json`（**永不复涨**：新增即红，清偿后跑 `--update-baseline`）。判死 → 先 `node scripts/mv-sync-refs.mjs refs <file>` 顺链查到底再删；判活但消费者在分析边界外（`scripts/**` · `electron/**`）→ 在**声明处**打 `@public 跨边界消费者：<路径>`（机器核验三条件）。详见 `scripts/check-dead-code.mjs` 头。
 - ⚠️ **测试复用 worker**（`vite.config.ts` 的 `test.isolate: false`，省去每文件 spawn 开销）：**新增模块级可变状态前必须先清理**（否则跨文件泄漏 → flaky）。有意保留的进程级状态见该配置注释。
 
 ---
 
-## 七、文档地图（每份只干一件事）
+## 七、文档地图（**结果只有一份**）
+
+> ★ **判据**：**下一个 AI 干活时会不会打开它**。会 ⇒ 它是「结果」，**全库只有一份**，要维护；不会 ⇒ 它是「过程」。
+> ⛔ **同一个结果不许抄到第二处** —— 别处**只许写指针**（`见 docs/XX`）。**改一个结果只改一处**；要改两处以上就是抄了副本。
+
+### 7.1 真源（**唯一载体，要维护**）
 
 | 想知道什么 | 读哪 |
 |---|---|
-| **物理红线 / 依赖规则 / 契约边界 / 八原则** | `docs/11-架构与契约定稿.md` ★ |
-| 实现进度 / 里程碑验收 | `docs/00-进度台账.md` |
-| 数据流现状（谁经过谁） | `docs/DATAFLOW.md` |
-| 判据真源与副本数 | `docs/判据登记表.md` |
-| 已裁定 / 被推翻的判据 | `docs/adr/` |
-| 审计进度 / 技术债 | `daily/架构日志/`（`index.md` · `债务.md`，均脚本产物） |
-| 原版 vs 重写 UI 对照 | `docs/12-UI对照表.md`（脚本产物） |
-| 缺口登记：UI / 功能 / 数据 | `docs/13` · `docs/14` · `docs/15` |
-| **缺口落点与写法定稿**（放哪层 / 怎么验） | `docs/16-缺口落点与写法定稿.md` ★ |
-| **CSS 唯一契约** | `docs/17-CSS规范.md` ★ |
-| **待执行的移植 / 改造计划** | `docs/plan/` ★ |
-| 最新交接 / 换机说明 | `docs/归档/19-交接-HANDOFF.md` · `docs/归档/18-交接-HANDOFF.md` · `docs/归档/17-交接-HANDOFF.md` |
-| UI 预演（CSS/token） | `docs/mockup/` |
-| 原版前端源码参考（可读 JSX） | `docs/豆包画布原版参考/expanded_components/` |
-| 逆向事实层（事实，非判据） | `docs/00` ~ `docs/10`（后端坑见 `docs/10`） |
+| **物理红线 / 依赖规则 / 契约边界 / 八原则** | `docs/架构与契约定稿.md` ★ |
+| **CSS 唯一契约** | `docs/CSS规范.md` ★ |
+| **每件事归谁定 + 载体几份** | `docs/判据登记表.md` ★ |
+| **谁经过谁**（数据流） | `docs/DATAFLOW.md` ★ |
+| **已裁定 / 被推翻的判据**（**完整系统**：状态机 · 落一条 6 问 · 审计） | `docs/adr/` ★（走 `adr.mjs`，禁手写索引） |
+| 入口 / 铁律 / 命令 / 本表 | `AGENTS.md`（本文件 = **索引**，不复述判据正文） |
 
+> ★ **真源集 = 上表 6 行**（`架构与契约定稿` · `CSS规范` · `判据登记表` · `DATAFLOW` · `adr/` + 本入口）。**其余文档一律是参考资料**。
 > **读债 / 想引用"仓里一直这么写"之前，先过 `docs/adr/` 索引** —— 既有约定可能正是要消灭的对象。
+
+> **其余文档**（过程记录 · 缺口登记 · UI 对照 · 后端契约 · 原版参考材料 …）**一律是参考资料** —— 可引，**不可当真源**；本索引**不复述、也不逐个列它**。
 
 ### 写作口径：**只写当下，不留过程**（2026-10-12 用户裁定）
 
@@ -196,6 +171,7 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 | UI 细节自检 / 作图 | `UI细节8查.md` / `作图3步法.md` / `作图4步法.md` |
 | 地基前瞻 / 推演 / PRD / Skill | `地基前瞻5步法.md` / `推演5步法.md` / `PRD5步法.md` / `Skill5步法.md` |
 | 记录流水账 | `记一下.md` |
+| **删 + 做**（清障 —— 删与做必须同批） | `删.md` ★ |
 
 **动手前先定数据流**：走既有唯一入口（端口 + adapters 唯一实现 + state 唯一写入点 + `constants/text.ts` 文案 + `stable/contracts/` 键与格式），**禁止自建旁路**；**禁裸字面量**（先查 §五）。文件移动/改名走 `scripts/mv-sync-refs.mjs`。
 
@@ -208,9 +184,9 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
    **别自己推理，也别先问人**。
    ⚠️ 它**同时压住 M4**：注释与文档会漂移，**原版代码不会**。
    ⚠️ 只有**读不到**（原版没有这段 / 不可读）时，才轮到"问用户"或"自己设计"。
-2. **先读文档再动手** —— `docs/16` 已对每项写好**落点 / 写法 / 判据 / 验法**。
+2. **先读真源再动手** —— 落点看 `docs/判据登记表.md`、判据看 `docs/架构与契约定稿.md`、链路看 `docs/DATAFLOW.md`。
 
-**完成定义（DoD）**：① 跑 `npm run check` 全绿（**改样式另按 `UI细节8查` 人工跑判据**）；② 给闸留「**先红后绿**」凭证（`scripts/probe.mjs`）；③ 每轮往 `docs/16` 追加一条（落点 / 判据 / 教训）；④ **判据 B5：不留「落了但没人调」**（没调用方就先别落，或同批落调用方）。
+**完成定义（DoD）**：① 跑 `npm run check` 全绿（**改样式另按 `UI细节8查` 人工跑判据**）；② 给闸留「**先红后绿**」凭证（`scripts/probe.mjs`）；③ 每轮往 `daily/架构日志/<NN>-*.md` 追加一条（落点 / 判据 / 教训）；④ **判据 B5：不留「落了但没人调」**（没调用方就先别落，或同批落调用方）。
 
 ---
 
@@ -226,35 +202,34 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 - ❌ 手写 `债务.md` / `index.md` / ADR 索引（脚本产物）；手写 `mv` 改文件。
 - ❌ 注释 / 文档里写**过程**（`原写…` · `此前…` · `已更正` · `已结`）—— 只写**当下口径**，改了就写新的（详判据见 §七「写作口径」）。
 - ❌ `ui/**` 下写测试文件。
-- ⚠️ 调用不存在的宿主方法 `lovartChromeEval`（死代码，见 `docs/09` C2）。
+- ⚠️ 调用不存在的宿主方法 `lovartChromeEval`（死代码）。
 - ⚠️ `saveImageSync` / `activateProjectStorage` 是 **`sendSync`**，**不得 `await`**。
-- ⚠️ 站点层**零注入**（不得改 `navigator`/`screen`/`webgl`）、**不开自动轮询**（`SitePort.scan` 必须显式调用）。唯一例外 = 输入锁（`site/shared/inputLock.ts`）。
+- ⚠️ 站点层**零注入**（不得改 `navigator`/`screen`/`webgl`）、**不开自动轮询**（`SitePort.scan` 必须显式调用）。例外 = 输入锁（`site/shared/inputLock.ts`）＋ Dola 强开（`site/doubao/dolaForce.ts`：**功能层** patch `fetch`/XHR 改报文 `duration`/`model`，**非指纹伪装**）。
 - ⚠️ **验证脚本吃 `dist/`** —— 改了 `src/` 必须 `npx vite build` 再跑 `scripts/verify-*.cjs`。
 
 ---
 
 ## 十、目录速览
 
-```
-app/
-├── src/
-│   ├── lib/         无状态工具（hash / phash / url / image / text / time / selection / hostEnv / editorText）
-│   ├── constants/   业务常量 + 文案（SSOT）
-│   ├── styles/      tokens.css(SSOT) / reset.css / theme.css
-│   ├── stable/      contracts(20键+值形状) · model(数据形状) · protocols(img/vid) · migrations(2 条)
-│   ├── core/        model · rules(纯函数) · usecases(编排 14) · ports(clock/host/site/storage/backendPage)
-│   ├── adapters/    host(electron|mock) · site(doubao|dola|lovart|tapnow|gpt|shared) · media · storage/local · clock
-│   ├── state/       store(zustand5) · slices · persist · persistKeys · subscriptions · generate · batchSend · sendQueue · analyze · accountOps · context
-│   ├── ui/          shell · pages · canvas · nodes(8类) · edges · panels · common(共享交互件)
-│   └── bootstrap/   main.tsx(StrictMode) · container.ts(唯一接线处) · hydrate.ts
-├── electron/        ★ 宿主壳（默认不动；按成本判据可改）
-├── public/mediapipe/ 人脸检测模型 + wasm（随仓库走，勿删）
-├── scripts/         治理与验证脚本（arch-index / debt / adr / probe / check-* / verify-* / ui-spec）
-├── docs/            逆向事实(00~10) · 架构定稿(11) · UI对照(12) · 缺口登记(13~15) · 落点定稿(16) · CSS规范(17) · 交接(18) · DATAFLOW · 判据登记表 · 原版参考 · mockup · 归档
-├── daily/架构日志/  审计轮次 + 债务索引
-├── tests/           fixtures（含 real-sample 真实样本）
-└── .codebuddy/      commands(工作流) + skill（**非临时缓存，勿删**）
-```
+分层：`lib/constants/styles`(L0) → `stable`(L1) → `core`(L2) → `adapters`(L3) → `state`(L4) → `ui`(L5) → `bootstrap`(L6)。
+
+| 目录 | 装什么 |
+|---|---|
+| `src/lib` | **纯工具**（不碰宿主）—— 碰 `window`/`document` 的归 `adapters`（原则 4 后半） |
+| `src/constants` · `src/styles` | 业务常量 / 文案 / 设计 token（SSOT） |
+| `src/stable` | 冻结契约：`contracts`（20 键）· `model`（数据形状）· `protocols` · `migrations` |
+| `src/core` | `model` · `rules`（纯函数）· `usecases`（编排）· `ports`（**零实现**） |
+| `src/adapters` | 脏活实现：`host`（electron / mock / shared）· `site/*`（volatile）· `media` · `storage` · `clock` |
+| `src/state` | store + slices + 落盘 + 订阅（**唯一能写 store 的地方**） |
+| `src/ui` | shell · pages · canvas · nodes · edges · panels · common |
+| `src/bootstrap` | `main.tsx`（StrictMode）· `container.ts`（**唯一接线处**）· `hydrate.ts` |
+| `electron/` | 宿主壳（默认不动；**按成本判据可改**，见下） |
+| `scripts/` | 治理与验证脚本 |
+| `docs/` | 见 §七（**真源 4 份 + `docs/adr/` 系统**；其余参考资料） |
+| `daily/架构日志/` | 审计轮次 + 债务（脚本产物） |
+| `tests/` · `public/mediapipe/` · `.codebuddy/` | fixtures（含 real-sample）· 人脸模型（**勿删**）· 工作流（**勿删**） |
+
+> **文件级清单不写在这里**（必漂）—— 看实际目录；`docs/` 的每份装什么见 §七。
 
 > `electron/`、`docs/`、`.codebuddy/`、`public/**` 已排除出 eslint 范围；`tsconfig` 的 `include` 只有 `src`。
 
@@ -263,4 +238,4 @@ app/
 
 ### 后端边界（成本优先）
 
-`electron/**` **不是绝对冻结**：**若动后端比动前端便宜，就动后端**。3 条硬约束：① 不破坏已有方法签名（只新增/重载）；② 不改变数据格式；③ 改动**回写 `docs/05-配置契约层.md`**。
+`electron/**` **不是绝对冻结**：**若动后端比动前端便宜，就动后端**。3 条硬约束：① 不破坏已有方法签名（只新增/重载）；② 不改变数据格式；③ 改动**回写后端契约文档**。

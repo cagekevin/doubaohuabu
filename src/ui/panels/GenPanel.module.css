@@ -177,7 +177,6 @@
   composes: btn btnSm from '../common/shared.module.css';
   appearance: none;
   padding-right: var(--space-5);
-  cursor: pointer;
 }
 
 /* 工具条上的 `⌄`（风格按钮用） */

@@ -10,8 +10,9 @@
   left: var(--space-2);
   bottom: var(--space-2);
   z-index: var(--z-overlay);
-  width: 320px;
-  max-height: 260px;
+  /* ★ 尺寸唯一真源在 SendQueuePanel.tsx 的 PANEL_W ／ PANEL_H（经这两个变量消费，防"夹取尺寸"漂移） */
+  width: var(--sq-panel-w, 320px);
+  max-height: var(--sq-panel-h, 260px);
   overflow: hidden;
   color: var(--color-text-strong);
   font-size: var(--font-size-xs);
