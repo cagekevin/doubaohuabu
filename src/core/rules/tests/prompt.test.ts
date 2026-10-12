@@ -156,9 +156,9 @@ describe('视频组装（原 `im` video 分支 + `rR`）', () => {
     expect(composeVideoPrompt({ text: out, stylePrefix: '水墨风，' })).toBe(out);
   });
 
-  it('duration 非有限数 → 5；ratio auto → 16:9', () => {
+  it('duration 非有限数 → 默认时长(5)；ratio auto → **默认比例**（2026-10-12 起是 4:3，吃 SSOT）', () => {
     expect(videoParamsSuffix({ model: 'seedance-2.0', duration: 'abc', ratio: 'auto' })).toBe(
-      '，画面比例 16:9，duration=5，--模型:Seedance 2.0',
+      '，画面比例 4:3，duration=5，--模型:Seedance 2.0',
     );
   });
 

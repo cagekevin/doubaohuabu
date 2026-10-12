@@ -26,6 +26,7 @@
  */
 
 import type { LibraryItem } from '@/stable/model/project';
+import { DEFAULT_VIDEO_MODEL, NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
 import { parseRefChips, refsToReferenceLabels } from './refs';
 import { stripHtml } from '@/lib/text';
 
@@ -185,9 +186,17 @@ export function collectAccountNodeInputs(input: {
       id,
       rawText,
       text: labelled.body.trim(),
-      aspectRatio: str(d.aspectRatio) || '16:9',
+      /*
+       * ⚠️ **2026-10-12 有意偏离源（只改"默认值"这一轴）**：源 `shared.js:40639-40641` 是
+       *   `aspectRatio || '16:9'` / `duration ?? 7` / `model || 'seedance-2.0-mini'`（**逐字**）。
+       *   其中 `'16:9'` 与 `'seedance-2.0-mini'` 都是**同一槽位的默认值**
+       *   （默认比例 / 默认模型）⇒ 吃 SSOT，不再于此处复述第二份（改一处另一处会静默漂）。
+       *   `7` 保留字面量：它是**文本节点默认时长**那个槽（同 `NODE_DEFAULTS.text.duration`），
+       *   与"视频默认时长"不是一个槽 —— 与 `RECIPE_TEXT_FALLBACKS.duration` 同属"同值巧合"。
+       */
+      aspectRatio: str(d.aspectRatio) || NODE_DEFAULT_RATIO_LABEL,
       duration: typeof d.duration === 'number' ? d.duration : 7,
-      model: str(d.model) || 'seedance-2.0-mini',
+      model: str(d.model) || DEFAULT_VIDEO_MODEL,
       refMap,
     });
   }

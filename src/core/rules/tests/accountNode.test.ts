@@ -149,7 +149,8 @@ describe('collectAccountNodeInputs（原 RL 40531-40680）', () => {
     expect(out.params).toEqual({ aspectRatio: '16:9', duration: 5, model: 'seedance-2.5' });
   });
 
-  it('★ 文本的默认值：`aspectRatio` 缺 ⇒ `16:9`；`duration` 缺 ⇒ **7**；`model` 缺 ⇒ `seedance-2.0-mini`', () => {
+  // ⚠️ 2026-10-12：`aspectRatio` / `model` 的缺省值改吃 SSOT（默认比例现为 4:3；模型名不变）
+  it('★ 文本的默认值：`aspectRatio` 缺 ⇒ **4:3**；`duration` 缺 ⇒ **7**；`model` 缺 ⇒ `seedance-2.0-mini`', () => {
     const nodes = [text('t1', 'A'), { id: 'acct', type: 'account', data: {} }];
     const out = collectAccountNodeInputs({
       nodeId: 'acct',
@@ -157,7 +158,7 @@ describe('collectAccountNodeInputs（原 RL 40531-40680）', () => {
       edges: [{ source: 't1', target: 'acct' }],
       library: lib,
     });
-    expect(out.params).toEqual({ aspectRatio: '16:9', duration: 7, model: 'seedance-2.0-mini' });
+    expect(out.params).toEqual({ aspectRatio: '4:3', duration: 7, model: 'seedance-2.0-mini' });
   });
 
   it('★ `total = materials + texts`（源版用它判「未连接文本框或素材」）', () => {

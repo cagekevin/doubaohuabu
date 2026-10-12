@@ -16,7 +16,12 @@
  * ⚠️ **W8（风格）**：风格 = **纯前缀拼接**（`${stylePrefix}${body}`），无分隔符。
  */
 
-import { DEFAULT_VIDEO_MODEL, VIDEO_MODEL_LABELS } from '@/constants/models';
+import {
+  DEFAULT_VIDEO_DURATION,
+  DEFAULT_VIDEO_MODEL,
+  NODE_DEFAULT_RATIO_LABEL,
+  VIDEO_MODEL_LABELS,
+} from '@/constants/models';
 // ★ SSOT 收口：`@[id|label]` 正则与 `参考图N` token **只有一份**（`refs.ts` 是 `@图N` 协议的归属模块）
 import { createRefChipRe, formatReferenceLabel } from './refs';
 
@@ -90,8 +95,12 @@ export function videoParamsSuffix(opts: {
 }): string {
   if (opts.mediaType === 'image') return '';
   const model = normalizeModelLabel(opts.model);
-  const duration = Number.isFinite(Number(opts.duration)) ? Number(opts.duration) : 5;
-  const ratio = opts.ratio && opts.ratio !== 'auto' ? String(opts.ratio) : '16:9';
+  // ⚠️ **2026-10-12 有意偏离源（只改"默认值"这一轴）**：源 `shared.js:35443-35444` 是
+  //   `Number.isFinite(Number(t)) ? … : 5` 与 `n && n !== 'auto' ? String(n) : '16:9'`（**逐字**）。
+  //   这两个兜底与「默认时长 / 默认比例」是**同一个槽位** ⇒ 吃 SSOT
+  //   （否则"节点框是 4:3、提示词里却写 16:9"）。
+  const duration = Number.isFinite(Number(opts.duration)) ? Number(opts.duration) : DEFAULT_VIDEO_DURATION;
+  const ratio = opts.ratio && opts.ratio !== 'auto' ? String(opts.ratio) : NODE_DEFAULT_RATIO_LABEL;
   return `，画面比例 ${ratio}，duration=${duration}，--模型:${model}`;
 }
 
