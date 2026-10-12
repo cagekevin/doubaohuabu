@@ -32,6 +32,7 @@ import type { CanvasEdge } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
 import { useCapture, useHostOps, useStore, useStoreApi } from '@/state';
 import { nodeTypes } from '@/ui/nodes';
+import { BatchSendPanel } from '@/ui/panels/BatchSendPanel';
 import { GenPanel } from '@/ui/panels/GenPanel';
 import { FaceMaskPanel } from '@/ui/panels/FaceMaskPanel';
 import type { RFCanvasNode } from '@/ui/nodes/types';
@@ -53,6 +54,7 @@ import { buildClipboard, type ClipboardPayload } from '@/core/rules/clipboard';
 import { SplitKeywordModal } from '@/ui/nodes/SplitKeywordModal';
 import { SplitPresetPickerModal } from '@/ui/nodes/SplitPresetPickerModal';
 import styles from './CanvasHost.module.css';
+import shared from '@/ui/common/shared.module.css';
 
 const edgeTypes = { interactive: InteractiveEdge };
 
@@ -922,9 +924,13 @@ function Inner() {
           「not used ReactFlowProvider as an ancestor」 */}
       <GenPanel />
 
+      {/* ★ 批量发送触发条（原 `L3.jsx`，源在 `_Component42.jsx:1472` 渲染）——
+          同因：它用 `useViewport()` + `getNodesBounds()` 算落点 ⇒ **必须**在 provider 内 */}
+      <BatchSendPanel />
+
       {empty && (
         <div className={styles.emptyHint}>
-          <div className={styles.emptyTitle}>{CANVAS_TEXT.emptyTitle}</div>
+          <div className={shared.emptyTitle}>{CANVAS_TEXT.emptyTitle}</div>
           <div>{CANVAS_TEXT.emptyHint}</div>
         </div>
       )}

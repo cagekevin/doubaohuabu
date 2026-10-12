@@ -42,9 +42,11 @@
 
 .webviews {
   position: relative;
+  /* ★ 铺满视图剩余高度（源里 `<webview>` 就是整个视图区）——
+     此前写死 `min-height: 220px` ⇒ webview 只剩一条缝，页面内容看不见。 */
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  /* 给可见的 webview 留出高度；隐藏的那些不占布局（position: absolute + 0 尺寸） */
-  min-height: 220px;
 }
 
 /* 隐藏态：仍在 DOM 里（后台任务要能用它跑脚本），但不可见、不占位 */
@@ -58,15 +60,13 @@
   pointer-events: none;
 }
 
-/* 可见态：用户就在这个页面里登录 */
+/* 可见态：用户就在这个页面里登录 —— 铺满整个 webview 区（源里就是整块视图） */
 .active {
   position: relative;
   display: block;
   width: 100%;
-  height: 220px;
+  height: 100%;
   background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
 /* ───────────────── 头部工具栏（原 `.dv-head-wrap` / `.dv-head-clip` / `.doubao-view-head` / `.dv-head-toggle`）─────────────────
@@ -75,9 +75,8 @@
    ⚠️ 原则 5：色值/间距/圆角只走 `styles/tokens.css` 的 token。 */
 
 .head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-1);
+  composes: panelHead from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   margin-bottom: var(--space-1);
 }
 
@@ -104,14 +103,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
-
-.title {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+
 
 .actions {
   display: flex;

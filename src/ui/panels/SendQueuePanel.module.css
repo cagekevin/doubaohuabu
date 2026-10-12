@@ -5,13 +5,11 @@
  */
 
 .panel {
-  composes: overlay from '../common/shared.module.css';
+  composes: panel from '../common/shared.module.css';
   position: fixed;
   left: var(--space-2);
   bottom: var(--space-2);
   z-index: var(--z-overlay);
-  display: flex;
-  flex-direction: column;
   width: 320px;
   max-height: 260px;
   overflow: hidden;
@@ -24,24 +22,12 @@
   user-select: none;
 }
 
-/* 原 `.sq-head` —— 它是**拖动把手** */
+/* 原 `.sq-head` —— 它是**拖动把手**（`cursor: move` 是真源未设的差异）*/
 .head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  composes: panelHead from '../common/shared.module.css';
   cursor: move;
-  border-bottom: 1px solid var(--color-border);
 }
-
-.title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: var(--font-weight-bold);
-}
+
 
 .conc {
   padding: 0 var(--space-1);
@@ -59,14 +45,8 @@
 }
 
 /* ★ 改名：原 `.bar`（实为轨道）/ `.progress`（实为填充）—— 名字与语义相反。
-   现在按语义命名（同步改了 TSX 的 `styles.track` / `styles.fill`）。 */
-.track {
-  composes: progressTrack from '../common/shared.module.css';
-}
-
-.fill {
-  composes: progressFill from '../common/shared.module.css';
-}
+   现在按语义命名（同步改了 TSX 的 `styles.track` / `styles.fill`）。 */
+
 
 .list {
   display: flex;
@@ -76,11 +56,6 @@
   min-height: 0;
   overflow: auto;
   padding: var(--space-1) var(--space-2);
-}
-
-.empty {
-  composes: emptyInline from '../common/shared.module.css';
-  text-align: center;
 }
 
 .item {

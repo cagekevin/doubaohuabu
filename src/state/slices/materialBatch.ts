@@ -127,6 +127,7 @@ export function buildMaterialBatch(
         id: libId,
         name: it.name || LOVART_ITEM_DEFAULT_NAME,
         dataUrl,
+        // ⚠️ 库条目的 `h` 存的是**图片自身**的高 ⇒ 从落点框高里**减掉那截头部余量**（原 29026-29036）
         w: it.natW || p0.w || 0,
         h: it.natH || p0.h - GALLERY_NODE_HEADER_H || 0,
         favorite: false,

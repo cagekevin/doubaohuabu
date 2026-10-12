@@ -4,7 +4,7 @@
  */
 
 export { createAppStore, type AppState, type AppStore, type AppStoreHook, type AppStoreDeps } from './store';
-export { StoreProvider, useStore, useGen, useAnalyze, useAccountOps, useBatchSend, useCapture, useSendQueue, useStoreApi, useLicenseOps, useHostOps, useProjectOps, useApiOps } from './context';
+export { StoreProvider, useStore, useGen, useAnalyze, useAccountOps, useBatchSend, useCapture, useSendQueue, useStoreApi, useLicenseOps, useHostOps, useProjectOps, useApiOps, usePullResult } from './context';
 export type { GenController } from './generate';
 export type { AnalyzeController } from './analyze';
 export type { AccountOpsController } from './accountOps';
@@ -13,6 +13,7 @@ export type { SendQueueController } from './sendQueue';
 export type { CaptureController } from './capture';
 export type { HostOpsController } from './hostOps';
 export type { ProjectOpsController } from './projectOps';
+/** ⚠️ `PullResultController` **不导出**：`ui` 只经 `usePullResult()` 拿控制器（判据 B5 —— 无人消费的类型不导出，与 `ApiOpsController` 同法）。 */
 /** ★ 只导出**面板真的用**的两个类型（判据 B5：`ApiOpsController` / `SaveProviderInput` 无人消费 ⇒ 不导出） */
 export type { ProviderDraft, ProviderTestResult } from './apiOps';
 export type { UiSlice, BannerError } from './slices/ui';

@@ -1,8 +1,8 @@
 /** 资源库面板样式（原则 5：只用 var(--...)） */
 
 /**
- * ★ 改名（原 `.panel`）：与「浮层卡片」**同名不同物** —— 本类是**栏容器**，没有视觉壳。
- *   现在 `.panel` 只表示浮层（都 `composes: overlay`），栏容器统一叫 `.column`。
+ * ★ 栏容器（原 `.library-panel`）：与「浮层卡片」**同名不同物** —— 本类是**栏容器**，没有视觉壳。
+ *   现在 `.panel` 只表示浮层（都 `composes: panel`），栏容器统一叫 `.column`。
  */
 .column {
   display: flex;
@@ -12,59 +12,81 @@
 }
 
 .head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--font-size-sm);
+  composes: panelHead from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   color: var(--color-text-muted);
 }
 
-/* ★ 查 6：原为元素选择器 `.head button`（`composes` 不支持）
-   ⇒ 给 TSX 的按钮加了 `styles.headBtn`，走共享真源 */
-.headBtn {
-  composes: btn btnSm from '../common/shared.module.css';
+/* ★ 面板题（原 `.library-title`）—— 走真源 `panelTitle`（只有一种题） */
+.title {
+  composes: panelTitle from '../common/shared.module.css';
 }
 
-/* disabled 时文字变淡 —— `cursor` / `opacity` 由真源 `.btn:disabled` 提供，这里只叠加文字色 */
-.headBtn:disabled {
+/* ★ 查 6：原为元素选择器 `.head button`（`composes` 不支持）⇒ TSX 加了 `styles.addBtn` */
+.addBtn {
+  composes: btn btnPrimary btnSm from '../common/shared.module.css';
+}
+.addBtn:disabled {
   color: var(--color-text-faint);
 }
 
-.grid {
+/**
+ * 列表容器（原 `.library-list`）—— 整块是**外部图片文件的落点**。
+ * ⚠️ 行是**横向一行**（缩略图 · 名字 · ☆ · ✕），不是卡片网格。
+ */
+.list {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   padding: var(--space-2);
 }
 
-.item {
-  position: relative;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--color-surface-raised);
-  cursor: grab;
+/* 有文件悬停（原 `.library-list.drag-over`）—— 只改底色，不动布局 */
+.dragOver {
+  background: var(--color-surface-sunken);
 }
 
-.item:active {
+/* 空态（原 `.library-empty`，逐字两行） */
+.dropHint {
+  margin: auto;
+  padding: var(--space-5) var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  line-height: var(--line-height-relaxed);
+}
+
+/* 一行（原 `.lib-row`） */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+}
+.row:active {
   cursor: grabbing;
 }
 
+/* 缩略图（原 `.lib-thumb`）—— 小方块，行内不撑高 */
 .thumb {
-  width: 100%;
-  height: 90px;
+  flex: none;
+  width: 36px;
+  height: 36px;
   object-fit: cover;
+  border-radius: var(--radius-xs);
 }
 
-/* ★ 条目名（原 `RT.jsx:301` 的 `.lib-name`，`title` = 双击重命名） */
+/* 条目名（原 `.lib-name`，`title` = 双击重命名） */
 .name {
-  padding: var(--space-half) var(--space-1);
+  flex: 1;
+  min-width: 0;
   font-size: var(--font-size-xs);
   color: var(--color-text-strong);
   overflow: hidden;
@@ -72,33 +94,44 @@
   white-space: nowrap;
 }
 
-/* ★ 改名输入框（原 `RT.jsx:304` 的 `.lib-name-input`）—— 形态同 `.name`，只是可编辑 */
+/* 改名输入框（原 `.lib-name-input`）—— 占满名字那一格 */
 .renameInput {
-  width: 100%;
-  padding: var(--space-half) var(--space-1);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-strong);
-  background: var(--field-bg, var(--color-surface-raised));
-  border: 1px solid var(--field-border-focus);
-  border-radius: var(--radius-sm);
-}
-
-.actions {
-  display: flex;
-  justify-content: space-between;
-  padding: var(--space-half) var(--space-1);
-}
-
-/* ★ 查 6：原为元素选择器 `.actions button`（`composes` 不支持）
-   ⇒ TSX 加了 `styles.actionBtn`。仍保持紧凑尺寸（`height:auto` + `padding:0`），
-     不硬套 `.btnSm` 的固定高度 —— 这是有意的形态差异。 */
-.actionBtn {
-  composes: btn btnGhost from '../common/shared.module.css';
+  composes: field from '../common/shared.module.css';
+  flex: 1;
+  min-width: 0;
   height: auto;
-  padding: 0;
-  color: var(--color-text-muted);
+  padding: var(--space-half) var(--space-1);
   font-size: var(--font-size-xs);
 }
-.actionBtn:hover:not(:disabled) {
+
+/* ☆ / ✕（原 `.lib-icon`）—— 图标方块，走真源图标按钮 */
+.icon {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  flex: none;
+  width: var(--dim-5);
+  height: var(--dim-5);
+  color: var(--color-text-muted);
+}
+.icon:hover:not(:disabled) {
   color: var(--color-text-strong);
+}
+
+/* 已收藏（原 `.lib-icon.fav`）—— 用警告色把 ★ 点亮 */
+.fav {
+  color: var(--color-warning);
+}
+
+/* 删除（原 `.lib-icon.del`）—— 悬停走危险色 */
+.del:hover:not(:disabled) {
+  color: var(--color-danger-text);
+}
+
+/* 底部提示（原 `.library-tip`） */
+.tip {
+  flex: none;
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  text-align: center;
 }

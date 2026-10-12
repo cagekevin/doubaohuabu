@@ -1,0 +1,66 @@
+/**
+ * 节点标题（`NodeTitle`）
+ * ⚠️ 颜色 / 圆角 / 字号一律走 token；名称输入框的宽度是**形状值**（原 `w-32`），逐字保留。
+ */
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  /* 标题行是拖动把手（原 `.node-title` 的 drag-handle） */
+  cursor: move;
+}
+
+/* 浮层模式：绝对定位到节点上方（原 `absolute -top-6 left-0 z-30`） */
+.floating {
+  position: absolute;
+  left: 0;
+  top: calc(-1 * var(--space-5));
+  z-index: var(--z-overlay);
+}
+
+/* 图标（11px / faint）在此**唯一**定义 —— 调用方只声明"我是哪个图标" */
+.icon {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+}
+
+/* 名称（可收缩出省略号） */
+.name {
+  max-width: 180px;
+  padding: 0 var(--space-half);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: inherit;
+}
+
+.name:hover {
+  color: var(--color-text-strong);
+  background: var(--color-surface-hover);
+}
+
+/* 改名态输入框（原 `w-32 … border-edge-muted bg-surface-black`） */
+.input {
+  width: 128px;
+  padding: var(--space-half) var(--space-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-strong);
+  font: inherit;
+}
+
+.input:focus {
+  border-color: var(--field-border-focus);
+}

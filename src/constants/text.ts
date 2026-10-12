@@ -11,7 +11,7 @@
 // 文案只依赖 L0（constants）内的 kind 联合，不依赖 core（分层：L0 不得依赖 L2）
 export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure';
 // ⚠️ 发送/面板文案的**分片转发**（定义在 `sendPanelText.ts`，见那里的头注释）
-export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, AUTO_MATCH_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EDGE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FUZZY_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_IMAGE_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, IMAGE_EDITOR_TEXT, MATERIAL_NODE_TEXT, MEDIA_PLAYER_TEXT, NODE_CTX_TEXT, PRESET_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, STYLE_LIB_TEXT, VIDEO_NODE_TEXT, WATERMARK_PANEL_TEXT } from './sendPanelText';
+export { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT, AUTO_MATCH_TEXT, BATCH_SEND_TEXT, DOWNLOAD_NODE_TEXT, EDGE_TEXT, EXPORT_TEXT, FP_DIAG_TEXT, FUZZY_TEXT, FP_SCAN_TEXT, GALLERY_TEXT, GEN_IMAGE_TEXT, GEN_PANEL_TEXT, GEN_VIDEO_TEXT, GROUP_MANAGER_TEXT, GROUP_NODE_TEXT, IMAGE_EDITOR_TEXT, MATERIAL_NODE_TEXT, MEDIA_PLAYER_TEXT, NODE_CTX_TEXT, NODE_TITLE_TEXT, PRESET_TEXT, PROXY_TEXT, SELECT_TOOLBAR_TEXT, SEND_QUEUE_TEXT, SPLIT_TEXT, STYLE_LIB_TEXT, VIDEO_NODE_TEXT, WATERMARK_PANEL_TEXT } from './sendPanelText';
 // ⚠️ 以下三处分片由 eslint `max-lines`(400) 触发 —— **该规则已于 2026-10-11 关闭**（分片的"各组彼此内聚"理由仍成立，但不再有"必须 <400 行"的硬约束）。
 // ⚠️ 2026-10-11：从 `sendPanelText.ts` **拆出**（那个文件代码行越过 eslint `max-lines`(400)）——
 //    「出新图」那一族彼此内聚，独立成 `newImagesText.ts`。**公开入口不变**（仍从 `@/constants/text` 取）。
@@ -87,21 +87,12 @@ export const COMMON_TEXT = {
    */
   boundaryViolation: (field: string) => `宿主返回缺少必需字段 ${field}（契约违约）`,
   /**
-   * 提示词为空时的占位（**本工程新增** —— 回源 0 命中）
-   *
-   * ★ **2026-10-12（`TD-09-1`）**：`GenImageNode` 与 `GenVideoNode` **各写了一遍**同一句
-   *   ⇒ 两份（母体 M3）⇒ 收在这里一处，两处委托。
-   * ⚠️ 收它的理由**不是"源里有"**（源里没有）—— 而是「**用户可见文案只写一遍**」：
-   *   本文件的自述就是「只放 UI 独有文案」。判据用错会留下下一处漂移
-   *   （同轮刚修掉一处：`Thumb` 写"无图"、源写"暂无图片"）。
-   */
-  emptyPrompt: '（空提示词）',
-  /**
-   * 「正在生成」的按钮/占位文案（**本工程新增** —— 回源 0 命中；源里那个**无省略号**的
+   * 「正在生成」的按钮文案（**本工程新增** —— 回源 0 命中；源里那个**无省略号**的
    *   `生成中` 是 API 任务状态条的标签（`ZL.jsx:324`），**不是同一句**，别混）
    *
-   * ★ **2026-10-12（`TD-09-1`）**：两处消费者 —— `GenPanel` 的运行按钮（`busy ? … : …`）
-   *   与 `GenImageNode` 的占位（`data.generating ? …`）⇒ 放通用层，各自委托。
+   * ★ 唯一消费者 = `GenPanel` 的运行按钮（`busy ? … : …`）。
+   * ⚠️ 两个生成节点的**舞台等待文案**是源里另有的两句（`正在生成新的一张…` /
+   *   `正在生成 · 出图后展示在这里`），住在 `GEN_IMAGE_TEXT` / `GEN_VIDEO_TEXT`，**不是这一句**。
    */
   generating: '生成中…',
   /** 关闭按钮的无障碍名（**本工程新增** —— 源里没有对应 aria） */
@@ -269,8 +260,6 @@ export const PROJECT_TEXT = {
   parseFailed: '项目文件解析失败',
   /** 原 `_Component42.jsx:318` 的 `Ze.error || '未知错误'`（后端没给原因时的兜底原文） */
   unknownReason: COMMON_TEXT.unknownReason,
-  doubaoBackend: '豆包后台',
-  export: '导出工程',
   generate: '生成',
   regenerating: '重新生成',
 } as const;
@@ -337,17 +326,44 @@ export const BANNER_TEXT = {
  * （读屏软件会把它们念出来 ⇒ 是用户可感知文案，不该散在两个 JSX 属性里）。
  */
 export const SHELL_TEXT = {
-  /** 左栏（账号）—— ⚠️ 与源 `_Component48.jsx:163` 的 `展开账号栏`/`收起账号栏` **不是同一句**（那是折叠按钮的 title，且随状态变），别合并 */
+  /** 左栏（账号）—— ⚠️ 与下面折叠钮的 title **不是同一句**（那是折叠按钮的，且随状态变），别合并 */
   accountsAria: '账号栏',
-  /** 右栏（资源库）—— 同理，源 `:182` 是折叠按钮的 title */
+  /** 右栏（资源库）—— 同理 */
   libraryAria: '资源栏',
+  /** 左栏折叠钮 —— 已收起时（原 `_Component48.jsx:163` 的 `u ? …` 支，逐字） */
+  expandAccounts: '展开账号栏',
+  /** 左栏折叠钮 —— 展开时（原 `:163`，逐字） */
+  collapseAccounts: '收起账号栏',
+  /** 右栏折叠钮 —— 已收起时（原 `:182`，逐字） */
+  expandLibrary: '展开资源栏',
+  /** 右栏折叠钮 —— 展开时（原 `:182`，逐字） */
+  collapseLibrary: '收起资源栏',
 } as const;
 
 export const LIBRARY_TEXT = {
   /** 面板标题（原 `RT.jsx:254` 的 `<span className="library-title">资源库</span>`，逐字） */
   title: '资源库',
+  /** 头部「＋ 添加」（原 `RT.jsx:257`，逐字含全角 `＋`） */
+  add: '＋ 添加',
+  /** 列表空态第一行（原 `RT.jsx:263`，逐字） */
+  dropHint: '拖入图片',
+  /** 列表空态第二行（原 `RT.jsx:265`，逐字含全角引号） */
+  dropHintSub: '或点击「添加」',
+  /** 底部操作提示（原 `RT.jsx:334`，逐字） */
+  tip: '拖拽素材到画布生成节点 · 长按拖入后台页面 · 列表内拖动调整顺序',
   /** 条目删除按钮的无障碍名（**本工程新增** —— 源里没有对应 aria） */
   deleteAria: '删除',
+  /** 收藏按钮 `title`（原 `RT.jsx:316`，逐字） */
+  favorite: '收藏',
+  /** 取消收藏按钮 `title`（原 `RT.jsx:316`，逐字） */
+  unfavorite: '取消收藏',
+  /**
+   * 删除仍在画布上被引用的条目时的确认（原 `RT.jsx:323`，逐字 —— **含换行**）
+   * @param name 条目名
+   * @param refs 画布上引用它的节点数
+   */
+  deleteConfirm: (name: string, refs: number) =>
+    `「${name}」在画布上仍有 ${refs} 处引用，删除后这些节点的图片将失效。\n确认删除吗？`,
   empty: '资源库为空，请先从右侧资源库或文件添加素材。',
   /** 素材选择器标题（原 `DT.jsx:33` 的 replace 档，逐字） */
   pickFromLibrary: '从资源库选择素材进行更换',
@@ -623,12 +639,6 @@ export const NODE_EDIT_TEXT = {
    * ★ 2026-10-10：`@` 引用作者侧落地 ⇒ **改回源版全文**（此前为不承诺不存在的能力而砍掉了 `@` 段）
    */
   textPlaceholder: '输入文字，输入 @ 从资源库引用素材…',
-  /** 生成面板提示词字段名 */
-  promptLabel: '提示词',
-  /** 生成面板提示词占位（源 `_Component45.jsx:1211`；当前去掉 `@` 段） */
-  promptPlaceholder: '描述想要画的内容…',
-  /** 源版全文（`@` 引用落地后改回这个） */
-  promptPlaceholderWithRefs: '描述想要画的内容…（输入 @ 引用素材）',
 
   // ── 节点「发送状态」前缀图标（原 `CL.jsx:760`，逐字；⚠️ **都带一个尾空格**）──────
   /** `sending`（原 760，逐字） */
@@ -803,31 +813,124 @@ export const ANALYZE_UI_TEXT = {
  *    `BackendView` 的 `<webview>` 里真人登录 → 探针回填 `已登录`。
  *    ⇒ 因此本组文案里有源版**没有**的几句（`probe*` / `notLoggedIn`），已逐条注明。
  */
+/**
+ * 「选择账号类型」弹窗（原 `TP.jsx`，64 行 —— 逐字回源）
+ *
+ * ⚠️ 六张卡片的 `type` 与 `stable/model/account.ts` 的 `SITE_TYPES` **同序同集**
+ *   （源 `TP.jsx:17-60` 的六张卡片就是这个顺序）。
+ *   ⚠️ 本表**不 import `SITE_TYPES`**（`constants` 是 L0，不得依赖 `stable` 这个 L1）；
+ *       `type` 字段只作 `onPick` 的入参，合法性由调用方的 `addAccount` 兜。
+ */
+export const ACCOUNT_TYPE_PICKER_TEXT = {
+  /** 标题（原 `TP.jsx:9`，逐字） */
+  title: '选择账号类型',
+  /** 卡片（原 `TP.jsx:17-60`，emoji / 名 / 说明**逐字**） */
+  cards: [
+    { type: 'doubao', emoji: '🫘', name: '豆包', desc: '登录 www.doubao.com，沿用现有流程' },
+    { type: 'dola', emoji: '🎬', name: 'dola', desc: '登录 www.dola.com/chat/，操作逻辑与豆包一致' },
+    { type: 'lovart', emoji: '🎨', name: 'Lovart', desc: '登录 www.lovart.ai/zh，用于登录与后台浏览' },
+    { type: 'tapnow', emoji: '✨', name: 'Tapnow', desc: '进入 app.tapnow.media/home，支持邮箱验证链接登录' },
+    {
+      type: 'gpt',
+      emoji: '🤖',
+      name: 'GPT',
+      desc: '登录 chatgpt.com，登录后可在文生图面板选号（出图链路后续上线）',
+    },
+    { type: 'other', emoji: '🌐', name: '其他', desc: '手动输入网址，进入任意网站（仅浏览，独立会话）' },
+  ],
+} as const;
+
+/**
+ * 登录弹窗（原 `$P.jsx`，331 行）—— **逐字对源**
+ *
+ * ★ 它是「选平台」之后的**第二步**，也是**建号的地方**：
+ *   源版在**登录成功时**才 `addAccount({status:'已登录'})`（`$P.jsx:102-156` 的 `se`）
+ *   ⇒ 所以左栏**不会**先冒出一个「未登录」的账号。
+ *
+ * ⚠️ 站点显示名（`m`，`$P.jsx:18`）**与 `ACCOUNT_TYPE_PICKER_TEXT.cards[].name` 不是同一套**：
+ *   源那边登录标题用的是 `豆包` / `dola` / `Lovart` / `Tapnow` / `GPT`（`other` 走另一句标题）
+ *   —— 逐字抄，**不合并**。
+ */
+export const LOGIN_MODAL_TEXT = {
+  /** 标题前缀（原 `$P.jsx:253` 的 `` `登录${m}账号` ``） */
+  titlePrefix: '登录',
+  /** 标题后缀（原 253，逐字） */
+  titleSuffix: '账号',
+  /** 站点显示名（原 18 的 `m`，逐字） */
+  siteName: {
+    doubao: '豆包',
+    dola: 'dola',
+    lovart: 'Lovart',
+    tapnow: 'Tapnow',
+    gpt: 'GPT',
+    other: '自定义网站',
+  } as Record<string, string>,
+  /** `other` 的标题（原 253 的 `c ? '打开自定义网站' : …`，逐字） */
+  otherTitle: '打开自定义网站',
+  /** 「在浏览器打开」（原 255-260，逐字） */
+  openExternal: '在浏览器打开',
+  /** 「完成登录」（原 261-263，逐字） */
+  done: '完成登录',
+  /** `other` 的完成钮（原 262 的 `c ? '保存' : '完成登录'`，逐字） */
+  save: '保存',
+  /** 「关闭」（原 264，逐字） */
+  close: '关闭',
+  /** `other` 的网址输入占位（原 270，逐字） */
+  urlPlaceholder: '输入网址，如 www.bing.com 或 https://example.com',
+  /** `other` 的「进入」（原 280，逐字） */
+  enter: '进入',
+  /** 网址为空（原 107 / 190，逐字） */
+  urlRequired: '请先输入要打开的网址',
+  /** tapnow 验证链接占位（原 317，逐字） */
+  verifyPlaceholder: '粘贴邮箱里的验证链接（https://…），确认后自动登录',
+  /** tapnow「确认进入」（原 325，逐字） */
+  verifyEnter: '确认进入',
+  /** tapnow 验证中（原 325 的 `O ? '验证中…'`，逐字） */
+  verifyEntering: '验证中…',
+  /** tapnow 未填链接（原 161，逐字） */
+  verifyRequired: '请先粘贴验证链接',
+  /** tapnow 正在打开（原 168，逐字） */
+  verifyOpening: '正在打开验证链接…',
+  /** tapnow 验证通过（原 173，逐字） */
+  verifyDone: '验证通过，已保存登录状态',
+  /** tapnow 打开失败（原 184，逐字） */
+  verifyFailed: '打开链接失败',
+  /** 载入失败标题（原 304，逐字） */
+  loadErrorTitle: '页面无法在应用内加载',
+  /** 载入失败描述（原 305-307，逐字 —— **含换行**） */
+  loadErrorDesc: (code: number | string, description: string) =>
+    `错误码 ${code}：${description || '未知错误'}\n部分站点会检测 Electron 内嵌视图并阻止渲染。请点击「在浏览器打开」完成登录。`,
+} as const;
+
 export const ACCOUNT_PANEL_TEXT = {
   /** ★ 指纹撞车体检（原 `OP.jsx` 打开 `DP` 的那个动作） */
   scan: '指纹体检',
   scanTitle: '跨账号指纹关联扫描：看哪些账号的环境指纹高度重合（重合越多越像同一台设备）',
-  /** ★ 打开该账号的画廊（原 `OP.jsx` 里 `_Component23` 的入口；源版是账号卡片上的一个动作） */
-  gallery: '画廊',
+  /** ★ 打开该账号的画廊（原 `OP.jsx:778` 的 `📷`，逐字） */
+  galleryGlyph: '📷',
   galleryTitle: '查看该账号的 Tapnow / Lovart 画廊',
   /** 源版空态提示（`_Component43.jsx:3297`，逐字） */
   emptyHint: '请先在左侧添加并登录账号',
   /** 原 `OP.jsx:827` 的按钮（**逐字**，含全角 `＋`） */
   addAccount: '＋ 添加账号',
-  /** 新增：选平台（源版是 `_ComponentTP` 弹窗的标题感文案） */
-  pickType: '选择平台',
-  /** 新增：建号后的引导（源版没有——它建号即已登录） */
-  loginHint: (name: string) => `「${name}」已创建，请在下方页面里登录，然后点「检测登录」`,
-  /** 新增：探针按钮（用既有 `SitePort.probe`，不是新机制） */
+  /**
+   * 探针按钮（用既有 `SitePort.probe`，不是新机制）
+   *
+   * ⚠️ **2026-10-12 口径更正**：它此前被写成"建号后的引导"（因为那时是**先建号再登录**）。
+   *   现在建号改回源版顺序（**登录成功才建号**，见 `ui/panels/LoginModal.tsx`）⇒
+   *   新建的账号恒 `已登录`，这颗钮只对**两种账号**有用：
+   *   ① 从文件**导入**的账号（`docs/10` 的账号迁移）；② 会话过期后被标成 `未登录` 的账号。
+   */
   probe: '检测登录',
   probing: '检测中…',
-  /** 新增：探针结果（源版没有这个状态，见 `ACCOUNT_STATUS.loggedOut` 的长注释） */
+  /** 探针结果（源版没有这个状态，见 `ACCOUNT_STATUS.loggedOut` 的长注释） */
   notLoggedIn: '尚未登录',
-  /** 新增：探针成功 */
+  /** 探针成功 */
   loggedInOk: '已登录',
   /** 原 `OP.jsx:801` 的移除按钮 title（逐字） */
   removeTitle: '移除账号（同时清理该账号的数据）',
-  remove: '移除',
+  /** ★ 移除按钮字形（原 `OP.jsx:811` 的 `✕`，逐字）—— 走**图标钮**（文本钮会挤没名字列） */
+  removeGlyph: '✕',
   /** 新增：确认（源版 `OP.jsx:801` 的 onClick 里自带确认逻辑，此处用最简单的一种） */
   confirmRemove: (name: string) => `确定移除「${name}」？其登录数据会一并清理。`,
   /** 新增：去掉分组概念的说明（源版有分组，本工程尚未落地） */
@@ -882,6 +985,13 @@ export const BACKEND_PAGE_TEXT = {
   navTimeout: '豆包 / Dola 页面加载超时',
   /** 新增：`<webview>` 元素上既没有 `reload` 也没有 `loadURL`（视图未挂载/已销毁） */
   webviewNoCommands: '该账号的 webview 不支持刷新 / 导航（视图可能未挂载）',
+  /**
+   * 新增：无水印拉取**必须先站到 aispace 页**（源 `es(qe, Bd)`，`_Component43.jsx:2103-2109`），
+   * 站不过去就拉不了 —— 源版不检查这一步，只会得到一个含糊的 `empty-response`。
+   */
+  aispaceNavFailed: '无法切换到豆包 aispace 页面（无水印拉取的前置）',
+  /** 新增：页内脚本**跑通了**但返回的形状对不上（契约违约 ⇒ 明确报错，不静默当"没读到"） */
+  probeBadShape: '页面脚本返回了无法识别的结果',
 } as const;
 
 /**

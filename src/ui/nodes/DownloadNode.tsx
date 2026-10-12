@@ -24,7 +24,6 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { NodeResizer } from '@xyflow/react';
 import { useHostOps, useStore } from '@/state';
 import {
   collectDownloadTargets,
@@ -35,6 +34,7 @@ import {
   type DownloadStatusMap,
 } from '@/core/rules/downloadNode';
 import { DOWNLOAD_NODE_TEXT } from '@/constants/text';
+import { NodeShell } from './NodeShell';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
 
@@ -119,24 +119,27 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
   const doneCount = countDownloaded(status);
 
   return (
-    <div className={`${styles.downloadNode} ${selected ? styles.groupSelected : ''}`} data-testid="download-node">
-      {/* 原 105：`minWidth=260` / `minHeight=140` */}
-      <NodeResizer minWidth={260} minHeight={140} isVisible={!!selected} />
-
-      <div className={styles.materialHead}>
-        <span className={styles.downloadDot} />
-        <span className={styles.downloadTitle}>{DOWNLOAD_NODE_TEXT.title}</span>
-        {targets.length > 0 && <span className={styles.materialCount}>{targets.length}</span>}
-      </div>
-
+    <NodeShell
+      type="download"
+      title={DOWNLOAD_NODE_TEXT.title}
+      meta={targets.length > 0 ? <span className={styles.nodeCount}>{targets.length}</span> : undefined}
+      selected={selected}
+      minWidth={260}
+      minHeight={140}
+      testId="download-node"
+    >
       <div className={`${styles.downloadBody} nodrag nopan`}>
         <div className={styles.downloadFolderRow}>
           <span className={styles.downloadFolderLabel}>{DOWNLOAD_NODE_TEXT.folderLabel}</span>
+          {/*
+            原 `WL.jsx:114-116`：`title` 给**完整路径**（未选 ⇒ `未选择`），正文只显示**最后一段**
+            （`a.replace(/^.*[\\/]/, '')`）—— 长路径会把这一行挤爆。
+          */}
           <span
             className={styles.downloadFolderPath}
             title={folder || DOWNLOAD_NODE_TEXT.folderNone}
           >
-            {folder || DOWNLOAD_NODE_TEXT.folderNone}
+            {folder ? folder.replace(/^.*[\\/]/, '') : DOWNLOAD_NODE_TEXT.folderNone}
           </span>
           <button type="button" className={styles.downloadBtn} onClick={() => void chooseFolder()}>
             {DOWNLOAD_NODE_TEXT.chooseFolder}
@@ -191,7 +194,7 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
             disabled={busy || !folder || targets.length === 0}
             onClick={() => void downloadAll()}
           >
-            {busy ? DOWNLOAD_NODE_TEXT.downloading : DOWNLOAD_NODE_TEXT.downloadAll}
+            {busy ? DOWNLOAD_NODE_TEXT.downloading : DOWNLOAD_NODE_TEXT.downloadAll(targets.length)}
           </button>
           {doneCount > 0 && (
             <span className={styles.downloadTotal}>
@@ -200,6 +203,6 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
           )}
         </div>
       </div>
-    </div>
+    </NodeShell>
   );
 }

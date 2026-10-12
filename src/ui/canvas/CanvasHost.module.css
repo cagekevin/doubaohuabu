@@ -15,10 +15,7 @@
   inset: 0;
   pointer-events: none;
 }
-
-.emptyTitle {
-  composes: emptyTitle from '../common/shared.module.css';
-}
+
 
 /* `.drop-hint`（原 `_Component42.jsx:1466`）—— 拖**文件**进画布时的提示层
    ★ **推断样式**：原版 CSS 未入库、mockup 也未收录 ⇒ 按语义补，全 token（待原版 CSS 校 —— TD-16-87）

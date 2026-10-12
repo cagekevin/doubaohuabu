@@ -37,6 +37,20 @@ export const EDGE_MARKER = {
 /** 切项目后 fitView 延迟（ms） */
 export const FITVIEW_DELAY_MS = 250;
 
+// ── 批量发送触发条（原 `L3.jsx:20-49` 的视口数学；常量见 `shared.js:42448-42451`）──
+//
+// 触发条浮在**选中节点包围盒**的上/下方：先按画布 transform 把包围盒换算成视口坐标，
+// 上方放不下（`top - Xd - Yd - Jd < R3`）就翻到下方。
+
+/** 触发条距包围盒的横向余量（px，原 `Xd` 42449 = 10） */
+export const BS_TRIGGER_MARGIN_X = 10;
+/** 触发条距包围盒的纵向偏移（px，原 `Yd` 42448 = 40） */
+export const BS_TRIGGER_OFFSET_Y = 40;
+/** 触发条与包围盒的间隙（px，原 `Jd` 42450 = 6） */
+export const BS_TRIGGER_GAP = 6;
+/** 触发条「放得下」所需的最小上边距（px，原 `R3` 42451 = 6） */
+export const BS_TRIGGER_MIN_TOP = 6;
+
 // ─────────────────────────── 撤销 / 持久化 ───────────────────────────
 
 /** 撤销栈上限（原 26890-26911） */
@@ -137,11 +151,23 @@ export const SCAN_FRAME_TIMEOUT_MS = 8000;
  */
 export const FP_DIAG_TIMEOUT_MS = 2500;
 
+/**
+ * 指纹体检的**自动记录防抖**（ms，原 `OP.jsx:31` 的 `setTimeout(…, 1500)`）
+ *
+ * ⚠️ 语义：账号 ≥2 时，报告稳定这么久之后才 `recordScan`（源是**防抖**，不是节流）。
+ */
+export const FP_SCAN_RECORD_DEBOUNCE_MS = 1500;
+
 // ── 文本拆分（原 `splitDirect` shared.js:28584-28586 的三个内联字面量）──
 
 /** 拆出来的文本框宽度（px，原 `d = 600`） */
 export const SPLIT_NODE_WIDTH = 600;
-/** 拆出来的文本框高度（px，原 `f = 400`） */
+/**
+ * 拆出来的文本框高度（px，原 `f = 400`）
+ *
+ * ⚠️ **2026-10-12 保持源值**：用户裁定「4:3 指的是**空节点**的默认比例」——
+ *   拆出来的文本框**带着正文**（不是空的）⇒ 仍用源的 `600×400`，不按 4:3 算。
+ */
 export const SPLIT_NODE_HEIGHT = 400;
 /** 相邻两个文本框的纵向间距（px，原 `p = 80`） */
 export const SPLIT_NODE_GAP = 80;

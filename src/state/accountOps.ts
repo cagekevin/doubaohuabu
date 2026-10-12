@@ -18,7 +18,7 @@
 
 import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
-import { err, type Result } from '@/core/model/result';
+import { err, ok, type Result } from '@/core/model/result';
 import type { HostOS } from '@/constants';
 import {
   applyProxyAssignments,
@@ -87,6 +87,15 @@ export interface AccountOpsController {
    * @returns 是否已登录（同时已把 `status` 写成 `已登录` / `未登录`）
    */
   probeLogin(accountId: string): Promise<boolean>;
+  /**
+   * ★★ **对「还没入名册」的待建账号探一次登录**（原 `$P.jsx:199-249` 的 `pe` 轮询）
+   *
+   * 登录弹窗用它**轮询自动完成登录**：源版每 2s 读一次 webview 的 cookie；
+   * 本仓受 `docs/10` #5（cookie 前端一律不碰）约束 ⇒ 走 `SitePort.probe`（同义、不同机制）。
+   * @param account `buildPendingAccount` 产出的那个**未入册**账号（只用到 `id`/`type`/`partition`）
+   * @returns 是否已登录（失败 ⇒ `false`，**不建号**）
+   */
+  probeLoginOf(account: Account): Promise<boolean>;
   /**
    * ★ **导出账号数据**（原 `PP.jsx:36-94`）
    * @param accountIds UI 已勾选的账号 id（空 ⇒ `failed`，转发源版 `请至少选择一个账号`）
@@ -298,8 +307,46 @@ export function createAccountOps(
     scheduleWatch(accountId, autoWatchBaseDelay(next, cadence) + autoWatchJitter(accountId));
   };
 
+  /**
+   * 对一个账号跑一次**登录态探针**（原 `SitePort.probe`）
+   *
+   * ★ **判据 C1**：`probeLogin`（已入册的账号）与 `probeLoginOf`（**还没入册**的待建账号）
+   *   共用这一处 —— 登录弹窗要在建号**之前**轮询"登录好了没"，用的必须是**同一条判据**。
+   * ⚠️ 失败**原样上报**（原则 6），并返回 `Err` ⇒ 调用方**不改状态**（缺证据就别下结论）。
+   */
+  const probeAccountLogin = async (account: Account): Promise<Result<boolean>> => {
+    // ⚠️ 站点适配器缺失 ⇒ **明确报错**，不把"没适配器"当成"未登录"
+    const site = ports.sites[account.type];
+    if (!site) {
+      store.useStore.getState().pushBackendError('unknown', SEND_TEXT.noSiteAdapter(account.type));
+      return err('unknown', SEND_TEXT.noSiteAdapter(account.type));
+    }
+    const r = await site.probe(account);
+    if (!r.ok) {
+      store.useStore.getState().pushBackendError('unknown', r.message);
+      return err(r.reason, r.message);
+    }
+    return ok(r.value.loggedIn);
+  };
+
   return {
     addAccount: (input) => store.useStore.getState().addAccount(input),
+
+    /**
+     * ★ **对「还没入名册」的待建账号探一次登录**（原 `$P.jsx:199-249` 的 `pe` 轮询）
+     *
+     * 源版每 2s 读一次 `<webview>` 的 **cookie** 判断登录（`session.cookies.get({})`）。
+     * ⚠️ 那条路在本仓**走不通**：`docs/10` #5「**cookie 由后端管理，前端一律不碰**」是
+     *   `AccountPort` 契约里写死的红线（端口里明确禁止新增读 cookie 的方法）
+     *   ⇒ 本仓改用**同义的 `SitePort.probe`**（本项目为"判登录态"专门建的能力，
+     *   `probeLogin` 走的就是它）—— 行为一致（页面就绪 ⇒ 判登录），机制不同（不碰 cookie）。
+     * ⚠️ 探针失败 ⇒ `false`（**不建号**）：登录弹窗靠它决定"自动完成登录"，判错会建出一个
+     *   实际没登录的账号 —— 宁可让用户点「完成登录」。
+     */
+    async probeLoginOf(account) {
+      const r = await probeAccountLogin(account);
+      return r.ok ? r.value : false;
+    },
 
     async removeAccount(accountId) {
       const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
@@ -326,21 +373,9 @@ export function createAccountOps(
       const account = s.accounts.find((a) => a.id === accountId);
       if (!account) return false;
 
-      // ⚠️ 站点适配器缺失 ⇒ **明确报错**，不把"没适配器"当成"未登录"
-      const site = ports.sites[account.type];
-      if (!site) {
-        s.pushBackendError('unknown', SEND_TEXT.noSiteAdapter(account.type));
-        return false;
-      }
-
-      const r = await site.probe(account);
-      if (!r.ok) {
-        // 探针失败（页面没起来等）⇒ 原样上报；**不改状态**（缺证据就别下结论）
-        store.useStore.getState().pushBackendError('unknown', r.message);
-        return false;
-      }
-
-      const loggedIn = r.value.loggedIn;
+      const r = await probeAccountLogin(account);
+      if (!r.ok) return false;
+      const loggedIn = r.value;
       const next = store.useStore.getState().accounts.map((a) =>
         a.id === accountId
           ? { ...a, status: loggedIn ? ACCOUNT_STATUS.loggedIn : ACCOUNT_STATUS.loggedOut }

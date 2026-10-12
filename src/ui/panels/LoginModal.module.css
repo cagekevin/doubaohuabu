@@ -1,0 +1,83 @@
+/**
+ * 登录弹窗样式（原 `$P.jsx` 的 `.login-*`）
+ * 样式真源 = `docs/mockup/assets/mockup.css:1663-1697`（逐条对照原版 CSS）。
+ */
+
+/** 弹窗本体（原 `.login-modal`：**720px 宽 · 78% 高 · 上限 720px**） */
+.panel {
+  composes: panel from '../common/shared.module.css';
+  width: 720px;
+  max-width: 100%;
+  height: 78%;
+  max-height: 720px;
+}
+
+/** 正文：竖排（网址行 / webview / 失败卡 / 验证行） */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* 网址行 / 验证链接行（原 `.login-verify-row`） */
+.verifyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.verifyInput {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+.verifyMsg {
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+
+/** webview（原 `.login-webview`）—— 吃掉剩余高度 */
+.webview {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  background: var(--color-surface-sunken);
+}
+
+/* 载入失败卡（原 `.login-load-error`） */
+.loadError {
+  margin: auto;
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.loadErrorTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-danger);
+}
+
+.loadErrorDesc {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+}
+
+/* 头部两枚动作钮 —— ⚠️ 原版 CSS 未入库、mockup 未收录 ⇒ 走真源按钮类 */
+.btn {
+  composes: btn btnSm from '../common/shared.module.css';
+}
+
+.btnPrimary {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}

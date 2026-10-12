@@ -30,14 +30,21 @@
  *     （`vt-time`，`formatClock(当前) / formatClock(总)`）· 拖拽定位（`At`/`_t`）。
  *     ⚠️ 三处**有意差异**见下（登记 `TD-03-13`）；⚠️ `ct` 的「按视频宽高比自适应节点尺寸」**仍未落**（`TD-03-14`）。
  *
- * ⚠️ **仍未落**（原 `BL.jsx`）：`vn-pull-chip`（「可拉取」+ 拉取流程，要宿主拉取通道 `pullResultFn`）、
- *    `vn-flash`（拉取的瞬时提示）、`ct` 的自适应尺寸（见上）。
+ *   · ✅ **「拉取结果」**（原 `BL.jsx:355-382` 的 `vn-pull-chip`）—— **2026-10-12 已落**：
+ *     可拉判据走纯层 `pullTargetOf`（原 `xk` + `z$`），动作走 `usePullResult().pull`
+ *     （原 `pullResult` 的 `vid` 分支）⇒ 按 vid 拉无水印直链 → 落节点 → 本地化。
+ *     ⚠️ 两处有意差异：① **只落 `vid` 分支** —— 原版另一条 `conversationId` 分支
+ *        （回对话页 → 登记 `pull:true` → 交给 `postSendDetect`）依赖**发送后监测子系统**
+ *        （`docs/19` §4.1，未落）⇒ 只剩 `conversationId` 时按钮**禁用**（判据 B4）；
+ *        ② 成功 / 失败走 **`pushToast`**（与 `sourceMissing` 同一映射），**不**复刻源版那个
+ *        节点内的 `vn-pull-err` 瞬时行。
+ * ⚠️ **仍未落**（原 `BL.jsx`）：`ct` 的自适应尺寸（见上）。
  */
 
 import { useCallback, useRef, useState } from 'react';
-import { useCapture, useHostOps, useStore } from '@/state';
+import { useCapture, useHostOps, usePullResult, useStore } from '@/state';
 import { useCaptureElement } from '@/ui/common/useCaptureElement';
-import { NodeResizer, useReactFlow } from '@xyflow/react';
+import { useReactFlow } from '@xyflow/react';
 import {
   formatClock,
   provenanceLabel,
@@ -46,11 +53,13 @@ import {
   recipeSummaryLine,
 } from '@/core/rules/recipe';
 import { normalizeModelLabel } from '@/core/rules/prompt';
-import { attemptsOf, attemptStats, attemptStatusLabel } from '@/core/rules/genHistory';
+import { attemptsOf, attemptStats, attemptStatusLabel, pullTargetOf } from '@/core/rules/genHistory';
 import { seekSeconds, timelinePercent } from '@/core/rules/genVideo';
 import { formatMonthDayMinute } from '@/lib/time';
 import { clamp } from '@/lib/math';
 import { ANALYZE_UI_TEXT, MEDIA_PLAYER_TEXT, VIDEO_NODE_TEXT } from '@/constants/text';
+import { NodeShell } from './NodeShell';
+import { NodeTitle } from './NodeTitle';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
 
@@ -81,6 +90,14 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   const hostOps = useHostOps();
   const { setCenter } = useReactFlow();
   const capture = useCapture();
+  const pullResult = usePullResult();
+  /**
+   * 「拉取结果」的可拉目标（原 `xk` + `z$`）—— 每次渲染算（判据 A2：能算出来就不入 state）。
+   * ⚠️ `null` ⇒ 没有可拉的记录（已有 `url` / 没有尝试 / 尝试里既无 `vid` 也无 `conversationId`）。
+   */
+  const pullTarget = pullTargetOf(data);
+  /** 拉取中（原 `z`，`:41`）—— 只用于按钮的忙碌态 */
+  const [pulling, setPulling] = useState(false);
   /**
    * ★ 把 `<video>` 登记进**截图注册表**（原 `Lu.set`）—— 截图的发起方与"被截的元素"
    *   不在同一个组件里，靠这张表对上（见 `lib/captureRegistry.ts` 的头注释）。
@@ -90,32 +107,6 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   const [capturing, setCapturing] = useState(false);
 
   const label = data.label || VIDEO_NODE_TEXT.fallbackName;
-
-  const [editingName, setEditingName] = useState(false);
-  // ⚠️ 显式 `string`：`label` 的来源是 `as const` 的 SSOT ⇒ 不标注会被收窄成字面量类型
-  const [draft, setDraft] = useState<string>(label);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  /** 进入改名态（原 86-96）—— ⚠️ 源版用 `requestAnimationFrame` 等输入框挂上再 focus */
-  const startRename = useCallback(
-    (e: { stopPropagation: () => void }) => {
-      e.stopPropagation();
-      setDraft(label);
-      setEditingName(true);
-      requestAnimationFrame(() => {
-        nameInputRef.current?.focus();
-        nameInputRef.current?.select();
-      });
-    },
-    [label],
-  );
-
-  /** 提交改名（原 97-105）—— ⚠️ **不 trim 就不写**、**同名也不写**，但**都退出改名态** */
-  const commitRename = useCallback(() => {
-    const next = draft.trim();
-    if (next && next !== label) patchNodeData(id, { label: next });
-    setEditingName(false);
-  }, [draft, label, id, patchNodeData]);
 
   /** 来源标签（原 49-51 的 `M = fR({data}, nodes)`） */
   const source = provenanceLabel(data, nodes);
@@ -222,61 +213,38 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   }, [recipe, pushToast, hostOps]);
 
   return (
-    <div className={`${styles.videoNode} ${selected ? styles.groupSelected : ''}`} data-testid="video-node">
-      {/* 原 303：`minWidth=200` / `minHeight=170` */}
-      <NodeResizer minWidth={200} minHeight={170} isVisible={!!selected} />
-
-      <div className={styles.materialHead}>
-        <span className={styles.videoDot} />
-        {editingName ? (
-          <input
-            ref={nameInputRef}
-            className={`${styles.materialRename} nodrag nopan nowheel`}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={(e) => {
-              // ⚠️ 与源一致：BL 的改名输入**只有 Enter**（不像素材节点还带 Escape）
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                commitRename();
-              }
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <span className={styles.materialTitle} title={VIDEO_NODE_TEXT.renameTitle} onDoubleClick={startRename}>
-            {label}
-          </span>
-        )}
-        {data.accountName && <span className={styles.videoMeta}>{data.accountName}</span>}
-        {data.duration != null && <span className={styles.videoMeta}>{formatClock(data.duration)}</span>}
-        {data.width != null && data.height != null && (
-          <span className={styles.videoMeta}>
-            {data.width}×{data.height}
-          </span>
-        )}
-        {/* ★ 截图（原 `Mt` → `$T` → `Rk`）—— 失败**必须说出来**（源版静默返回 null，用户会反复点） */}
-        <button
-          type="button"
-          className={styles.videoMeta}
-          disabled={capturing}
-          title={VIDEO_NODE_TEXT.captureTitle}
-          onClick={() => {
-            setCapturing(true);
-            void capture
-              .captureNode(id)
-              .then((r) => {
-                if (!r.ok) pushToast(r.reason ?? VIDEO_NODE_TEXT.captureTitle, undefined, 'warn');
-              })
-              .finally(() => setCapturing(false));
+    <NodeShell
+      type="video"
+      title={
+        /*
+         * 改名收口到 `NodeTitle`（原 86-105 的进入/提交两态）。
+         * ⚠️ 与源一致：**不 `trim` 就不写**、**同名也不写** ⇒ `defaultTitle` 传当前 `label`，
+         *    使"清空后提交"回落到当前名（不误改名）。
+         */
+        <NodeTitle
+          label={label}
+          defaultTitle={label}
+          onRename={(next) => {
+            if (next && next !== label) patchNodeData(id, { label: next });
           }}
-        >
-          {capturing ? VIDEO_NODE_TEXT.captureBusy : VIDEO_NODE_TEXT.capture}
-        </button>
-      </div>
+        />
+      }
+      meta={
+        <>
+          {data.accountName && <span className={styles.videoMeta}>{data.accountName}</span>}
+          {data.duration != null && <span className={styles.videoMeta}>{formatClock(data.duration)}</span>}
+          {data.width != null && data.height != null && (
+            <span className={styles.videoMeta}>
+              {data.width}×{data.height}
+            </span>
+          )}
+        </>
+      }
+      selected={selected}
+      minWidth={200}
+      minHeight={170}
+      testId="video-node"
+    >
 
       {/* 原 327-345：来源 chip + 配方 chip */}
       <div className={`${styles.videoProvenance} nodrag nopan`}>
@@ -322,6 +290,35 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
             }}
           >
             {VIDEO_NODE_TEXT.historyChip(stats.total)}
+          </button>
+        )}
+        {/* 「拉取结果」（原 `BL.jsx:355-382` 的 `vn-pull-chip`）
+            ⚠️ 显示判据**照源 `z$`**（无 `url` + 最后一条尝试有 `vid` / `conversationId`）；
+               本工程只落了「按 vid」那条路 ⇒ **只有 `vid` 时可用**，只剩 `conversationId` 时
+               **禁用**（判据 B4：不渲染"点了没反应"的按钮）。 */}
+        {pullTarget && (
+          <button
+            type="button"
+            className={styles.videoChip}
+            disabled={pulling || !pullTarget.vid}
+            title={VIDEO_NODE_TEXT.pullTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPulling(true);
+              void pullResult
+                .pull(id)
+                .then((r) => {
+                  if (r.ok) {
+                    pushToast(VIDEO_NODE_TEXT.pulled);
+                    return;
+                  }
+                  // ⚠️ 失败**原文透传**（原则 6）—— 不在这里造"拉取失败"这类泛化文案
+                  pushToast(r.message, undefined, 'error');
+                })
+                .finally(() => setPulling(false));
+            }}
+          >
+            {pulling ? VIDEO_NODE_TEXT.pulling : VIDEO_NODE_TEXT.pull}
           </button>
         )}
       </div>
@@ -499,8 +496,30 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
           <span className={styles.vtTime}>
             {formatClock(currentTime)} / {formatClock(duration || data.duration || 0)}
           </span>
+          {/*
+            ★ 截图（原 `BL.jsx:535-537` 的 `.vt-btn.vt-shot`）—— 在**播放条里**、时间文字之后。
+            ⚠️ **2026-10-12 归位**：此前它在**节点头部右槽**（源里那一槽没有这颗钮）。
+            ⚠️ 失败**必须说出来**（源版静默返回 null，用户会反复点）⇒ toast。
+          */}
+          <button
+            type="button"
+            className={`${styles.vtBtn} ${styles.vtShot}`}
+            disabled={capturing}
+            title={VIDEO_NODE_TEXT.captureTitle}
+            onClick={() => {
+              setCapturing(true);
+              void capture
+                .captureNode(id)
+                .then((r) => {
+                  if (!r.ok) pushToast(r.reason ?? VIDEO_NODE_TEXT.captureTitle, undefined, 'warn');
+                })
+                .finally(() => setCapturing(false));
+            }}
+          >
+            {capturing ? VIDEO_NODE_TEXT.captureBusyGlyph : VIDEO_NODE_TEXT.captureGlyph}
+          </button>
         </div>
       )}
-    </div>
+    </NodeShell>
   );
 }

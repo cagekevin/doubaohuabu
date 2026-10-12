@@ -1,19 +1,17 @@
 /**
  * 批量发送面板（原 `.bs-trigger` / `.bs-backdrop` / `.bs-card` / `.bs-*`）
  *
- * ⚠️ **位置偏离（有意，已留痕）**：源版把触发按钮**浮在选中节点包围盒的上/下方**
- *    （`L3.jsx:20-49` 的 `getNodesBounds` + 画布 transform + 常量 `Yd=40/Xd=10/Jd=6/R3=6`）。
- *    本实现固定在画布**右下角** —— 那套视口数学只有在 ReactFlow 内部才算得出来，
- *    而行为（点得到、看得见、不遮画布中心）不变。
+ * ⚠️ 触发条是**画布内浮层**（原 `.canvas-wrap` 的子节点）—— 落点由组件按视口数学算好、
+ *    以 `left/top/transform` 内联给出（原 `L3.jsx:174-178`）；本模块只留盒模型。
  * ⚠️ 原则 5：色值只走 token。
  */
 
-.root {
+.triggerGroup {
   position: absolute;
-  right: var(--space-4);
-  bottom: var(--space-4);
-  z-index: var(--z-overlay);
-  pointer-events: auto;
+  z-index: var(--z-panel);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 /* ★ 查 6：走共享真源；浮动入口比特例保留「更大 + 投影」*/
@@ -28,28 +26,15 @@
   background: var(--btn-primary-bg-hover);
 }
 
-/* ── 卡片（原 `.bs-card`）── */
+/* ── 卡片（原 `.bs-card`）── 遮罩/头/关闭钮/正文全归 `PanelShell`，本模块只留尺寸 */
 .card {
-  composes: overlay from '../common/shared.module.css';
-  width: 380px;
-  max-height: 60vh;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  font-size: var(--font-size-sm);
+  composes: panel from '../common/shared.module.css';
+  width: min(540px, calc(100% - 48px));
+  max-height: 76%;
+  overflow: hidden;
 }
-
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.title {
-  color: var(--color-text-strong);
-}
+
+
 
 /* ★ 查 6：三个按钮走共享真源 */
 .continue {
@@ -61,18 +46,10 @@
   background: transparent;
   border-color: var(--color-danger-border);
 }
-.close {
-  composes: btn btnGhost from '../common/shared.module.css';
-}
+/* `.close` 已删：关闭钮归 `PanelShell` 的 `.panelClose`（统一成 ✕） */
 
-/* ── 进度条（原 `.bs-progress`）── */
-.progress {
-  composes: progressTrack from '../common/shared.module.css';
-}
-
-.progressBar {
-  composes: progressFill from '../common/shared.module.css';
-}
+/* ── 进度条（原 `.bs-progress`）── */
+
 
 /* ── 列表（原 `.bs-item` / `.bs-chip`）── */
 .list {
@@ -83,10 +60,7 @@
   max-height: 40vh;
 }
 
-/* ★ 查 6：与 `listItem` 几乎逐字相同 ⇒ 走真源（本处**不可点**，不加 Clickable）*/
-.item {
-  composes: listItem from '../common/shared.module.css';
-}
+/* ★ 查 6：与 `listItem` 几乎逐字相同 ⇒ 走真源（本处**不可点**，不加 Clickable）*/
 
 .idx {
   flex: 0 0 auto;
@@ -100,10 +74,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.chip {
-  composes: pill from '../common/shared.module.css';
-}
+
 
 .msg {
   flex: 1;

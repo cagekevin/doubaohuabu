@@ -54,6 +54,7 @@ import { resolveRefMaterial, type RefNodeLike } from '@/core/rules/prompt';
 import { refChipHtml, textToEditorHtml } from '@/core/rules/richText';
 import { editorToText } from '@/lib/editorText';
 import { NodeShell } from './NodeShell';
+import { NodeTitle } from './NodeTitle';
 import { RefAutocomplete, matchRefTrigger } from './RefAutocomplete';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
@@ -73,7 +74,6 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
    * ⚠️ 只**打开弹窗**（弹窗由 `CanvasHost` 渲染 —— 拆分要删掉本节点，弹窗不能住在这里）。
    */
   const openSplitKeywordModal = useStore((s) => s.openSplitKeywordModal);
-  const [editingName, setEditingName] = useState(false);
   /** 自动匹配按钮的临时态（原 `ce`：`'ok'` / `'none'` / `null`，1.5s 后复位） */
   const [autoMatchState, setAutoMatchState] = useState<'ok' | 'none' | null>(null);
   const autoMatchTimerRef = useRef<number | null>(null);
@@ -81,7 +81,6 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   const [presetSaved, setPresetSaved] = useState(false);
   const presetTimerRef = useRef<number | null>(null);
   const addPreset = useStore((s) => s.addPreset);
-  const nameRef = useRef<HTMLSpanElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   /**
    * `@` 下拉的触发态。
@@ -189,13 +188,6 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
     commit();
   };
 
-  /** 提交节点名（原 `ke` 197-206） */
-  const commitName = (): void => {
-    const next = (nameRef.current?.textContent ?? '').trim() || TEXT_NODE_LABEL;
-    if (next !== (data.label ?? '')) patchNodeData(id, { label: next });
-    setEditingName(false);
-  };
-
   /**
    * 自动匹配（原 `wt`，`CL.jsx:243-264`）
    *
@@ -299,41 +291,36 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
     setDrag({ from: idx, over: idx });
   };
 
-  const title = editingName ? (
-    <span
-      ref={nameRef}
-      className={styles.nameEdit}
-      contentEditable
-      suppressContentEditableWarning
-      onBlur={commitName}
-      onKeyDown={(e) => {
-        // ⚠️ 与源一致：**只有 Enter** 分支（`CL.jsx:732`）。
-        //   Escape 处理只允许住 `ui/common/`（`原则8/rule-of-three`）⇒ 不在这里加。
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          commitName();
-        }
+  /*
+   * 标题 + 改名收口到 `NodeTitle`（显示态 ↔ 编辑态 + `Enter` 提交 + `Esc` 取消 + focus/全选）。
+   * ⚠️ 与源 `ke`（`CL.jsx:197-206`）一致：`trim()` 后为空 ⇒ 回落 `TEXT_NODE_LABEL`；
+   *    与当前名相同 ⇒ **不调 action**。
+   */
+  const title = (
+    <NodeTitle
+      label={data.label}
+      defaultTitle={TEXT_NODE_LABEL}
+      onRename={(next) => {
+        if (next !== (data.label ?? '')) patchNodeData(id, { label: next });
       }}
-    >
-      {data.label ?? TEXT_NODE_LABEL}
-    </span>
-  ) : (
-    <span
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        setEditingName(true);
-      }}
-    >
-      {data.label ?? TEXT_NODE_LABEL}
-    </span>
+    />
   );
 
   return (
     <NodeShell
+      type="text"
       title={title}
-      meta={
+      /*
+       * 头部**右槽** —— ★ 三颗动作钮（自动匹配 / 拆分 / 保存预设）都在**右上角**
+       *   （`NodeShell.actions` → `.nodeHeadActions` 的 `margin-left: auto` 把它们推到最右）。
+       * ⚠️ **2026-10-12 归位**：此前它们在**中槽**（`meta`）—— 中槽是 `flex: 0 1 auto`
+       *   （只包住自己的内容、不占满头部）⇒ `margin-left: auto` **没有可推的空间**，
+       *   于是三颗钮全挤在标题右边、看起来像一串**标题文字**（截图实测）。
+       * 顺序（逐字对源 `CL.jsx:745-780`）：`自动匹配` → `拆分`（**只在有正文时**）→ `发送状态`
+       *   → 等待倒计时 → 切换状态 → `保存预设`。
+       */
+      actions={
         <>
-          {`${data.aspectRatio} · ${data.duration}s`}
           {/*
             ★ 「自动匹配」（原 `CL.jsx:745-750` 的 `.auto-match-btn`）—— 在**头部**（紧跟节点名，
             与 `.split-md-btn` 相邻）；按钮态 `'ok'` / `'none'` 1.5s 后复位。
@@ -353,6 +340,20 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
                 ? AUTO_MATCH_TEXT.none
                 : AUTO_MATCH_TEXT.idle}
           </button>
+          {/* ★ 「拆分」（原 `CL.jsx:751-756` 的 `.split-md-btn`）—— 紧跟在「自动匹配」之后，**只在有正文时**出现 */}
+          {data.text.trim().length > 0 && (
+            <button
+              type="button"
+              className={`${styles.splitBtn} nodrag nopan`}
+              title={SPLIT_TEXT.buttonTitle}
+              onClick={(e) => {
+                e.stopPropagation();
+                openSplitKeywordModal(id);
+              }}
+            >
+              {SPLIT_TEXT.button}
+            </button>
+          )}
           {/*
             ★ 「发送状态」（原 `CL.jsx:757-762`）—— 源在**头部**（`foot-send-status head-send-status`
             两个类名都挂，位置在拆分按钮之后）；`title` = `msg`，图标按状态三档
@@ -368,20 +369,18 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
               {sendState?.msg}
             </span>
           ) : null}
-          {/* `head-actions`（原 `CL.jsx:773-780`）—— 源里头部**最后**一项，`margin-left:auto` 靠右 */}
-          <span className={`${styles.headActions} nodrag nopan`}>
-            <button
-              type="button"
-              className={styles.savePresetBtn}
-              title={PRESET_TEXT.saveTitle}
-              onClick={(e) => {
-                e.stopPropagation();
-                savePreset();
-              }}
-            >
-              {presetSaved ? PRESET_TEXT.saved : PRESET_TEXT.save}
-            </button>
-          </span>
+          {/* `head-actions`（原 `CL.jsx:773-780`）—— 头部**最后**一项「保存预设」 */}
+          <button
+            type="button"
+            className={`${styles.savePresetBtn} nodrag nopan`}
+            title={PRESET_TEXT.saveTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              savePreset();
+            }}
+          >
+            {presetSaved ? PRESET_TEXT.saved : PRESET_TEXT.save}
+          </button>
         </>
       }
       selected={selected}
@@ -489,23 +488,6 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
               {r.dataUrl ? r.label : REF_TEXT.previewMissing}
             </span>
           ))}
-        </div>
-      )}
-
-      {/* ★ 「拆分」（原 `CL.jsx:751-756` 的 `.split-md-btn`）—— 只在有正文时出现 */}
-      {data.text.trim().length > 0 && (
-        <div className={styles.splitFoot}>
-          <button
-            type="button"
-            className={`${styles.splitBtn} nodrag nopan`}
-            title={SPLIT_TEXT.buttonTitle}
-            onClick={(e) => {
-              e.stopPropagation();
-              openSplitKeywordModal(id);
-            }}
-          >
-            {SPLIT_TEXT.button}
-          </button>
         </div>
       )}
 

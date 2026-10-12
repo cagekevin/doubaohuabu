@@ -102,6 +102,7 @@ AGENTS.md 的「已知缺口」里还有两句已失真，下一个 AI 会误判
 
 ### 4.2 无水印拉取的自动触发点（小，接 §2.2 的账）
 - 发送/生成成功后 → 拿视频节点 `vid` → `withBackendPage` + `site.fetchWatermarkFree` → `addVideoShare`。
+  > ⚠️ **2026-10-12 回源更正（本行描述失真，勿据此落点）**：真实触发点是**视频节点的「拉取结果」按钮**（原 `pullResult`，`_Component43.jsx:3145`）；`addVideoShare` 是**另一件事**（`postSendDetect` 里检测到新视频时加进「无水印资源」列表）。本项**已落**：`state/pullResult.ts` + `ui/nodes/VideoNode` 的 `vn-pull-chip`（详见 `docs/16` 末条）。
 - `onDolaMedia` 后端推送（「图」类）—— 需先核 `HostPort` 是否已有对应订阅，没有则登记不预支。
 
 ### 4.3 收尾账

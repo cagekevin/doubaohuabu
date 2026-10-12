@@ -20,9 +20,9 @@
  */
 
 import type { HostPort } from '@/core/ports/host.port';
-import type { ImageQuestionContext, SitePort, WatermarkThreadOutcome, WatermarkVideo } from '@/core/ports/site.port';
+import type { SitePort, WatermarkThreadOutcome, WatermarkVideo } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
-import { ANALYZE_TEXT } from '@/constants/text';
+import { ANALYZE_TEXT, BACKEND_PAGE_TEXT } from '@/constants/text';
 import { sleep } from '@/lib/async';
 import { log } from '@/lib/log';
 import {
@@ -37,8 +37,8 @@ import {
 import { buildReplyReadOptions } from '@/core/rules/analyzePrompt';
 import { withInputLock } from '../shared/inputLock';
 import { attachImageToWebview } from '../shared/attachImage';
-import { findWebview, type WebviewElement } from '../shared/webview';
-import { runProbe } from '../shared/waits';
+import { viewOfContext, type WebviewElement } from '../shared/webview';
+import { navigateAndWait, runProbe } from '../shared/waits';
 import { WATERMARK_FREE_BY_THREAD, WATERMARK_FREE_BY_VID } from './scripts';
 import {
   INPUT_FOCUS_SCRIPT,
@@ -184,14 +184,6 @@ export async function askAndWaitReply(
   return ok({ text: last });
 }
 
-/** 取该账号的后台 `<webview>`（三级回落，找不到返 `null`） */
-const viewOfAccount = (ctx: ImageQuestionContext): WebviewElement | null =>
-  findWebview({
-    id: ctx.account.id,
-    partition: ctx.account.partition,
-    type: ctx.account.type,
-  });
-
 /**
  * 构造 `SitePort.askWithImage` 的实现（原 `gS`/`yS` 里 `hS` + `mS` 那两段）
  *
@@ -201,8 +193,8 @@ export function createDoubaoAskWithImage(
   host: HostPort,
 ): NonNullable<SitePort['askWithImage']> {
   return async (ctx, imageUrl, instruction) => {
-    const view = viewOfAccount(ctx);
-    if (!view) return err('page-error', '该账号的 webview 未初始化');
+    const view = viewOfContext(ctx);
+    if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
 
     const attached = await attachImageToWebview({ clipboard: host.clipboard }, view, ctx.webContentsId, imageUrl);
     if (!attached.ok) return err(attached.reason, attached.message, attached.cause);
@@ -227,8 +219,8 @@ export function createDoubaoPingQueueProgress(
   host: HostPort,
 ): NonNullable<SitePort['pingQueueProgress']> {
   return async (ctx, instruction) => {
-    const view = viewOfAccount(ctx);
-    if (!view) return err('page-error', '该账号的 webview 未初始化');
+    const view = viewOfContext(ctx);
+    if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
     return askAndWaitReply(host, view, ctx.webContentsId, instruction);
   };
 }
@@ -239,36 +231,82 @@ type WatermarkVidScriptResult = WatermarkVideo & { ok: true };
 type WatermarkVidScriptFail = { ok: false; error: string; note?: string };
 
 /**
+ * 无水印拉取的**前置页**（原 `Bd`，`shared.js:36772`）
+ *
+ * ⚠️ **为什么必须先站过去**：源注释明写「homepage API 在 `/chat/` 页返回空数据」
+ *    （`_Component43.jsx:1500`）⇒ 不站过去，三步链第一步就拿到空数据（拉取恒失败）。
+ *    而 `withBackendPage` 会把后台页导航到 `site.chatUrl`（`/chat/`）⇒ **这一步不能省**。
+ */
+const AISPACE_URL = 'https://www.doubao.com/samantha/aispace/';
+const AISPACE_RE = /\/samantha\/aispace/;
+/** 站过去之后的静置（源 `await new Promise(T => setTimeout(T, 1500))`，`:2106-2108`） */
+const AISPACE_SETTLE_MS = 1500;
+
+/**
+ * 把 webview 站到 aispace 页上（原 `es(qe, Bd)`）—— 返回**还原函数**；站不过去 ⇒ `null`
+ *
+ * ⚠️ 还原目标是**导航前的地址**，而源版写死还原到 `La`（`/chat/`，`shared.js:36756`）——
+ *    `withBackendPage` 已把页面导航到 `site.chatUrl`，正常路径下两者**同一个值**；
+ *    用"原地址"更准，也免掉在站点适配器里再写一份 chat URL（那是 `SitePort.chatUrl` 的事）。
+ * ⚠️ 已在 aispace 页 ⇒ **不导航也不还原**（源同判：`if (!/\/samantha\/aispace/.test(url))`）。
+ */
+async function gotoAispacePage(view: WebviewElement): Promise<(() => void) | null> {
+  const before = view.getURL?.() ?? '';
+  if (AISPACE_RE.test(before)) return () => undefined;
+  const navigated = await navigateAndWait(view, AISPACE_URL);
+  if (!navigated) return null;
+  await sleep(AISPACE_SETTLE_MS);
+  return () => {
+    void navigateAndWait(view, before);
+  };
+}
+
+/**
  * 构造 `SitePort.fetchWatermarkFree` 的实现（原 `_Component43` 的 `xt` 里 `mD` 页内脚本）
  *
- * ⚠️ 脚本封装在 `./scripts.ts`（`WATERMARK_FREE_BY_VID`），本方法只做「找 webview → 执行 → 判 ok」。
+ * ⚠️ 脚本封装在 `./scripts.ts`（`WATERMARK_FREE_BY_VID`），本方法只做「找 webview → 站到
+ *    aispace → 执行 → 判 ok → 还原」。
  * ⚠️ 不用 `runProbe` 的 `timeoutMs`：`mD` 是**同步 XHR 三步链**（homepage→node_info→download），
  *    耗时不可预期，给超时反而会截断正常拉取（源版也没有超时）。
+ * ⚠️ 站不到 aispace 页 ⇒ **明确失败**（源版不检查、直接跑脚本 ⇒ 只会得到含糊的 `empty-response`）。
  */
 export function createDoubaoFetchWatermarkFree(): NonNullable<SitePort['fetchWatermarkFree']> {
   return async (ctx, vid) => {
-    const view = viewOfAccount(ctx);
-    if (!view) return err('page-error', '该账号的 webview 未初始化');
-    const r = await runProbe<WatermarkVidScriptResult | WatermarkVidScriptFail>(
-      view,
-      `(${WATERMARK_FREE_BY_VID})(${JSON.stringify(vid)})`,
-    );
-    if (!r.ok) return err('page-error', r.error);
-    if (!r.value.ok) return err('page-error', r.value.error);
-    return ok(r.value);
+    const view = viewOfContext(ctx);
+    if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
+    const restore = await gotoAispacePage(view);
+    if (!restore) return err('page-timeout', BACKEND_PAGE_TEXT.aispaceNavFailed);
+    try {
+      const r = await runProbe<WatermarkVidScriptResult | WatermarkVidScriptFail>(
+        view,
+        `(${WATERMARK_FREE_BY_VID})(${JSON.stringify(vid)})`,
+      );
+      if (!r.ok) return err('page-error', r.error);
+      if (!r.value.ok) return err('page-error', r.value.error);
+      return ok(r.value);
+    } finally {
+      restore();
+    }
   };
 }
 
 /** 构造 `SitePort.fetchWatermarkFreeByThread` 的实现（原 `resolveThreadAndFetch` 里 `gD` 页内脚本） */
 export function createDoubaoFetchWatermarkFreeByThread(): NonNullable<SitePort['fetchWatermarkFreeByThread']> {
   return async (ctx, threadId) => {
-    const view = viewOfAccount(ctx);
-    if (!view) return err('page-error', '该账号的 webview 未初始化');
-    const r = await runProbe<WatermarkThreadOutcome>(
-      view,
-      `(${WATERMARK_FREE_BY_THREAD})(${JSON.stringify(threadId)})`,
-    );
-    if (!r.ok) return err('page-error', r.error);
-    return ok(r.value);
+    const view = viewOfContext(ctx);
+    if (!view) return err('page-error', BACKEND_PAGE_TEXT.webviewMissing);
+    // 源 `resolveThreadAndFetch` 同法先站到 aispace（`_Component43.jsx:3098-3118`）
+    const restore = await gotoAispacePage(view);
+    if (!restore) return err('page-timeout', BACKEND_PAGE_TEXT.aispaceNavFailed);
+    try {
+      const r = await runProbe<WatermarkThreadOutcome>(
+        view,
+        `(${WATERMARK_FREE_BY_THREAD})(${JSON.stringify(threadId)})`,
+      );
+      if (!r.ok) return err('page-error', r.error);
+      return ok(r.value);
+    } finally {
+      restore();
+    }
   };
 }

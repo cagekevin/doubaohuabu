@@ -45,7 +45,7 @@ export function SaveErrorBanner() {
       <span className={styles.saveErrorText}>⚠️ {saveError.message}</span>
       <button
         type="button"
-        className={styles.saveErrorClose}
+        className={`${styles.panelClose} ${styles.isDanger}`}
         title={PERSIST_TEXT.close}
         onClick={() => setSaveError(null)}
       >

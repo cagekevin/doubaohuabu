@@ -34,8 +34,10 @@ import {
 } from '@/core/rules/accountBusy';
 import {
   addAccountToList,
+  buildNewAccount,
   removeAccountFromList,
   type NewAccountInput,
+  type RosterDeps,
 } from '@/core/rules/accountRoster';
 import {
   FINGERPRINT_VERSION,
@@ -216,6 +218,20 @@ export interface GlobalSlice {
    */
   addAccount: (input: NewAccountInput) => string;
   /**
+   * ★★ **算出一个「还没入名册」的账号**（原 `$P.jsx:22-35` 的 `v` / `j` / `y` 三行）
+   *
+   * ★ **为什么必须有它**：源版的登录弹窗**在账号存在之前**就要拿到三样东西 ——
+   *   `id`（`acc_…`）、`partition`（`persist:<type>_<rand>`）、`fingerprint`（`zc(\`${id}#0\`)`），
+   *   因为 `<webview>` 要**带着这些身份**先把登录页开起来；**登录成功后才 `addAccount`**
+   *   （`$P.jsx:102-156` 的 `se`）。⇒ 于是左栏**不会**先冒出一个「未登录」的账号。
+   *
+   * ⚠️ 纯逻辑复用 `buildNewAccount`（= `addAccount` 的**纯半**，判据 C1：**不写第二份**），
+   *   所以它产出的账号与随后 `addAccount` 建出来的**逐字段一致**（指纹也会被
+   *   `canReuseFingerprint` 原样沿用 —— 这正是"同一身份先登录、后入册"要的）。
+   * ⚠️ 它**不写 store**（名册不变）—— 名字是按当前名册算的，入册时 `addAccount` 会重算。
+   */
+  buildPendingAccount: (type: string) => Account;
+  /**
    * ★ **移除账号**（原 `removeAccount` 30218-30247 的**列表半**）
    *
    * 源版顺序：先 fire-and-forget 清会话（`clearAccountSession`，`try{}catch{}` 吞），
@@ -301,6 +317,22 @@ export function createGlobalSlice(
     ...(env.chromeMajor === undefined ? {} : { chromeMajor: env.chromeMajor }),
     ...(env.winScreens ? { winScreens: env.winScreens } : {}),
     ...(env.winWebgl ? { winWebgl: env.winWebgl } : {}),
+  });
+
+  /**
+   * 名册纯层的依赖（原 `addAccount` 30159 里那组现读的环境）
+   *
+   * ★ **判据 C1**：`addAccount` 与 `buildPendingAccount` **共用这一处** ——
+   *   「同一个账号长什么样」只能有一份算法（否则登录时用的身份与入册时的会不一致）。
+   * ⚠️ 环境**调用时**才读（源版 `Uc()`/`M$()`/`$$()` 就是现读），所以这里返回一个**函数**。
+   */
+  const rosterDeps = (env: RosterEnv, proxyPool: readonly string[]): RosterDeps => ({
+    now: deps.now(),
+    os: env.os,
+    fingerprintVersion: FINGERPRINT_VERSION,
+    // 指纹生成器（原 `zc`）—— 环境（真实窗口 / 真实 GPU）由 bootstrap 注入
+    generateFingerprint: (seed, os) => generateFingerprint(seed, { ...fpEnv(env), os }),
+    proxyPool,
   });
 
   return {
@@ -397,18 +429,16 @@ export function createGlobalSlice(
     addAccount: (input) => {
       const s = get();
       // ⚠️ **调用时**才读环境（源版 `Uc()`/`M$()`/`$$()` 就是现读）—— 见 deps.roster 的注释
-      const env = deps.roster();
-      const accounts = addAccountToList(s.accounts, input, {
-        now: deps.now(),
-        os: env.os,
-        fingerprintVersion: FINGERPRINT_VERSION,
-        // 指纹生成器（原 `zc`）—— 环境（真实窗口 / 真实 GPU）由 bootstrap 注入
-        generateFingerprint: (seed, os) => generateFingerprint(seed, { ...fpEnv(env), os }),
-        proxyPool: s.proxyPool,
-      });
+      const accounts = addAccountToList(s.accounts, input, rosterDeps(deps.roster(), s.proxyPool));
       set({ accounts });
       // ⚠️ `addAccountToList` 是「追加 + 重编号」，重编号**不重排** ⇒ 新账号恒在末尾
       return accounts[accounts.length - 1]?.id ?? '';
+    },
+
+    buildPendingAccount: (type) => {
+      const s = get();
+      // ★ 与 `addAccount` **同一个纯半**（判据 C1）—— 只是**不落名册**
+      return buildNewAccount(s.accounts, { type }, rosterDeps(deps.roster(), s.proxyPool));
     },
 
     removeAccount: (accountId) => {

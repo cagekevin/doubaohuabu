@@ -13,10 +13,9 @@
 }
 
 .sectionTitle {
+  composes: sectionTitle from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   margin-bottom: var(--space-2);
-  color: var(--color-text-strong);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
 }
 
 .row {
@@ -46,24 +45,20 @@
 }
 
 .empty {
-  composes: emptyInline from '../common/shared.module.css';
+  composes: empty isInline from '../common/shared.module.css';
 }
 
 /* ── provider 卡片 ── */
 
 .card {
+  composes: panel from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   margin-top: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
 .cardHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  composes: panelHead from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   margin-bottom: var(--space-2);
 }
 
@@ -73,12 +68,7 @@
   gap: var(--space-1);
   cursor: pointer;
 }
-
-.cardName {
-  color: var(--color-text-strong);
-  font-size: var(--font-size-md);
-  font-weight: 600;
-}
+
 
 .caps {
   flex: none;

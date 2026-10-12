@@ -37,6 +37,9 @@ import { formatBytes } from '@/core/rules/downloadNode';
 import { canvasMaterialBookmarks, type LovartImage } from '@/core/rules/lovartGallery';
 import { galleryItemDims, isBigGalleryItem } from '@/core/rules/materialGrid';
 import styles from './GalleryPanel.module.css';
+import shared from '@/ui/common/shared.module.css';
+// ★ 浮层壳走**共享件**（遮罩 / 头三槽 / ✕ / 正文 / 脚只有一种）
+import { PanelShell } from '@/ui/common/PanelShell';
 
 export interface GalleryPanelProps {
   /** 画廊归属的账号 id */
@@ -131,23 +134,32 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
   };
 
   return (
-    // ⚠️ 点背板关闭（原 412）—— 与源一致：面板内点击**不**冒泡（否则点内容就关）
-    <div className={styles.backdrop} onClick={onClose} data-testid="gallery-panel">
-      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.head}>
-          <span className={styles.title}>{GALLERY_TEXT.title(accountName)}</span>
-          <span className={styles.sub}>{GALLERY_TEXT.sub(selected.size, items.length)}</span>
-          <div className={styles.actions}>
+    /*
+     * ★★ **2026-10-12 收口到共享壳**：此前它自拼 `.backdrop` + `.panel` + `.panelHead`
+     *   + 一个文本「关闭」钮 —— 遮罩虽然 `composes: overlay`，但**头/脚/关闭钮**都是自己一套。
+     *   ⇒ 现全部归 `PanelShell`（**遮罩 / 头三槽 / ✕ / 正文 / 脚只有一种**）：
+     *     · 中槽 = `sub`（已选 N / 共 M）· 右槽 = 那一排工具钮 · 脚 = 提示 + 取消 + 添加到画布。
+     *   ⚠️ 源版右槽末尾那颗**文本「关闭」**并入真源 `✕`（2026-10-12 口径）。
+     */
+    <PanelShell
+      overlay
+      onClose={onClose}
+      className={styles.panel}
+      testId="gallery-panel"
+      title={GALLERY_TEXT.title(accountName)}
+      meta={<span className={styles.sub}>{GALLERY_TEXT.sub(selected.size, items.length)}</span>}
+      actions={
+        <div className={styles.actions}>
             <span className={styles.count}>{GALLERY_TEXT.count(items.length)}</span>
             {/* ⛔ 扫描：**禁用 + 说明原因**（走站点页内脚本，与 M11 剩余三项同一层） */}
-            <button type="button" className={styles.btn} disabled title={GALLERY_TEXT.pendingScan}>
+            <button type="button" className={shared.btn} disabled title={GALLERY_TEXT.pendingScan}>
               {GALLERY_TEXT.scan}
             </button>
             <span className={styles.sep} />
             {/* ★ 全选 / 反选 / 清空选择（原 427-435，**禁用条件逐字**） */}
             <button
               type="button"
-              className={styles.btn}
+              className={shared.btn}
               disabled={items.length === 0 || selected.size === items.length}
               onClick={() => setSelected(new Set(items.map((it) => it.id)))}
             >
@@ -155,7 +167,7 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
             </button>
             <button
               type="button"
-              className={styles.btn}
+              className={shared.btn}
               disabled={items.length === 0}
               onClick={() =>
                 setSelected((cur) => {
@@ -169,7 +181,7 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
             </button>
             <button
               type="button"
-              className={styles.btn}
+              className={shared.btn}
               disabled={selected.size === 0}
               onClick={() => setSelected(new Set())}
             >
@@ -184,7 +196,7 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
             */}
             <button
               type="button"
-              className={styles.btn}
+              className={shared.btn}
               title={GALLERY_TEXT.addSelectedTitle}
               onClick={() => {
                 const picked = canvasMaterialBookmarks(nodes);
@@ -204,98 +216,93 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
             <span className={styles.sep} />
             <button
               type="button"
-              className={`${styles.btn} ${styles.danger}`}
+              className={`${shared.btn} ${styles.danger}`}
               disabled={items.length === 0}
               title={GALLERY_TEXT.clearTitle}
               onClick={() => clearLovartGallery(accountId)}
             >
               {GALLERY_TEXT.clear}
             </button>
-            <button type="button" className={`${styles.btn} ${styles.ghost}`} onClick={onClose}>
-              {GALLERY_TEXT.close}
-            </button>
-          </div>
         </div>
-
-        {items.length === 0 ? (
-          <div className={styles.empty}>
-            <div className={styles.emptyIcon}>{GALLERY_TEXT.emptyIcon}</div>
-            <div className={styles.emptyTitle}>{GALLERY_TEXT.emptyTitle}</div>
-            <div className={styles.emptyDesc}>{GALLERY_TEXT.emptyDesc}</div>
-          </div>
-        ) : (
-          <div className={styles.body}>
-            <div className={styles.grid}>
-              {shown.map((item, idx) => (
-                <GalleryCard
-                  key={item.id}
-                  item={item}
-                  index={idx}
-                  selected={selected.has(item.id)}
-                  hovered={hover === item.id}
-                  onToggle={toggle}
-                  onPreview={setPreview}
-                  onRemove={(id) => removeLovartImages(accountId, [id])}
-                  onHover={setHover}
-                />
-              ))}
-            </div>
-            {/* 原 530-533：分页「加载更多」 */}
-            {hasMore && (
-              <div className={styles.more}>
-                <button
-                  type="button"
-                  className={`${styles.btn} ${styles.ghost}`}
-                  onClick={() => setVisible((v) => v + GALLERY_PAGE_SIZE)}
-                >
-                  {GALLERY_TEXT.loadMore(shown.length, items.length)}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 原 537-548：底部提示 + 取消 / 添加到画布 (N) */}
-        <div className={styles.foot}>
+      }
+      /* 脚（原 `.lovart-gallery-foot`）—— 提示靠 `margin-right: auto` 顶左（真源脚是右对齐） */
+      footer={
+        <>
           <div className={styles.footHint}>{GALLERY_TEXT.footHint}</div>
-          <div className={styles.footActions}>
-            <button type="button" className={styles.btnGhost} onClick={onClose}>
-              {GALLERY_TEXT.cancel}
-            </button>
+          <button type="button" className={styles.btnGhost} onClick={onClose}>
+            {GALLERY_TEXT.cancel}
+          </button>
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            disabled={selected.size === 0}
+            title={selected.size === 0 ? GALLERY_TEXT.addToCanvasNone : GALLERY_TEXT.addToCanvasTitle(selected.size)}
+            onClick={addToCanvas}
+          >
+            {GALLERY_TEXT.addToCanvas(selected.size)}
+          </button>
+        </>
+      }
+    >
+      {items.length === 0 ? (
+        <div className={shared.empty}>
+          <div className={styles.emptyIcon}>{GALLERY_TEXT.emptyIcon}</div>
+          <div className={styles.emptyTitle}>{GALLERY_TEXT.emptyTitle}</div>
+          <div className={styles.emptyDesc}>{GALLERY_TEXT.emptyDesc}</div>
+        </div>
+      ) : (
+        <>
+        <div className={styles.grid}>
+          {shown.map((item, idx) => (
+            <GalleryCard
+              key={item.id}
+              item={item}
+              index={idx}
+              selected={selected.has(item.id)}
+              hovered={hover === item.id}
+              onToggle={toggle}
+              onPreview={setPreview}
+              onRemove={(id) => removeLovartImages(accountId, [id])}
+              onHover={setHover}
+            />
+          ))}
+        </div>
+        {/* 原 530-533：分页「加载更多」 */}
+        {hasMore && (
+          <div className={styles.more}>
             <button
               type="button"
-              className={styles.btnPrimary}
-              disabled={selected.size === 0}
-              title={selected.size === 0 ? GALLERY_TEXT.addToCanvasNone : GALLERY_TEXT.addToCanvasTitle(selected.size)}
-              onClick={addToCanvas}
+              className={`${shared.btn} ${styles.ghost}`}
+              onClick={() => setVisible((v) => v + GALLERY_PAGE_SIZE)}
             >
-              {GALLERY_TEXT.addToCanvas(selected.size)}
+              {GALLERY_TEXT.loadMore(shown.length, items.length)}
             </button>
           </div>
-        </div>
-
-        {/*
-          ★ 大图预览（原 `_Component23.jsx:550-602` 的 `.tg-lightbox`）
-          ⚠️ 挂在 `.panel` 内（而不是 `.backdrop` 的兄弟）：`.panel` 已有 `stopPropagation`，
-            否则点 lightbox 的遮罩会**同时**把画廊也关掉（React 事件走**组件树**冒泡）。
-        */}
-        {preview !== null && (
-          <GalleryLightbox
-            items={items}
-            index={preview}
-            checked={items[preview] ? selected.has(items[preview].id) : false}
-            onToggle={toggle}
-            onPrev={() => stepPreview(-1)}
-            onNext={() => stepPreview(1)}
-            onClose={() => setPreview(null)}
-            onRemove={(id) => {
-              removeLovartImages(accountId, [id]);
-              // ⚠️ 与源一致：移除后当前项可能没了 ⇒ 直接关掉（源版靠 `{A && …}` 隐式关闭）
-              setPreview(null);
-            }}
-          />
         )}
-      </div>
-    </div>
+        </>
+      )}
+
+      {/*
+        ★ 大图预览（原 `_Component23.jsx:550-602` 的 `.tg-lightbox`）
+        ⚠️ 挂在**卡片内**（不是遮罩的兄弟）：卡片自带 `stopPropagation`，
+          否则点 lightbox 的遮罩会**同时**把画廊也关掉（React 事件走**组件树**冒泡）。
+      */}
+      {preview !== null && (
+        <GalleryLightbox
+          items={items}
+          index={preview}
+          checked={items[preview] ? selected.has(items[preview].id) : false}
+          onToggle={toggle}
+          onPrev={() => stepPreview(-1)}
+          onNext={() => stepPreview(1)}
+          onClose={() => setPreview(null)}
+          onRemove={(id) => {
+            removeLovartImages(accountId, [id]);
+            // ⚠️ 与源一致：移除后当前项可能没了 ⇒ 直接关掉（源版靠 `{A && …}` 隐式关闭）
+            setPreview(null);
+          }}
+        />
+      )}
+    </PanelShell>
   );
 }

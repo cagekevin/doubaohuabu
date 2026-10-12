@@ -12,6 +12,7 @@
  */
 
 import type { SiteType } from '@/stable/model/account';
+import type { ImageQuestionContext } from '@/core/ports/site.port';
 // ★ 容器 DOM 钩子类名必须走 SSOT（写字面量对不上 BackendView 的 CSS-module 类 ⇒ 定位恒失效）
 import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
 
@@ -29,6 +30,15 @@ export interface WebviewElement extends HTMLElement {
 
 /** webview 元素的定位键：用 session partition（每个账号一个） */
 const PARTITION_ATTR = 'partition';
+
+/**
+ * 从 `ImageQuestionContext` 取该账号的后台 `<webview>`（找不到 ⇒ `null`）
+ *
+ * ⚠️ 这是 `SitePort` 各「页内脚本」方法**公共的第一句**（`askWithImage` / `pingQueueProgress` /
+ *   `fetchWatermarkFree` / 4 个监测探测…）⇒ 判据 C1：收口到一处，别每个实现各写一份。
+ */
+export const viewOfContext = (ctx: ImageQuestionContext): WebviewElement | null =>
+  findWebview({ id: ctx.account.id, partition: ctx.account.partition, type: ctx.account.type });
 
 /** 取某个 partition 对应的 `<webview>`；找不到则抛（**原文明确**，不静默返回 null） */
 export function requireWebview(partition: string | null | undefined): WebviewElement {

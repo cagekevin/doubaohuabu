@@ -45,7 +45,7 @@
 
 /* 原 `.gp-acc-menu`（portal 到 body ⇒ 固定定位） */
 .menu {
-  composes: overlay from './shared.module.css';
+  composes: panel from './shared.module.css';
   position: fixed;
   z-index: var(--z-overlay);
   min-width: 180px;

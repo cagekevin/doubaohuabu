@@ -5,14 +5,16 @@
  *    **没有 `addAccount`**、`ui/` 里**没有任何账号界面** ⇒ 选号池永远为空
  *    ⇒ `generate` 必然报「未配置已登录的豆包 / Dola 账号」。
  *
- * ★ **与源版的顺序差异（有意，已留痕）**：
- *   源版「＋ 添加账号」= 先选平台（`_ComponentTP`）→ 再在登录表单（`$P`）里**先登录**
- *   → 登录成功后才 `addAccount`（所以源版账号一建出来就是 `已登录`）。
- *   本工程**顺序倒过来**：先建号（`未登录`）→ 在下方 `<webview>` 里真人登录 →
- *   点「检测登录」（`SitePort.probe`）回填状态。
- *   理由：源版那条路依赖 `$P` 的登录弹窗与 `webview` 的紧耦合编排；
- *   而我们的 `BackendView` 已经把 webview 渲染出来了 ⇒ 让它直接可见、由用户操作更简单，
- *   也**不需要**一个新弹窗。代价是多一句引导文案与一个探针按钮。
+ * ★★ **2026-10-12 改回源版顺序**（此前那套「先建号再登录」已**删掉**）：
+ *   「＋ 添加账号」= 选平台（`TP.jsx`）→ **登录弹窗（`$P.jsx`）** → 登录成功才 `addAccount`
+ *   ⇒ 账号一建出来就是 `已登录`，**左栏在那之前什么都不多**。
+ *
+ * ⚠️ 此前这里写着「顺序倒过来：先建号（未登录）→ …；**理由**：源版那条路依赖 `$P` 的
+ *   登录弹窗与 webview 的紧耦合编排；而我们的 `BackendView` 已经把 webview 渲染出来了
+ *   ⇒ 让它直接可见、由用户操作更简单」—— **那段"理由"是借口**：真实后果是**左栏立刻多出
+ *   一行「未登录」的账号**（用户点名的就是这个），而"简单"换来的是一套源版没有的状态机。
+ *   `$P` 那条路在本仓**完全走得通**（`prepareSession` / `SitePort.probe` / `addAccount`
+ *   都已在），⇒ 已按源落地，见 `ui/panels/LoginModal.tsx`。
  *
  * ⚠️ 原则 1：本组件**不写 store**（写全经 `useAccountOps()` / store action）
  *
@@ -27,12 +29,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useAccountOps, useStore } from '@/state';
-import { ACCOUNT_STATUS, SITE_TYPES } from '@/stable/model/account';
+import { ACCOUNT_STATUS, isAccountUsable, type SiteType } from '@/stable/model/account';
+// ⚠️ 头像字是**纯规则**（原 `OP.jsx:724`）⇒ 住 `core/rules`，不在组件里内联
+import { accountAvatarText } from '@/core/rules/accountName';
+import { AccountTypePicker } from './AccountTypePicker';
+import { LoginModal } from './LoginModal';
 import { GalleryPanel } from './GalleryPanel';
 import { FingerprintScanPanel } from './FingerprintScanPanel';
 import { ExportAccountsModal } from './ExportAccountsModal';
 import { ProxyPoolPanel } from './ProxyPoolPanel';
 import { GroupManagerModal } from './GroupManagerModal';
+import { FP_SCAN_RECORD_DEBOUNCE_MS } from '@/constants';
 import {
   ACCOUNT_PANEL_TEXT,
   ACCOUNT_TRANSFER_TEXT,
@@ -56,12 +63,16 @@ const CACHE_MSG_MS = 4000;
 
 export function AccountPanel() {
   const accounts = useStore((s) => s.accounts);
+  /** 分组表 —— 只为取**头像底色**（原 `OP.jsx:700-706` 的 `at`） */
+  const groups = useStore((s) => s.groups);
   const activeAccountId = useStore((s) => s.activeAccountId);
   const setActiveAccountId = useStore((s) => s.setActiveAccountId);
   const pushToast = useStore((s) => s.pushToast);
   const accountOps = useAccountOps();
   /** ★ 重新生成指纹（原 `OP.jsx:757-765` 的 ↻） */
   const regenerateFingerprint = useStore((s) => s.regenerateFingerprint);
+  /** ★ 记一次体检（原 `OP.jsx:20` 的 `r`）—— `scanHistory` 的**唯一写入方** */
+  const recordScan = useStore((s) => s.recordScan);
   /**
    * ★ 🔍 指纹诊断按钮的**显示判据**（原 `_P`，`shared.js:34202-34210`）
    *
@@ -79,6 +90,11 @@ export function AccountPanel() {
   const clearCanvas = useStore((s) => s.clearCanvas);
 
   const [picking, setPicking] = useState(false);
+  /**
+   * ★ 正在登录哪个平台（`null` = 不开）—— 原 `OP.jsx` 里开 `$P` 的那个状态
+   * ⚠️ 与 `picking`（选平台）是**两步**：选完平台关 `picking`、开 `loginType`（源同序）。
+   */
+  const [loginType, setLoginType] = useState<SiteType | null>(null);
   const [probing, setProbing] = useState<string | null>(null);
   /** ★ 正在查看哪个账号的画廊（`null` = 不显示）—— 原 `_Component23` 是覆盖层模态 */
   const [galleryFor, setGalleryFor] = useState<string | null>(null);
@@ -105,16 +121,41 @@ export function AccountPanel() {
    */
   const health = useMemo(() => scanFingerprintCollisions(accounts), [accounts]);
 
+  /**
+   * ★ **自动记录体检历史**（原 `OP.jsx:26-40`，逐行）
+   *
+   * 源逐行：
+   * ```js
+   * useEffect(() => {
+   *   if (!(n.length < 2)) {                          // 账号 < 2 不记
+   *     if (o.current) clearTimeout(o.current);
+   *     o.current = setTimeout(() => r(s), 1500);     // r = recordScan，s = 报告
+   *     return () => { if (o.current) clearTimeout(o.current); };
+   *   }
+   * }, [s, n.length, r]);
+   * ```
+   * ⚠️ 语义 = **防抖**（每次报告 / 账号数变都重排定时器）—— 源那个手写 `clearTimeout`
+   *    是双保险，React 的 cleanup 已等价，故不重复一份。
+   * ⚠️ 本处是 `scanHistory` 的**唯一写入方**：面板里**没有**手动「开始体检」按钮（源 `DP.jsx` 同）。
+   */
+  useEffect(() => {
+    if (accounts.length < 2) return;
+    const t = window.setTimeout(() => recordScan(health), FP_SCAN_RECORD_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [health, accounts.length, recordScan]);
+
   /** 写一条状态行（原 `setMsg(...)` + 各处 `setTimeout(() => setMsg(''), ms)`） */
   const showStatus = (text: string, ms: number): void => setStatus({ text, ms });
 
-  const add = (type: string): void => {
-    const id = accountOps.addAccount({ type });
+  /**
+   * 选定平台 ⇒ **开登录弹窗**（原 `TP.jsx` 的 `onPick` → `OP.jsx` 里开 `$P`）
+   *
+   * ★★ **这里不再建号** —— 建号发生在**登录成功那一刻**（`LoginModal` 里调 `addAccount`），
+   *   与源版 `$P.jsx:102-156` 的 `se` 同序。此前"先建号"会让左栏立刻多出一行「未登录」。
+   */
+  const add = (type: SiteType): void => {
     setPicking(false);
-    // 新建即设为「当前显示」—— 用户接着就要在那个页面里登录
-    setActiveAccountId(id);
-    const created = accounts.find((a) => a.id === id);
-    pushToast(ACCOUNT_PANEL_TEXT.loginHint(created?.name ?? id), 6000);
+    setLoginType(type);
   };
 
   const probe = async (id: string): Promise<void> => {
@@ -209,102 +250,86 @@ export function AccountPanel() {
 
   return (
     <div className={styles.column}>
-      {picking ? (
-        <div className={styles.pick}>
-          <div className={styles.pickTitle}>{ACCOUNT_PANEL_TEXT.pickType}</div>
-          {SITE_TYPES.map((t) => (
-            <button key={t} type="button" className={styles.pickItem} onClick={() => add(t)}>
-              {t}
-            </button>
-          ))}
-          <button type="button" className={styles.pickCancel} onClick={() => setPicking(false)}>
-            ×
-          </button>
-        </div>
-      ) : (
-        <>
-          <button type="button" className={styles.addBtn} onClick={() => setPicking(true)}>
-            {ACCOUNT_PANEL_TEXT.addAccount}
-          </button>
-          {/* ★ 工具条（原 `OP.jsx:829-843` 的 `.account-tool-row`）：导入 / 导出 / 关联扫描 */}
-          <div className={styles.toolRow}>
-            <button
-              type="button"
-              className={styles.toolBtn}
-              title={EXPORT_TEXT.importTitle}
-              onClick={() => void runImport()}
-            >
-              {EXPORT_TEXT.importBtn}
-            </button>
-            <button
-              type="button"
-              className={styles.toolBtn}
-              title={EXPORT_TEXT.exportTitle}
-              disabled={loggedInCount === 0}
-              onClick={() => setExportOpen(true)}
-            >
-              {EXPORT_TEXT.exportBtn}
-            </button>
-            {/* 指纹体检（原「🔗 关联扫描」，打开 `DP`）—— 它也是 `scanHistory` 的**唯一写入方** */}
-            <button
-              type="button"
-              className={styles.toolBtn}
-              title={ACCOUNT_PANEL_TEXT.scanTitle}
-              disabled={accounts.length < 2}
-              onClick={() => setScanOpen(true)}
-            >
-              {ACCOUNT_PANEL_TEXT.scan}
-            </button>
-            {/* 出口代理池（原「🌐 出口代理」，打开 `LP`） */}
-            <button
-              type="button"
-              className={styles.toolBtn}
-              title={PROXY_TEXT.triggerTitle}
-              onClick={() => setProxyOpen(true)}
-            >
-              {PROXY_TEXT.trigger}
-            </button>
-            {/* 清理浏览器缓存（原「🧹 清理缓存」，`OP.jsx:850-852`） */}
-            <button
-              type="button"
-              className={styles.toolBtn}
-              title={ACCOUNT_PANEL_TEXT.clearCacheTitle}
-              disabled={cacheBusy}
-              onClick={() => void runClearCache()}
-            >
-              {cacheBusy ? ACCOUNT_PANEL_TEXT.clearCacheBusy : ACCOUNT_PANEL_TEXT.clearCache}
-            </button>
-            {/* 分组管理（原 `OP.jsx` 的分组工具条 + `RP.jsx`） */}
-            <button
-              type="button"
-              className={styles.toolBtn}
-              title={GROUP_MANAGER_TEXT.triggerTitle}
-              onClick={() => setGroupOpen(true)}
-            >
-              {GROUP_MANAGER_TEXT.trigger}
-            </button>
-          </div>
-          {/* ★ 实时隔离体检（原 `OP.jsx:854-858`）—— 与工具条的「关联扫描」打开**同一个**面板，
-              区别只是这个入口**自带状态摘要**（🔴 / 🟡 / ✅ 三态） */}
-          {accounts.length >= 2 && (
-            <button
-              type="button"
-              className={`${styles.fpHealth} ${
-                health.critical > 0 ? styles.fpHealthCrit : health.warn > 0 ? styles.fpHealthWarn : styles.fpHealthOk
-              }`}
-              title={FP_SCAN_TEXT.healthTitle}
-              onClick={() => setScanOpen(true)}
-            >
-              {health.critical > 0
-                ? FP_SCAN_TEXT.healthCrit(health.critical)
-                : health.warn > 0
-                  ? FP_SCAN_TEXT.healthWarn(health.warn)
-                  : FP_SCAN_TEXT.healthOk}
-            </button>
-          )}
-          {status && <div className={styles.toolMsg}>{status.text}</div>}
-        </>
+      <button type="button" className={styles.addBtn} onClick={() => setPicking(true)}>
+        {ACCOUNT_PANEL_TEXT.addAccount}
+      </button>
+      {/* ★ 工具条（原 `OP.jsx:829-843` 的 `.account-tool-row`）：导入 / 导出 / 关联扫描 */}
+      <div className={styles.toolRow}>
+        <button
+          type="button"
+          className={styles.toolBtn}
+          title={EXPORT_TEXT.importTitle}
+          onClick={() => void runImport()}
+        >
+          {EXPORT_TEXT.importBtn}
+        </button>
+        <button
+          type="button"
+          className={styles.toolBtn}
+          title={EXPORT_TEXT.exportTitle}
+          disabled={loggedInCount === 0}
+          onClick={() => setExportOpen(true)}
+        >
+          {EXPORT_TEXT.exportBtn}
+        </button>
+        {/* 指纹体检（原「🔗 关联扫描」，打开 `DP`）—— 它也是 `scanHistory` 的**唯一写入方** */}
+        <button
+          type="button"
+          className={styles.toolBtn}
+          title={ACCOUNT_PANEL_TEXT.scanTitle}
+          disabled={accounts.length < 2}
+          onClick={() => setScanOpen(true)}
+        >
+          {ACCOUNT_PANEL_TEXT.scan}
+        </button>
+        {/* 出口代理池（原「🌐 出口代理」，打开 `LP`） */}
+        <button
+          type="button"
+          className={styles.toolBtn}
+          title={PROXY_TEXT.triggerTitle}
+          onClick={() => setProxyOpen(true)}
+        >
+          {PROXY_TEXT.trigger}
+        </button>
+        {/* 清理浏览器缓存（原「🧹 清理缓存」，`OP.jsx:850-852`） */}
+        <button
+          type="button"
+          className={styles.toolBtn}
+          title={ACCOUNT_PANEL_TEXT.clearCacheTitle}
+          disabled={cacheBusy}
+          onClick={() => void runClearCache()}
+        >
+          {cacheBusy ? ACCOUNT_PANEL_TEXT.clearCacheBusy : ACCOUNT_PANEL_TEXT.clearCache}
+        </button>
+        {/* 分组管理（原 `OP.jsx` 的分组工具条 + `RP.jsx`） */}
+        <button
+          type="button"
+          className={styles.toolBtn}
+          title={GROUP_MANAGER_TEXT.triggerTitle}
+          onClick={() => setGroupOpen(true)}
+        >
+          {GROUP_MANAGER_TEXT.trigger}
+        </button>
+      </div>
+      {/* ★ 实时隔离体检（原 `OP.jsx:854-858`）—— 与工具条的「关联扫描」打开**同一个**面板，
+          区别只是这个入口**自带状态摘要**（🔴 / 🟡 / ✅ 三态） */}
+      {accounts.length >= 2 && (
+        <button
+          type="button"
+          className={`${styles.fpHealth} ${
+            health.critical > 0 ? styles.fpHealthCrit : health.warn > 0 ? styles.fpHealthWarn : styles.fpHealthOk
+          }`}
+          title={FP_SCAN_TEXT.healthTitle}
+          onClick={() => setScanOpen(true)}
+        >
+          {health.critical > 0
+            ? FP_SCAN_TEXT.healthCrit(health.critical)
+            : health.warn > 0
+              ? FP_SCAN_TEXT.healthWarn(health.warn)
+              : FP_SCAN_TEXT.healthOk}
+        </button>
       )}
+      {status && <div className={styles.toolMsg}>{status.text}</div>}
 
       {/*
         ★ **「出新图」条**（原 `_Component26`）—— 源版位置在 `.doubao-view-webviews` **之上**
@@ -327,71 +352,90 @@ export function AccountPanel() {
         <div className={styles.empty}>{ACCOUNT_PANEL_TEXT.emptyHint}</div>
       ) : (
         <ul className={styles.list}>
-          {accounts.map((a) => (
-            <li
-              key={a.id}
-              className={`${styles.row} ${a.id === activeAccountId ? styles.rowActive : ''}`}
-            >
-              <button
-                type="button"
-                className={styles.rowMain}
-                title={a.type}
-                onClick={() => setActiveAccountId(a.id === activeAccountId ? null : a.id)}
+          {accounts.map((a) => {
+            /** 分组色（原 `OP.jsx:709` 的 `at[W.groupId]`）—— 头像底色 */
+            const tint = groups.find((g) => g.id === a.groupId)?.color ?? null;
+            return (
+              <li
+                key={a.id}
+                className={`${styles.row} ${a.id === activeAccountId ? styles.rowActive : ''}`}
               >
-                <span className={styles.name}>{a.name}</span>
-                <span className={styles.meta}>
-                  {a.type} · {a.status}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={styles.rowBtn}
-                disabled={probing === a.id}
-                onClick={() => void probe(a.id)}
-              >
-                {probing === a.id ? ACCOUNT_PANEL_TEXT.probing : ACCOUNT_PANEL_TEXT.probe}
-              </button>
-              <button
-                type="button"
-                className={styles.rowBtn}
-                title={ACCOUNT_PANEL_TEXT.galleryTitle}
-                onClick={() => setGalleryFor(a.id)}
-              >
-                {ACCOUNT_PANEL_TEXT.gallery}
-              </button>
-              {/* ★ 指纹诊断（原 `OP.jsx:751-756` 的 🔍）—— ⚠️ 只在 Windows 显示（源 `_P`） */}
-              {canDiagnose && (
                 <button
                   type="button"
-                  className={styles.rowBtn}
-                  title={FP_DIAG_TEXT.diagTitle}
-                  onClick={() => void runDiagnose(a.id, a.name)}
+                  className={styles.rowMain}
+                  title={a.type}
+                  onClick={() => setActiveAccountId(a.id === activeAccountId ? null : a.id)}
                 >
-                  {FP_DIAG_TEXT.diagLabel}
+                  {/* 头像（原 `OP.jsx:720-725`）：名字里的数字 / 首字；分组色作底 */}
+                  <span className={styles.avatar} style={tint ? { background: tint } : undefined}>
+                    {accountAvatarText(a)}
+                  </span>
+                  <span className={styles.metaCol}>
+                    <span className={styles.name}>{a.name}</span>
+                    <span className={styles.meta}>
+                      {a.type} · {a.status}
+                    </span>
+                  </span>
                 </button>
-              )}
-              {/* ★ 重新生成指纹（原 `OP.jsx:757-765` 的 ↻） */}
-              <button
-                type="button"
-                className={styles.rowBtn}
-                title={FP_DIAG_TEXT.regenTitle}
-                onClick={() => {
-                  // ⚠️ 源版 `OP.jsx:759` 自带 confirm（与「移除账号」同法，不引入新弹窗件）
-                  if (window.confirm(FP_DIAG_TEXT.regenConfirm(a.name))) regenerateFingerprint(a.id);
-                }}
-              >
-                {FP_DIAG_TEXT.regenLabel}
-              </button>
-              <button
-                type="button"
-                className={styles.rowBtnDanger}
-                title={ACCOUNT_PANEL_TEXT.removeTitle}
-                onClick={() => void remove(a.id, a.name)}
-              >
-                {ACCOUNT_PANEL_TEXT.remove}
-              </button>
-            </li>
-          ))}
+                {/*
+                  「检测登录」—— ⚠️ **源版没有这颗按钮**（它建号即已登录）；本仓是「先建号再登录」
+                  ⇒ 未登录的账号必须有它。**只在未登录时显示**：已登录的账号不需要它，
+                  而它一旦常驻，名字列会被挤到只剩一两个字（截图实测）。
+                */}
+                {!isAccountUsable(a) && (
+                  <button
+                    type="button"
+                    className={styles.rowBtn}
+                    disabled={probing === a.id}
+                    onClick={() => void probe(a.id)}
+                  >
+                    {probing === a.id ? ACCOUNT_PANEL_TEXT.probing : ACCOUNT_PANEL_TEXT.probe}
+                  </button>
+                )}
+                {/* 以下四颗走**图标钮**（源 `lib-icon`，`OP.jsx:751-812`）——
+                    文本钮会把名字列挤没（同一处截图实测）。 */}
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  title={ACCOUNT_PANEL_TEXT.galleryTitle}
+                  onClick={() => setGalleryFor(a.id)}
+                >
+                  {ACCOUNT_PANEL_TEXT.galleryGlyph}
+                </button>
+                {/* ★ 指纹诊断（原 `OP.jsx:751-756` 的 🔍）—— ⚠️ 只在 Windows 显示（源 `_P`） */}
+                {canDiagnose && (
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    title={FP_DIAG_TEXT.diagTitle}
+                    onClick={() => void runDiagnose(a.id, a.name)}
+                  >
+                    {FP_DIAG_TEXT.diagLabel}
+                  </button>
+                )}
+                {/* ★ 重新生成指纹（原 `OP.jsx:757-765` 的 ↻） */}
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  title={FP_DIAG_TEXT.regenTitle}
+                  onClick={() => {
+                    // ⚠️ 源版 `OP.jsx:759` 自带 confirm（与「移除账号」同法，不引入新弹窗件）
+                    if (window.confirm(FP_DIAG_TEXT.regenConfirm(a.name))) regenerateFingerprint(a.id);
+                  }}
+                >
+                  {FP_DIAG_TEXT.regenLabel}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${styles.iconDel}`}
+                  title={ACCOUNT_PANEL_TEXT.removeTitle}
+                  onClick={() => void remove(a.id, a.name)}
+                >
+                  {ACCOUNT_PANEL_TEXT.removeGlyph}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
       {/* ★ 画廊面板（原 `_Component23`）—— 覆盖层，挂在列表之后即可
@@ -406,6 +450,12 @@ export function AccountPanel() {
       {proxyOpen && <ProxyPoolPanel onClose={() => setProxyOpen(false)} />}
       {/* ★ 分组管理弹窗（原 `OP.jsx` 分组工具条 + `RP.jsx`） */}
       {groupOpen && <GroupManagerModal onClose={() => setGroupOpen(false)} />}
+      {/* ★ 「选择账号类型」弹窗（原 `TP.jsx`）—— 「＋ 添加账号」的**第一步** */}
+      {picking && <AccountTypePicker onPick={add} onClose={() => setPicking(false)} />}
+      {/* ★ 登录弹窗（原 `$P.jsx`）—— **第二步**，也是**建号的地方**（登录成功才入册） */}
+      {loginType && (
+        <LoginModal key={loginType} type={loginType} onClose={() => setLoginType(null)} />
+      )}
 
       {/* ★ 面板底部操作条（原 `OP.jsx:925-941` 的 `.panel-foot`） */}
       <div className={styles.foot}>

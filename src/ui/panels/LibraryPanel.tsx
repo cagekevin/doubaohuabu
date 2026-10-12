@@ -1,28 +1,37 @@
 /**
- * 资源库面板（右栏）—— 原 `.side` 右栏 + `.lib-*`（`RT.jsx`，354 行）
+ * 资源库面板（右栏）—— 原 `RT.jsx`（354 行）
  *
- * 依据：docs/03-人类版.md §3（素材与媒体）+ §8（文案）
+ * 依据：`docs/03-人类版.md` §3（素材与媒体）+ §8（文案）
  *
- * **本轮（2026-10-12）补的两件**（原 `RT.jsx` 有、本仓此前没有的）：
+ * ── 骨架（**逐行对源** `RT.jsx:252-335`）──
+ *   `.library-panel`
+ *     → `.library-head`（标题「资源库」＋「＋ 添加」）
+ *     → `.library-list`（**列表行**：缩略图 · 名字 · ☆ · ✕；空态「拖入图片 / 或点击「添加」」；
+ *        整块可接**外部拖入的图片文件**）
+ *     → `.library-tip`（有素材时：`拖拽素材到画布生成节点 · 长按拖入后台页面 · 列表内拖动调整顺序`）
+ *
+ * ── 本轮补的两件（原 `RT.jsx` 有、本仓此前没有的）──
  *   · **双击重命名**（原 `M`/`U`，`RT.jsx:242-251`/`:301-314`）—— 走 `renameLibrary`
  *     （库条目 + 所有同源素材节点一起改）
  *   · **右键「替换素材」**（原 `O`，`RT.jsx:133-154`/`:342-352`）—— 走 `replaceLibrary`
  *     （换**库条目自身的图** + 同步所有引用节点）
  *
  * ⚠️ 原则 1：本组件**不直接写 store**，只调 state 暴露的 action
- * ⚠️ 图片一律走 `<Thumb>`（`?w=`），不加载原图（docs/10 #7）
+ * ⚠️ 图片一律走 `<Thumb>`（`?w=`），不加载原图（`docs/10` #7）
  * ⚠️ 拖拽 MIME = `DRAG_MIME_MATERIAL`（与原实现一致，画布 `onDrop` 认它）
  * ⚠️ 与「更换素材」（节点右键菜单那个）**不是同一件事** —— 见 `constants/text.ts` 的 `LIBRARY_TEXT.libReplace` 注
  */
 
-import { useState } from 'react';
+import { useMemo, useState, type DragEvent } from 'react';
 import { useHostOps, useStore } from '@/state';
 import { Thumb } from '@/ui/common/Thumb';
 import { ContextMenu, type MenuItem } from '@/ui/common/ContextMenu';
-import { EmptyState } from '@/ui/common/EmptyState';
 import { LIBRARY_TEXT } from '@/constants/text';
 import { DRAG_MIME_MATERIAL } from '@/constants';
 import { makeLibraryId } from '@/core/rules/project';
+import { countLibRefs, sortLibrary } from '@/core/rules/libraryEdit';
+import { readImageFile } from '@/lib/readDroppedFile';
+import type { LibraryItem } from '@/stable/model/project';
 import styles from './LibraryPanel.module.css';
 
 /** 右键菜单的锚点（原 `x`，`RT.jsx:43`）—— 屏幕坐标 + 条目 id */
@@ -34,6 +43,7 @@ interface LibMenuAnchor {
 
 export function LibraryPanel() {
   const library = useStore((s) => s.library);
+  const nodes = useStore((s) => s.nodes);
   const setLibrary = useStore((s) => s.setLibrary);
   const commit = useStore((s) => s.commit);
   const renameLibrary = useStore((s) => s.renameLibrary);
@@ -48,8 +58,13 @@ export function LibraryPanel() {
   const [renameDraft, setRenameDraft] = useState('');
   /** 右键菜单锚点（原 `x`）—— `null` = 关 */
   const [menu, setMenu] = useState<LibMenuAnchor | null>(null);
+  /** 有文件拖到列表上方（原 `u`，`RT.jsx:38`） */
+  const [dragOver, setDragOver] = useState(false);
 
-  /** 从文件添加（走 `hostOps.importFiles`） */
+  /** 展示顺序：**收藏在前**（原 `c`，`RT.jsx:29-37`） */
+  const ordered = useMemo(() => sortLibrary(library), [library]);
+
+  /** 从文件添加（原 `R`，`RT.jsx:256` 的「＋ 添加」） */
   const addFromFile = async (): Promise<void> => {
     setBusy(true);
     try {
@@ -79,12 +94,55 @@ export function LibraryPanel() {
     }
   };
 
+  /**
+   * 把**外部拖进来的图片文件**加进资源库（原 `F`，`RT.jsx:219-241`）
+   *
+   * 源逐行：`preventDefault` → 只留 `type` 以 `image/` 开头的 → 逐个 `Pu(file)`（读成
+   *   `{name, dataUrl, natW, natH}`）→ 建库条目（`favorite:false`）。
+   */
+  const onDropFiles = async (e: DragEvent<HTMLDivElement>): Promise<void> => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files || []).filter((f) =>
+      (f.type || '').startsWith('image/'),
+    );
+    if (files.length === 0) return;
+    setBusy(true);
+    try {
+      const now = Date.now();
+      const added: LibraryItem[] = [];
+      let i = 0;
+      for (const file of files) {
+        const img = await readImageFile(file);
+        added.push({
+          id: makeLibraryId(now, i),
+          favorite: false,
+          name: img.name,
+          dataUrl: img.dataUrl,
+          w: img.natW,
+          h: img.natH,
+        });
+        i += 1;
+      }
+      commit('library');
+      setLibrary([...library, ...added]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleFavorite = (id: string): void => {
     commit('library');
     setLibrary(library.map((it) => (it.id === id ? { ...it, favorite: !it.favorite } : it)));
   };
 
-  const remove = (id: string): void => {
+  /**
+   * 删除条目（原 `RT.jsx:321-329`）
+   * ⚠️ **仍有引用时先确认**（源 `l ? l(_.id) : 0` → `confirm(...)`）—— 删了会让那些节点的图失效。
+   */
+  const remove = (id: string, name: string): void => {
+    const refs = countLibRefs(library, nodes, id);
+    if (refs > 0 && !window.confirm(LIBRARY_TEXT.deleteConfirm(name, refs))) return;
     commit('library');
     setLibrary(library.filter((it) => it.id !== id));
   };
@@ -141,49 +199,53 @@ export function LibraryPanel() {
     }
   };
 
-  if (library.length === 0) {
-    return (
-      <div className={styles.column}>
-        <div className={styles.head}>
-          <span>{LIBRARY_TEXT.title}</span>
-          <button type="button" className={styles.headBtn} onClick={() => void addFromFile()} disabled={busy}>
-            从文件选择
-          </button>
-        </div>
-        <EmptyState title={LIBRARY_TEXT.empty} />
-      </div>
-    );
-  }
-
   return (
     <div className={styles.column}>
       <div className={styles.head}>
-        <span>资源库（{library.length}）</span>
-        <button type="button" className={styles.headBtn} onClick={() => void addFromFile()} disabled={busy}>
-          从文件选择
+        <span className={styles.title}>{LIBRARY_TEXT.title}</span>
+        <button type="button" className={styles.addBtn} onClick={() => void addFromFile()} disabled={busy}>
+          {LIBRARY_TEXT.add}
         </button>
       </div>
 
-      <div className={styles.grid}>
-        {library.map((it) => (
+      {/* 列表容器（原 `.library-list`）—— 整块是**外部图片文件的落点** */}
+      <div
+        className={`${styles.list}${dragOver ? ` ${styles.dragOver}` : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDragOver(false);
+        }}
+        onDrop={(e) => void onDropFiles(e)}
+      >
+        {ordered.length === 0 && (
+          <div className={styles.dropHint}>
+            {LIBRARY_TEXT.dropHint}
+            <br />
+            {LIBRARY_TEXT.dropHintSub}
+          </div>
+        )}
+
+        {ordered.map((it) => (
           <div
             key={it.id}
-            className={styles.item}
-            title={it.name}
+            className={styles.row}
             draggable
             onDragStart={(e) => {
               // ★ 与原实现一致的 MIME（画布 onDrop 靠它识别素材）
               e.dataTransfer.setData(DRAG_MIME_MATERIAL, it.id);
               e.dataTransfer.effectAllowed = 'copy';
             }}
-            onDoubleClick={() => startRename(it)}
             onContextMenu={(e) => {
               // 源 `RT.jsx:292-298`：preventDefault + 记锚点
               e.preventDefault();
               setMenu({ id: it.id, x: e.clientX, y: e.clientY });
             }}
           >
-            <Thumb src={it.dataUrl} alt={it.name} width={160} className={styles.thumb} />
+            <Thumb src={it.dataUrl} alt={it.name} width={240} className={styles.thumb} />
             {renamingId === it.id ? (
               <input
                 className={styles.renameInput}
@@ -198,31 +260,33 @@ export function LibraryPanel() {
                 }}
               />
             ) : (
-              <div className={styles.name} title={LIBRARY_TEXT.libRenameHint}>
+              <div className={styles.name} title={LIBRARY_TEXT.libRenameHint} onDoubleClick={() => startRename(it)}>
                 {it.name}
               </div>
             )}
-            <div className={styles.actions}>
-              <button
-                type="button"
-                className={styles.actionBtn}
-                aria-label={it.favorite ? '取消收藏' : '收藏'}
-                onClick={() => toggleFavorite(it.id)}
-              >
-                {it.favorite ? '★' : '☆'}
-              </button>
-              <button
-                type="button"
-                className={styles.actionBtn}
-                aria-label="删除"
-                onClick={() => remove(it.id)}
-              >
-                ✕
-              </button>
-            </div>
+            <button
+              type="button"
+              className={`${styles.icon}${it.favorite ? ` ${styles.fav}` : ''}`}
+              title={it.favorite ? LIBRARY_TEXT.unfavorite : LIBRARY_TEXT.favorite}
+              onClick={() => toggleFavorite(it.id)}
+            >
+              {it.favorite ? '★' : '☆'}
+            </button>
+            <button
+              type="button"
+              className={`${styles.icon} ${styles.del}`}
+              title={LIBRARY_TEXT.deleteAria}
+              aria-label={LIBRARY_TEXT.deleteAria}
+              onClick={() => remove(it.id, it.name)}
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>
+
+      {/* 底部提示（原 `RT.jsx:333-335`）—— 有素材才显示 */}
+      {ordered.length > 0 && <div className={styles.tip}>{LIBRARY_TEXT.tip}</div>}
 
       {/* ★ 右键菜单（原 `RT.jsx:336-353` 的 `node-ctx-menu`）—— 只有一项「替换素材」。
           开合（点外部 / Esc / 键盘导航）全部走共享件 `ui/common/ContextMenu`。 */}

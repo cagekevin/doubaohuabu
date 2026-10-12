@@ -12,7 +12,14 @@
  * ★ **2026-10-11 再拆一次（同一先例）**：本文件又被 `max-lines` 拦（代码行 402 > 400，落完
  *   「自动值守 + 长按拖出」的文案之后）⇒ 把**彼此内聚**的「出新图」那一族（`NEW_IMAGES_TEXT`）
  *   挪到 `newImagesText.ts`。公开入口不变（`constants/text.ts` 转发）。
+ *
+ * ⚠️ **2026-10-12**：本文件**破了"纯文案、零 import"的惯例一次** ——
+ *   `GEN_IMAGE_TEXT.metaDefaultRatio` 要吃**默认比例真源** `NODE_DEFAULT_RATIO_LABEL`
+ *   （`./models`，同层 `constants`，**不成环**）。⚠️ 漏 import 的后果是**整站白屏**
+ *   （`ReferenceError`，实测踩过）⇒ 改本文件后**必须**跑一次 `tsc`。
  */
+
+import { NODE_DEFAULT_RATIO_LABEL } from './models';
 
 /**
  * 执行账号选择器（原 `_Component45.jsx:1265-1374` 的 `.gp-acc-*`；`fL.jsx`/`ZL.jsx` 同款）
@@ -102,6 +109,31 @@ export const BATCH_SEND_TEXT = {
  *    （本工程的面板是纵向表单式，不是横向工具条，需要标签才读得懂）。
  */
 export const GEN_PANEL_TEXT = {
+  /** 面板标题 —— 文生图（原 `_Component45.jsx` 的 `Ge`） */
+  imageTitle: '文生图',
+  /** 提示词正文的 `aria-label`（原 `Z3_1.jsx:1005`，逐字） */
+  promptAria: '提示词正文',
+  /** 提示词占位 —— 文生视频（原 `Z3_1.jsx:1005` 的 `data-placeholder`，逐字） */
+  promptPlaceholderVideo: '描述想生成的视频画面…（输入 @ 引用素材）',
+  /** 提示词占位 —— 文生图（原 `_Component45.jsx:1211`，逐字） */
+  promptPlaceholderImage: '描述想要画的内容…（输入 @ 引用素材）',
+  /** 工具条上的 `@` 按钮 `title`（原 `Z3_1.jsx:1013`，逐字） */
+  atTitle: '引用素材（弹出素材列表，选中后以「微缩图 + 素材名」插入正文）',
+  /** `.gp-meta` 尾项：已引用几张参考（原 `Z3_1.jsx:967`，**含前导分隔符**，逐字） */
+  metaRefs: (n: number) => ` · ${n} 张参考`,
+  /** 时长按钮 `title`（原 `Z3_1.jsx:1147`，逐字 —— 上下界来自 SSOT） */
+  durationTitle: (seconds: number) => `视频时长：${seconds} 秒（4–30 秒可调）`,
+  /** 生成按钮 `title` —— 走 API 通道（原 `1197` 的 `Je === 'api'` 支，逐字） */
+  runApiTitle: (providerName: string) =>
+    `走 API 通道生成${providerName ? `（${providerName}）` : '（未配置可用服务商）'}`,
+  /** 生成按钮 `title` —— 已有结果（原 `1197` 的 `Le` 支，逐字） */
+  regenerateTitle: '按当前提示词与参数重新生成（可连点：自动换另一个空闲账号并行）',
+  /** 生成按钮 `title` —— 首次生成（原 `1197` 的 else 支，逐字） */
+  generateTitle: '按当前提示词与参数生成视频（可连点：自动换另一个空闲账号并行）',
+  /** 拖高手柄 `aria-label`（原 `Z3_1.jsx:1203`，逐字） */
+  resizeAria: '拖动调整输入框高度',
+  /** 拖高手柄 `title`（原 `Z3_1.jsx:1203`，逐字；`h` = 复位高度） */
+  resizeTitle: (h: number) => `拖动调整输入框高度（双击复位 ${h}px）`,
   /** 执行账号行（原 1266 的按钮，标签语义取自它的 `title` 首四字） */
   accountLabel: '执行账号',
   ratioLabel: '比例',
@@ -110,8 +142,6 @@ export const GEN_PANEL_TEXT = {
   modelLabel: '模型',
   /** 关闭按钮 `title`（原 `Z3_1.jsx:969`，逐字） */
   closeTitle: '保存并关闭（Esc）',
-  /** 模型下拉的"跟随默认"项（**本工程新增**，回源 0 命中 —— 同上判据） */
-  modelDefault: '（默认）',
   /** 关闭按钮字形（原 `Z3_1.jsx:970`，逐字） */
   closeGlyph: '✕',
 
@@ -131,8 +161,6 @@ export const GEN_PANEL_TEXT = {
   styleChipRemove: (name: string) => `移除风格「${name}」`,
   /** 药丸移除字形（原 1039，逐字） */
   styleChipRemoveGlyph: '×',
-  /** 本工程新增：表单式面板的「风格」行标签（源版是横向工具条，无可见标签） */
-  styleLabel: '风格',
   /** 按钮 `title`（原 1200，逐字；`name` = provider 展示名） */
   batchTitle: (name: string) =>
     `批量出片：同一提示词 + ${name}，按 16:9 / 9:16 / 1:1 三个比例各出一片（复用并发队列）`,
@@ -203,8 +231,8 @@ export const STYLE_LIB_TEXT = {
  *   并把文本框与素材填入所选账号对话框（不触发发送）** —— 它是「填表」节点，不是「发送」节点。
  */
 export const ACCOUNT_NODE_TEXT = {
-  /** 节点头部文本（**本工程新增** —— 源里账号节点没有对应标题串） */
-  title: '账号',
+  /** 节点头部文本（原 `OL.jsx:414` 的裸文本 `发送节点`，逐字） */
+  title: '发送节点',
   /** 未绑定时的按钮文案（原 `OL.jsx:289` 的 `'选择账号'`） */
   pickAccount: '选择账号',
   /** 绑定菜单的「未绑定」项（原 `OL.jsx:456` 的 `foot-menu-grid-header`） */
@@ -253,8 +281,12 @@ export const ACCOUNT_NODE_TEXT = {
    * ⇒ 按钮**禁用**并把原因写在 `title` 里（判据 B4：不对用户承诺不存在的能力）。
    */
   channelPending: '该通道尚未接通：原 Bu 的「填入」语义与已落的 SitePort.send（发送+等结果）不同',
-  /** 输入预览区标题（**本工程新增**：源版靠按钮上的状态行表达，本工程额外列清"将要填入什么"） */
-  previewTitle: '将填入',
+  /**
+   * 汇总行（原 `OL.jsx:522`：`` `已链接 ${x.materials.length} 张素材 · ${x.texts.length} 个文本框` ``，逐字）
+   * ⚠️ 与「本工程新增的输入预览」不同 —— 源里**只有这一行**（没有逐条列出"将要填入什么"）。
+   */
+  linkedSummary: (materials: number, texts: number) =>
+    `已链接 ${materials} 张素材 · ${texts} 个文本框`,
 } as const;
 
 /**
@@ -289,6 +321,12 @@ export const GROUP_NODE_TEXT = {
  *   ② 图片上的**人脸遮罩层**（`iL.jsx` 191 行：识别人脸 + 单击遮脸 + 双击设参数）
  *      它甚至不在 `fL.jsx` 里，而是挂在图片上的独立组件 ⇒ 独立大件。
  */
+/** 节点标题（`NodeTitle`）—— 显示态 ↔ 改名态的公共文案 */
+export const NODE_TITLE_TEXT = {
+  /** 名称的 `title`（双击改名；与素材 / 视频 / 分组三处既有文案同字） */
+  renameTitle: '双击重命名',
+} as const;
+
 export const MATERIAL_NODE_TEXT = {
   /** 标题前缀（原 154：`素材 · {名字}`，**逐字**含 ` · `） */
   headPrefix: '素材',
@@ -327,8 +365,8 @@ export const DOWNLOAD_NODE_TEXT = {
   folderLabel: '目录：',
   /** 未选目录（原 114 的 `title={a || '未选择'}`） */
   folderNone: '未选择',
-  /** 选目录按钮（源版是图标按钮，无文字 —— 本工程给文字，因为它看起来就是个按钮） */
-  chooseFolder: '选择目录',
+  /** 选目录按钮（原 `WL.jsx:118` 的 `选择…`，逐字含省略号） */
+  chooseFolder: '选择…',
   /** 空态（原 140，逐字） */
   empty: '从视频节点连线至此处以批量下载',
   /** 下载中（原 129-130 的 `⬇` 图标；本工程配文字以免只靠符号） */
@@ -337,8 +375,8 @@ export const DOWNLOAD_NODE_TEXT = {
   statusOk: '✓',
   /** 失败（原 134-136 的 `✗`） */
   statusErr: '✗',
-  /** 批量下载按钮（源版原文是「开始下载」之类的图标按钮 —— 见文件头注） */
-  downloadAll: '开始下载',
+  /** 批量下载按钮（原 `WL.jsx:129`：`` `全部下载 (${o.length})` ``，逐字含括号与空格） */
+  downloadAll: (count: number) => `全部下载 (${count})`,
   downloading: '下载中…',
   /** 每条的兜底名（原 127 的 `title={y}` 用的是名字本身） */
   untitled: '未命名',
@@ -624,10 +662,20 @@ export const GEN_IMAGE_TEXT = {
   downloadName: (now: number) => `文生图_${now}.png`,
   /** 卡片 `title`（原 `ZL.jsx:210`，逐字） */
   cardTitle: '点击卡片打开文生图面板（填提示词与参数，出图直接展示在这里）',
-  /** 尚未出图的占位（**本工程新增**，回源 0 命中 —— 按「用户可见文案只写一遍」收于此） */
-  notGenerated: '未生成',
   /** 节点头部文本（**本工程新增** —— 源里那个 `文生图` 是下载文件名前缀，不是标题） */
   title: '文生图',
+
+  // ── `gv-stage` / `gv-waiting` / `gv-preview-empty`（原 `ZL.jsx:230-243`）────────
+  /** 等待浮层 `aria-label`（原 230，逐字） */
+  waitingAria: '正在生成',
+  /** 等待文案 —— 已有图时（原 237 的 `u` 支，逐字） */
+  waitingRegenerate: '正在生成新的一张…',
+  /** 等待文案 —— 首次生成时（原 237，逐字） */
+  waitingFirst: '正在生成 · 出图后展示在这里',
+  /** 空舞台标题（原 241，逐字） */
+  stageEmptyTitle: '文生图 · 在下方输入提示词',
+  /** 空舞台副标题（原 242，逐字） */
+  stageEmptySub: '点击卡片打开生成面板，出图直接展示在这里',
   // ⚠️ `generating: '生成中…'` **不在这里** —— 它与 `GenPanel` 的运行按钮**同一句**（跨两处）
   //   ⇒ 已上移到 `COMMON_TEXT.generating`（`constants/text.ts`），此处再留就是同值两份（M3）。
 
@@ -662,8 +710,14 @@ export const GEN_IMAGE_TEXT = {
   channelLabels: GEN_IMAGE_CHANNEL_LABELS,
   /** 频道查不到时的兜底（原 961 的 `|| '豆包后台'`，逐字） */
   metaChannelFallback: '豆包后台',
-  /** 比例兜底（原 961 的 `f = l.aspectRatio || '1:1'`，逐字） */
-  metaDefaultRatio: '1:1',
+  /**
+   * 比例兜底（原 961 的 `f = l.aspectRatio || '1:1'`）
+   *
+   * ⚠️ **2026-10-12 收口**：此前是**源的字面量 `'1:1'`** —— 与「空节点默认比例 4:3」
+   *   （用户裁定）**不是一个值** ⇒ 改吃真源 `NODE_DEFAULT_RATIO_LABEL`。
+   *   它只是 `data.aspectRatio` 为空时的**显示兜底**（节点上那行 `gv-meta` 与面板的 meta）。
+   */
+  metaDefaultRatio: NODE_DEFAULT_RATIO_LABEL,
   /** 已出张数（原 962：`` ` · 已出 ${c.length} 张` ``，逐字含前缀分隔） */
   metaOutput: (n: number) => ` · 已出 ${n} 张`,
 } as const;
@@ -701,10 +755,15 @@ export const VIDEO_NODE_TEXT = {
    *  把配方里的提示词/模型/时长/比例填进去。 */
   /** 反建出来的文本框的默认名（原 29483 的 `c || '重跑'`） */
   rerunLabel: '重跑',
-  /** ★ 截图（原 `BL.jsx` 的 `Mt` + `shared.js` 的 `Rk`）—— 2026-10-11 接通 */
-  capture: '截图',
-  captureTitle: '把当前画面截成图，并在右侧生成一个素材节点（文件名带播放位置）',
-  captureBusy: '截图中…',
+  /**
+   * ★ 截图（原 `BL.jsx:535-537` 的 `.vt-btn.vt-shot`，在**播放条**里、时间文字之后）
+   * ⚠️ **2026-10-12 归位**：此前它被放在**节点头部右槽**（源里没有这一颗）⇒ 移进播放条。
+   */
+  captureGlyph: '📷',
+  /** 忙碌时的字形（原 536 的 `re ? '…' : '📷'`，逐字） */
+  captureBusyGlyph: '…',
+  /** `title`（原 535，逐字） */
+  captureTitle: '截取当前画面为图片素材（快捷键 S）',
   /** 出片记录面板标题（原 447，逐字） */
   historyTitle: (n: number) => `出片记录（${n}）`,
   /**
@@ -724,6 +783,20 @@ export const VIDEO_NODE_TEXT = {
     failed: '失败',
     cancelled: '已取消',
   },
+  /**
+   * ★ 「拉取结果」（原 `BL.jsx:355-381` 的 `vn-pull-chip`）—— 2026-10-12 接通
+   *
+   * ⚠️ 失败文案由**生产者**给全（`state/pullResult.ts` 是这几条业务判断的产者，原则 6）；
+   *    `fetchWatermarkFreeByVid` 的失败**原样透传**，不在这里兜底造句。
+   */
+  pull: '可拉取',
+  pulling: '拉取中…',
+  pullTitle: '该次生成已记录会话/视频 id，可回到豆包拉取结果（不重发、不扣额度）',
+  pulled: '已拉取到结果',
+  pullNoNode: '节点已不存在',
+  pullNotAvailable: '该节点没有可拉取的生成记录',
+  pullNeedConversation: '该次生成只记录了会话 id，需回豆包对话页拉取（本工程尚未落地）',
+  pullNoAccount: '找不到该次生成所用的账号',
 } as const;
 
 /**
@@ -811,8 +884,6 @@ export const SEND_QUEUE_TEXT = {
   resume: '继续',
   /** 清掉已结束的项（原 `A3`；按钮文案源版在 `.sq-foot`，本工程给文字） */
   clearDone: '清除已完成',
-  /** 空态（**本工程新增**：源版没渲染空列表，直接是空面板） */
-  empty: '队列为空。在批量发送面板里点「加入队列」把节点排进来。',
   /** 状态行：暂停中（**本工程新增**，源版只有图标变色） */
   paused: '已暂停',
   /** 状态行：进行中（源版用 `.sq-statusline` 表达，本工程给文字） */
@@ -981,8 +1052,6 @@ export const FP_SCAN_TEXT = {
   /** 报告头两行（原 24-25，逐字） */
   scanned: (withFp: number, noFp: number) => `扫描账号: ${withFp} 个（${noFp} 个无指纹记录已跳过）`,
   pairs: (total: number) => `比对配对: ${total} 对`,
-  /** 「记进历史」按钮的 tooltip（**本工程新增** —— 源里没有这句；按「用户可见文案只写一遍」收于此） */
-  recordTitle: '把当前这份报告记进历史（同一结论不会重复记）',
   /** 分级计数（原 26-27，逐字） */
   critical: (n: number) => `🔴 完全关联(全维重合): ${n} 对`,
   warn: (n: number) => `🟡 高度相似(≥70%重合): ${n} 对`,
@@ -994,8 +1063,7 @@ export const FP_SCAN_TEXT = {
   /** 维度离散度一行（原 20，逐字；`distinct <= 1` 时后缀「（无隔离力）」） */
   dimLine: (label: string, distinct: number) =>
     `  ${label}: ${distinct} 个不同值${distinct <= 1 ? ' （无隔离力）' : ''}`,
-  /** 按钮（源版是无文字图标 + `title`；本工程给文字） */
-  run: '开始体检',
+  /** 按钮（原 `DP.jsx:106` 的「清空」） */
   copyReport: '复制报告',
   clearHistory: '清空历史',
   close: '关闭',

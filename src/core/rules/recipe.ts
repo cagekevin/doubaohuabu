@@ -17,6 +17,7 @@
  */
 
 import { RECIPE_TEXT } from '@/constants/text';
+import { NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
 import { pad2 } from '@/lib/time';
 import { normalizeModelLabel } from './prompt';
 
@@ -246,5 +247,13 @@ export function recipeTextNodePosition(
   return snap ? snapToGrid(raw) : raw;
 }
 
-/** 配方缺字段时的兜底（原 29485-29486 的 `|| 7` 与 `|| '16:9'`） */
-export const RECIPE_TEXT_FALLBACKS = { duration: 7, ratio: '16:9' } as const;
+/**
+ * 配方缺字段时的兜底（原 29485-29486 的 `|| 7` 与 `|| '16:9'`）
+ *
+ * ⚠️ **2026-10-12 收口**：`ratio` 此前**又写了一遍字面量 `'16:9'`** ——
+ *   与 `NODE_DEFAULTS.text.aspectRatio`（现为 4:3）**不是同一个值** ⇒ 同一份"默认比例"
+ *   在仓里有两处、改一处另一处静默漂。现吃 `NODE_DEFAULT_RATIO_LABEL` 这一处真源。
+ * ⚠️ `duration` 的 `7` 与 `NODE_DEFAULTS.text.duration` 同值但**不是同一个语义槽**
+ *   （这里是"配方缺字段"的兜底，那里是"新节点默认"）—— 暂各留一份，同值巧合。
+ */
+export const RECIPE_TEXT_FALLBACKS = { duration: 7, ratio: NODE_DEFAULT_RATIO_LABEL } as const;

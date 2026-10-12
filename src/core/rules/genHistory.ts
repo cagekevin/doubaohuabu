@@ -343,3 +343,58 @@ export function versionItemView(attempt: unknown): VersionItemView {
         : COMMON_TEXT.noPrompt,
   };
 }
+
+// ─────────────────────────── 「拉取结果」（原 `xk` / `z$` / `pullResult`）───────────────────────────
+
+/**
+ * 最后一条生成尝试（原 `xk`，`shared.js:25606-25613`）
+ *
+ * 源（逐字）：`const t = tm(e); return t.length ? t[t.length - 1] : null;`
+ *
+ * ⚠️ **两个消费者**（判据 C1）：`z$`（「可拉取」判据）与 `pullResult`（拉取动作）——
+ *    两处都要"最后一条"，故抽成共享函数。
+ */
+export function latestAttempt(data: Record<string, unknown>): Record<string, unknown> | null {
+  const list = attemptsOf(data);
+  if (!list.length) return null;
+  return asRecord(list[list.length - 1]);
+}
+
+/** 「拉取结果」的目标（原 `z$` 的判据 + `pullResult` 的取数 —— 合体为**一处**判断） */
+export interface PullTarget {
+  /** 要打补丁的那条尝试 id（原 `ve.id`；老数据可能没有 ⇒ 空串） */
+  attemptId: string;
+  /** 视频 id（原 `ve.vid`）—— **有它才走「按 vid 拉无水印」那条路** */
+  vid: string;
+  /** 该次生成用的账号（原 `ve.accountId`；缺 ⇒ `null`，由调用方回落「当前账号」） */
+  accountId: string | null;
+}
+
+/**
+ * 取「可拉取」的那条尝试（原 `z$` `shared.js:25614-25620` + `pullResult` 的取数）
+ *
+ * 源（逐字）：
+ *   ```js
+ *   if (!e || !e.data || e.data.url) return false;
+ *   const t = xk(e);
+ *   return !!t && (!!t.conversationId || !!t.vid);
+ *   ```
+ * ⇒ 三条件：**① 还没有 `url`**（结果已在手上就不必再拉）· **② 有尝试** ·
+ *   **③ 那条尝试记了 `conversationId` 或 `vid`**（否则无从拉取）。
+ *
+ * ⚠️ `vid` 为空 = 只剩「回对话页拉取」那条路（原 `pullResult` 的第二个分支）；
+ *    调用方据此决定能不能直接拉（见 `state/pullResult.ts`）。
+ */
+export function pullTargetOf(data: Record<string, unknown>): PullTarget | null {
+  if (data.url) return null;
+  const a = latestAttempt(data);
+  if (!a) return null;
+  const vid = typeof a.vid === 'string' ? a.vid : '';
+  const conversationId = typeof a.conversationId === 'string' ? a.conversationId : '';
+  if (!vid && !conversationId) return null;
+  return {
+    attemptId: typeof a.id === 'string' ? a.id : '',
+    vid,
+    accountId: typeof a.accountId === 'string' && a.accountId ? a.accountId : null,
+  };
+}

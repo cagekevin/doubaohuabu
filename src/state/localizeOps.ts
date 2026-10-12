@@ -9,7 +9,7 @@
  *   | 源调用点 | 语义 | 本仓落点 |
  *   |---|---|---|
  *   | `_Component48.jsx:92-99` | 挂载后 **5s** ⇒ `backfillLocalVideos()` | `container.startVideoBackfill()`（经注入时钟） |
- *   | `_Component43.jsx:3160` | **生成成功**写完 `attempt.url` 后 ⇒ `localizeNodeVideos(ee)` | `state/generate` 写完 `resultUrl` 后调 `localizeNodeInto` |
+ *   | `_Component43.jsx:3160` | **「拉取结果」**（`pullResult`）写完 `url` 后 ⇒ `localizeNodeVideos(ee)` | `state/pullResult` 写完 `url` 后调 `localizeNodeInto`（`state/generate` 同族：写完 `resultUrl` 后调同一个） |
  *   | `shared.js:28308` | **新增节点**后 ⇒ `localizeNodeVideos(q)` | 同一族（"写 url 后即刻"） |
  *   | `shared.js:28140` | 版本海报落定后 ⇒ `localizeNodeVideos(j.id)` | 同一族 |
  *

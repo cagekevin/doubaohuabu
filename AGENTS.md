@@ -13,27 +13,6 @@
 - 宿主能力经 `HostPort` 抽象，DEV 走 mock；**无 SSR / RSC**。
 - 编号约定：**M0~M14** 里程碑（`docs/16` §7）· **W1~W17** 验收用例（`docs/08`）· **TD-xx** 技术债 · **ADR-xxxx** 判据决议。
 
-### 状态（2026-10-11）
-
-| 里程碑 | 内容 | 状态 |
-|---|---|---|
-| M0~M7 | 骨架 / 数据层 / 画布 / 素材 / 宿主 / 生成 / 站点 / 端到端 | ✅ |
-| M8~M12 | 契约与状态地基 / 内核纯规则 / 边界层 / 用例编排 / UI 与 8 类节点 | ✅ |
-| M13 | 面板 / 页面（21 个） | ⏳ 进行中 |
-| M14 | 端到端 + 回归（全闸 + W1~W17） | ⏳ 未开始 |
-
-门禁基线：`npm run check` 全绿（**305 模块 / 1118 依赖 / 0 违规 · 1583 tests**）。
-进度与落点：`docs/00-进度台账.md`（M0~M7）· `docs/16` §7（里程碑重排）· `docs/18-交接-HANDOFF.md`（最新交接）。
-
-### 已知缺口（勿当已完成）
-
-- 缺口登记：`docs/13`（UI 层）· `docs/14`（功能层）· `docs/15`（数据与持久化）。
-- 未接线（有实现、无链路）：`core/rules` 的 `dedupe`（0 生产消费）—— 见 `docs/DATAFLOW.md` §十二（**2026-10-12 复核**：`node` 已由 `bootstrap/hydrate.ts:26` 接线，已移出本清单）。**已接线（勿再当缺口）**：`sendGuard`（`adapters/site/gpt/index.ts:64`）· `license`（`state/licenseOps`）· `importProject` / `projectStorage`（`state/projectOps`）· `facemask` / `faceDetect`（经 `MediaPort` ← `state/hostOps` ← `ui/nodes/FaceMarksLayer`）· `replyKind` / `genProgress`（`state/sendQueue` 的排队追问链 ← `ui/panels/SendQueuePanel`）· `apiConfig`（`state/apiOps` ← `ui/panels/ApiSettings`）· `localizeVideos`（`state/localizeOps` ← `state/generate` ＋ `container.startVideoBackfill()`）。
-- ⛔ 阻塞：`fetchWatermarkFree`（缺 `SitePort.executeJavaScript` + webview 租约）。
-- 未落（**2026-10-12 复核**）：**图片编辑器**（遮脸 / 涂抹 / 裁剪，`TD-09-4`）· 画廊「从磁盘导入」（`TD-09-5`）· Tapnow「扫描画布取图」（`TD-05-9`）· `oR` 配方构造器（`TD-02-21`）· 预设 UI 读方（`TD-09-6`）。**已落（本轮移出）**：人脸遮罩层（`ui/nodes/FaceMarksLayer` + `ui/panels/FaceMaskPanel`）· 出片记录面板（`ui/nodes/VideoNode`）· 账号分组 / 导入导出（`GroupManagerModal` / `ExportAccountsModal`）· 画布自动排列（`arrangeSelectedNodes`）。
-- 待 Electron 内验证：W3 磁盘侧 · W4 `projects-autobackup.json`；W6 toast 接线。
-- 技术债：`daily/架构日志/债务.md`（走 `node scripts/debt.mjs`，**禁手写、禁全量 Read**）。
-
 ---
 
 ## 二、常用命令
@@ -129,7 +108,15 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 | 端口类型 | `src/core/ports/`（`clock`/`host`/`site`/`storage`/`backendPage`） | 人工（原 `ports-type-only` 会误伤合法 `as const`，已弃） |
 | 依赖方向 | `.dependency-cruiser.cjs`（10 条） | `npm run lint:boundaries` |
 
-**样式**：原生 CSS + CSS Modules；ReactFlow 只用官方 `--xy-*` 变量（不写 `.react-flow__*` 覆写）；组件禁硬编码色值/间距，只引用 `var(--...)`；新面板的按钮/输入/浮层等一律 `composes` 真源类（`ui/common/shared.module.css`）。
+**样式**：原生 CSS + CSS Modules；ReactFlow 只用官方 `--xy-*` 变量（不写 `.react-flow__*` 覆写）；组件禁硬编码色值/间距，只引用 `var(--...)`。
+
+★ **「能一种的别搞两种」**（2026-10-12 用户裁定 —— 界面统一的总原则）：
+同一形态**有 N 份实现时收成一份**，**不要**用「变体 / 分档 / 别名 / 本地覆盖」去保留**不影响功能**的差别 ——
+那只会**越漂移越不统一**。判据一句话：**它影响用户什么功能吗？** 不影响 ⇒ **并掉**。
+落点：**节点 → `ui/nodes/NodeShell.tsx`**（8 类节点全走它）· **面板 / 弹窗 → `ui/common/PanelShell.tsx`**
+（★ **遮罩只有一种**、**关闭钮只有一种 `✕`**、头只有一种）· 样式真源 → `ui/common/shared.module.css`
+（token 四层契约见 `docs/17-CSS规范.md`）。⚠️ 面板模块**只许保留尺寸 / 定位**（`className`），
+**禁止用本地 `padding` 等覆盖表达差异**（构建产物里使用方的规则在真源之前 ⇒ 覆盖**不生效且不报错**）。
 
 > ★ **CSS 唯一契约 = `docs/17-CSS规范.md`**：token 四层（L1 原始值 → L2 语义 → L3 组件旋钮）· 新样式放哪 · `composes` 规则 · 例外表。**那份文件可改**（改它 + 写理由，别绕过它自造）。
 
@@ -162,7 +149,8 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 | 缺口登记：UI / 功能 / 数据 | `docs/13` · `docs/14` · `docs/15` |
 | **缺口落点与写法定稿**（放哪层 / 怎么验） | `docs/16-缺口落点与写法定稿.md` ★ |
 | **CSS 唯一契约** | `docs/17-CSS规范.md` ★ |
-| 最新交接 / 换机说明 | `docs/18-交接-HANDOFF.md` · `docs/归档/17-交接-HANDOFF.md` |
+| **待执行的移植 / 改造计划** | `docs/plan/` ★ |
+| 最新交接 / 换机说明 | `docs/归档/19-交接-HANDOFF.md` · `docs/归档/18-交接-HANDOFF.md` · `docs/归档/17-交接-HANDOFF.md` |
 | UI 预演（CSS/token） | `docs/mockup/` |
 | 原版前端源码参考（可读 JSX） | `docs/豆包画布原版参考/expanded_components/` |
 | 逆向事实层（事实，非判据） | `docs/00` ~ `docs/10`（后端坑见 `docs/10`） |

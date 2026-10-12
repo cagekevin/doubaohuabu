@@ -52,6 +52,7 @@
   --p-gray-300: #d1d5db;
   --p-gray-400: #9ca3af;
   --p-gray-500: #6b7280;
+  --p-gray-600: #4b5563;   /* ★ 查 1.3：弱文字下移一档用（#9ca3af 只有 2.54:1）*/
   --p-gray-800: #1f2329;
 
   /* ── 中性色阶（暗色专用）── */
@@ -69,8 +70,9 @@
   --p-green-400:  #34d399;  --p-green-500:  #10b981;  --p-green-600:  #059669;
 
   /* ── 功能色 ── */
-  --p-amber-400: #fbbf24;   --p-amber-500: #f59e0b;
-  --p-red-400:   #f87171;   --p-red-500:   #ef4444;
+  --p-amber-400: #fbbf24;   --p-amber-500: #f59e0b;   --p-amber-600: #b45309;
+  --p-red-400:   #f87171;   --p-red-500:   #ef4444;   --p-red-600:   #dc2626;
+  --p-green-700: #047857;   /* ★ 查 1.3：反馈色当**文字**用要再深一档（底色版不够 4.5:1）*/
   --p-white:     #ffffff;
 
   /* ── 节点类型色（对齐 MiniMap 配色）── */
@@ -120,6 +122,20 @@
   --type-lg: 16px;
   --type-xl: 20px;
 
+  /* ── 字重（查 3.2：原缺此族 ⇒ 组件只能写裸值 500/600/700）── */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semi:    600;
+  --weight-bold:    700;
+
+  /* ── 行高（查 3.2：原缺此族）── */
+  --leading-none:    1;    /* 图标 + 中文同排（查 3.3 要求）*/
+  --leading-tight:   1.3;
+  --leading-snug:    1.4;
+  --leading-base:    1.5;
+  --leading-relaxed: 1.6;
+  --leading-loose:   1.7;
+
   /* ── 字族 ── */
   --type-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --type-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -131,10 +147,31 @@
   --layer-modal:   900;
   --layer-toast:   1000;
 
+  /**
+   * ── 节点内局部层级（查 5.1：档位表里原缺这一层）──
+   * `.node` 自建 stacking context（`isolation: isolate`）⇒ 这一组只在本节点内竞争，
+   * 与全局 `--layer-*` 互不干扰。档位语义：
+   *   base   视频区/舞台内容
+   *   float  舞台上浮标（播放 / 时长 / 下载 / 时间线）
+   *   panel  节点内浮层（配方卡 / 浮动按钮组 / 提示胶囊）
+   *   notice 节点外提示条（reply-notice，要压在节点之上）
+   *   handle 连线端点（永远最上）
+   */
+  --layer-node-base:   1;
+  --layer-node-float:  2;
+  --layer-node-panel:  3;
+  --layer-node-notice: 4;
+  --layer-node-handle: 5;
+
   /* ── 动效 ── */
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 循环类周期（查 5.4：转一圈 / 跳一下，不是 UI 过渡时长，单独成档）*/
+  --dur-spinner: 700ms;
+  --dur-spinner-slow: 800ms;
+  --dur-bounce: 1000ms;
+  --dur-bounce-step: 150ms;   /* 三点跳动的错峰延迟 */
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -145,21 +182,25 @@
   --brand-400: var(--p-indigo-400);
   --brand-500: var(--p-indigo-500);
   --brand-600: var(--p-indigo-600);
+  --brand-500-ch: 99 102 241;
 }
 [data-brand='blue'] {
   --brand-400: var(--p-blue-400);
   --brand-500: var(--p-blue-500);
   --brand-600: var(--p-blue-600);
+  --brand-500-ch: 59 130 246;
 }
 [data-brand='violet'] {
   --brand-400: var(--p-violet-400);
   --brand-500: var(--p-violet-500);
   --brand-600: var(--p-violet-600);
+  --brand-500-ch: 139 92 246;
 }
 [data-brand='green'] {
   --brand-400: var(--p-green-400);
   --brand-500: var(--p-green-500);
   --brand-600: var(--p-green-600);
+  --brand-500-ch: 16 185 129;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -193,10 +234,12 @@
   --color-canvas:         var(--p-canvas);     /* 画布底 */
   --color-canvas-grid:    rgb(var(--p-gray-200-ch) / 0.4);
 
-  /* ── 文字 ── */
+  /* ── 文字 ──
+     ★ 查 1.3 修正：整族下移一档。
+       原 `muted=#6b7280` 在凹陷底上只有 4.27:1、`faint=#9ca3af` 只有 2.54:1（连大字都不到）。*/
   --color-text-strong: var(--p-gray-800);
-  --color-text-muted:  var(--p-gray-500);
-  --color-text-faint:  var(--p-gray-400);
+  --color-text-muted:  var(--p-gray-600);   /* 7.56:1（白底）/ 6.81:1（凹陷底）*/
+  --color-text-faint:  var(--p-gray-500);   /* 4.74:1（白底）—— 只许用在 raised 底上 */
   --color-text-on-brand: var(--p-white);
   --color-text-on-danger: var(--p-white);
 
@@ -205,9 +248,12 @@
   --color-border-strong: var(--p-gray-300);
 
   /* ── 动作（★ 原本这 6 个语义全挤在 --color-primary 一个变量里）── */
-  --color-action-primary:       var(--brand-500);  /* 主按钮底 */
-  --color-action-primary-hover: var(--brand-600);  /* 主按钮 hover */
-  --color-accent-text:          var(--brand-500);  /* 强调文字 / 图标 */
+  /* ★ 查 1.3：**实底**用 600 档（brand-500 配白字只有 4.47:1；原版 --primary #5850ec 是 5.57:1）。
+     500 档继续用于描边 / 光环 / 连线等**非文字**角色。*/
+  --color-action-primary:       var(--brand-600);
+  --color-action-primary-hover: color-mix(in srgb, var(--brand-600) 88%, var(--p-ink-950));
+  /* ★ 查 1.3：强调**文字**用 600 档（brand-500 当文字只有 4.47:1，差 0.03）*/
+  --color-accent-text:          var(--brand-600);
   --color-selected-border:      var(--brand-500);  /* 选中框 */
   --color-selected-ring:        var(--brand-500);  /* 选中光环 box-shadow */
   --color-focus-ring:           var(--brand-500);  /* 键盘 focus 环 */
@@ -217,29 +263,38 @@
   /* 下载动作色（原版「全部下载」是蓝底，与品牌色区分）*/
   --color-action-download:      var(--p-blue-600);
 
-  /* ── 反馈 ── */
-  --color-success: var(--p-green-500);
-  /**
-   * 成功态底色 —— ★ 修正悬空：`ActivatePage.module.css` 一直在引用它，
-   * 但**从未有定义**（旧 `tokens.css` 里只有 `--color-danger-bg`，没有 success 版）。
-   */
+  /* ── 反馈 ──
+     ★ 查 1.3/1.5 修正：反馈色回到**原版真值**（原版 `--success/#15803d · --warn/#b45309 ·
+       --danger/#dc2626 · --info/#0369a1` 都是 600/700 档）。
+       原先取 500 档 ⇒ 白字压上去只有 2.54:1（success）/ 3.76:1（danger）。
+       现在实底版本身够深，可直接当底（配白字）**也可直接当文字** ⇒ 无需再拆两套值。*/
+  --color-success: var(--p-green-700);
   --color-success-bg: rgb(var(--p-green-500-ch) / 0.10);
-  --color-warning: var(--p-amber-500);
-  --color-danger:  var(--p-red-500);
+  --color-warning: var(--p-amber-600);
+  --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.10);
+  --color-danger:  var(--p-red-600);
   --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.08);
   --color-danger-border: rgb(var(--p-red-500-ch) / 0.24);
-  --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.10);
   /* 信息态（原版 --info：可拉取芯片 / 等待倒计时 / 账号徽章 / reply-notice-info）*/
-  --color-info:      var(--p-blue-500);
+  --color-info:      var(--p-blue-600);
   --color-info-bg:     rgb(var(--p-blue-500-ch) / 0.10);
   --color-info-border: rgb(var(--p-blue-500-ch) / 0.24);
+
+  /* ── 反馈色的「文字版」别名（查 1.5：同一个语义不在对立角色上复用）──
+     浅色下实底版已够深 ⇒ 文字版与底色版同值；暗色下二者不同（见 dark 段）。*/
+  --color-success-text: var(--color-success);
+  --color-warning-text: var(--color-warning);
+  --color-danger-text:  var(--color-danger);
+  --color-info-text:    var(--color-info);
 
   /* ── 叠加 ── */
   --color-shadow:        rgb(var(--p-black-ch) / 0.08);
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.16);
   --color-mask:          rgb(var(--p-gray-100-ch) / 0.6);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.32);
-  --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.08);
+  /* ★ 查 1.4/1.5：原写死 `--p-indigo-500-ch` ⇒ 换品牌时选中底色不变。
+     改走品牌通道值；暗色段需覆盖（8% 在深底上会消失）。*/
+  --color-selection-bg:  rgb(var(--brand-500-ch) / 0.08);
   /* 媒体浮层（图/视频上的按钮与徽章：原版 #10121b8c 暗纱 + #ffffff73 轨道）*/
   --color-media-scrim:  rgb(var(--p-black-ch) / 0.55);
   --color-media-track:  rgb(var(--p-white-ch) / 0.45);
@@ -259,16 +314,24 @@
   --color-canvas:         var(--p-ink-950);
   --color-canvas-grid:    rgb(var(--p-white-ch) / 0.06);
 
-  --color-text-strong: var(--p-gray-100);
-  --color-text-muted:  var(--p-gray-400);
-  --color-text-faint:  var(--p-gray-500);
-  --color-text-on-brand: var(--p-white);
+  /* ★ 查 1.3 修正：暗底上整族**上移**（原 faint=#6b7280 在暗卡上只有 3.66:1）。
+     暗底需 ≥0.2225 相对亮度才够 4.5:1 ⇒ faint 取 gray-400（6.83:1）。*/
+  --color-text-strong: var(--p-gray-100);   /* 15.6:1 */
+  --color-text-muted:  var(--p-gray-300);   /* 11.8:1 */
+  --color-text-faint:  var(--p-gray-400);   /*  6.8:1 */
+  /* ★ 查 1.3 修正：暗色下品牌/危险实底是**浅色**（400 档）⇒ 白字只有 2.98:1，
+     改为「浅底 + 深字」。*/
+  --color-text-on-brand:  var(--p-ink-950);  /* 6.3:1（brand-400 底）*/
+  --color-text-on-danger: var(--p-ink-950);  /* 6.8:1（red-400 底）*/
 
   --color-border:        var(--p-ink-800);
   --color-border-strong: var(--p-ink-700);
 
   /* 暗色下品牌色要提亮一档，否则压在深底上发闷 */
   --color-action-primary:       var(--brand-400);
+  /* ★ 查 1.4 修正：原 dark 段漏了 hover ⇒ 会回落到 light 的 brand-600（**变暗**），
+     与「暗色提亮」的直觉相反。暗色 hover 应更亮。*/
+  --color-action-primary-hover: color-mix(in srgb, var(--brand-400) 86%, var(--p-white));
   --color-accent-text:          var(--brand-400);
   --color-selected-border:      var(--brand-400);
   --color-selected-ring:        var(--brand-400);
@@ -283,12 +346,35 @@
   --color-danger:  var(--p-red-400);
   --color-info:    var(--p-blue-400);
 
+  /* 暗色下 400 档本身够亮 ⇒ 文字版 = 底色版（与浅色段的决策不同，此处**有意不覆盖**）*/
+  --color-success-text: var(--p-green-400);
+  --color-warning-text: var(--p-amber-400);
+  --color-danger-text:  var(--p-red-400);
+  --color-info-text:    var(--p-blue-400);
+
+  /* ★ 查 1.4：**半透明底/描边必须覆盖** —— 浅色段的 8~10% α 压在深底上等于看不见
+     （SOP 实录：「rgb(ch / 0.08) 压在深底上几乎看不见 ⇒ 暗色段把 α 提到 ~1.8×」）*/
+  --color-success-bg:     rgb(var(--p-green-500-ch) / 0.18);
+  --color-warning-bg:     rgb(var(--p-amber-500-ch) / 0.18);
+  --color-danger-bg:      rgb(var(--p-red-500-ch) / 0.16);
+  --color-danger-border:  rgb(var(--p-red-500-ch) / 0.40);
+  --color-info-bg:        rgb(var(--p-blue-500-ch) / 0.18);
+  --color-info-border:    rgb(var(--p-blue-500-ch) / 0.40);
+
   --color-shadow:        rgb(var(--p-black-ch) / 0.40);
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.56);
   --color-mask:          rgb(var(--p-black-ch) / 0.45);
   --color-mask-strong:   rgb(var(--p-black-ch) / 0.62);
   --color-media-scrim:   rgb(var(--p-black-ch) / 0.62);
   --color-media-track:   rgb(var(--p-white-ch) / 0.30);
+  /* ★ 查 1.4：淡底在深色下会「消失」⇒ α 提到 ~2×（SOP 实录同条）*/
+  --color-selection-bg:  rgb(var(--brand-500-ch) / 0.16);
+
+  /**
+   * ★ 查 1.4 —— **有意不覆盖**的两族（各自写了理由）：
+   *   · `--color-node-material / -account / -other`：**标识色**，跨主题一致才对
+   *     （暗色下若跟着变，MiniMap 与节点圆点就会与亮色下的"同一类节点"不同色）。
+   */
 }
 
 /* ── 间距（受密度乘数影响；density=1 时与旧值完全一致）── */
@@ -321,15 +407,39 @@
   --font-sans: var(--type-sans);
   --font-mono: var(--type-mono);
 
+  /* ── 字重 / 行高（查 3.2）── */
+  --font-weight-regular: var(--weight-regular);
+  --font-weight-medium:  var(--weight-medium);
+  --font-weight-semi:    var(--weight-semi);
+  --font-weight-bold:    var(--weight-bold);
+
+  --line-height-none:    var(--leading-none);
+  --line-height-tight:   var(--leading-tight);
+  --line-height-snug:    var(--leading-snug);
+  --line-height-base:    var(--leading-base);
+  --line-height-relaxed: var(--leading-relaxed);
+  --line-height-loose:   var(--leading-loose);
+
   --z-canvas:  var(--layer-canvas);
   --z-panel:   var(--layer-panel);
   --z-overlay: var(--layer-overlay);
   --z-modal:   var(--layer-modal);
   --z-toast:   var(--layer-toast);
+  /* 节点内局部层级（查 5.1）*/
+  --z-node-base:   var(--layer-node-base);
+  --z-node-float:  var(--layer-node-float);
+  --z-node-panel:  var(--layer-node-panel);
+  --z-node-notice: var(--layer-node-notice);
+  --z-node-handle: var(--layer-node-handle);
 
   --duration-fast: var(--dur-fast);
   --duration-base: var(--dur-base);
-  --ease-out: var(--ease-out);
+  --duration-spinner:      var(--dur-spinner);
+  --duration-spinner-slow: var(--dur-spinner-slow);
+  --duration-bounce:       var(--dur-bounce);
+  --duration-bounce-step:  var(--dur-bounce-step);
+  /* ── 缓动：L1 已有 `--ease-out` 原始值 ⇒ **不再**写 `--ease-out: var(--ease-out)`（自我引用 = 无效值，
+       会让所有 transition 落到浏览器默认 ease）。组件直接用 L1 那个名字。── */
 }
 
 /* ══════════════════════════════════════════════════════════════════

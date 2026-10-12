@@ -224,7 +224,9 @@ export interface UiSlice {
    *   初值 `NT()` 读盘、setter `30458-30468`）
    *
    * **谁读**：建文本框那两条路 —— 源 `29440-29442`（普通建框）与 `29486-29488`（「重跑」）
-   *   ⇒「`aspectRatio: canvasDefaults.ratio || '16:9'`、`duration: … || 7`、`model: … || null`」。
+   *   ⇒「`aspectRatio: canvasDefaults.ratio || <默认比例>`、`duration: … || 7`、`model: … || null`」。
+   *   ⚠️ 本仓那个「默认比例」的**真源** = `NODE_DEFAULT_RATIO_LABEL`（`constants/models.ts`，现 `'4:3'`），
+   *   不再在注释里复述源版的 `'16:9'`（复述即第二份、会漂）。
    * **谁写**：源里 `setCanvasDefaults` **0 调用** ⇒ 值实际上**只从盘上来**（本仓同此：
    *   以 `hydrate` 读盘 ⇒ 建节点时消费为主路径；setter 保留以对源，将来有设置 UI 直接可用）。
    */

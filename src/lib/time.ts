@@ -11,25 +11,6 @@
 const SECOND_CUTOFF = 1000000000000;
 
 /**
- * 站点时间戳 → 毫秒（原 `pR` 35735）
- *
- * 规则（**顺序即语义**）：
- *   1. `null`/`undefined` → `NaN`
- *   2. 能 `Number()` 成有限数：`> 0` 时 —— `< 1e12` 视为**秒**（×1000），否则视为**毫秒**；
- *      `<= 0` → `NaN`
- *   3. 否则按日期字符串 `new Date(v).getTime()`；`> 0` 才有效，否则 `NaN`
- *
- * ⚠️ 与源一致：**没有**"解析失败给当前时间"的兜底 —— 失败一律 `NaN`，
- *    由调用方（`matchVideosToNodes`）据此走"无时间戳"分支。
- *
- * @public 跨边界消费者：src/core/rules/media.ts
- *   ⚠️ **为什么需要这行**（2026-10-11）：消费者 `core/rules/media.ts` 自己**尚未接线**
- *   （它在死代码基线里）⇒ knip 看不到这条引用，会把本导出报成"新增死代码"。
- *   本文件此前**整个**在基线里（文件级条目）；`ui/panels/GalleryLightbox.tsx` 开始用
- *   `formatDateTimeMinute` 后文件变成可达 ⇒ 文件级条目消失、这两个导出被暴露出来。
- *   ⇒ 它们**不是死代码**（有真实消费者 + 单测），按闸的正道打 `@public` 而非删。
- */
-/**
  * 纪元毫秒 → ISO 时间戳（`2026-10-12T08:30:00.000Z`）
  *
  * ★ **2026-10-12（`TD-16-109`）收口**：此前 `core/rules/payload.ts` ×3 ＋
@@ -42,6 +23,23 @@ export function toIsoTimestamp(epochMs: number): string {
   return new Date(epochMs).toISOString();
 }
 
+/**
+ * 站点时间戳 → 毫秒（原 `pR` 35735）
+ *
+ * 规则（**顺序即语义**）：
+ *   1. `null`/`undefined` → `NaN`
+ *   2. 能 `Number()` 成有限数：`> 0` 时 —— `< 1e12` 视为**秒**（×1000），否则视为**毫秒**；
+ *      `<= 0` → `NaN`
+ *   3. 否则按日期字符串 `new Date(v).getTime()`；`> 0` 才有效，否则 `NaN`
+ *
+ * ⚠️ 与源一致：**没有**"解析失败给当前时间"的兜底 —— 失败一律 `NaN`，
+ *    由调用方（`matchVideosToNodes`）据此走"无时间戳"分支。
+ *
+ * @public 跨边界消费者：src/core/rules/media.ts
+ *   ⚠️ **为什么需要这行**：消费者 `core/rules/media.ts` 自己**尚未接线**
+ *   （它在死代码基线里）⇒ knip 看不到这条引用，会把本导出报成"新增死代码"。
+ *   ⇒ 它**不是死代码**（有真实消费者 + 单测），按闸的正道打 `@public` 而非删。
+ */
 export function parseSiteTimestamp(value: unknown): number {
   if (value == null) return NaN;
 

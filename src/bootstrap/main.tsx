@@ -143,7 +143,7 @@ createRoot(rootEl).render(
   <StrictMode>
     {/* 全局错误边界（docs/11 §9.9 的第一级） */}
     <ErrorBoundary area="应用">
-      <StoreProvider store={container.store} gen={container.gen} analyze={container.analyze} accountOps={container.accountOps} batchSend={container.batchSend} sendQueue={container.sendQueue} capture={container.capture} licenseOps={container.licenseOps} hostOps={container.hostOps} projectOps={container.projectOps} apiOps={container.apiOps}>
+      <StoreProvider store={container.store} gen={container.gen} analyze={container.analyze} accountOps={container.accountOps} batchSend={container.batchSend} sendQueue={container.sendQueue} capture={container.capture} licenseOps={container.licenseOps} hostOps={container.hostOps} projectOps={container.projectOps} apiOps={container.apiOps} pullResult={container.pullResult}>
         <Root />
       </StoreProvider>
     </ErrorBoundary>

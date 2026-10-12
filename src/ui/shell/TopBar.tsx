@@ -1,19 +1,24 @@
 /**
- * 画布顶栏（原 `.canvas-topbar`）
+ * 画布顶栏（原 `.canvas-topbar`，`_Component42.jsx:1563-1609`）
  *
- * 依据：docs/03-人类版.md §8（顶栏文案）+ §2（工程导出/导入）+ 原 `_Component42.jsx:1578-1602`（保存路径区）
+ * ★ **它不是全宽顶栏** —— 它是**浮在画布上方的居中条**（`position: absolute; top: 12px; left: 50%`），
+ *   内容只有四件：**项目名 · 保存路径 · 授权 · 豆包后台**（`docs/mockup/README.md` §3.2）。
+ *   样式真值 = `docs/mockup/assets/mockup.css:1892-1925`（`.canvas-topbar` 一族）。
+ *
+ * ⚠️ **2026-10-12 收口**：此前它是一条**全宽条**（占布局高度），且带两样源里没有的东西 ——
+ *   「N 个节点」计数与「导出工程」按钮（回源 `_Component42` / `_Component47` **均 0 命中**）⇒ 已删。
+ * ⚠️ 项目名**双击**重命名（原 `1575` 的 `onDoubleClick`），不是单击。
  *
  * ★ **2026-10-11 补「项目保存路径」区**：设置保存路径 / 打开保存目录 / 占用空间统计
  *   —— 接 `core/usecases/projectStorage`（此前 0 消费）。
  *
  * ⚠️ 原则 1：不直接写 store，只调 action
- * ⚠️ 原则 6：失败时**原样上报**（`hostOps.saveTextFile` / `projectOps` 控制器给出的原始 message）
  * ⚠️ 宿主调用走控制器（`useHostOps` / `useProjectOps`）—— `ui` 不得直持 `Ports`（TD-16-8）。
  * ⚠️ **effect 里不做同步 `setState`**（`react-hooks/set-state-in-effect`）—— 占用统计只经 `.then` 回写。
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useHostOps, useProjectOps, useStore } from '@/state';
+import { useProjectOps, useStore } from '@/state';
 import { BACKEND_VIEW_TEXT, PROJECT_STORAGE_TEXT, PROJECT_TEXT } from '@/constants/text';
 import { formatStorageSize } from '@/core/rules/storageSize';
 import { toMessage } from '@/core/model/result';
@@ -36,8 +41,6 @@ export function TopBar({ onOpenDoubaoView }: TopBarProps) {
   const project = useStore((s) => s.projects.find((p) => p.id === s.activeId) ?? null);
   const renameProject = useStore((s) => s.renameProject);
   const pushToast = useStore((s) => s.pushToast);
-  const pushBackendError = useStore((s) => s.pushBackendError);
-  const hostOps = useHostOps();
   const projectOps = useProjectOps();
 
   const storagePath = project?.storagePath ?? '';
@@ -70,20 +73,6 @@ export function TopBar({ onOpenDoubaoView }: TopBarProps) {
     };
   }, [storagePath, projectOps]);
 
-  /** 导出当前工程为 JSON（走 `hostOps.saveTextFile`） */
-  const onExport = async (): Promise<void> => {
-    if (!project) return;
-    const res = await hostOps.saveTextFile(JSON.stringify([project], null, 2));
-    if (!res.ok) {
-      // ★ 原样上报（不改写成「导出失败」）
-      // ⚠️ kind 归 'unknown' **不是偷懒**：`res.reason` 是 `SendFailKind`，横幅域是
-      //    `BackendErrorKind`，两域不互通 ⇒ 无法转发（原则 6 禁止 #3 认可归 unknown）。见 TD-16-68。
-      pushBackendError('unknown', res.message);
-      return;
-    }
-    pushToast(`已导出「${project.name}」`);
-  };
-
   /** 选择/更改保存路径（原 `zt`）—— 失败已由控制器 toast；这里只兜「调用本身抛出」（TD-16-53 的教训） */
   const onPickStorage = async (): Promise<void> => {
     if (!project || picking) return;
@@ -97,6 +86,7 @@ export function TopBar({ onOpenDoubaoView }: TopBarProps) {
     }
   };
 
+  /** 双击重命名项目（原 `1575` 的 `onDoubleClick`） */
   const onRename = (): void => {
     if (!project) return;
     const next = window.prompt(PROJECT_TEXT.renameHint, project.name);
@@ -128,16 +118,22 @@ export function TopBar({ onOpenDoubaoView }: TopBarProps) {
 
   return (
     <div className={styles.topbar}>
-      <button type="button" className={styles.topbarName} onClick={onRename} title={PROJECT_TEXT.renameHint}>
-        {project?.name ?? '—'}
-      </button>
-      <span className={styles.topbarCount}>
-        {project ? `${project.data.nodes.length} 个节点` : ''}
-      </span>
-      <span className={styles.topbarSpacer} />
+      {/* 项目名（原 `.topbar-project-name` → `.topbar-project-label`，双击重命名） */}
+      <div className={styles.topbarProjectName}>
+        <span
+          className={styles.topbarProjectLabel}
+          title={PROJECT_TEXT.renameHint}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onRename();
+          }}
+        >
+          {project?.name ?? '—'}
+        </span>
+      </div>
 
-      {/* 项目保存路径区（原 `.topbar-project-storage`，1583-1602） */}
-      <div className={styles.storage}>
+      {/* 项目保存路径区（原 `.topbar-project-storage`，1582-1602） */}
+      <div className={`${styles.storage}${storagePath ? ` ${styles.storageConfigured}` : ''}`}>
         <button
           type="button"
           className={styles.storageMain}
@@ -148,7 +144,7 @@ export function TopBar({ onOpenDoubaoView }: TopBarProps) {
           <svg className={styles.storageIcon} viewBox="0 0 20 20" aria-hidden="true">
             <path d="M2.8 5.2c0-.9.7-1.6 1.6-1.6h4l1.6 1.8h5.6c.9 0 1.6.7 1.6 1.6v7.6c0 .9-.7 1.6-1.6 1.6H4.4c-.9 0-1.6-.7-1.6-1.6V5.2Z" />
           </svg>
-          <span>{storageLabel}</span>
+          <span className={styles.storageLabel}>{storageLabel}</span>
         </button>
         {storagePath && (
           <button
@@ -162,10 +158,6 @@ export function TopBar({ onOpenDoubaoView }: TopBarProps) {
           </button>
         )}
       </div>
-
-      <button type="button" onClick={() => void onExport()}>
-        {PROJECT_TEXT.export}
-      </button>
 
       {/* ★ **「豆包后台」入口**（原 `_Component42.jsx:1606`，逐字：`<span className="topbar-icon">▦</span>豆包后台`）
           —— 它是**后台视图的唯一打开入口**；其 `onClick`（源 `tt`）＝ 补齐当前账号 ＋ 打开视图。 */}

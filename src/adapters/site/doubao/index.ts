@@ -32,6 +32,13 @@ import {
   createDoubaoFetchWatermarkFreeByThread,
   createDoubaoPingQueueProgress,
 } from './analyze';
+// ★ 发送后监测的 4 个页内探测（原 `_Component43` 的 `watchSendReply`）
+import {
+  createDoubaoProbeGenAck,
+  createDoubaoProbeQuotaUsage,
+  createDoubaoProbeReplyNotice,
+  createDoubaoProbeWaitTime,
+} from './watch';
 import { requireWebview, webviewEval } from '../shared/webview';
 import { buildResultScanScript } from '../shared/scanScripts';
 
@@ -143,6 +150,11 @@ export function createDoubaoSite(kind: 'doubao' | 'dola', host: HostPort): SiteP
     // ★ 无水印拉取（原 `mD`/`gD` 页内脚本）—— 2026-10-12 落（`docs/14` §10 的 ⛔ 阻塞）
     fetchWatermarkFree: createDoubaoFetchWatermarkFree(),
     fetchWatermarkFreeByThread: createDoubaoFetchWatermarkFreeByThread(),
+    // ★ 发送后监测的 4 个页内探测（原 `_Component43` 的 `watchSendReply` 用 `dD`/`fD`/`pD`/`hD`）
+    probeGenAck: createDoubaoProbeGenAck(),
+    probeWaitTime: createDoubaoProbeWaitTime(),
+    probeReplyNotice: createDoubaoProbeReplyNotice(),
+    probeQuotaUsage: createDoubaoProbeQuotaUsage(),
 
     async send(account: Account, payload: SendPayload): Promise<Result<SendResult>> {
       const partition = account.partition;

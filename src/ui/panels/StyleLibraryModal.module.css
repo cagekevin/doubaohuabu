@@ -40,22 +40,13 @@
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: var(--space-2);
 }
-
-.empty {
-  padding: var(--space-4) var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  text-align: center;
-}
+
 
 .card {
-  display: flex;
-  flex-direction: column;
+  composes: panel from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   gap: var(--space-1);
   padding: var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-raised);
 }
 
 .cardActive {

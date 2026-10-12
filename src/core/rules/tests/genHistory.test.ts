@@ -11,8 +11,10 @@ import {
   attemptStats,
   attemptStatusLabel,
   currentVersionIndex,
+  latestAttempt,
   makeGenAttempt,
   patchGenHistoryAttempt,
+  pullTargetOf,
   selectVersionPatch,
   setVersionPosterPatch,
   versionItemView,
@@ -379,5 +381,42 @@ describe('versionItemView（原 `YL.jsx:594-618`）', () => {
   it('提示词**超 24 字** ⇒ 截断', () => {
     const v = versionItemView({ id: 'x', url: 'u', prompt: '一'.repeat(30) });
     expect(v.prompt).toBe('一'.repeat(24));
+  });
+});
+
+describe('latestAttempt / pullTargetOf（原 `xk` 25606 + `z$` 25614）', () => {
+  it('xk：空表 ⇒ `null`；非空 ⇒ **最后一条**', () => {
+    expect(latestAttempt({})).toBeNull();
+    expect(latestAttempt(withHistory([{ id: 'a1' }, { id: 'a2' }]))).toEqual({ id: 'a2' });
+  });
+
+  it('★ 已有 `url` ⇒ 不可拉（源 `e.data.url` 先返回 `false`）', () => {
+    expect(pullTargetOf({ url: 'http://x/v.mp4', ...withHistory([{ id: 'a1', vid: 'v0' }]) })).toBeNull();
+  });
+
+  it('没有尝试 / 最后一条既无 `vid` 也无 `conversationId` ⇒ 不可拉', () => {
+    expect(pullTargetOf({})).toBeNull();
+    expect(pullTargetOf(withHistory([{ id: 'a1' }]))).toBeNull();
+    expect(pullTargetOf(withHistory([{ id: 'a1', vid: '', conversationId: '' }]))).toBeNull();
+  });
+
+  it('有 `vid` ⇒ 目标带 `vid` / `attemptId` / `accountId`（可直接拉）', () => {
+    expect(pullTargetOf(withHistory([{ id: 'a9', vid: 'v0abc', accountId: 'acc_1' }]))).toEqual({
+      attemptId: 'a9',
+      vid: 'v0abc',
+      accountId: 'acc_1',
+    });
+  });
+
+  it('★ 只有 `conversationId` ⇒ 仍是目标，但 `vid` 为空（那条路本工程未落）', () => {
+    expect(pullTargetOf(withHistory([{ id: 'a9', conversationId: 'c1' }]))).toEqual({
+      attemptId: 'a9',
+      vid: '',
+      accountId: null,
+    });
+  });
+
+  it('只看**最后一条**（前面几条有 `vid` 也不算）', () => {
+    expect(pullTargetOf(withHistory([{ id: 'a1', vid: 'v0old' }, { id: 'a2' }]))).toBeNull();
   });
 });

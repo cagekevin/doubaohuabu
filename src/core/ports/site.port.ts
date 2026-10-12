@@ -195,6 +195,34 @@ export interface SitePort {
     threadId: string,
   ) => Promise<Result<WatermarkThreadOutcome>>;
 
+  // ─────────────────────────── 发送后监测的 4 个页内探测 ───────────────────────────
+  //
+  // 依据（**逐字回源**）：`_Component43.jsx:2638-2700` 的 `watchSendReply` 每 2s 一轮，
+  // 依次跑这 4 个页内脚本（源 `dD`/`fD`/`pD`/`hD`，`shared.js:37544-37734`）。
+  //
+  // ★ **为什么拆成 4 个窄方法**（而不是一个"读快照"）：循环**自己控制**跑哪几个 ——
+  //   源在「已解析到等待时长」后就不再跑它（`Re` 闩）、「已命中额度」后不再跑额度（`Me` 闩）
+  //   ⇒ 探测的**时机**是调用方的判断，端口只提供"读一次"的能力（判据 B4：接口窄而深）。
+  // ★ **缺项 ⇒ 调用方跳过该探测**（不回落、不报错）—— 与 `autoWatch` 同法。
+  // ⚠️ 每个方法的**脚本**封装在 adapter 内部（`adapters/site/doubao/scripts.ts`），端口只收 `ctx`。
+
+  /**
+   * 读「已接单」回复的**命中次数**（原 `dD`，`shared.js:37544`）
+   *
+   * ⚠️ 返回**计数**而非布尔：源用「本轮次数 > 监听起点的基线」做**增量判定**
+   *    （会话里往往残留着上一轮的回复，只判布尔会误判成"本轮新回复"）。
+   */
+  readonly probeGenAck?: (ctx: ImageQuestionContext) => Promise<Result<GenAckReading>>;
+
+  /** 读「预计等待 N 分钟/秒」（原 `fD`，`shared.js:37577`）—— 没命中 ⇒ `{hit:false}` */
+  readonly probeWaitTime?: (ctx: ImageQuestionContext) => Promise<Result<WaitTimeReading>>;
+
+  /** 读额度用量预警（原 `hD`，`shared.js:37652`） */
+  readonly probeQuotaUsage?: (ctx: ImageQuestionContext) => Promise<Result<QuotaUsageReading>>;
+
+  /** 读回复通知命中计数（原 `pD`，`shared.js:37617`） */
+  readonly probeReplyNotice?: (ctx: ImageQuestionContext) => Promise<Result<ReplyNoticeReading>>;
+
   /**
    * ★ **无人值守轮询**能力（原 `_Component26` 的 `Ee` 428-592）—— **注册制：站点细节由 adapter 声明**
    *
@@ -275,6 +303,41 @@ export interface WatermarkThreadOutcome {
   total: number;
   success: number;
   note?: string;
+}
+
+/** 「已接单」回复读数（原 `dD` 的返回，`shared.js:37573`） */
+export interface GenAckReading {
+  /** 命中次数（增量判定用计数） */
+  count: number;
+  /** 第一条命中的原文片段（无 ⇒ `''`） */
+  text: string;
+}
+
+/** 等待时长读数（原 `fD` 的返回，`shared.js:37612-37613`）—— **判别联合**，不用 `null` 冒充"没读到" */
+export type WaitTimeReading =
+  | { hit: true; minutes: number; seconds: number; text: string }
+  | { hit: false };
+
+/** 额度用量读数（原 `hD` 的返回，`shared.js:37667`） */
+export interface QuotaUsageReading {
+  /** 命中次数（**增量判定**用；数值型信号记 `1`） */
+  lowCount: number;
+  /** 本次消耗（同一回复里多次出现取**最大**；无 ⇒ `null`） */
+  consume: number | null;
+  /** 剩余额度（取**最小**；无 ⇒ `null`） */
+  remain: number | null;
+  /** 命中来源：`'explicit'`（明确话术）/ `'consume'` / `'remain'` / `''`（未命中） */
+  reason: string;
+  /** 命中片段（无 ⇒ `''`） */
+  sample: string;
+}
+
+/** 回复通知读数（原 `pD` 的返回，`shared.js:37648`） */
+export interface ReplyNoticeReading {
+  /** `rule.code → 命中次数`（同一规则内多 pattern 取**最大值**，不是求和） */
+  counts: Record<string, number>;
+  /** `rule.code → 原文片段` */
+  samples: Record<string, string>;
 }
 
 /** 站点适配器注册表（由 bootstrap 组装） */

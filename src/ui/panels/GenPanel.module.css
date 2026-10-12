@@ -1,8 +1,11 @@
 /** 生成面板样式（原则 5：只用 var(--...)） */
 
 /**
- * 浮层（原 `gen-panel-layer`，`Z3_1.jsx:956`）—— **整屏一层**，托住面板并承接「点外面关闭」。
- * ★ **推断样式**（原版 CSS 未入库、mockup 未收录 ⇒ 已回填 mockup.css —— TD-16-98）。
+ * ★ 整屏**透明层**（原 `.gen-panel-layer`，`Z3_1.jsx:956`）
+ *
+ * ⚠️ **它不是遮罩**：源里这一层**没有暗底**（面板就贴在节点下方，画布照常可见）；
+ *   它的唯一作用是「点面板外面 ⇒ 提交并关闭」。
+ *   ⇒ 不复用 `PanelShell` 的 `.overlay`（那是**全屏 + 居中 + 暗底**的唯一遮罩）。
  */
 .layer {
   position: fixed;
@@ -11,77 +14,191 @@
 }
 
 /**
- * 面板本体（原 `.gen-panel`）—— ★ **`position: fixed` + `left/top` 由锚定 effect 写入**
- * （原 `Z3_1.jsx:60-90` 直写 `style.left/top`，不走 React 状态）。
- * 宽度走源那个兜底式 `min(860, 92vw)`（`Z3_1.jsx:73`；仅当量不到时才用，这里是 CSS 直给）。
+ * 面板本体（原 `.gen-panel`）—— 遮罩 / 头 / 关闭钮 / 正文全归 `PanelShell`，
+ * 本模块**只留定位与尺寸**。
+ *
+ * ⚠️ **`position: fixed` 是锚定生效的前提**：`left/top` 由 `planGenPanelAnchor`
+ *   （视口坐标）在 `useLayoutEffect` 里写到本元素上。
  */
 .panel {
-  composes: overlay from '../common/shared.module.css';
+  composes: panel from '../common/shared.module.css';
   position: fixed;
-  left: 0;
-  top: 0;
-  z-index: calc(var(--z-overlay) + 1);
   width: min(860px, 92vw);
+  max-height: 78vh;
+}
+
+/**
+ * 正文：**竖排**（提示词在上、工具条在下）
+ * ⚠️ 只追加真源 `panelBody` **未设**的属性（`display` / `gap`）—— 见 `PanelShell` 头注的口径。
+ */
+.body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  font-size: var(--font-size-sm);
+  gap: var(--space-3);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-/**
- * 关闭按钮（原 `Z3_1.jsx:969` 的 `.gp-close`）
- * ⚠️ mockup 无 `.gp-close` 样式 ⇒ 走**真源按钮类**（同 `.close` 先例），全 token。
- */
-.close {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
-  flex: none;
-  width: 20px;
-  height: 20px;
-}
-
-/**
- * 自动匹配按钮（原 `Z3_1.jsx:962` 的 `.gp-automatch-btn.gp-head-automatch`）
- * ⚠️ 原版 CSS 未入库、mockup 也未收录 ⇒ 走**真源按钮类**，全 token。
- */
+/* 头部中槽的「自动匹配」按钮（原 `Z3_1.jsx:962` 的 `.gp-automatch-btn.gp-head-automatch`） */
 .autoMatch {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
   flex: none;
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+/* 头部右槽的 `.gp-meta`（原 `Z3_1.jsx:965-968`）—— 小字、靠右、可截断 */
+.meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+}
+
+/** 提示词区（包住编辑器 + `@` 候选浮层 —— 浮层的定位上下文） */
+.promptWrap {
+  position: relative;
 }
 
 /**
- * 风格行（原 `Z3_1.jsx:1020-1045` 的 `.gp-style-chip*`）
- * ⚠️ mockup 无 `.gp-style-*` 样式 ⇒ 走**真源按钮类** + 全 token（推断样式，同 `TD-16-87` 家族）。
+ * 提示词编辑器（`contentEditable`）—— 原 `.gp-prompt`
+ * ⚠️ 高度由 `style.height` 给（原 `U`，可拖 `.gp-resize` 改；上下界 104/320）。
  */
-.styleWrap {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-  flex-wrap: wrap;
+.promptEditor {
+  display: block;
+  min-height: 104px;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-2);
+  color: var(--field-fg);
+  font: inherit;
+  font-size: var(--field-font-size);
+  line-height: var(--line-height-relaxed);
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.promptEditor:focus {
+  background: var(--field-bg-focus);
+  border-color: var(--field-border-focus);
 }
 
-.styleBtn {
+/** 空态占位（`contentEditable` 没有 `placeholder` 属性） */
+.promptEditor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-faint);
+  pointer-events: none;
+}
+
+/* ── gp 药丸（原 `X3` 生成的三段：`.ref-chip.gp-ref-chip` / `.chip-img` / `.chip-name`）── */
+.promptEditor :global(.ref-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+  margin: 0 var(--space-half);
+  padding: 0 var(--space-1);
+  color: var(--node-ref-chip-fg);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  user-select: none;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+.promptEditor :global(.chip-img) {
+  width: 14px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+}
+
+.promptEditor :global(.chip-name) {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── `.gp-toolbar`（原 `Z3_1.jsx:1010-1216`）—— **单行**工具条 ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 撑开：把「生成」推到最右（原 `.gp-toolbar-grow`） */
+.grow {
+  flex: 1;
+}
+
+/* 工具条上的 `@`（原 1013-1019） */
+.atBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  flex: none;
+}
+
+/* 竖直分隔（原 `.gp-sep`） */
+.sep {
+  flex: none;
+  width: 1px;
+  height: var(--dim-4);
+  background: var(--color-border);
+}
+
+/* 普通工具条按钮（`◇ 风格` 等） */
+.toolBtn {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
+/* 下拉的外壳：只为摆那个 `⌄`（原生 `<select>` 的箭头已被 `appearance:none` 关掉） */
+.dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.dropdown::after {
+  content: '';
+  position: absolute;
+  right: var(--space-2);
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid var(--color-text-muted);
+  pointer-events: none;
+}
+
+/* 下拉本体（`<select>`）—— 走真源按钮类，只追加真源未设的属性 */
+.select {
+  composes: btn btnSm from '../common/shared.module.css';
+  appearance: none;
+  padding-right: var(--space-5);
+  cursor: pointer;
+}
+
+/* 工具条上的 `⌄`（风格按钮用） */
+.caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: var(--space-1);
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid currentColor;
+}
+
+/* 张数输入（文生图） */
+.count {
+  composes: field from '../common/shared.module.css';
+  width: 56px;
+  flex: none;
+}
+
+/* 风格药丸（原 `.gp-style-chip*`） */
 .styleChip {
   display: inline-flex;
   align-items: center;
@@ -120,103 +237,40 @@
   color: var(--color-text-strong);
 }
 
-/**
- * ⚠️ 元素选择器（`.row select`）⇒ `composes` 不支持（规范 §6 限制 #2），无法直接复用 `.field` 真源。
- *    但**色值 / 圆角 / 字号 / 底色语义全部对齐 `--field-*`**（与真源同源：
- *    将来改 `--field-border` 一处，两边同时变）。
- *
- * 形态差异是**有意的**，不是没收口：`<select>` 高度由内容决定，
- * 不能照搬 `.field` 的固定高度 + 垂直居中 padding。
- *
- * ⚠️ 底色由 `--color-surface-raised`(白) 改为 `--field-bg`(浅灰内嵌底)，
- *    与其余输入框统一 —— 不喜欢就改 `tokens.css` 的 `--field-bg` 一行。
- */
-.row select,
-.row input {
-  flex: 1;
-  min-width: 0;
-  padding: var(--space-half) var(--space-1);
-  border: 1px solid var(--field-border);
-  border-radius: var(--field-radius);
-  background: var(--field-bg);
-  font-size: var(--field-font-size);
-}
-
-/**
- * 提示词输入（原 `_Component45.jsx:1211` 的 `.gp-prompt` contentEditable）
- * ⚠️ 我们用 `<textarea>`（`@` 引用未落地 ⇒ 没有 chip 要渲染，见 `TextNode.tsx` 的偏离说明）
- * ⚠️ `resize: vertical` 允许用户拉高，但**不横向拉**（面板只有 220px 宽）
- */
-.prompt {
-  composes: field textarea from '../common/shared.module.css';
-  width: 100%;
-}
-
-/* ★ 查 6：主按钮走共享真源
-   ★ 查 1：父容器 `.panel` 已有 `gap: --space-2` ⇒ 删掉重复的 `margin-top`
-          （同一段间距只许有一个来源） */
+/* 生成（原 `.gp-generate`）—— 工具条最右的主按钮 */
 .run {
-  composes: btn btnPrimary from '../common/shared.module.css';
+  composes: btn btnPrimary btnSm from '../common/shared.module.css';
+  flex: none;
 }
 
 /**
- * 批量出片按钮（原 `Z3_1.jsx:1200` 的 `.gp-batch`）
+ * 批量出片（原 `Z3_1.jsx:1200` 的 `.gp-batch`）
  * ⚠️ mockup 无 `.gp-batch` 样式 ⇒ 走**真源次按钮类**（同 `.autoMatch` 先例），全 token。
  */
 .batch {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
+  flex: none;
 }
 
-/** 提示词区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */
-.promptWrap {
-  position: relative;
-}
-
-/**
- * 提示词编辑器（`contentEditable`）—— 原 `_Component45.jsx:1211` 的 `.gp-prompt`
- * ⚠️ 与上面的 `.prompt`（`<textarea>` 版）**同尺寸约定**，差别是它装**药丸 + `<br>`**
- */
-.promptEditor {
-  display: block;
-  min-height: 72px;
-  max-height: 40vh;
-  overflow: auto;
-  cursor: text;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/** 空态占位（`contentEditable` 没有 `placeholder` 属性） */
-.promptEditor:empty::before {
-  content: attr(data-placeholder);
+/* 拖高手柄（原 `.gp-resize`）—— 工具条最右的 `☰` */
+.resize {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--dim-4);
+  height: var(--dim-4);
   color: var(--color-text-faint);
-  pointer-events: none;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.resize:hover,
+.resizing {
+  color: var(--color-text-strong);
 }
 
-/* ── gp 药丸（原 `X3` 生成的三段：`.ref-chip.gp-ref-chip` / `.chip-img` / `.chip-name`）── */
-.promptEditor :global(.ref-chip) {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-half);
-  margin: 0 var(--space-half);
-  padding: 0 var(--space-1);
-  color: var(--node-ref-chip-fg);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-  user-select: none;
-  background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
-}
-
-.promptEditor :global(.chip-img) {
-  width: 14px;
-  height: 14px;
-  object-fit: cover;
-  border-radius: var(--radius-xs);
-}
-
-.promptEditor :global(.chip-name) {
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.resizeGrip {
+  width: 10px;
+  height: 8px;
+  border-top: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
 }

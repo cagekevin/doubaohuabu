@@ -13,6 +13,8 @@ import { useHostOps, useStore } from '@/state';
 import { COMMON_TEXT, WATERMARK_PANEL_TEXT } from '@/constants/text';
 import type { VideoShare } from '@/stable/model/project';
 import styles from './WatermarkPanel.module.css';
+import shared from '@/ui/common/shared.module.css';
+import { PanelShell } from '@/ui/common/PanelShell';
 
 export interface WatermarkPanelProps {
   onClose: () => void;
@@ -38,20 +40,16 @@ export function WatermarkPanel({ onClose }: WatermarkPanelProps) {
   };
 
   return (
-    <div className={styles.panel} onMouseDown={(e) => e.stopPropagation()}>
-      <div className={styles.head}>
-        <span className={styles.title}>{WATERMARK_PANEL_TEXT.title}</span>
-        <span className={styles.count}>{WATERMARK_PANEL_TEXT.count(videoShares.length)}</span>
-        <div className={styles.actions}>
-          <button type="button" className={styles.closeBtn} onClick={onClose}>
-            {WATERMARK_PANEL_TEXT.close}
-          </button>
-        </div>
-      </div>
-
-      <div className={styles.body}>
+    <PanelShell
+      className={styles.panel}
+      bodyClassName={styles.body}
+      title={WATERMARK_PANEL_TEXT.title}
+      meta={WATERMARK_PANEL_TEXT.count(videoShares.length)}
+      onClose={onClose}
+      closeLabel={WATERMARK_PANEL_TEXT.close}
+    >
         {videoShares.length === 0 ? (
-          <div className={styles.empty}>{WATERMARK_PANEL_TEXT.empty}</div>
+          <div className={shared.empty}>{WATERMARK_PANEL_TEXT.empty}</div>
         ) : (
           videoShares.map((item) => (
             <div className={styles.item} key={item.id}>
@@ -94,7 +92,6 @@ export function WatermarkPanel({ onClose }: WatermarkPanelProps) {
             </div>
           ))
         )}
-      </div>
-    </div>
+    </PanelShell>
   );
 }

@@ -21,7 +21,7 @@
 }
 
 .empty {
-  composes: emptyInline from '../common/shared.module.css';
+  composes: empty isInline from '../common/shared.module.css';
 }
 
 .list {
@@ -114,9 +114,9 @@
 }
 
 .sectionTitle {
+  composes: sectionTitleSub from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   margin: var(--space-3) 0 var(--space-1);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
 }
 
 .accountRow {

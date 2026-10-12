@@ -15,6 +15,20 @@
  * ⚠️ **零注入**：只读 + 派发鼠标事件（不改全局）
  */
 
+// ★ 监测脚本的规则表/模式表住 `constants/sendWatch.ts`（SSOT：页面脚本与 app 侧共用一份）
+import {
+  QUOTA_CONSUME_PATTERNS,
+  QUOTA_CONSUME_WARN,
+  QUOTA_KEYWORDS,
+  QUOTA_LOW_PATTERNS,
+  QUOTA_REMAIN_PATTERNS,
+  QUOTA_REMAIN_WARN,
+  REPLY_NOTICE_RULES,
+  WAIT_MAX_SECONDS,
+  WAIT_MIN_PATTERNS,
+  WAIT_SEC_PATTERNS,
+} from '@/constants/sendWatch';
+
 /** 四级降级的选择器定义（原 `Zl` 的三组排除正则 + 四级策略） */
 const EXCLUDE_NEAR = 'arrow|dropdown|clear|attach|upload|emoji|plus|add';
 const EXCLUDE_PAGE = 'copy|share|like|dislike|refresh|menu|nav|header|sidebar|toolbar';
@@ -492,4 +506,215 @@ export const WATERMARK_FREE_BY_THREAD = `
     };
   } catch(e) { return { ok:false, error: e.message || String(e) }; }
 })
+`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 发送后监测（原 `_Component43.jsx` 的 `watchSendReply` 用的 4 个页内脚本）
+//
+// | 本文件 | 源 | 语义 |
+// |---|---|---|
+// | `SEND_REPLY_ACK_SCRIPT` | `dD` `shared.js:37544-37576` | 数「已接单」话术的出现次数（增量判定用计数） |
+// | `WAIT_TIME_SCRIPT` | `fD` `37577-37616` | 解析「预计等待 N 分钟/秒」 |
+// | `REPLY_NOTICE_SCRIPT` | `pD` `37617-37651` | 按 `REPLY_NOTICE_RULES` 计数（同规则多 pattern 取**最大值**） |
+// | `QUOTA_USAGE_SCRIPT` | `hD` `37652-37734` | 额度预警（明确话术 / 本次消耗 / 剩余额度） |
+//
+// ★ **规则表与模式表住 `constants/sendWatch.ts`**（SSOT：页面脚本与 app 侧共用一份，见该文件头注）。
+// ⚠️ 三个脚本共同的第一件事：**把「输入框文本」排除在统计之外**（`inN`）—— 否则我方待发送的
+//   内容自己会被当成"页面回复"⇒ 自触发（源注释明写）。
+// ⚠️ 源版 4 个脚本都是 `catch(e) { return {…, error} }` —— **不静默**（本仓照抄；adapter 侧再判 `_execError`）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 「已接单」回复计数（原 `dD`，`shared.js:37544`）—— 返回 `{hit,count,text,bodyLen}` */
+export const SEND_REPLY_ACK_SCRIPT = `
+(function(){
+  try {
+    function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
+    // 输入框文本（我方待发送内容）——命中若只出现在这里则排除，避免自触发
+    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
+
+    // 只统计全文：body.innerText 覆盖全部可见文本，不存在漏检；用计数而非布尔便于做增量判定
+    var bodyText = norm(document.body.innerText || '');
+
+    var patterns = [
+      /视频生成好后[，,]?\\s*我会主动发送给你/,
+      /视频生成好后[，,]?\\s*[^。]{0,20}主动发送/,
+      /生成好后[，,]?\\s*[^。]{0,20}主动发送/,
+      /我会主动发送给你/,
+      /生成完成后[，,]?\\s*[^。]{0,20}发送给你/,
+      /稍后[，,]?\\s*[^。]{0,20}发送给你/
+    ];
+    var count = 0, sample = '';
+    for (var p=0; p<patterns.length; p++){
+      var g = bodyText.match(new RegExp(patterns[p].source, 'g'));
+      if (!g) continue;
+      for (var k=0; k<g.length; k++){
+        if (inN && inN.indexOf(g[k]) !== -1) continue; // 仅出现在输入框 → 跳过
+        count++;
+        if (!sample) sample = g[k];
+      }
+    }
+    return { hit: count > 0, count: count, text: sample, bodyLen: bodyText.length };
+  } catch(e) { return { hit:false, count:0, error: e.message || String(e) }; }
+})()
+`;
+
+/** 等待时长解析（原 `fD`，`shared.js:37577`）—— 返回 `{hit,minutes,seconds,text,index,bodyLen}` */
+export const WAIT_TIME_SCRIPT = `
+(function(){
+  try {
+    function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
+    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
+    var bodyText = norm(document.body.innerText || '');
+
+    // 模式源码与 app 侧共用同一份定义（constants/sendWatch.ts），避免两边话术适配各改各的
+    var MIN_PATTERNS = ${JSON.stringify(WAIT_MIN_PATTERNS)};
+    var SEC_PATTERNS = ${JSON.stringify(WAIT_SEC_PATTERNS)};
+    var MAX_SECONDS = ${WAIT_MAX_SECONDS};
+
+    var best = null;
+    function scan(pats, unit){
+      for (var p=0;p<pats.length;p++){
+        var re = new RegExp(pats[p], 'gi');
+        var m;
+        while ((m = re.exec(bodyText)) !== null) {
+          var snippet = m[0];
+          if (inN && inN.indexOf(snippet) !== -1) continue;   // 仅出现在输入框 → 跳过
+          var v = parseFloat(m[1]);
+          if (!isFinite(v) || v <= 0) continue;
+          var secs = unit === 'min' ? v * 60 : v;
+          if (secs > MAX_SECONDS) continue;                   // 超过上限视为误匹配
+          if (!best || m.index >= best.index) {               // 取最靠后的一条（最新回复）
+            best = { index:m.index, seconds:secs, minutes:Math.round((secs/60)*10)/10, text:snippet };
+          }
+        }
+      }
+    }
+    scan(MIN_PATTERNS, 'min');
+    scan(SEC_PATTERNS, 'sec');
+
+    if (!best) return { hit:false, bodyLen: bodyText.length };
+    return { hit:true, minutes:best.minutes, seconds:best.seconds, text:best.text, index:best.index, bodyLen:bodyText.length };
+  } catch(e) { return { hit:false, error: e.message || String(e) }; }
+})()
+`;
+
+/** 回复通知计数（原 `pD`，`shared.js:37617`）—— 返回 `{hit,counts,samples,total,bodyLen}` */
+export const REPLY_NOTICE_SCRIPT = `
+(function(){
+  try {
+    function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
+    // 输入框文本（我方待发送内容）——命中若只出现在这里则排除，避免自触发
+    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
+    var bodyText = norm(document.body.innerText || '');
+    var RULES = ${JSON.stringify(REPLY_NOTICE_RULES)};
+
+    var counts = {}, samples = {}, total = 0;
+    for (var r=0; r<RULES.length; r++){
+      var rule = RULES[r];
+      // 同一规则内的多个 pattern 是「同一句话的不同说法」，会互相重叠，
+      // 因此取各 pattern 命中数的**最大值**，而不是求和（与 app 侧同一口径）。
+      var best = 0, bestSample = '';
+      for (var p=0; p<rule.patterns.length; p++){
+        var re = new RegExp(rule.patterns[p], 'g');
+        var n = 0, sample = '', m;
+        while ((m = re.exec(bodyText)) !== null) {
+          var snippet = m[0];
+          if (snippet === '') { re.lastIndex += 1; continue; }        // 空匹配防御
+          if (inN && inN.indexOf(snippet) !== -1) continue;            // 仅出现在输入框 → 不计入
+          n++;
+          sample = snippet;
+        }
+        if (n > best) { best = n; bestSample = sample; }
+      }
+      if (best > 0) { counts[rule.code] = best; samples[rule.code] = bestSample; total += best; }
+    }
+    return { hit: total > 0, counts: counts, samples: samples, total: total, bodyLen: bodyText.length };
+  } catch(e) { return { hit:false, counts:{}, samples:{}, total:0, error: e.message || String(e) }; }
+})()
+`;
+
+/** 额度用量（原 `hD`，`shared.js:37652`）—— 返回 `{hit,lowCount,consume,remain,reason,sample,bodyLen}` */
+export const QUOTA_USAGE_SCRIPT = `
+(function(){
+  try {
+    function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
+    // 输入框文本（我方待发送内容）——命中若只出现在这里则排除，避免自触发
+    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
+    var bodyText = norm(document.body.innerText || '');
+    var KEYWORDS = ${JSON.stringify(QUOTA_KEYWORDS)};
+    var LOW_PATTERNS = ${JSON.stringify(QUOTA_LOW_PATTERNS)};
+    var CONSUME_PATTERNS = ${JSON.stringify(QUOTA_CONSUME_PATTERNS)};
+    var REMAIN_PATTERNS = ${JSON.stringify(QUOTA_REMAIN_PATTERNS)};
+    var CONSUME_WARN = ${QUOTA_CONSUME_WARN};
+    var REMAIN_WARN = ${QUOTA_REMAIN_WARN};
+
+    var res = { hit:false, lowCount:0, consume:null, remain:null, reason:'', sample:'' };
+    var t = bodyText;
+
+    // ① 明确话术（最强信号，且不依赖数值）—— 先确定命中的话术是什么，再统计它出现了几次。
+    //    必须**统计次数**而不是只判布尔：会话里往往残留着上一轮的额度提示，
+    //    只判布尔会在本轮第一条回复还没到时就误判成「新回复」→ 白白换号重发。
+    //    用「命中增量」（本轮次数 > 监听起点的基线次数）才与 quota-exhausted 同一口径。
+    for (var k=0;k<KEYWORDS.length;k++){
+      var kw = KEYWORDS[k];
+      if (t.indexOf(kw) !== -1 && !(inN && inN.indexOf(kw) !== -1)) {
+        res.reason = 'explicit'; res.sample = kw; break;
+      }
+    }
+    if (!res.sample) {
+      for (var q=0;q<LOW_PATTERNS.length;q++){
+        var mq = new RegExp(LOW_PATTERNS[q]).exec(t);
+        if (mq && mq[0]) {
+          var sq = mq[0];
+          if (!(inN && inN.indexOf(sq) !== -1)) { res.reason = 'explicit'; res.sample = sq; break; }
+        }
+      }
+    }
+    if (res.sample) {
+      // 用 indexOf 遍历计数（不用 RegExp：sample 里可能带正则元字符，转义反而是坑）
+      var nS = 0, pos = 0, step = res.sample.length > 0 ? res.sample.length : 1;
+      while ((pos = t.indexOf(res.sample, pos)) !== -1) { nS++; pos += step; }
+      res.lowCount = nS;
+      res.hit = nS > 0;
+      return res;
+    }
+
+    // 先解析两个数值（无论是否触发都记录，供调试/日志）。
+    // 用 g 标志 + while 遍历所有命中：同一回复里可能多次出现「消耗 N」，取最大值。
+    var consume = null;
+    for (var c=0;c<CONSUME_PATTERNS.length;c++){
+      var re1 = new RegExp(CONSUME_PATTERNS[c], 'g'); var m1;
+      while ((m1 = re1.exec(t)) !== null) {
+        if (m1[0] === '') { re1.lastIndex += 1; continue; }   // 空匹配防御
+        var fullC = m1[0];
+        if (inN && inN.indexOf(fullC) !== -1) continue;   // 仅出现在输入框 → 不计入
+        var n1 = parseInt(m1[1],10);
+        if(!isNaN(n1) && (consume===null||n1>consume)) consume = n1;
+      }
+    }
+    var remain = null;
+    for (var r=0;r<REMAIN_PATTERNS.length;r++){
+      var re2 = new RegExp(REMAIN_PATTERNS[r], 'g'); var m2;
+      while ((m2 = re2.exec(t)) !== null) {
+        if (m2[0] === '') { re2.lastIndex += 1; continue; }   // 空匹配防御
+        var fullR = m2[0];
+        if (inN && inN.indexOf(fullR) !== -1) continue;   // 仅出现在输入框 → 不计入
+        var n2 = parseInt(m2[1],10);
+        if(!isNaN(n2) && (remain===null||n2<remain)) remain = n2;
+      }
+    }
+    res.consume = consume; res.remain = remain;
+
+    // ② 剩余不足型（更紧急，优先于消耗型判定）
+    //    数值类信号没有可稳定计数的原文片段，记 lowCount=1（增量判定：基线为 0 即视为新回复）
+    if (remain !== null && remain <= REMAIN_WARN){ res.hit = true; res.lowCount = 1; res.reason = 'remain'; res.sample = '剩余 '+remain; return res; }
+    // ③ 本次消耗型
+    if (consume !== null && consume >= CONSUME_WARN){ res.hit = true; res.lowCount = 1; res.reason = 'consume'; res.sample = '本次消耗 '+consume; return res; }
+    return res;
+  } catch(e){ return { hit:false, lowCount:0, consume:null, remain:null, reason:'', sample:'', error: e.message || String(e) }; }
+})()
 `;

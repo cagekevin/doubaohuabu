@@ -12,9 +12,10 @@
 }
 
 .title {
+  composes: panelTitle from '../common/shared.module.css';
+  /* 仅追加真源未设的属性（危险色是真差异）*/
   margin: 0 0 var(--space-2);
   color: var(--color-danger-text);
-  font-size: var(--font-size-lg);
 }
 
 /* 原始 stack：★ 不做任何改写（原则 6 错误透传）*/

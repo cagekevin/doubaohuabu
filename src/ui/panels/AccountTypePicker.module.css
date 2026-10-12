@@ -1,0 +1,49 @@
+/**
+ * 「选择账号类型」弹窗（原 `.type-picker-modal` / `.type-picker-body` / `.type-picker-card`）
+ *
+ * ⚠️ 原版 CSS 未入库（`index-Dg_Oc7MR.css` 未收集）、`docs/mockup` 也未收录 `.type-picker-*`
+ *   ⇒ 形态按 `docs/参考-原版界面/09-选择账号类型.png` 复刻：**两列卡片网格**，
+ *   每张卡「emoji / 名称 / 说明」三行，全 token。
+ */
+
+/* 卡片网格（原 `.type-picker-body`）—— 参考图是 2 列 × 3 行 */
+.body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+/* 单张卡片（原 `.type-picker-card`，是个 `<button>`） */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  text-align: left;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.card:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-action-primary);
+}
+
+.emoji {
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-none);
+}
+
+.name {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-strong);
+}
+
+.desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}

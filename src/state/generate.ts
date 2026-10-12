@@ -11,6 +11,7 @@
 import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
 import { generateImage, generateVideo, type GenDeps } from '@/core/usecases/generate';
+import type { SendWatchController } from './sendWatch';
 import { countUsable } from '@/core/rules/accountPool';
 import { busyIdsOf } from '@/core/rules/accountBusy';
 import { resolveApiProviderId } from '@/core/rules/apiProvider';
@@ -37,7 +38,17 @@ export interface GenController {
   runVideoBatchForNode(nodeId: string): Promise<boolean>;
 }
 
-export function createGenController(store: AppStore, ports: Ports): GenController {
+export function createGenController(
+  store: AppStore,
+  ports: Ports,
+  /**
+   * ★ 「发送后监测」控制器（原 `gt` 的尾巴 —— `_Component43.jsx:3010` 在发送链里触发 `watchSendReply`）
+   *
+   * ⚠️ 由 `container` 注入（`state` 内部**不互相 new** —— 否则两个控制器互相依赖就成环）。
+   *   缺省 `undefined` ⇒ 只跳过监测（单测里不必造它）。
+   */
+  sendWatch?: SendWatchController,
+): GenController {
   /**
    * 尝试 id 的自增段（原 `O$` 的模块级计数器 `Oy`）
    *
@@ -202,6 +213,14 @@ export function createGenController(store: AppStore, ports: Ports): GenControlle
         // ★ 视频本地化（源 `_Component43.jsx:3160`：写完 `attempt.url` 后**立刻** `localizeNodeVideos`）
         //   链 18（`docs/10` #9）「视频必须落盘」；`void` 调 —— 落盘是收尾，不该拖住"生成成功"的返回
         void localizeNodeInto(store, ports, nodeId);
+      }
+
+      // ★ 「发送后监测」（原 `_Component43.jsx:3010`：发送链尾部起 `watchSendReply`）
+      //   网页通道发送成功 ⇒ 后台监测 180s（已接单 / 预计等待 / 额度 / 回复通知）。
+      //   ⚠️ `void` 调 —— 监测最长 180s，**绝不能**拖住"发送成功"这条主链的返回。
+      //   ⚠️ **只有网页通道**：源的 `watchSendReply` 挂在 `gt`（网页发送）上，API 通道另有一条链。
+      if (res.value.via === 'web' && res.value.accountId) {
+        sendWatch?.start({ nodeId, accountId: res.value.accountId, ownText: text });
       }
       return true;
     },

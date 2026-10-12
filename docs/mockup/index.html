@@ -225,28 +225,33 @@
             </svg>
 
             <div class="canvas-nodes">
-              <!-- 素材节点 · 原版 fL.jsx（.material-node）-->
-              <div class="material-node" style="left:36px; top:64px; width:170px;">
+              <!-- 素材节点 -->
+              <div class="node" data-type="material" style="left:36px; top:64px; width:170px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
                 <div class="node-head">
-                  <span class="dot material-dot"></span>
-                  <span class="material-node-title">素材 · 参考图</span>
+                  <span class="node-dot"></span>
+                  <span class="node-title">素材 · 参考图</span>
                 </div>
-                <div class="material-img-wrap">
-                  <div class="material-img-inner"><div class="ph-a" style="width:100%;height:96px;border-radius:var(--radius-sm);"></div></div>
-                  <div class="mat-float-actions">
-                    <button type="button" class="mat-edit-float" title="编辑图片（遮脸 / 裁剪）">编辑图片</button>
-                    <button type="button" class="mat-analyze-float" title="分析提示词">分析提示词</button>
+                <div class="node-body">
+                  <div class="material-img-wrap">
+                    <div class="material-img-inner"><div class="ph-a" style="width:100%;height:96px;border-radius:var(--radius-sm);"></div></div>
+                    <div class="mat-float-actions">
+                      <button type="button" class="mat-edit-float" title="编辑图片（遮脸 / 裁剪）">编辑图片</button>
+                      <button type="button" class="mat-analyze-float" title="分析提示词">分析提示词</button>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <!-- 文本框 · 原版 CL.jsx（.text-node）-->
-              <div class="text-node" data-selected="true" style="left:236px; top:44px; width:210px;">
+              <!-- 文本框 -->
+              <div class="node" data-type="text" data-selected="true" style="left:236px; top:44px; width:210px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
                 <div class="node-head">
-                  <span class="dot text-dot"></span>
-                  <span class="node-name">文本框</span>
+                  <span class="node-dot"></span>
+                  <span class="node-title">文本框</span>
+                  <span class="node-head-actions"><button type="button" class="node-btn">保存预设</button></span>
                 </div>
-                <div class="text-body">
+                <div class="node-body">
                   <div class="text-toolbar">
                     <button type="button" class="at-ref-btn" title="引用素材到文本框">@ 引用素材</button>
                     <div class="mat-preview-bar">
@@ -258,34 +263,41 @@
                 </div>
               </div>
 
-              <!-- 文生视频 · 原版 YL.jsx（.genvideo-node）-->
-              <div class="genvideo-node" style="left:236px; top:266px; width:210px;">
-                <div class="gv-head">
-                  <span class="gv-dot"></span>
-                  <span class="gv-title">文生视频</span>
-                  <span class="gv-head-grow"></span>
-                  <button type="button" class="gv-hist-btn" title="历史版本">历史 3</button>
+              <!-- 文生视频 -->
+              <div class="node" data-type="genvideo" style="left:236px; top:266px; width:210px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
+                <div class="node-head">
+                  <span class="node-dot"></span>
+                  <span class="node-title">文生视频</span>
+                  <span class="node-head-actions"><button type="button" class="node-btn" title="历史版本">历史 3</button></span>
                 </div>
-                <div class="gv-stage">
-                  <div class="gv-preview-empty">
-                    <div class="gv-preview-title">文生视频 · 在下方输入提示词</div>
-                    <div class="gv-preview-sub">点击卡片打开生成面板，出片直接展示在这里</div>
+                <div class="node-body">
+                  <div class="gv-stage">
+                    <div class="gv-preview-empty">
+                      <div class="gv-preview-title">文生视频 · 在下方输入提示词</div>
+                      <div class="gv-preview-sub">点击卡片打开生成面板，出片直接展示在这里</div>
+                    </div>
                   </div>
                 </div>
-                <div class="gv-meta">已连接 1 个输入 · 5s</div>
+                <div class="node-foot gv-foot">
+                  <span class="gv-meta">已连接 1 个输入 · 5s</span>
+                </div>
               </div>
 
-              <!-- 账号节点 · 原版 OL.jsx（.account-node）-->
-              <div class="account-node" style="left:36px; top:266px; width:170px;">
+              <!-- 账号节点 -->
+              <div class="node" data-type="account" style="left:36px; top:266px; width:170px;">
+                <span class="handle handle-left"></span><span class="handle handle-right"></span>
                 <div class="node-head">
-                  <span class="dot account-dot"></span>
-                  发送节点
-                  <label class="auto-send-toggle" title="自动发送">
-                    <input type="checkbox" checked style="display:none;">
-                    <span class="auto-send-slider"></span>
-                  </label>
+                  <span class="node-dot"></span>
+                  <span class="node-title">发送节点</span>
+                  <span class="node-head-actions">
+                    <label class="auto-send-toggle" title="自动发送">
+                      <input type="checkbox" checked style="display:none;">
+                      <span class="auto-send-slider"></span>
+                    </label>
+                  </span>
                 </div>
-                <div class="account-body">
+                <div class="node-body">
                   <div class="account-top-row">
                     <div class="foot-dropdown">
                       <button type="button" class="foot-btn">
@@ -348,7 +360,7 @@
             <div class="right-rail">
               <div class="library-panel">
                 <div class="library-head">
-                  <span class="library-title">资源库</span>
+                  <span class="panel-title is-sub">资源库</span>
                   <div class="library-head-actions">
                     <button type="button" class="btn primary sm">＋ 添加</button>
                   </div>
@@ -408,11 +420,12 @@
     <code>原版 CL / fL / OL / BL / WL / GL / YL / ZL.jsx · src/ui/nodes/*</code>
   </div>
   <div class="screen-body">
-    <div class="gap-flag" style="margin-bottom:var(--space-2);">
-      ★ 本屏 DOM <b>逐字对照</b> <code>docs/豆包画布原版参考/expanded_components/*.jsx</code>，样式值对照原版 <code>index-*.css</code>：
-      节点根类 = <code>.text-node</code> / <code>.material-node</code> / <code>.account-node</code> / <code>.video-node</code> /
-      <code>.download-node</code> / <code>.group-node</code> / <code>.genvideo-node</code>（imggen 复用 + <code>.imggen-node</code>）。
-      每类节点 head 的圆点各走自己的类（<code>.text-dot</code>/<code>.material-dot</code>/<code>.account-dot</code>/<code>.video-dot</code>/<code>.download-dot</code>/<code>.gv-dot</code>/<code>.ig-dot</code>）。
+    <div class="gap-flag" style="margin-bottom:var(--space-2); display:block;">
+      ★ <b>8 类节点共用一套骨架</b>（自有设计，只参考原版的「按钮位置」）：
+      根 <code>.node[data-type]</code> → 头 <code>.node-head</code>（<code>.node-dot</code> · <code>.node-title</code> ·
+      <code>.node-head-mid</code> · <code>.node-head-actions</code>）→ 身 <code>.node-body</code> → 脚 <code>.node-foot</code>。<br>
+      小件也只有两个：<code>.node-btn</code>（22px 描边钮）与 <code>.node-chip</code>（药丸，<code>is-brand/is-info/is-warn/is-ok</code> 修饰色）。
+      差异只剩两处 —— 圆点色由 <code>data-type</code> 决定、<code>.node-body</code> 里放各类自己的内容。
     </div>
 
     <div class="gap-flag" style="margin-bottom:var(--space-3); display:block;">
@@ -425,28 +438,27 @@
     <div class="node-gallery">
       <!-- ── text（CL.jsx）── -->
       <div class="gallery-cell">
-        <div class="text-node" data-selected="true">
-          <span class="handle handle-left"></span><span class="handle handle-right"></span>
-          <!-- reply-notice：CL.jsx:713 —— 浮在节点上方（absolute bottom:100%+8px） -->
+        <div class="node" data-type="text" data-selected="true">
+          <!-- 提示条：浮在节点上方 -->
           <div class="reply-notice">
             <span class="reply-notice-icon">ℹ</span>
             <span class="reply-notice-body">
               <span class="reply-notice-title">豆包回复</span>
               <span class="reply-notice-text">预计等待 3 分钟</span>
             </span>
-            <button type="button" class="reply-notice-close" title="关闭提示">×</button>
+            <button type="button" class="panel-close" title="关闭提示">×</button>
           </div>
-          <!-- node-head：状态元素互斥，此处只显示 foot-send-status -->
           <div class="node-head">
-            <span class="dot text-dot"></span>
-            <span class="node-name">文本框</span>
-            <button type="button" class="auto-match-btn" title="自动匹配素材">自动匹配</button>
-            <button type="button" class="split-md-btn" title="按 Markdown 拆分">拆分</button>
-            <span class="foot-send-status foot-send-sending">⏳ 发送中</span>
-            <span class="head-actions"><button type="button" class="save-preset-btn" title="保存为节点预设">保存预设</button></span>
+            <span class="node-dot"></span>
+            <span class="node-title">文本框</span>
+            <span class="node-head-mid">
+              <button type="button" class="node-btn" title="自动匹配素材">自动匹配</button>
+              <button type="button" class="node-btn" title="按 Markdown 拆分">拆分</button>
+              <span class="node-chip">⏳ 发送中</span>
+            </span>
+            <span class="node-head-actions"><button type="button" class="node-btn" title="保存为节点预设">保存预设</button></span>
           </div>
-          <!-- text-body：toolbar 在上，正文在下 -->
-          <div class="text-body">
+          <div class="node-body">
             <div class="text-toolbar">
               <button type="button" class="at-ref-btn" title="引用素材到文本框">@ 引用素材</button>
               <div class="mat-preview-bar">
@@ -459,18 +471,14 @@
           </div>
         </div>
         <div class="cell-spec">
-          <div class="spec-head">按钮 <b>8</b> · 落在两个容器</div>
+          <div class="spec-head">按钮位置</div>
           <ul>
-            <li><b>node-head 内</b>：<code>auto-match-btn</code> · <code>split-md-btn</code>（无独立样式，走共享按钮真源）</li>
-            <li><b>head-actions 内</b>：<code>save-preset-btn</code></li>
-            <li><b>text-toolbar 内</b>：<code>at-ref-btn</code>（品牌软底）</li>
-            <li><b>reply-notice 内</b>：<code>reply-notice-close</code>（浮在节点上方）</li>
-            <li><b>fuzzy-head 内</b>：<code>fuzzy-nav</code> ×2 ‹ ›</li>
-            <li><b>fuzzy-foot 内</b>：<code>fuzzy-ignore</code></li>
-          </ul>
-          <div class="spec-head">浮层（见第④屏）</div>
-          <ul>
-            <li><code>fuzzy-panel</code> 疑似匹配 · <code>ref-menu</code> @ 引用下拉 · <code>_Component33</code> 素材面板（portal）</li>
+            <li><b>头·中槽</b>：<code>.node-btn</code> 自动匹配 ＋ <code>.node-btn</code> 拆分 ＋ <code>.node-chip</code> 发送中</li>
+            <li><b>头·右槽</b>：<code>.node-btn</code> 保存预设</li>
+            <li><b>身·工具条</b>：<code>at-ref-btn</code> @ 引用素材（左）＋ 缩略条 ＋ 计数（右）</li>
+            <li><b>身·正文</b>：<code>text-edit</code>（contentEditable）</li>
+            <li><b>浮在节点上方</b>：<code>reply-notice</code> 提示条 ＋ 关闭钮</li>
+            <li><b>条件浮层</b>：<code>fuzzy-panel</code> 疑似匹配 · <code>ref-menu</code> @ 引用下拉</li>
           </ul>
         </div>
         <div class="cap-foot">text · CL.jsx 27,664B / 8 按钮 → TextNode.tsx 658B / 0（42.0×）</div>
@@ -478,27 +486,27 @@
 
       <!-- ── material（fL.jsx）── -->
       <div class="gallery-cell">
-        <div class="material-node" data-selected="true">
+        <div class="node" data-type="material" data-selected="true">
           <div class="node-head">
-            <span class="dot material-dot"></span>
-            <span class="material-node-title">素材 · 柯基</span>
+            <span class="node-dot"></span>
+            <span class="node-title">素材 · 柯基</span>
           </div>
-          <!-- material-img-wrap：float-actions 是 img-inner 的兄弟，浮在图片底部居中 -->
-          <div class="material-img-wrap">
+          <div class="node-body">
+            <div class="material-img-wrap">
             <div class="material-img-inner"><div class="ph-b" style="width:100%;height:110px;border-radius:var(--radius-sm);"></div></div>
-            <div class="mat-float-actions">
-              <button type="button" class="mat-edit-float" title="编辑图片（遮脸 / 裁剪）">编辑图片</button>
-              <button type="button" class="mat-analyze-float" title="分析提示词">分析提示词</button>
+              <div class="mat-float-actions">
+                <button type="button" class="mat-edit-float" title="编辑图片（遮脸 / 裁剪）">编辑图片</button>
+                <button type="button" class="mat-analyze-float" title="分析提示词">分析提示词</button>
+              </div>
             </div>
           </div>
-          <span class="handle handle-left"></span><span class="handle handle-right"></span>
         </div>
         <!-- mat-prompt-pop：节点外的兄弟弹层（absolute 浮在节点下方）-->
         <div class="mat-prompt-pop">
           <div class="mpp-head">
             <span class="mpp-badge mpp-done">完成</span>
             <span class="mpp-title">AI 提示词 · 豆包00</span>
-            <button type="button" class="mpp-close" title="关闭">×</button>
+            <button type="button" class="panel-close" title="关闭">×</button>
           </div>
           <div class="mpp-body">
             <div class="mpp-tabs">
@@ -519,7 +527,7 @@
           <div class="spec-head">按钮 <b>5</b></div>
           <ul>
             <li><code>mat-edit-float</code> / <code>mat-analyze-float</code>　<span class="note">底部居中浮层，hover 节点才显现</span></li>
-            <li><code>mpp-close</code> ×　<code>mpp-revise-btn</code> 调整　<span class="note">弹层底部 26px 胶囊</span></li>
+            <li><code>panel-close</code> ×　<code>mpp-revise-btn</code> 调整　<span class="note">弹层底部 26px 胶囊</span></li>
           </ul>
         </div>
         <div class="cap-foot">material · fL.jsx 10,045B / 5 按钮 → MaterialNode.tsx 731B / 0（13.7×）</div>
@@ -527,18 +535,19 @@
 
       <!-- ── account（OL.jsx）── -->
       <div class="gallery-cell">
-        <div class="account-node">
-          <span class="handle handle-left"></span><span class="handle handle-right"></span>
+        <div class="node" data-type="account">
           <div class="node-head">
-            <span class="dot account-dot"></span>
-            发送节点
-            <span class="timer-inline timer-yellow">05:12</span>
-            <label class="auto-send-toggle" data-on="true" title="自动发送">
-              <input type="checkbox" checked style="display:none;">
-              <span class="auto-send-slider"></span>
-            </label>
+            <span class="node-dot"></span>
+            <span class="node-title">发送节点</span>
+            <span class="node-head-mid"><span class="node-chip is-warn is-count">05:12</span></span>
+            <span class="node-head-actions">
+              <label class="auto-send-toggle" data-on="true" title="自动发送">
+                <input type="checkbox" checked style="display:none;">
+                <span class="auto-send-slider"></span>
+              </label>
+            </span>
           </div>
-          <div class="account-body">
+          <div class="node-body">
             <div class="account-top-row">
               <div class="foot-dropdown">
                 <button type="button" class="foot-btn">
@@ -557,11 +566,12 @@
         <div class="cell-spec">
           <div class="spec-head">按钮 <b>1</b>（本节点几乎纯功能区）</div>
           <ul>
-            <li><code>account-feedback-close</code> × —— <b>只在 err 时出现</b>（20×20 · opacity .6）</li>
+            <li><code>panel-close</code> × —— <b>只在 err 时出现</b></li>
           </ul>
           <div class="spec-head">功能区</div>
           <ul>
-            <li><b>head 内</b>：<code>timer-inline</code>（等宽 13px/700；yellow ≥5min / red ≥10min）+ <code>auto-send-toggle</code></li>
+            <li><b>头·中槽</b>：<code>.node-chip.is-count</code> 倒计时（等宽；≥5min 转 warn / ≥10min 转 danger）</li>
+            <li><b>头·右槽</b>：<code>auto-send-toggle</code> 自动发送开关</li>
             <li><b>account-top-row</b>：<code>foot-btn</code> 下拉 ＋ <code>account-send-btn</code>（<b>绿色</b>，非品牌色）</li>
             <li><b>其下</b>：<code>account-feedback</code> → <code>account-summary</code></li>
           </ul>
@@ -571,45 +581,49 @@
 
       <!-- ── video（BL.jsx）── -->
       <div class="gallery-cell">
-        <div class="video-node">
+        <div class="node" data-type="video">
           <div class="node-head">
-            <span class="dot video-dot"></span>
-            <span class="video-node-title">视频</span>
-            <span class="video-node-account">豆包00</span>
-            <span class="video-node-dur">8s</span>
-            <span class="video-node-res">1080×1920</span>
+            <span class="node-dot"></span>
+            <span class="node-title">视频</span>
+            <span class="node-head-mid">
+              <span class="node-chip is-info">豆包00</span>
+              <span class="node-chip is-count">8s</span>
+              <span class="node-chip">1080×1920</span>
+            </span>
           </div>
-          <div class="video-node-body">
-            <div class="ph-c" style="width:100%;height:110px;border-radius:var(--radius-sm);"></div>
-            <!-- vn-panel：absolute 浮在视频区底部（生成配方 / 出片记录）-->
-            <div class="vn-panel">
-              <div class="vn-panel-head"><span>生成配方</span><button type="button" class="vn-panel-close">✕</button></div>
-              <div class="vn-panel-body">
-                <div class="vn-prompt">一只柯基在海边冲浪</div>
-                <div class="vn-specs">
-                  <span class="vn-spec">模型 Seedance 2.5</span>
-                  <span class="vn-spec">8s</span>
-                  <span class="vn-spec">16:9</span>
-                  <span class="vn-spec">参考图×2</span>
-                  <span class="vn-spec">引用文本×1</span>
-                  <span class="vn-spec">豆包00</span>
+          <div class="node-body">
+            <div class="video-node-body">
+              <div class="ph-c" style="width:100%;height:110px;border-radius:var(--radius-sm);"></div>
+              <!-- 配方浮层：absolute 贴视频区底部 -->
+              <div class="vn-panel">
+                <div class="vn-panel-head"><span>生成配方</span><button type="button" class="panel-close">✕</button></div>
+                <div class="vn-panel-body">
+                  <div class="vn-prompt">一只柯基在海边冲浪</div>
+                  <div class="vn-specs">
+                    <span class="vn-spec">模型 Seedance 2.5</span>
+                    <span class="vn-spec">8s</span>
+                    <span class="vn-spec">16:9</span>
+                    <span class="vn-spec">参考图×2</span>
+                    <span class="vn-spec">引用文本×1</span>
+                    <span class="vn-spec">豆包00</span>
+                  </div>
+                </div>
+                <div class="vn-panel-foot">
+                  <button type="button" class="vn-act">复制配方</button>
+                  <button type="button" class="vn-act primary">按配方重跑</button>
                 </div>
               </div>
-              <div class="vn-panel-foot">
-                <button type="button" class="vn-act">复制配方</button>
-                <button type="button" class="vn-act primary">按配方重跑</button>
-              </div>
+            </div>
+            <!-- 来源条：body 内、视频区之后 -->
+            <div class="vn-provenance">
+              <button type="button" class="vn-src-chip"><span class="vn-src-ico">↩</span><span>来自：文生视频 #2</span></button>
+              <button type="button" class="vn-recipe-chip"><span class="vn-recipe-ico">≡</span><span class="vn-recipe-text">查看配方</span></button>
+              <button type="button" class="vn-hist-chip">×3</button>
+              <button type="button" class="vn-pull-chip">可拉取</button>
             </div>
           </div>
-          <!-- vn-provenance：在 node-head 之后、body 之前（全是按钮带 ico）-->
-          <div class="vn-provenance">
-            <button type="button" class="vn-src-chip"><span class="vn-src-ico">↩</span><span>来自：文生视频 #2</span></button>
-            <button type="button" class="vn-recipe-chip"><span class="vn-recipe-ico">≡</span><span class="vn-recipe-text">查看配方</span></button>
-            <button type="button" class="vn-hist-chip">×3</button>
-            <button type="button" class="vn-pull-chip">可拉取</button>
-          </div>
-          <!-- video-controls：播放 ‖ 时间线 ‖ 时间文字 ‖ 截图（vt-time 是兄弟）-->
-          <div class="video-controls">
+          <!-- 播放控制条：foot（播放 ‖ 时间线 ‖ 时间文字 ‖ 截图）-->
+          <div class="node-foot video-controls">
             <button type="button" class="vt-btn" title="播放">▶</button>
             <div class="video-timeline"><div class="vt-fill" style="width:40%;"></div><div class="vt-knob" style="left:40%;"></div></div>
             <span class="vt-time">00:03 / 00:08</span>
@@ -634,13 +648,13 @@
 
       <!-- ── download（WL.jsx）── -->
       <div class="gallery-cell">
-        <div class="download-node">
+        <div class="node" data-type="download">
           <div class="node-head">
-            <span class="dot download-dot"></span>
-            <span class="dn-title">下载节点</span>
-            <span class="dn-count">3</span>
+            <span class="node-dot"></span>
+            <span class="node-title">下载节点</span>
+            <span class="node-head-mid"><span class="node-chip is-warn">3</span></span>
           </div>
-          <div class="dn-body">
+          <div class="node-body">
             <div class="dn-folder-row">
               <span class="dn-folder-label">目录：</span>
               <span class="dn-folder-path" title="C:\Users\xinye\Downloads">Downloads</span>
@@ -674,28 +688,30 @@
 
       <!-- ── group（GL.jsx）── -->
       <div class="gallery-cell">
-        <div class="group-node">
-          <div class="group-node-head">
-            <span class="group-node-icon">
+        <div class="node group-node" data-type="group">
+          <div class="node-head">
+            <span class="node-icon">
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/><path d="M2.5 7.5h15"/></svg>
             </span>
-            <span class="group-node-name">组 1</span>
-            <span class="group-node-count">3</span>
-            <button type="button" class="group-ungroup-btn">取消组</button>
+            <span class="node-title">组 1</span>
+            <span class="node-head-mid"><span class="node-chip is-brand">3</span></span>
+            <span class="node-head-actions"><button type="button" class="node-btn">取消组</button></span>
           </div>
-          <div style="padding:var(--space-2); display:flex; gap:var(--space-2);">
-            <div class="text-node" style="flex:1;"><div class="node-head"><span class="dot text-dot"></span><span class="node-name">文本框</span></div></div>
-            <div class="material-node" style="flex:1;"><div class="node-head"><span class="dot material-dot"></span><span class="material-node-title">素材</span></div></div>
+          <div class="node-body">
+            <div class="group-children">
+              <div class="node" data-type="text" style="flex:1;"><div class="node-head"><span class="node-dot"></span><span class="node-title">文本框</span></div></div>
+              <div class="node" data-type="material" style="flex:1;"><div class="node-head"><span class="node-dot"></span><span class="node-title">素材</span></div></div>
+            </div>
           </div>
         </div>
         <div class="cell-spec">
           <div class="spec-head">按钮 <b>1</b></div>
           <ul>
-            <li><code>group-ungroup-btn</code> 取消组　<span class="note">group-node-head 内最右</span></li>
+            <li><code>.node-btn</code> 取消组　<span class="note">头·右槽（最右）</span></li>
           </ul>
           <div class="spec-head">★ 容器语义</div>
           <ul>
-            <li>head 高 34px；顺序：icon → name → count → 取消组</li>
+            <li>head 高 <b>32px</b>（统一骨架 `--mk-head-h`，与原版 .group-node-head 的 34px 有意不同）；顺序：icon → title → count → 取消组</li>
             <li><b>不挂 handle</b>（容器不是卡片）；<code>pointer-events:none</code>，只有 head 吃事件</li>
             <li>选中态：<code>border-style:solid</code> + 品牌边</li>
           </ul>
@@ -705,42 +721,43 @@
 
       <!-- ── genvideo（YL.jsx）── -->
       <div class="gallery-cell">
-        <div class="genvideo-node">
-          <span class="handle handle-left"></span><span class="handle handle-right"></span>
-          <div class="gv-head">
-            <span class="gv-dot"></span>
-            <span class="gv-title">文生视频</span>
-            <span class="gv-head-grow"></span>
-            <button type="button" class="gv-hist-btn">历史 3</button>
+        <div class="node" data-type="genvideo">
+          <div class="node-head">
+            <span class="node-dot"></span>
+            <span class="node-title">文生视频</span>
+            <span class="node-head-actions"><button type="button" class="node-btn">历史 3</button></span>
           </div>
-          <div class="gv-stage">
-            <div class="ph-c" style="width:100%;height:100%;"></div>
-            <span class="gv-play is-playing">❚❚</span>
-            <span class="gv-dur-badge gv-dur-real">8s</span>
-            <button type="button" class="gv-dl" title="下载">↧</button>
-            <div class="gv-tl">
-              <div class="gv-tl-track"><div class="gv-tl-fill" style="width:35%;"></div><span class="gv-tl-knob" style="left:35%;"></span></div>
+          <div class="node-body">
+            <div class="gv-stage">
+              <div class="ph-c" style="width:100%;height:100%;"></div>
+              <span class="gv-play is-playing">❚❚</span>
+              <span class="gv-dur-badge gv-dur-real">8s</span>
+              <button type="button" class="gv-dl" title="下载">↧</button>
+              <div class="gv-tl">
+                <div class="gv-tl-track"><div class="gv-tl-fill" style="width:35%;"></div><span class="gv-tl-knob" style="left:35%;"></span></div>
+              </div>
             </div>
           </div>
-          <div class="gv-meta">已连接 2 个输入 · 16:9 · <span class="gv-dur gv-dur-real">8s</span></div>
-          <!-- gv-frame-actions：absolute 浮在 stage 下方居中（不在文档流）-->
-          <div class="gv-frame-actions">
-            <button type="button" class="gv-frame-btn">头帧→画布参考图</button>
-            <button type="button" class="gv-frame-btn">当前帧→画布参考图</button>
-            <button type="button" class="gv-frame-btn">尾帧→画布参考图</button>
+          <div class="node-foot gv-foot">
+            <span class="gv-meta">已连接 2 个输入 · 16:9 · 8s</span>
+            <div class="gv-frame-actions">
+              <button type="button" class="node-btn">头帧 → 参考图</button>
+              <button type="button" class="node-btn">当前帧 → 参考图</button>
+              <button type="button" class="node-btn">尾帧 → 参考图</button>
+            </div>
           </div>
         </div>
         <div class="cell-spec">
           <div class="spec-head">按钮 <b>4</b></div>
           <ul>
-            <li><code>gv-hist-btn</code> 历史 N　<span class="note">gv-head 最右（22px 胶囊）</span></li>
-            <li><code>gv-frame-btn</code> ×3　<span class="note">★ absolute 浮在 stage 下方居中</span></li>
-            <li><code>gv-dl</code> 下载　<span class="note">stage <b>右上</b> 28×28</span></li>
+            <li><code>.node-btn</code> 历史 N　<span class="note">头·右槽（最右）</span></li>
+            <li><code>.node-btn</code> ×3 帧按钮　<span class="note">脚·按钮行（头帧 / 当前帧 / 尾帧）</span></li>
+            <li><code>gv-dl</code> 下载　<span class="note">舞台 <b>右上</b> 28×28</span></li>
           </ul>
           <div class="spec-head">★ stage 内浮层</div>
           <ul>
             <li><code>gv-play</code> 正中 34×34 · <code>gv-dur-badge</code> <b>左上</b> · <code>gv-tl</code> 贴底 22px</li>
-            <li>stage = <code>margin:0 12px</code> + <code>aspect-ratio:16/9</code> + 虚线强边</li>
+            <li>stage = 缩进由 <b>容器 padding</b> 给（不再用 margin）+ <code>aspect-ratio:16/9</code> + 虚线强边</li>
           </ul>
         </div>
         <div class="cap-foot">genvideo · YL.jsx 20,420B / 4 按钮 → GenVideoNode.tsx 1,115B / 0（18.3×）</div>
@@ -748,34 +765,36 @@
 
       <!-- ── imggen（ZL.jsx）── 空态 -->
       <div class="gallery-cell">
-        <div class="genvideo-node imggen-node">
-          <span class="handle handle-left"></span><span class="handle handle-right"></span>
-          <div class="gv-head">
-            <span class="gv-dot ig-dot"></span>
-            <span class="gv-title">文生图</span>
-            <span class="gv-head-grow"></span>
-            <span class="ig-chip-status">API 进行中</span>
-            <button type="button" class="gv-hist-btn">历史 3</button>
+        <div class="node" data-type="imggen">
+          <div class="node-head">
+            <span class="node-dot"></span>
+            <span class="node-title">文生图</span>
+            <span class="node-head-mid"><span class="node-chip is-brand">API 进行中</span></span>
+            <span class="node-head-actions"><button type="button" class="node-btn">历史 3</button></span>
           </div>
-          <div class="gv-stage">
-            <div class="gv-preview-empty">
-              <div class="gv-preview-title">文生图 · 在下方输入提示词</div>
-              <div class="gv-preview-sub">点击卡片打开生成面板，出图直接展示在这里</div>
+          <div class="node-body">
+            <div class="gv-stage">
+              <div class="gv-preview-empty">
+                <div class="gv-preview-title">文生图 · 在下方输入提示词</div>
+                <div class="gv-preview-sub">点击卡片打开生成面板，出图直接展示在这里</div>
+              </div>
             </div>
           </div>
-          <div class="gv-meta">已连接 2 个输入 · 豆包后台 · 16:9</div>
+          <div class="node-foot gv-foot">
+            <span class="gv-meta">已连接 2 个输入 · 豆包后台 · 16:9</span>
+          </div>
         </div>
         <div class="cell-spec">
           <div class="spec-head">按钮 <b>6</b></div>
           <ul>
-            <li><code>gv-hist-btn</code> 历史 N　<span class="note">head 最右</span></li>
-            <li><code>ig-chip-status</code>（非按钮）　<span class="note">grow 之后、历史之前 · 10px/700 品牌软底</span></li>
+            <li><code>.node-btn</code> 历史 N　<span class="note">头·右槽（最右）</span></li>
+            <li><code>.node-chip.is-brand</code> 状态（非按钮）　<span class="note">头·中槽</span></li>
           </ul>
           <div class="spec-head">★ 节点上无输入框</div>
           <ul>
             <li>空态只有 <code>gv-preview-empty</code>：主文案＋副文案</li>
             <li>有图时 <code>mat-float-actions</code> 浮在图上（编辑／分析）</li>
-            <li>imggen 复用 <code>.genvideo-node</code> + <code>.imggen-node</code>（圆点换 <code>.ig-dot</code>）</li>
+            <li>imggen 与 genvideo 同骨架，只换 <code>data-type</code>（圆点色自动跟随）</li>
           </ul>
         </div>
         <div class="cap-foot">imggen · ZL.jsx 15,552B / 6 按钮 → GenImageNode.tsx 1,320B / 0（11.8×）</div>
@@ -905,7 +924,7 @@
       <div class="overlay-cell">
         <div class="bs-card">
           <div class="bs-head">
-            <div class="bs-title">批量发送中 · 2/4</div>
+            <div class="panel-title">批量发送中 · 2/4</div>
             <button type="button" class="btn sm bs-abort">全部中止</button>
           </div>
           <div class="bs-progress"><div class="bs-progress-bar" style="width:50%;"></div></div>
@@ -1180,7 +1199,7 @@
       <div class="overlay-cell">
         <div class="cap">DP.jsx · 跨账号指纹关联扫描（.login-backdrop &gt; .linkscan-card · 缺口未落地）</div>
         <div class="linkscan-card">
-          <div class="linkscan-title">跨账号指纹关联扫描</div>
+          <div class="panel-title">跨账号指纹关联扫描</div>
           <div class="linkscan-row crit">
             <span class="linkscan-name">豆包00</span>
             <span class="linkscan-name">Dola01</span>
@@ -1246,16 +1265,19 @@
   <div class="screen-body">
     <div class="gap-flag" style="margin-bottom:var(--space-2); display:block;">
       现状：<code>ui/panels/GenPanel.tsx</code> 只有「提示词 + 账号 + 比例 + 分辨率 + 数量 + 生成」6 项；
-      原版是 <b>Z3_1.jsx（文生视频）+ _Component45.jsx（文生图）</b>两套 <code>.gen-panel-layer &gt; .gen-panel</code>（共用 <code>gp-*</code> 外壳，工具条不同）。
+      原版是 <b>Z3_1.jsx（文生视频）+ _Component45.jsx（文生图）</b>两套 <code>.gen-panel-layer &gt; .gen-panel</code>（共用 <code>gp-*</code> 外壳，工具条不同）。<br>
+      ★ <b>两个面板是同一套样式</b>：工具条控件一律 <code>--btn-height</code> 高（与 <code>.btn.primary</code> 同高 ⇒ 一行只有一个高度）；
+      「风格」入口是<b>一个控件两个状态</b>（<code>.gp-style-chip</code> 无值时 <code>data-empty</code> 走中性占位字、有值时多一个 × 清除钮）；
+      下拉浮层共用 <code>.gp-acc-menu</code> 外壳，<b>默认收起</b>，打开态见本屏下方「下拉浮层」格。
     </div>
 
     <!-- 生成面板 · 原版 _Component45.jsx（文生图）-->
     <div class="gen-panel-layer">
       <div class="gen-panel">
         <div class="gp-head">
-          <span class="gp-title">文生图</span>
+          <span class="panel-title">文生图</span>
           <span class="gp-meta">画布 2 张引用 · 豆包00</span>
-          <button type="button" class="gp-close" title="关闭（Esc）">✕</button>
+          <button type="button" class="panel-close" title="关闭（Esc）">✕</button>
         </div>
 
         <!-- 文生图任务条（原版 .igt-*）-->
@@ -1279,22 +1301,22 @@
           <button type="button" class="gp-btn" title="引用素材">＠</button>
           <span class="gp-sep"></span>
           <span class="gp-style-chip">
-            <button type="button" class="gp-style-chip-main"><span class="gp-style-chip-glyph">◇</span> 国风二次元</button>
+            <button type="button" class="gp-style-chip-main"><span class="gp-style-chip-glyph">◇</span> 国风二次元<span class="gp-caret"></span></button>
             <button type="button" class="gp-style-chip-x" title="移除风格">×</button>
           </span>
-          <button type="button" class="gp-btn" title="画面比例">16:9</button>
-          <button type="button" class="gp-btn" title="每次生成的张数">1 张</button>
+          <button type="button" class="gp-btn" title="画面比例">16:9<span class="gp-caret"></span></button>
+          <button type="button" class="gp-btn" title="每次生成的张数">1 张<span class="gp-caret"></span></button>
           <span class="gp-acc-wrap">
             <button type="button" class="gp-btn" title="发送账号">全部账号（自动） <span class="gp-caret"></span></button>
-            <div class="gp-acc-menu">
+            <div class="gp-acc-menu" hidden>
               <button type="button" class="gp-acc-item"><span class="gp-acc-name">全部账号（自动）</span></button>
               <button type="button" class="gp-acc-item"><span class="gp-acc-name">主力号</span><span class="gp-acc-count">3</span></button>
               <button type="button" class="gp-acc-item"><span class="gp-acc-name">备用号</span><span class="gp-acc-count">2</span></button>
               <button type="button" class="gp-acc-item"><span class="gp-acc-name">API</span></button>
             </div>
           </span>
-          <button type="button" class="gp-btn" title="生成模型">Seedream 5.0</button>
-          <button type="button" class="gp-btn" title="图片分辨率">2K</button>
+          <button type="button" class="gp-btn" title="生成模型">Seedream 5.0<span class="gp-caret"></span></button>
+          <button type="button" class="gp-btn" title="图片分辨率">2K<span class="gp-caret"></span></button>
           <span class="gp-toolbar-grow"></span>
           <button type="button" class="gp-batch" title="同一提示词按三个比例各出一片">批量出片</button>
           <button type="button" class="btn primary">生成</button>
@@ -1306,9 +1328,9 @@
     <div class="gen-panel-layer" style="margin-top:var(--space-4);">
       <div class="gen-panel">
         <div class="gp-head">
-          <span class="gp-title">文生视频</span>
+          <span class="panel-title">文生视频</span>
           <span class="gp-meta">画布 1 张引用 · 8s</span>
-          <button type="button" class="gp-close" title="保存并关闭（Esc）">✕</button>
+          <button type="button" class="panel-close" title="保存并关闭（Esc）">✕</button>
         </div>
         <div class="gp-thumbs">
           <button type="button" class="gp-thumb" title="@图1（角标 1）"><span class="ph-c" style="display:block;width:100%;height:100%;"></span><span class="gp-thumb-badge">1</span></button>
@@ -1318,15 +1340,17 @@
         <div class="gp-toolbar">
           <button type="button" class="gp-btn" title="引用素材">＠</button>
           <span class="gp-sep"></span>
-          <button type="button" class="gp-btn" title="风格库">◇ 风格 <span class="gp-caret"></span></button>
-          <button type="button" class="gp-btn" title="画面比例">16:9</button>
+          <span class="gp-style-chip" data-empty="true">
+            <button type="button" class="gp-style-chip-main" title="风格库"><span class="gp-style-chip-glyph">◇</span> 风格<span class="gp-caret"></span></button>
+          </span>
+          <button type="button" class="gp-btn" title="画面比例">16:9<span class="gp-caret"></span></button>
           <span class="gp-acc-wrap">
             <button type="button" class="gp-btn" title="发送账号">全部账号（自动） <span class="gp-caret"></span></button>
           </span>
-          <button type="button" class="gp-btn" title="生成模型">Seedance 2.5</button>
+          <button type="button" class="gp-btn" title="生成模型">Seedance 2.5<span class="gp-caret"></span></button>
           <span class="gp-acc-wrap">
             <button type="button" class="gp-btn" title="视频时长：8 秒">8s <span class="gp-caret"></span></button>
-            <div class="gp-acc-menu gp-param-menu">
+            <div class="gp-acc-menu gp-param-menu" hidden>
               <div class="gp-dur-pop">
                 <div class="gp-dur-pop-head"><span class="gp-dur-pop-label">视频时长</span><span class="gp-dur-pop-val">8s</span></div>
                 <input type="range" class="fmp-range" min="4" max="30" value="8">
@@ -1342,15 +1366,41 @@
 
     <div class="overlay-grid" style="margin-top:var(--space-4);">
 
+        <!-- 生成面板 · 下拉浮层（打开态）——两个面板共用同一套菜单外壳 -->
+        <div class="overlay-cell" style="grid-column:1/-1;">
+          <div class="cap">生成面板 · 下拉浮层（打开态）· <code>.gp-acc-menu</code> / <code>.gp-param-menu</code> / <code>.gp-dur-pop</code></div>
+          <div class="gp-menu-demo">
+            <span class="gp-acc-wrap">
+              <button type="button" class="gp-btn">全部账号（自动）<span class="gp-caret"></span></button>
+              <div class="gp-acc-menu">
+                <button type="button" class="gp-acc-item"><span class="gp-acc-name">全部账号（自动）</span></button>
+                <button type="button" class="gp-acc-item"><span class="gp-acc-name">主力号</span><span class="gp-acc-count">3</span></button>
+                <button type="button" class="gp-acc-item"><span class="gp-acc-name">备用号</span><span class="gp-acc-count">2</span></button>
+                <button type="button" class="gp-acc-item"><span class="gp-acc-name">API</span></button>
+              </div>
+            </span>
+            <span class="gp-acc-wrap">
+              <button type="button" class="gp-btn">8s<span class="gp-caret"></span></button>
+              <div class="gp-acc-menu gp-param-menu">
+                <div class="gp-dur-pop">
+                  <div class="gp-dur-pop-head"><span class="gp-dur-pop-label">视频时长</span><span class="gp-dur-pop-val">8s</span></div>
+                  <input type="range" class="fmp-range" min="4" max="30" value="8">
+                  <div class="gp-dur-pop-scale"><span>4s</span><span>30s</span></div>
+                </div>
+              </div>
+            </span>
+          </div>
+        </div>
+
         <!-- _Component46 · API 服务弹窗（真类名 .modal-overlay > .api-settings）-->
         <div class="overlay-cell" style="grid-column:1/-1;">
           <div class="cap">_Component46.jsx · API 服务（12,798 B · 完全没有）· 真结构 <code>.modal-overlay &gt; .api-settings</code></div>
           <div class="modal-overlay">
             <div class="api-settings">
               <div class="api-settings-head">
-                <span class="api-settings-title">API 服务</span>
-                <span class="api-settings-sub">对接第三方图像 / 视频生成服务（密钥只存主进程，明文不过桥）</span>
-                <button type="button" class="gp-close" title="关闭（Esc）">✕</button>
+                <span class="panel-title">API 服务</span>
+                <span class="panel-sub">对接第三方图像 / 视频生成服务（密钥只存主进程，明文不过桥）</span>
+                <button type="button" class="panel-close" title="关闭（Esc）">✕</button>
               </div>
               <div class="api-settings-body">
                 <div class="api-channel-config">
@@ -1397,12 +1447,12 @@
           <div class="ie-overlay-root">
             <div class="ie-panel">
               <div class="ie-head">
-                <div class="ie-title">图片编辑<span class="ie-title-sub"> · 素材 · 柯基</span></div>
+                <div class="panel-title">图片编辑<span class="panel-sub"> · 素材 · 柯基</span></div>
                 <div class="ie-tabs">
                   <button type="button" class="ie-tab ie-tab-active">一键遮脸</button>
                   <button type="button" class="ie-tab">裁剪</button>
                 </div>
-                <button type="button" class="ie-close" title="关闭">✕</button>
+                <button type="button" class="panel-close" title="关闭">✕</button>
               </div>
               <div class="ie-toolbar">
                 <div class="ie-group">
@@ -1463,7 +1513,7 @@
           <div class="style-lib-layer">
             <div class="slm-card">
               <div class="slm-head">
-                <span class="slm-title">风格库</span>
+                <span class="panel-title">风格库</span>
                 <button type="button" class="slm-close" title="关闭">✕</button>
               </div>
               <div class="slm-body">
@@ -1547,7 +1597,7 @@
         <div class="login-backdrop">
           <div class="login-modal">
             <div class="login-head">
-              <span class="login-title">选择账号类型</span>
+              <span class="panel-title">选择账号类型</span>
               <div class="login-actions"><button type="button" class="btn sm ghost">关闭</button></div>
             </div>
             <div class="type-picker-body" style="grid-template-columns:repeat(2,1fr);">
@@ -1592,7 +1642,7 @@
         <div class="login-backdrop">
           <div class="login-modal">
             <div class="login-head">
-              <span class="login-title">打开自定义网站</span>
+              <span class="panel-title">打开自定义网站</span>
               <div class="login-actions"><button type="button" class="btn sm ghost">关闭</button></div>
             </div>
             <div class="login-verify-row">
@@ -1618,8 +1668,9 @@
         <div class="cap">_Component26.jsx · 出新图（20,097 B / 5 按钮）· <code>.nip-wrap</code>（同第⑤屏）</div>
         <div class="dv-lovart-strip" style="border:1px solid var(--color-border); border-radius:var(--radius-md);">
           <div class="dvl-head">
-            <div class="dvl-title">出新图<span class="dvl-count">3</span><span class="dvl-live"></span></div>
+            <div class="dvl-title">出新图<span class="dvl-count">3</span><span class="dvl-live"></span><span class="nip-agg-head">聚合 3 个账号</span></div>
             <div class="dvl-status"><span class="dvl-spin"></span><span class="dvl-status-text">待机</span></div>
+            <button type="button" class="btn sm">⟳ 立即抓取</button>
           </div>
           <div class="dvl-body">
             <div class="dvl-thumbs">
@@ -1641,7 +1692,7 @@
         <div class="login-backdrop">
           <div class="login-modal">
             <div class="login-head">
-              <span class="login-title">Lovart 画廊 · Lovart02</span>
+              <span class="panel-title">Lovart 画廊 · Lovart02</span>
               <div class="login-actions"><button type="button" class="btn sm ghost">关闭</button></div>
             </div>
             <div class="dvl-thumbs" style="padding:12px;">
@@ -1666,7 +1717,7 @@
         <div class="login-backdrop">
           <div class="login-modal">
             <div class="login-head">
-              <span class="login-title">导出已登录账号</span>
+              <span class="panel-title">导出已登录账号</span>
               <div class="login-actions"><button type="button" class="btn sm ghost">关闭</button></div>
             </div>
             <div class="login-verify-row" style="flex-direction:column; align-items:stretch;">

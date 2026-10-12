@@ -23,15 +23,14 @@
 
 import { useMemo } from 'react';
 import { useStore } from '@/state';
-import { NodeShell, NodeStatusDot } from './NodeShell';
+import { NodeShell } from './NodeShell';
 import { AccountPicker } from '@/ui/common/AccountPicker';
 import { collectAccountNodeInputs } from '@/core/rules/accountNode';
-import { ACCOUNT_NODE_TEXT, REF_TEXT } from '@/constants/text';
+import { ACCOUNT_NODE_TEXT } from '@/constants/text';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
 
 export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
-  const account = useStore((s) => s.accounts.find((a) => a.id === data.accountId));
   const accounts = useStore((s) => s.accounts);
   const groups = useStore((s) => s.groups);
   const nodes = useStore((s) => s.nodes);
@@ -53,16 +52,37 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
   const status = sendState?.status ?? 'idle';
 
   return (
+    /*
+     * ── 骨架（**逐行对源** `OL.jsx:408-525`）──
+     *   `.node-head`：`dot.account-dot` · `发送节点` · `timer-inline` · **`auto-send-toggle`（滑块）**
+     *   `.account-body`：
+     *     `.account-top-row` → `[账号下拉] [发送按钮]`
+     *     → `.account-feedback`（`msg` + 失败时的关闭钮）
+     *     → `.account-summary`（有输入时：`已链接 N 张素材 · N 个文本框`）
+     *
+     * ⚠️ **2026-10-12 清掉三处"本工程新增"**（源里都没有，且都在卡片上显眼）：
+     *   ① 头部 `meta` 的账号类型（未绑号时印一个 `—`）；
+     *   ② `.account-preview`「将填入 …」整块；
+     *   ③ `.account-pending` 那句开发说明（现在只留在按钮 `title` 里）。
+     */
     <NodeShell
+      type="account"
       title={ACCOUNT_NODE_TEXT.title}
-      meta={account?.type ?? '—'}
+      /* 中槽 = 自动发送开关（原 418-427：一个滑块 + `title`，**无可见文字**，紧跟标题之后） */
+      meta={
+        <label className={styles.autoSend} title={ACCOUNT_NODE_TEXT.autoSendTitle}>
+          <input
+            type="checkbox"
+            checked={!!data.autoSend}
+            onChange={(e) => patchNodeData(id, { autoSend: e.target.checked })}
+          />
+        </label>
+      }
       selected={selected}
     >
       <div className={styles.accountBody}>
-        {/* ① 绑号（原 `OL.jsx:434` 的 `foot-btn-account`） */}
-        <div className={styles.accountRow}>
-          {/* 登录态圆点（原 `.gp-acc-dot` 同族） */}
-          <NodeStatusDot ok={!!account} />
+        <div className={styles.accountTopRow}>
+          {/* 绑号（原 `OL.jsx:434` 的 `foot-btn-account`）—— 绑定模式，落值回调的是**账号 id** */}
           <AccountPicker
             value={data.accountId ?? ''}
             channel="doubao"
@@ -73,76 +93,43 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
             onChange={() => undefined}
             onBind={(accountId) => patchNodeData(id, { accountId })}
           />
-          {/* ② 自动发送开关（原 418-427：一个滑块 + `title`，**无可见文字**） */}
-          <label className={styles.autoSend} title={ACCOUNT_NODE_TEXT.autoSendTitle}>
-            <input
-              type="checkbox"
-              checked={!!data.autoSend}
-              onChange={(e) => patchNodeData(id, { autoSend: e.target.checked })}
-            />
-          </label>
+          {/*
+            「发送」（原 `OL.jsx:498-507`）—— 标签照抄源版（`↑ 发送` / `⟳ 发送中…`）。
+            ⛔ **恒禁用** —— 「填入」通道未接通（见文件头）；`title` 同时给出源版语义与本工程原因。
+          */}
+          <button
+            type="button"
+            className={styles.accountSend}
+            disabled
+            title={`${ACCOUNT_NODE_TEXT.sendTitle}\n${ACCOUNT_NODE_TEXT.channelPending}`}
+          >
+            {status === 'sending' ? (
+              <>
+                <span className={styles.sendSpinner}>⟳</span>
+                {ACCOUNT_NODE_TEXT.sendBusy}
+              </>
+            ) : (
+              <>
+                <span className={styles.sendIcon}>↑</span>
+                {ACCOUNT_NODE_TEXT.send}
+              </>
+            )}
+          </button>
         </div>
 
-        {/*
-          ③ 输入预览（**本工程新增**：源版只在按钮上给一行状态，看不到"将要填入什么"）
-          ⚠️ 它同时是"这个节点到底在做什么"的唯一可视解释 ⇒ 数量、来源、参数都摆出来
-        */}
-        <div className={styles.accountPreview}>
-          <div className={styles.accountPreviewTitle}>{ACCOUNT_NODE_TEXT.previewTitle}</div>
-          {inputs.total === 0 ? (
-            <div className={styles.accountEmpty}>{ACCOUNT_NODE_TEXT.noInput}</div>
-          ) : (
-            <>
-              {inputs.texts.map((t) => (
-                <div key={t.id} className={styles.accountItem} title={t.text}>
-                  {`${REF_TEXT.previewSep}文本 · ${t.text || '（空）'}`}
-                </div>
-              ))}
-              {inputs.materials.map((m) => (
-                <div
-                  key={m.id}
-                  className={m.dataUrl ? styles.refOk : styles.refMissing}
-                  title={m.dataUrl ? m.label : REF_TEXT.previewMissing}
-                >
-                  {`参考图${m.refIndex}${REF_TEXT.previewSep}${m.dataUrl ? m.label : REF_TEXT.previewMissing}`}
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-
-        {/* ④ 状态行（原 `OL.jsx:511` 的 `account-feedback`） */}
-        {sendState?.msg && (
+        {/* 状态行（原 `OL.jsx:509-520`）—— 只在非 `idle` 时出现 */}
+        {sendState?.msg && status !== 'idle' && (
           <div className={`${styles.accountFeedback} ${styles[`st_${status}`] ?? ''}`}>
             {sendState.msg}
           </div>
         )}
 
-        {/*
-          ⑤ 动作按钮（原 `OL.jsx:498-501`）
-          ⛔ **禁用** —— 「填入」通道未接通（见文件头）。`title` **同时**给出源版语义与本工程原因：
-             不写源版那句会让用户以为按下去就是"填入"，写上去又不说明就是撒谎。
-        */}
-        <button
-          type="button"
-          className={styles.accountSend}
-          /*
-           * ⚠️ 与源版的一处偏离：源版**只在 `status === 'sending'` 时禁用**（`OL.jsx:501`），
-           *   本工程因为「填入」通道未接通（见文件头）⇒ **恒禁用**。
-           * ⚠️ 标签照抄源版（就是「发送」，语义由 `title` 补）——
-           *   源版自己就是"标签写发送、title 写不触发发送"，不擅自改文案。
-           */
-          disabled
-          title={`${ACCOUNT_NODE_TEXT.sendTitle}\n${ACCOUNT_NODE_TEXT.channelPending}`}
-        >
-          {status === 'sending' ? ACCOUNT_NODE_TEXT.sendBusy : ACCOUNT_NODE_TEXT.send}
-        </button>
-
-        {/*
-          ⚠️ 未接通的原因**必须可见** —— 只写在 `title` 里＝要悬停才知道，
-             而"按钮为什么点不动"是用户第一眼就会问的事（判据 B4 的落实）
-        */}
-        <div className={styles.accountPending}>{ACCOUNT_NODE_TEXT.channelPending}</div>
+        {/* 汇总行（原 `OL.jsx:521-523`）—— **有输入才出现** */}
+        {inputs.total > 0 && (
+          <div className={styles.accountSummary}>
+            {ACCOUNT_NODE_TEXT.linkedSummary(inputs.materials.length, inputs.texts.length)}
+          </div>
+        )}
       </div>
     </NodeShell>
   );

@@ -7,45 +7,24 @@
  */
 
 .panel {
+  composes: panel from '../common/shared.module.css';
+  /* 真实差异：定位（视口坐标）+ 定宽 + 紧凑字号 + 强边 */
   position: fixed;
   z-index: var(--z-modal);
   width: 232px;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lg);
   font-size: var(--font-size-xs);
+  border-color: var(--color-border-strong);
 }
-
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.title {
-  color: var(--color-text-strong);
-  font-weight: 600;
-}
-
-.close {
-  padding: 0 var(--space-half);
-  border: none;
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
-}
+
+
+
 
 .body {
+  composes: panelBody from '../common/shared.module.css';
+  /* 仅追加**真源未设**的属性（无冲突）*/
   display: flex;
   flex-direction: column;
   gap: var(--space-half);
-  padding: var(--space-2);
 }
 
 .label {

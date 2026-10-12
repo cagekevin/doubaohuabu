@@ -38,6 +38,8 @@ import { maskCellSize } from '@/core/rules/facemask';
 import { BRUSH_DEFAULT_DIAMETER, BRUSH_UNDO_LIMIT, brushPatchRect, pushUndoSnapshot } from '@/core/rules/maskBrush';
 import { createCanvas, createTmpState, drawMaskEffect, type TmpState } from '@/lib/image';
 import { clamp } from '@/lib/math';
+// ★ 浮层壳走**共享件**（遮罩 / 卡片 / 头三槽 / 关闭钮 / 正文 / 脚只有一种）
+import { PanelShell } from '@/ui/common/PanelShell';
 import styles from './ImageEditor.module.css';
 
 /** 脸框最小边（源 `El` = 16，`shared.js:42649`） */
@@ -115,11 +117,28 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
   const spaceRef = useRef(false); // 原 `De`
   const tmpStateRef = useRef<TmpState>(createTmpState()); // ★ 编辑器共享的马赛克/pattern 缓存
 
+  /** 让图片适应视口（原 `te`，`G3.jsx:122-137`）—— 声明在加载 effect 之前（effect 内引用不可前向） */
+  const fitView = useCallback((w: number, h: number) => {
+    const vp = viewportRef.current;
+    if (!vp || !w || !h) return;
+    const rect = vp.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const z = Math.min(rect.width / w, rect.height / h) * 0.92;
+    setZoom(z);
+    setOffset({ x: (rect.width - w * z) / 2, y: (rect.height - h * z) / 2 });
+  }, []);
+
+  // 换图 ⇒ 立即回到加载态（渲染期调整，不用 effect —— react-hooks/set-state-in-effect）
+  const [prevImgRef, setPrevImgRef] = useState(imgRef);
+  if (prevImgRef !== imgRef) {
+    setPrevImgRef(imgRef);
+    setLoaded(false);
+    setError('');
+  }
+
   // ── 加载原图（原 `G3.jsx:50-104` 的 effect）──
   useEffect(() => {
     let cancelled = false;
-    setLoaded(false);
-    setError('');
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -157,19 +176,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fitView 是稳定回调，无需入依赖
-  }, [imgRef]);
-
-  /** 让图片适应视口（原 `te`，`G3.jsx:122-137`） */
-  const fitView = useCallback((w: number, h: number) => {
-    const vp = viewportRef.current;
-    if (!vp || !w || !h) return;
-    const rect = vp.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const z = Math.min(rect.width / w, rect.height / h) * 0.92;
-    setZoom(z);
-    setOffset({ x: (rect.width - w * z) / 2, y: (rect.height - h * z) / 2 });
-  }, []);
+  }, [imgRef, fitView]);
 
   /** 客户区坐标 → 图片坐标（原 `ut`，`G3.jsx:275-288`） */
   const toImagePos = useCallback(
@@ -474,12 +481,10 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
     }
   }, []);
 
-  // ── 进入裁剪模式时初始化裁剪框（原 `G3.jsx:600-624` 的 effect）──
-  useEffect(() => {
-    if (mode !== 'crop' || !loaded || cropRect) return;
-    const ratio = cropRatioOf(CROP_RATIO_PRESETS, ratioValue);
-    setCropRect(initialCropRect(size, ratio));
-  }, [mode, loaded, cropRect, size, ratioValue]);
+  // ── 进入裁剪模式 / 重置框后初始化裁剪框（原 `G3.jsx:600-624`）—— 渲染期调整，不用 effect ──
+  if (mode === 'crop' && loaded && !cropRect) {
+    setCropRect(initialCropRect(size, cropRatioOf(CROP_RATIO_PRESETS, ratioValue)));
+  }
 
   // ── 应用裁剪（原 `Nt`，`G3.jsx:625-666`）──
   const applyCropNow = useCallback(() => {
@@ -563,7 +568,8 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
         spaceRef.current = true;
         e.preventDefault();
       }
-      if (e.key === 'Escape') onClose();
+      // ⚠️ **不在这里处理 `Esc`** —— 已随 `PanelShell`（`ui/common/` 是 `Escape` 唯一落点），
+      //    且它的监听也是 window 级 ⇒ 焦点在 canvas 时同样生效（本组件原先自己挂一份的原因）
       if ((e.key === 'Delete' || e.key === 'Backspace') && activeFace >= 0 && mode === 'mask') {
         const tag = (e.target as HTMLElement | null)?.tagName ?? '';
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -614,35 +620,74 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
   const noticeLine = notice || error || detecting;
 
   return (
-    <div className={styles.overlayRoot}>
-      <div className={styles.backdrop} onMouseDown={onClose} />
-      <div className={styles.panel} onMouseDown={(e) => e.stopPropagation()}>
-        <div className={styles.head}>
-          <div className={styles.title}>
-            {IMAGE_EDITOR_TEXT.title}
-            {label ? <span className={styles.titleSub}>{IMAGE_EDITOR_TEXT.titleSub(label)}</span> : null}
-          </div>
-          <div className={styles.tabs}>
-            <button
-              type="button"
-              className={`${styles.tab}${mode === 'mask' ? ` ${styles.tabActive}` : ''}`}
-              onClick={() => setMode('mask')}
-            >
-              {IMAGE_EDITOR_TEXT.tabMask}
-            </button>
-            <button
-              type="button"
-              className={`${styles.tab}${mode === 'crop' ? ` ${styles.tabActive}` : ''}`}
-              onClick={() => setMode('crop')}
-            >
-              {IMAGE_EDITOR_TEXT.tabCrop}
-            </button>
-          </div>
-          <button type="button" className={styles.close} onClick={onClose} title={IMAGE_EDITOR_TEXT.close}>
-            ✕
+    /*
+     * ★★ **2026-10-12 收口到共享壳**（此前它自造了一套 `.overlayRoot` + `.scrim` + `.panelHead`
+     *   + 自绘 `✕` —— 正是 `PanelShell` 要消灭的那份重复）。
+     *   ⇒ 遮罩 / 卡片 / 头三槽 / 关闭钮 / 正文 / 脚**全部**归 `ui/common/PanelShell`：
+     *     · 中槽 = 页签（`一键遮脸 / 裁剪`）· 脚 = 提示 + 缩放 + 动作 · `✕` = 真源那颗。
+     *   ⚠️ `Esc` 也随之归 `PanelShell`（`ui/common/` 是 `Escape` 唯一落点）——
+     *      本组件自己的 window 监听**不再处理 Esc**（见下面的键盘 effect）。
+     */
+    <PanelShell
+      overlay
+      onClose={onClose}
+      closeLabel={IMAGE_EDITOR_TEXT.close}
+      className={styles.panel}
+      bodyClassName={styles.body}
+      testId="image-editor"
+      title={
+        <>
+          {IMAGE_EDITOR_TEXT.title}
+          {label ? <span className={styles.titleSub}>{IMAGE_EDITOR_TEXT.titleSub(label)}</span> : null}
+        </>
+      }
+      meta={
+        <div className={styles.tabs}>
+          <button
+            type="button"
+            className={`${styles.tab}${mode === 'mask' ? ` ${styles.tabActive}` : ''}`}
+            onClick={() => setMode('mask')}
+          >
+            {IMAGE_EDITOR_TEXT.tabMask}
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab}${mode === 'crop' ? ` ${styles.tabActive}` : ''}`}
+            onClick={() => setMode('crop')}
+          >
+            {IMAGE_EDITOR_TEXT.tabCrop}
           </button>
         </div>
-
+      }
+      footer={
+        <>
+          <div className={styles.hint}>{loaded ? `${hint}  ·  ${size.w}×${size.h}` : ''}</div>
+          <div className={styles.zoom}>
+            <button type="button" className={styles.zoomBtn} onClick={() => setZoom((z) => clamp(z / 1.15, ZOOM_MIN, ZOOM_MAX))}>
+              −
+            </button>
+            <span className={styles.zoomVal}>{zoomPercent}%</span>
+            <button type="button" className={styles.zoomBtn} onClick={() => setZoom((z) => clamp(z * 1.15, ZOOM_MIN, ZOOM_MAX))}>
+              +
+            </button>
+            <button type="button" className={`${styles.zoomBtn} ${styles.zoomFit}`} onClick={() => fitView(size.w, size.h)}>
+              {IMAGE_EDITOR_TEXT.fit}
+            </button>
+          </div>
+          <div className={styles.actions}>
+            <button type="button" className={styles.btn} onClick={onClose}>
+              {IMAGE_EDITOR_TEXT.cancel}
+            </button>
+            <button type="button" className={styles.btn} onClick={() => void copy()} disabled={!loaded}>
+              {IMAGE_EDITOR_TEXT.copy}
+            </button>
+            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={save} disabled={!loaded}>
+              {IMAGE_EDITOR_TEXT.save}
+            </button>
+          </div>
+        </>
+      }
+    >
         <div className={styles.toolbar}>
           {mode === 'mask' ? (
             <>
@@ -828,34 +873,6 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
             </div>
           ) : null}
         </div>
-
-        <div className={styles.foot}>
-          <div className={styles.hint}>{loaded ? `${hint}  ·  ${size.w}×${size.h}` : ''}</div>
-          <div className={styles.zoom}>
-            <button type="button" className={styles.zoomBtn} onClick={() => setZoom((z) => clamp(z / 1.15, ZOOM_MIN, ZOOM_MAX))}>
-              −
-            </button>
-            <span className={styles.zoomVal}>{zoomPercent}%</span>
-            <button type="button" className={styles.zoomBtn} onClick={() => setZoom((z) => clamp(z * 1.15, ZOOM_MIN, ZOOM_MAX))}>
-              +
-            </button>
-            <button type="button" className={`${styles.zoomBtn} ${styles.zoomFit}`} onClick={() => fitView(size.w, size.h)}>
-              {IMAGE_EDITOR_TEXT.fit}
-            </button>
-          </div>
-          <div className={styles.actions}>
-            <button type="button" className={styles.btn} onClick={onClose}>
-              {IMAGE_EDITOR_TEXT.cancel}
-            </button>
-            <button type="button" className={styles.btn} onClick={() => void copy()} disabled={!loaded}>
-              {IMAGE_EDITOR_TEXT.copy}
-            </button>
-            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={save} disabled={!loaded}>
-              {IMAGE_EDITOR_TEXT.save}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </PanelShell>
   );
 }

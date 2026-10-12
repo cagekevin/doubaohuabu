@@ -1,0 +1,166 @@
+/**
+ * 自绘连接端口的视觉层（`CustomHandle`）
+ *
+ * ⚠️ 端口几何（6 / 32 / 18px 等）是**端口自身的形状**，不是间距刻度 —— 逐字对源保留。
+ * ⚠️ 颜色一律走 token（`--p-white-ch` 是白色通道，避免硬编码 `rgba(255,255,255,…)`）。
+ * ⚠️ `connectingto` / `connectingfrom` 是 ReactFlow 挂在 `Handle` 上的**全局类名** ⇒ 用 `:global`。
+ */
+
+.wrap {
+  position: absolute;
+  /* 端口要盖在节点内容之上（与 `--z-overlay` 同档：它是节点内的浮层） */
+  z-index: var(--z-overlay);
+  cursor: crosshair;
+  pointer-events: auto;
+  transform-origin: center center;
+  transition: opacity 160ms ease;
+  --cust-shift-x: 0px;
+  --cust-shift-y: 0px;
+  --cust-anchor-x: 50%;
+}
+
+.dot,
+.ring,
+.plus {
+  position: absolute;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+/* 常驻小圆点（未悬停时的可见形态） */
+.dot {
+  top: 50%;
+  left: var(--cust-anchor-x);
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-faint);
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  transition:
+    opacity 180ms ease,
+    transform 220ms ease;
+}
+
+/* 悬停外环 */
+.ring {
+  top: 50%;
+  left: var(--cust-anchor-x);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 2px solid rgb(var(--p-white-ch) / 0.7);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.6);
+  transition:
+    opacity 220ms ease,
+    transform 280ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+/* 悬停十字（跟随鼠标轻微位移） */
+.plus {
+  top: 50%;
+  left: var(--cust-anchor-x);
+  width: 18px;
+  height: 18px;
+  transform: translate(calc(-50% + var(--cust-shift-x)), calc(-50% + var(--cust-shift-y))) scale(0.3);
+  opacity: 0;
+  color: var(--color-text-on-brand);
+  transition:
+    opacity 200ms ease,
+    transform 220ms ease;
+}
+
+.plus::before,
+.plus::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+  border-radius: var(--radius-xs);
+  top: 50%;
+  left: 50%;
+}
+
+.plus::before {
+  width: 14px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+}
+
+.plus::after {
+  width: 2px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+}
+
+.wrap:hover .dot {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.4);
+}
+
+.wrap:hover .ring {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  border-color: rgb(var(--p-white-ch) / 0.85);
+  box-shadow:
+    0 0 16px rgb(var(--p-white-ch) / 0.35),
+    0 0 36px rgb(var(--p-white-ch) / 0.15);
+  background: rgb(var(--p-white-ch) / 0.08);
+}
+
+.wrap:hover .plus {
+  opacity: 1;
+  transform: translate(calc(-50% + var(--cust-shift-x)), calc(-50% + var(--cust-shift-y))) scale(1);
+}
+
+/* 正在拉线 / 按下：环再放大一档 */
+.wrap:active .ring,
+.wrap :global(.react-flow__handle.connectingto) ~ .ring,
+.wrap :global(.react-flow__handle.connectingfrom) ~ .ring {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.15);
+  border-color: var(--color-text-on-brand);
+  box-shadow:
+    0 0 22px rgb(var(--p-white-ch) / 0.6),
+    0 0 48px rgb(var(--p-white-ch) / 0.25);
+}
+
+.wrap :global(.react-flow__handle.connectingto) ~ .plus,
+.wrap :global(.react-flow__handle.connectingfrom) ~ .plus {
+  opacity: 1;
+  transform: translate(calc(-50% + var(--cust-shift-x)), calc(-50% + var(--cust-shift-y))) scale(1.1);
+}
+
+.wrap :global(.react-flow__handle.connectingto) ~ .dot,
+.wrap :global(.react-flow__handle.connectingfrom) ~ .dot {
+  opacity: 0;
+}
+
+/* 小号变体（文本 / 素材类节点） */
+.isSmall .dot {
+  width: 8px;
+  height: 8px;
+}
+
+.isSmall .plus {
+  width: 14px;
+  height: 14px;
+}
+
+.isSmall .plus::before {
+  width: 12px;
+  height: 2px;
+}
+
+.isSmall .plus::after {
+  width: 2px;
+  height: 12px;
+}
+
+/* 真正的 Handle：铺满外壳、完全透明（外观全由上三层负责） */
+.handle {
+  border: 0;
+  background: transparent;
+}

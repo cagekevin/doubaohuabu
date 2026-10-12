@@ -13,7 +13,6 @@ import { ErrorBanner } from '@/ui/common/ErrorBanner';
 import { ToastHost } from '@/ui/common/ToastHost';
 import { LibraryPanel } from '@/ui/panels/LibraryPanel';
 import { AccountPanel } from '@/ui/panels/AccountPanel';
-import { BatchSendPanel } from '@/ui/panels/BatchSendPanel';
 import { SendQueuePanel } from '@/ui/panels/SendQueuePanel';
 import { ApiSettings } from '@/ui/panels/ApiSettings';
 import { TopBar } from './TopBar';
@@ -47,6 +46,13 @@ export function AppShell({ canvas }: AppShellProps) {
    * ⚠️ 住 `AppShell` 而不是 store：源就是宿主的 `useState`（`docs/16` §2.9：面板开合 ⇒ 组件局部）。
    */
   const [doubaoViewVisible, setDoubaoViewVisible] = useState(false);
+  /**
+   * 左右栏收起态 —— ★ **组件局部 state**（源 `_Component48.jsx:56` 的 `const [u, d] = useState(false)` /
+   * `const [f, p] = useState(false)`，两个都住在宿主的 `useState` 里，**不入 store**）。
+   * 依据：`docs/mockup/README.md` §3.2「两栏均可收起：`.side.collapsed` → 宽 0；`.side-toggle` 是 22×52 骑马钮」。
+   */
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   const accounts = useStore((s) => s.accounts);
   const activeAccountId = useStore((s) => s.activeAccountId);
@@ -82,20 +88,35 @@ export function AppShell({ canvas }: AppShellProps) {
           ★ 2026-10-10 起**不再是空壳** —— 之前它只是一个带 aria-label 的 `<aside />`：
             没有账号界面 ⇒ 加不了账号 ⇒ 选号池永远为空 ⇒ 生成必然报「未配置账号」。
         */}
-        <aside className={styles.side} aria-label={SHELL_TEXT.accountsAria}>
-          <AccountPanel />
-          {/* ★ 「API 服务」入口（原 `_Component48.jsx:155-159` 的 `.side-api-btn`） */}
-          <div className={styles.sideApiCol}>
-            <button
-              type="button"
-              className={styles.sideApiBtn}
-              title={API_SETTINGS_TEXT.entryTitle}
-              onClick={() => setApiOpen(true)}
-            >
-              <span className={styles.sideApiIcon}>⚡</span>
-              {API_SETTINGS_TEXT.entryLabel}
-            </button>
+        <aside
+          className={`${styles.side}${leftCollapsed ? ` ${styles.sideCollapsed}` : ''}`}
+          aria-label={SHELL_TEXT.accountsAria}
+        >
+          <div className={styles.sideClip}>
+            <AccountPanel />
+            {/* ★ 「API 服务」入口（原 `_Component48.jsx:155-159` 的 `.side-api-btn`） */}
+            <div className={styles.sideApiCol}>
+              <button
+                type="button"
+                className={styles.sideApiBtn}
+                title={API_SETTINGS_TEXT.entryTitle}
+                onClick={() => setApiOpen(true)}
+              >
+                <span className={styles.sideApiIcon}>⚡</span>
+                {API_SETTINGS_TEXT.entryLabel}
+              </button>
+            </div>
           </div>
+          {/* ★ 折叠钮（原 `_Component48.jsx:163-169` 的 `.side-toggle`）—— 22×52 骑马钮 */}
+          <button
+            type="button"
+            className={styles.sideToggle}
+            title={leftCollapsed ? SHELL_TEXT.expandAccounts : SHELL_TEXT.collapseAccounts}
+            aria-label={leftCollapsed ? SHELL_TEXT.expandAccounts : SHELL_TEXT.collapseAccounts}
+            onClick={() => setLeftCollapsed((v) => !v)}
+          >
+            {leftCollapsed ? '»' : '«'}
+          </button>
         </aside>
 
         <div className={styles.centerStage}>
@@ -104,8 +125,6 @@ export function AppShell({ canvas }: AppShellProps) {
           {/* 画布级错误边界（docs/11 §9.9 的第二级） */}
           <ErrorBoundary area="画布">
             {canvas}
-            {/* 批量发送面板（选中 ≥2 个文本框/文生视频节点时出现） */}
-            <BatchSendPanel />
             {/* 发送队列面板（有队列项或折叠态时常驻；可拖动） */}
             <SendQueuePanel />
           </ErrorBoundary>
@@ -122,9 +141,23 @@ export function AppShell({ canvas }: AppShellProps) {
           />
         </div>
 
-        {/* 右栏：资源库 */}
-        <aside className={`${styles.side} ${styles.sideRight}`} aria-label={SHELL_TEXT.libraryAria}>
-          <LibraryPanel />
+        {/* 右栏：资源库（原 `_Component48.jsx:181-194`）—— 折叠钮在 `.side-clip` **之前** */}
+        <aside
+          className={`${styles.side} ${styles.sideRight}${rightCollapsed ? ` ${styles.sideCollapsed}` : ''}`}
+          aria-label={SHELL_TEXT.libraryAria}
+        >
+          <button
+            type="button"
+            className={styles.sideToggle}
+            title={rightCollapsed ? SHELL_TEXT.expandLibrary : SHELL_TEXT.collapseLibrary}
+            aria-label={rightCollapsed ? SHELL_TEXT.expandLibrary : SHELL_TEXT.collapseLibrary}
+            onClick={() => setRightCollapsed((v) => !v)}
+          >
+            {rightCollapsed ? '«' : '»'}
+          </button>
+          <div className={styles.sideClip}>
+            <LibraryPanel />
+          </div>
         </aside>
       </div>
 

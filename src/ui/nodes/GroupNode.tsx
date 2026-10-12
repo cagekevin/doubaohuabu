@@ -18,10 +18,10 @@
  *    差异仅在于"拖内容区也能移动"，不影响语义。
  */
 
-import { NodeResizer } from '@xyflow/react';
 import { useStore } from '@/state';
 import { GROUP_MIN_H, GROUP_MIN_W } from '@/core/rules/group';
 import { GROUP_NODE_TEXT } from '@/constants/text';
+import { NodeShell } from './NodeShell';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
 
@@ -31,11 +31,9 @@ export function GroupNode({ id, data, selected }: RFNodeProps<'group'>) {
   const ungroupNodes = useStore((s) => s.ungroupNodes);
 
   return (
-    <div className={`${styles.group} ${selected ? styles.groupSelected : ''}`} data-testid="group-node">
-      {/* 原 19：`minWidth={200} minHeight={140}` + **只在选中时可见** */}
-      <NodeResizer minWidth={GROUP_MIN_W} minHeight={GROUP_MIN_H} isVisible={!!selected} />
-
-      <div className={styles.groupHead} title={GROUP_NODE_TEXT.headTitle}>
+    <NodeShell
+      type="group"
+      dot={
         <span className={styles.groupIcon} aria-hidden="true">
           {/* 原 22-24 的文件夹图标（`viewBox 0 0 24 24`，`stroke` 描边不填充） */}
           <svg width="12" height="12" viewBox="0 0 24 24">
@@ -48,10 +46,10 @@ export function GroupNode({ id, data, selected }: RFNodeProps<'group'>) {
             />
           </svg>
         </span>
-        <span className={styles.groupName}>{data.label || GROUP_NODE_TEXT.defaultLabel}</span>
-        <span className={styles.groupCount} title={GROUP_NODE_TEXT.countTitle}>
-          {count}
-        </span>
+      }
+      title={data.label || GROUP_NODE_TEXT.defaultLabel}
+      meta={<span className={styles.nodeCount} title={GROUP_NODE_TEXT.countTitle}>{count}</span>}
+      actions={
         <button
           type="button"
           // `nodrag nopan` 是 ReactFlow 的约定类名：没有它，点按钮会顺带拖动/平移
@@ -65,7 +63,12 @@ export function GroupNode({ id, data, selected }: RFNodeProps<'group'>) {
         >
           {GROUP_NODE_TEXT.ungroup}
         </button>
-      </div>
-    </div>
+      }
+      selected={selected}
+      minWidth={GROUP_MIN_W}
+      minHeight={GROUP_MIN_H}
+      cardTitle={GROUP_NODE_TEXT.headTitle}
+      testId="group-node"
+    />
   );
 }

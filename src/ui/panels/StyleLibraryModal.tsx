@@ -25,6 +25,7 @@ import { STYLE_LIB_TEXT } from '@/constants/text';
 import { normalizeStyleName, normalizeStylePrefix, styleCoverGradient, UNNAMED_STYLE } from '@/core/rules/style';
 import type { StylePreset } from '@/constants/stylePresets';
 import styles from './StyleLibraryModal.module.css';
+import shared from '@/ui/common/shared.module.css';
 
 /** 编辑页草稿（原 `p`：`{name, prefix, cover}`） */
 interface Draft {
@@ -213,7 +214,7 @@ export function StyleLibraryModal({ selectedIds, onToggle, onUseNone, onClose }:
 
       <div className={styles.gridWrap}>
         {list.length === 0 ? (
-          <div className={styles.empty}>{STYLE_LIB_TEXT.empty}</div>
+          <div className={shared.empty}>{STYLE_LIB_TEXT.empty}</div>
         ) : (
           <div className={styles.grid}>
             {list.map((s) => {

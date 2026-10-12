@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { planLibraryRename, planLibraryReplace } from '../libraryEdit';
+import { countLibRefs, planLibraryRename, planLibraryReplace, sortLibrary } from '../libraryEdit';
 import type { MaterialNodeLike } from '../materialRename';
 
 const libItem = (id: string, dataUrl: string, extra: Record<string, unknown> = {}) => ({
@@ -24,6 +24,57 @@ const matNode = (id: string, data: Record<string, unknown> = {}): MaterialNodeLi
 });
 
 const textNode = (id: string): MaterialNodeLike => ({ id, type: 'text', data: { text: '' } });
+
+describe('sortLibrary（原 `RT.jsx:29-37`）', () => {
+  it('★ 收藏在前，两组各自保持原序（`filter` 稳定）', () => {
+    const items = [
+      libItem('a', 'u-a'),
+      libItem('b', 'u-b', { favorite: true }),
+      libItem('c', 'u-c'),
+      libItem('d', 'u-d', { favorite: true }),
+    ];
+    expect(sortLibrary(items).map((it) => it.id)).toEqual(['b', 'd', 'a', 'c']);
+  });
+
+  it('★ 不改原数组（返回新数组，元素同一引用）', () => {
+    const items = [libItem('a', 'u-a'), libItem('b', 'u-b', { favorite: true })];
+    const out = sortLibrary(items);
+    expect(items.map((it) => it.id)).toEqual(['a', 'b']);
+    expect(out[0]).toBe(items[1]);
+  });
+});
+
+describe('countLibRefs（原 `getLibraryRefCount` 27733-27754）', () => {
+  const library = [libItem('m1', 'img://a.png'), libItem('m2', 'img://b.png')];
+
+  it('★ 库里没有这个 id ⇒ 0', () => {
+    expect(countLibRefs(library, [matNode('n1', { libId: 'nope' })], 'nope')).toBe(0);
+  });
+
+  it('★ libId 命中记一次，且**不重复计**（源 `continue`）', () => {
+    const nodes = [matNode('n1', { libId: 'm1', dataUrl: 'img://a.png' })];
+    expect(countLibRefs(library, nodes, 'm1')).toBe(1);
+  });
+
+  it('★ 没有 libId 但 dataUrl 与条目相同也算', () => {
+    const nodes = [matNode('n1', { dataUrl: 'img://a.png' })];
+    expect(countLibRefs(library, nodes, 'm1')).toBe(1);
+  });
+
+  it('★ 只数素材节点（视频 / 生成节点不算）', () => {
+    const nodes: MaterialNodeLike[] = [
+      { id: 'v1', type: 'video', data: { libId: 'm1', dataUrl: 'img://a.png' } },
+      { id: 'g1', type: 'genvideo', data: { libId: 'm1' } },
+      matNode('n1', { libId: 'm1' }),
+    ];
+    expect(countLibRefs(library, nodes, 'm1')).toBe(1);
+  });
+
+  it('★ 没有 data 的节点跳过（源 `!!a.data`）', () => {
+    const nodes: MaterialNodeLike[] = [{ id: 'n1', type: 'material' }];
+    expect(countLibRefs(library, nodes, 'm1')).toBe(0);
+  });
+});
 
 describe('planLibraryRename（原 `renameLibrary` 27515-27548）', () => {
   const library = [libItem('m1', 'img://a.png'), libItem('m2', 'img://b.png')];

@@ -42,7 +42,7 @@
 }
 /* 浮层壳走真源 `overlay`（只含底/边框/圆角/阴影）；定位与尺寸留在这里 */
 .menu {
-  composes: overlay from '../common/shared.module.css';
+  composes: panel from '../common/shared.module.css';
   position: absolute;
   top: calc(100% + var(--space-1));
   left: 0;

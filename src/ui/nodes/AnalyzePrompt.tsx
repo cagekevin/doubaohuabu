@@ -21,13 +21,16 @@
  * ⚠️ 与源版一致：面板**只在已有 `analyzePrompt` 且已展开时**才渲染。
  */
 
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
+// ★ 浮层壳走**共享件**（头三槽 / ✕ / 正文只有一种）—— 不带 `overlay`：它是**节点锚定浮层**
+import { PanelShell } from '@/ui/common/PanelShell';
 import { useAnalyze, useHostOps, useStore } from '@/state';
 import type { AnalyzePromptState } from '@/stable/model/node';
 // ⚠️ 纯函数放 `core/rules`（判据 E1：`ui/` 下不得有测试 ⇒ 留在组件里就永远没有单测）
 import { formatJsonPrompt } from '@/core/rules/analyzePrompt';
 import { ANALYZE_UI_TEXT } from '@/constants/text';
 import styles from './AnalyzePrompt.module.css';
+import shared from '@/ui/common/shared.module.css';
 
 export type AnalyzeTab = 'zh' | 'en' | 'json';
 
@@ -39,9 +42,31 @@ export interface AnalyzePromptProps {
   state: AnalyzePromptState | null;
   /** 是否显示浮动按钮（原 256 的 `u && !l.generating`） */
   showButton: boolean;
+  /**
+   * ★ **同一条浮动动作条里排在前面的按钮**（如素材 / 文生图节点的「编辑图片」）
+   *
+   * 依据：源里两个按钮**同住一个 `.mat-float-actions`**
+   *   （`fL.jsx:162-192` / `ZL.jsx:255-286`：`mat-edit-float` 与 `mat-analyze-float` 是**兄弟**）
+   *   ⇒ 由本组件出容器、消费者把「前面那颗」传进来，避免两处各画一条 bar。
+   */
+  leading?: ReactNode;
+  /**
+   * 动作条的落点：
+   *   · `'image'`（默认）—— **贴在图片下沿**（原 `.mat-float-actions` 的 `left:0;bottom:0`）
+   *   · `'above'` —— 浮在容器**上沿之外**（`bottom:100%`）—— 源 `YL.jsx` 没有分析按钮，
+   *     这条是**本仓既有**的落点（`TD-16-80`），保持原样不动
+   */
+  placement?: 'image' | 'above';
 }
 
-export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePromptProps) {
+export function AnalyzePrompt({
+  nodeId,
+  imageUrl,
+  state,
+  showButton,
+  leading,
+  placement = 'image',
+}: AnalyzePromptProps) {
   const analyze = useAnalyze();
   const hostOps = useHostOps();
   const pushToast = useStore((s) => s.pushToast);
@@ -98,7 +123,8 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
     <>
       {showButton && (
         // ⚠️ `nodrag nopan` 是 ReactFlow 约定类名（按钮不该拖动节点 / 平移画布）
-        <div className={`${styles.floatActions} nodrag nopan`}>
+        <div className={`${styles.floatActions} ${placement === 'above' ? styles.floatAbove : ''} nodrag nopan`}>
+          {leading}
           <button
             type="button"
             className={styles.analyzeBtn}
@@ -116,11 +142,20 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
       )}
 
       {state && open && (
-        <div className={`${styles.pop} nodrag nopan nowheel`}>
-          <div className={styles.head}>
+        /*
+         * ★★ **2026-10-12 收口到共享壳**：此前它自拼 `.panelHead` + 自绘 `×` 关闭钮（`btnIcon`）
+         *   ⇒ 关闭钮与全站唯一的 `✕`（`panelClose`）**不是同一个**。
+         *   现走 `PanelShell`（**不带 `overlay`** —— 它是**节点锚定浮层**，不是模态）：
+         *   · 中槽 = 状态药丸 · `✕` = 真源那颗。
+         */
+        <PanelShell
+          className={`${styles.pop} nodrag nopan nowheel`}
+          testId="analyze-prompt-pop"
+          title={ANALYZE_UI_TEXT.panelTitle(state.accountName)}
+          meta={
             <span
-              className={`${styles.badge} ${
-                state.status === 'error' ? styles.badgeFailed : state.ok === true ? styles.badgeDone : ''
+              className={`${shared.pill} ${
+                state.status === 'error' ? shared.pillErr : state.ok === true ? shared.pillOk : ''
               }`}
             >
               {state.status === 'analyzing' || state.status === 'revising'
@@ -131,20 +166,18 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
                     : ANALYZE_UI_TEXT.badgeRaw
                   : ANALYZE_UI_TEXT.badgeFailed}
             </span>
-            <span className={styles.title}>{ANALYZE_UI_TEXT.panelTitle(state.accountName)}</span>
-            <button type="button" className={styles.close} title={ANALYZE_UI_TEXT.collapse} onClick={() => setOpen(false)}>
-              ×
-            </button>
-          </div>
-
+          }
+          onClose={() => setOpen(false)}
+          closeLabel={ANALYZE_UI_TEXT.collapse}
+        >
           {/* 原 333：`key={`${status}-${at}`}` —— 状态或时刻一变就重挂（用于重放入场动画） */}
-          <div className={styles.body} key={`${state.status}-${state.at}`}>
+          <Fragment key={`${state.status}-${state.at}`}>
             {state.status === 'error' ? (
               <div className={styles.error}>{state.error}</div>
             ) : busy ? (
               <div className={styles.wait}>
                 <div className={styles.waitRow}>
-                  <span className={styles.spinner} aria-hidden="true" />
+                  <span className={shared.spinnerRing} aria-hidden="true" />
                   <span>{state.phase || ANALYZE_UI_TEXT.waitDefault}</span>
                 </div>
               </div>
@@ -189,7 +222,7 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
                 {state.error ? <div className={styles.error}>{state.error}</div> : null}
               </>
             )}
-          </div>
+          </Fragment>
 
           {/* 原 389-407：调整区（`O` = 有分析结果时才有；这里等价于「非忙碌」） */}
           {!busy && (
@@ -210,7 +243,7 @@ export function AnalyzePrompt({ nodeId, imageUrl, state, showButton }: AnalyzePr
               </button>
             </div>
           )}
-        </div>
+        </PanelShell>
       )}
     </>
   );

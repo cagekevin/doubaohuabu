@@ -12,7 +12,7 @@
 }
 
 .panel {
-  composes: overlay from '../common/shared.module.css';
+  composes: panel from '../common/shared.module.css';
   position: fixed;
   left: 50%;
   top: 50%;
@@ -26,10 +26,9 @@
 }
 
 .title {
+  composes: panelTitle from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   padding: var(--space-1) var(--space-2);
-  color: var(--color-text-strong);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium, 600);
 }
 
 .grid {
@@ -81,11 +80,5 @@
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
 }
-
-.btn {
-  composes: btn from '../common/shared.module.css';
-}
-
-.btnGhost {
-  composes: btnGhost from '../common/shared.module.css';
-}
+
+

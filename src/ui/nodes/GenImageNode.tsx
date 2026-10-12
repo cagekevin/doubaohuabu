@@ -27,6 +27,8 @@ import { Thumb } from '@/ui/common/Thumb';
 import { COMMON_TEXT, GEN_IMAGE_TEXT, MATERIAL_NODE_TEXT } from '@/constants/text';
 import { isCardClick } from '@/core/rules/cardClick';
 import { genImageCurrentUrl, imageApiChipLabel, imageChannelLabel, imageVersionView } from '@/core/rules/genImage';
+// ⚠️ 舞台的 `aspectRatio` 与文生视频**同一条纯规则**（判据 C1）—— 不各写一份
+import { stageRatio } from '@/core/rules/genVideo';
 import { countInputs } from '@/core/rules/linkedMaterials';
 import { withThumb } from '@/stable/protocols/img';
 import { formatDateTimeMinute } from '@/lib/time';
@@ -133,27 +135,26 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
     // ⚠️ 用 Fragment 包住：历史弹层走 `createPortal` 到 `document.body`（源 `ZL.jsx:288` 同法）
     <>
       <NodeShell
+        type="imggen"
         title={GEN_IMAGE_TEXT.title}
         selected={selected}
         // 有框外浮层（分析按钮 / 提示词浮层）⇒ 不能被 `.node` 的 overflow 裁掉
         overflowVisible
-        // 头部右槽（按源 218-225 的顺序：先 `ig-chip-status`、再 `gv-hist-btn`）
-        meta={
-          <>
-            {chipText !== null ? <span className={styles.igChipStatus}>{chipText}</span> : null}
-            {versions.length > 0 ? (
-              <button
-                ref={histBtnRef}
-                type="button"
-                className={`${styles.gvHistBtn} nodrag${histOpen ? ` ${styles.gvHistBtnOpen}` : ''}`}
-                title={GEN_IMAGE_TEXT.histBtnTitle}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={toggleHistory}
-              >
-                {GEN_IMAGE_TEXT.histBtn(versions.length)}
-              </button>
-            ) : null}
-          </>
+        // 中槽 = 状态 chip；右槽 = 历史按钮（按源 218-225 的顺序）
+        meta={chipText !== null ? <span className={styles.igChipStatus}>{chipText}</span> : undefined}
+        actions={
+          versions.length > 0 ? (
+            <button
+              ref={histBtnRef}
+              type="button"
+              className={`${styles.gvHistBtn} nodrag${histOpen ? ` ${styles.gvHistBtnOpen}` : ''}`}
+              title={GEN_IMAGE_TEXT.histBtnTitle}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={toggleHistory}
+            >
+              {GEN_IMAGE_TEXT.histBtn(versions.length)}
+            </button>
+          ) : undefined
         }
         cardTitle={GEN_IMAGE_TEXT.cardTitle}
         // 整卡点击 → 打开文生图面板（原 `ZL.jsx:210` 的 `onPointerDown`/`onClick`）
@@ -166,16 +167,35 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           if (isCardClick(start, { x: e.clientX, y: e.clientY })) openImageGenPanel(id);
         }}
       >
-        <div className={styles.text}>{data.text || COMMON_TEXT.emptyPrompt}</div>
-        {data.generating ? (
-          <div className={styles.spinner}>{COMMON_TEXT.generating}</div>
-        ) : current ? (
-          <Thumb src={current} className={styles.thumb} />
-        ) : (
-          <div className={styles.placeholder}>{GEN_IMAGE_TEXT.notGenerated}</div>
-        )}
-        {/* `gv-dl`（原 244-255）：下载这张图（条件 = 有当前图 `u`，与是否在生成无关） */}
-        {current ? (
+        {/*
+          `gv-stage`（原 `ZL.jsx:227-229`）—— 按比例撑开的舞台。
+          ⚠️ **2026-10-12 对齐源**：此前卡片顶部多印一行 `（空提示词）`（源卡片**没有**这行），
+            且空态用的是「未生成」两字（源是 `.gv-preview-empty` 的**标题 + 副标题**两句）。
+        */}
+        <div className={styles.gvStage} style={{ aspectRatio: stageRatio(data.aspectRatio) }}>
+          {data.generating && (
+            <div className={styles.gvWaiting} aria-label={GEN_IMAGE_TEXT.waitingAria}>
+              <div className={styles.gvwDots}>
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className={styles.gvwText}>
+                {current ? GEN_IMAGE_TEXT.waitingRegenerate : GEN_IMAGE_TEXT.waitingFirst}
+              </div>
+            </div>
+          )}
+          {current ? (
+            // 原 240：`Xt(d, 720)` —— 缩略图宽 **720**
+            <Thumb src={current} width={720} className={styles.thumb} />
+          ) : (
+            <div className={styles.gvPreviewEmpty}>
+              <div className={styles.gvPreviewTitle}>{GEN_IMAGE_TEXT.stageEmptyTitle}</div>
+              <div className={styles.gvPreviewSub}>{GEN_IMAGE_TEXT.stageEmptySub}</div>
+            </div>
+          )}
+          {/* `gv-dl`（原 244-255）：下载这张图（条件 = 有当前图 `u`，与是否在生成无关） */}
+          {current ? (
           <button
             type="button"
             className={`${styles.gvDl} nodrag`}
@@ -203,28 +223,37 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
             </svg>
           </button>
         ) : null}
-        {/*
-          `mat-edit-float`（原 256-272）—— ★ **2026-10-12 落（`TD-09-4`）**：
-          条件 = 有当前图 `u` 且**不在生成中**（原 256 的 `u && !l.generating`）。
-          ⚠️ 与 `AnalyzePrompt` 的按钮**不同位置**：本按钮在**左下角**（`.matFloatActions`），
-          分析按钮在**上方居中**（`AnalyzePrompt` 的 `.floatActions`）—— 不重叠。
-        */}
-        {current && !data.generating ? (
-          <div className={`${styles.matFloatActions} nodrag nopan`}>
-            <button
-              type="button"
-              className={styles.matFloatBtn}
-              title={MATERIAL_NODE_TEXT.editImageTitle}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                openImageEditor(id, current, data.label || GEN_IMAGE_TEXT.title);
-              }}
-            >
-              {MATERIAL_NODE_TEXT.editImage}
-            </button>
-          </div>
-        ) : null}
+          {/*
+            ★ 提示词分析（原 `ZL.jsx:256/273-286` 的浮动按钮 + `321` 的浮层）
+            ⚠️ **落点在 `gv-stage` 内**（源 256 的 `.mat-float-actions` 就在 `.gv-stage` 里）——
+              所以它压在**图上**，不是压在卡片底。
+
+            ⚠️ **`leading` = 「编辑图片」**（原 `mat-edit-float`，256-272）：源里两颗按钮同住
+               `.mat-float-actions` ⇒ 动作条由 `AnalyzePrompt` 出容器，这里只把「前面那颗」传进去
+               （此前是**两条** bar：编辑图片在左下、分析按钮浮在节点上方 —— 与源都不符）。
+          */}
+          <AnalyzePrompt
+            nodeId={id}
+            imageUrl={current}
+            state={data.analyzePrompt ?? null}
+            showButton={!!current && !data.generating}
+            leading={
+              <button
+                type="button"
+                className={styles.matFloatBtn}
+                title={MATERIAL_NODE_TEXT.editImageTitle}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // ⚠️ `leading` 是**先构造、后由 `showButton` 决定渲不渲染** ⇒ 这里要自己收窄
+                  if (current) openImageEditor(id, current, data.label || GEN_IMAGE_TEXT.title);
+                }}
+              >
+                {MATERIAL_NODE_TEXT.editImage}
+              </button>
+            }
+          />
+        </div>
         {/*
           `gv-meta`（原 960-962）—— ★ **落点更正**：源在**卡片底部独立行**（`gv-stage` 之后），
           此前误经 `NodeShell` 的 `meta` 塞进**头部右槽**。内容亦按源改：
@@ -238,17 +267,6 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           {data.aspectRatio || GEN_IMAGE_TEXT.metaDefaultRatio}
           {versions.length > 0 ? GEN_IMAGE_TEXT.metaOutput(versions.length) : ''}
         </div>
-        {/*
-          ★ 提示词分析（原 `ZL.jsx:256/273-286` 的浮动按钮 + `321` 的浮层）
-          ⚠️ 与源一致：`showButton` = 有图且**不在生成中**（原 256 的 `u && !l.generating`）
-          ⚠️ `imageUrl` = **当前图**（原 `se()` 的 `d`）
-        */}
-        <AnalyzePrompt
-          nodeId={id}
-          imageUrl={current}
-          state={data.analyzePrompt ?? null}
-          showButton={!!current && !data.generating}
-        />
       </NodeShell>
       {/* `gv-hist-pop`（原 288-314）：历史版本弹层（portal 到 body，按按钮位置定位） */}
       {histOpen && versions.length > 0

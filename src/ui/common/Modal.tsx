@@ -11,53 +11,52 @@
  *           （依据技能 `vercel-composition-patterns` 的 `architecture-avoid-boolean-props`）
  */
 
-import { useEffect, type ReactNode } from 'react';
-import { COMMON_TEXT } from '@/constants/text';
-import styles from './shared.module.css';
+import type { ReactNode } from 'react';
+import { PanelShell } from './PanelShell';
 
 export interface ModalProps {
   open: boolean;
   /** 关闭回调（遮罩点击 / X / ESC 三处共用同一个） */
   onClose: () => void;
   title?: ReactNode;
+  /**
+   * 头部**中槽**（计数 / 账号 / 元信息）—— 紧跟在标题之后，不靠右
+   * ⚠️ **2026-10-12 补**：此前只有 `title` / `footer` ⇒ 需要"标题 + 元信息"的弹窗
+   *   （如 `GalleryLightbox`）只能**把整个 `.panelHead` 塞进 `title`** —— 头里又套一个头
+   *   （两层 padding、两份字号）。三槽齐了才不必自拼头。
+   */
+  meta?: ReactNode;
+  /** 头部**右槽**（关闭钮之前的动作） */
+  actions?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   /** 点遮罩是否关闭，默认 true */
   closeOnMask?: boolean;
 }
 
-export function Modal({ open, onClose, title, children, footer, closeOnMask = true }: ModalProps) {
-  // ESC 关闭 —— 全应用**唯一**的 Escape 处理点
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
+export function Modal({ open, onClose, title, meta, actions, children, footer, closeOnMask = true }: ModalProps) {
   if (!open) return null;
 
+  /*
+   * 结构（遮罩 + 卡片 + 三槽头 + 正文 + 脚）**全部交给 `PanelShell`** —— 本组件只剩一件它独有的：
+   *   `role="dialog"` / `aria-modal`（浮层语义的唯一落点）。
+   * ⚠️ 不再手写 `panelHead` / `panelClose` / `panelBody` / `panelFoot`（那是「合成 1 个」要消灭的重复）。
+   * ⚠️ `Esc` 也不再住这里 —— 已上收到 `PanelShell`（**有 `overlay` 就有 `Esc`**，见那里的注释），
+   *    否则"直接用 `PanelShell overlay` 的面板"与"经 `Modal` 的面板"行为不一致。
+   */
   return (
-    <div className={styles.mask} onClick={closeOnMask ? onClose : undefined} role="presentation">
-      <div
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {title !== undefined && (
-          <div className={styles.header}>
-            <span>{title}</span>
-            <button type="button" className={styles.close} onClick={onClose} aria-label={COMMON_TEXT.closeAria}>
-              ✕
-            </button>
-          </div>
-        )}
-        <div className={styles.body}>{children}</div>
-        {footer !== undefined && <div className={styles.footer}>{footer}</div>}
-      </div>
-    </div>
+    <PanelShell
+      overlay
+      closeOnMask={closeOnMask}
+      onClose={onClose}
+      title={title}
+      meta={meta}
+      actions={actions}
+      footer={footer}
+      role="dialog"
+      ariaModal
+    >
+      {children}
+    </PanelShell>
   );
 }

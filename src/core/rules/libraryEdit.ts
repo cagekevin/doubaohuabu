@@ -18,6 +18,48 @@
 import type { LibraryItem } from '@/stable/model/project';
 import type { MaterialNodeLike } from './materialRename';
 
+/**
+ * 资源库的**展示顺序**（原 `RT.jsx:29-37` 的 `useMemo`）
+ *
+ * 源逐行：`const _ = e.filter(J => J.favorite)` ＋ `const H = e.filter(J => !J.favorite)`
+ *   ⇒ `[..._, ...H]` —— **收藏在前**，两组**各自保持原序**（`Array.filter` 稳定）。
+ * ⚠️ 只影响**渲染顺序**，不改 `library` 数组本身（源也没写回 store）。
+ */
+export function sortLibrary(items: readonly LibraryItem[]): LibraryItem[] {
+  return [...(items ?? []).filter((it) => it.favorite), ...(items ?? []).filter((it) => !it.favorite)];
+}
+
+/**
+ * 画布上引用该库条目的**素材节点**数（原 `getLibraryRefCount`，`shared.js:27733-27754`）
+ *
+ * 源逐行：库里找不到该 id ⇒ `0`；否则取条目的 `dataUrl`，遍历节点：
+ *   `type === 'material'` 且 `data` 存在 ⇒ `data.libId === libId` 记一次（`continue`）；
+ *   否则 `item.dataUrl` 非空且 `data.dataUrl === item.dataUrl` 也记一次。
+ *
+ * ⚠️ **只数 `material` 节点**（视频 / 生成节点不算）—— 与 `materialNode.materialLibId`
+ *   （那条还认 `poster`、且不限节点类型）**不是同一条判据**，各自逐字对各自的源，**不合并**。
+ * ⚠️ 用途：删除库条目前的确认（原 `RT.jsx:322-326`）—— 有引用时才拦一下。
+ */
+export function countLibRefs(
+  library: readonly LibraryItem[],
+  nodes: readonly MaterialNodeLike[],
+  libId: string,
+): number {
+  const hit = (library ?? []).find((l) => l.id === libId);
+  if (!hit) return 0;
+  const url = hit.dataUrl;
+  let n = 0;
+  for (const node of nodes ?? []) {
+    if (!node || node.type !== 'material' || !node.data) continue;
+    if (node.data.libId === libId) {
+      n += 1;
+      continue;
+    }
+    if (url && node.data.dataUrl === url) n += 1;
+  }
+  return n;
+}
+
 /** 改名规划的结果 */
 export interface LibraryRenamePlan {
   /** 改名后的资源库（未命中 ⇒ **同一引用**） */

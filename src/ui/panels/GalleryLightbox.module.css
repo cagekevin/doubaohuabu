@@ -3,19 +3,8 @@
  * ⚠️ 原则 5：色值只走 token。
  * ⚠️ 查 6：按钮走 `ui/common/shared.module.css` 真源，不自造。
  */
-
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-half);
-  min-width: 0;
-}
-
-.title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
+
 
 .meta {
   color: var(--color-text-faint);

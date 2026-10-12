@@ -106,7 +106,7 @@ interface NodeBase {
 export interface TextNodeData extends NodeDataBase {
   label?: string;
   text: string;
-  /** 默认 `'16:9'` */
+  /** 默认 `NODE_DEFAULT_RATIO_LABEL`（`'4:3'`，`constants/models.ts`）—— 见 `NODE_DEFAULTS.text` */
   aspectRatio: string;
   /** 默认 7 */
   duration: number;
@@ -178,7 +178,7 @@ export const TEXT_NODE_LABEL = '文本框';
 export interface GenVideoNodeData extends NodeDataBase {
   label: typeof GEN_VIDEO_LABEL;
   text: string;
-  /** 默认 `'16:9'` */
+  /** 默认 `NODE_DEFAULT_RATIO_LABEL`（`'4:3'`）—— 见 `NODE_DEFAULTS.genvideo` */
   aspectRatio: string;
   /** 默认 5 */
   duration: number;
@@ -215,7 +215,7 @@ export type GenVideoNode = NodeBase & { type: 'genvideo'; data: GenVideoNodeData
 export interface GenImageNodeData extends NodeDataBase {
   label: '文生图';
   text: string;
-  /** 默认 `'1:1'` */
+  /** 默认 `NODE_DEFAULT_RATIO_LABEL`（`'4:3'`）—— 见 `NODE_DEFAULTS.imggen` */
   aspectRatio: string;
   /** 默认 `'doubao'` */
   channel: string;

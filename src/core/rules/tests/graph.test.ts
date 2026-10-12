@@ -197,20 +197,22 @@ describe('edgeInsertPosition（原 `lt` `_Component42.jsx:543-560`）', () => {
     expect(edgeInsertPosition({ position: { x: 1, y: 2 } }, undefined, S)).toEqual({ x: 0, y: 0 });
   });
 
-  it('尺寸表（原 create-panel 三个动作内联的 `w/h`）逐项对齐源版', () => {
+  it('尺寸表：宽度取源值、**高度一律按默认比例 4:3 算**（2026-10-12 用户裁定）', () => {
+    // ⚠️ 源版的高是 150/240/300/220/200（各不相同）；用户要求「**空节点**的默认比例都是 4:3」
+    //   ⇒ 宽保留源值，高 = 宽 ÷ (4/3)。
     expect(NODE_CREATE_SIZES).toEqual({
-      text: { w: 280, h: 150 },
-      genvideo: { w: 380, h: 240 },
-      imggen: { w: 380, h: 300 },
-      account: { w: 420, h: 220 },
-      download: { w: 280, h: 200 },
+      text: { w: 280, h: 210 },
+      genvideo: { w: 380, h: 285 },
+      imggen: { w: 380, h: 285 },
+      account: { w: 420, h: 315 },
+      download: { w: 280, h: 210 },
     });
   });
 
-  it('未列出的类型 ⇒ `nodeCreateSize` 回落 200×180', () => {
-    expect(nodeCreateSize('material')).toEqual({ w: 200, h: 180 });
-    expect(nodeCreateSize('group')).toEqual({ w: 200, h: 180 });
-    expect(nodeCreateSize('不存在的类型')).toEqual({ w: 200, h: 180 });
+  it('未列出的类型 ⇒ `nodeCreateSize` 回落 `200×150`（宽取源值 200、高按 4:3 算）', () => {
+    expect(nodeCreateSize('material')).toEqual({ w: 200, h: 150 });
+    expect(nodeCreateSize('group')).toEqual({ w: 200, h: 150 });
+    expect(nodeCreateSize('不存在的类型')).toEqual({ w: 200, h: 150 });
   });
 });
 

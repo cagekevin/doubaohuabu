@@ -5,47 +5,32 @@
  *    ⇒ 全部为**推断样式**（只用 token）—— 登记 **`TD-16-87`**（推断样式待校母体）。
  */
 
-.overlayRoot {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: grid;
-  place-items: center;
-}
-
-.backdrop {
-  position: absolute;
-  inset: 0;
-  background: var(--color-scrim);
-}
+/*
+ * ★★ **2026-10-12 收口**：自造的 `.overlayRoot`（遮罩）与 `.close`（关闭钮）已删 ——
+ *   遮罩归 `PanelShell` 的真源 `.overlay`（全屏 + 居中 + 暗底，**只有一种**），
+ *   关闭钮归真源 `.panelClose`（`✕`，**只有一种**）。
+ */
 
 .panel {
+  composes: panel from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   position: relative;
   width: min(920px, 94vw);
   height: min(720px, 92vh);
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-strong);
   font-size: var(--font-size-xs);
   overflow: hidden;
 }
 
-.head {
+/** 正文：竖排（工具条 / 提示 / 视口）—— 只追加真源 `panelBody` 未设的属性（`display`） */
+.body {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border);
+  flex-direction: column;
 }
 
-.title {
-  color: var(--color-text-strong);
-  font-weight: 600;
-  white-space: nowrap;
-}
+
+
+
 
 .titleSub {
   color: var(--color-text-muted);
@@ -71,17 +56,6 @@
   border-color: var(--color-action-primary);
   background: var(--color-action-primary);
   color: var(--color-text-on-brand);
-}
-
-.close {
-  margin-left: auto;
-  padding: 0 var(--space-1);
-  border: none;
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--font-size-sm);
 }
 
 .toolbar {
@@ -278,15 +252,13 @@
   opacity: 0.25;
 }
 
-.foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1) var(--space-2);
-  border-top: 1px solid var(--color-border);
-}
-
+/*
+ * ⚠️ 自造的 `.foot` 已删 —— 脚归真源 `.panelFoot`（`flex` + `justify-content: flex-end`）。
+ *   源版这行的三块是「提示（左）· 缩放（中）· 动作（右）」⇒ 提示靠 `margin-right: auto` 顶到左边
+ *   （真源没设 `margin`，属"只追加真源未设的属性"）。
+ */
 .hint {
+  margin-right: auto;
   color: var(--color-text-faint);
 }
 

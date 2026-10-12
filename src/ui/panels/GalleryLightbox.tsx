@@ -32,6 +32,7 @@ import { formatDateTimeMinute } from '@/lib/time';
 import type { LovartImage } from '@/core/rules/lovartGallery';
 import styles from './GalleryLightbox.module.css';
 
+
 export interface GalleryLightboxProps {
   items: readonly LovartImage[];
   /** 当前看第几张（索引，`0..n-1`） */
@@ -93,20 +94,21 @@ export function GalleryLightbox({
     <Modal
       open
       onClose={onClose}
-      title={
-        <span className={styles.head}>
-          <span className={styles.title} title={item.sourceUrl || item.name}>
-            {item.name}
-          </span>
-          <span className={styles.meta}>
-            {GALLERY_TEXT.lightboxMeta(
-              galleryItemDims(item),
-              formatBytes(item.sizeBytes),
-              formatDateTimeMinute(item.addedAt),
-              index + 1,
-              items.length,
-            )}
-          </span>
+      /*
+       * ⚠️ **2026-10-12 修掉一处"头里又套头"**：此前 `title` 槽里塞的是**整个** `.panelHead`
+       *   （自带 `.panelTitle` + `.meta`）⇒ 真源头里又套了一个头（两层 padding / 两份字号）。
+       *   正确落法：**标题进 `title`、元信息进 `meta`**（真源的中槽），不再自拼头。
+       */
+      title={<span title={item.sourceUrl || item.name}>{item.name}</span>}
+      meta={
+        <span className={styles.meta}>
+          {GALLERY_TEXT.lightboxMeta(
+            galleryItemDims(item),
+            formatBytes(item.sizeBytes),
+            formatDateTimeMinute(item.addedAt),
+            index + 1,
+            items.length,
+          )}
         </span>
       }
       footer={

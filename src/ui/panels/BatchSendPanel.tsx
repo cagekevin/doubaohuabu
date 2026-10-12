@@ -14,24 +14,34 @@
  *   | 决策区 | `228-246` | 「{name}」发送失败：{msg}（还有 n 个…）+ 继续/中止 |
  *   | 汇总 | `247-252` | aborted 提示 + 执行顺序说明 |
  *
- * ★ **两处有意偏离（都留痕）**：
- *   ① **位置**：源版用 `useReactFlow().getNodesBounds` + 画布 transform 把触发按钮
- *      **浮在选中节点包围盒的上方/下方**（`L3.jsx:20-49`，常量 `Yd=40/Xd=10/Jd=6/R3=6`）。
- *      本实现改成**固定在画布右下角**的卡片 —— 少一套视口数学（那套只有在 ReactFlow 内部
- *      才能算），行为（点得到、看得见）不变。
- *   ② **「加入队列」按钮**（原 `L3.jsx:187-189`）—— ★ **2026-10-11 更正（TD-09-3）**：
- *      **已接通并渲染**（队列子系统已落：纯逻辑 / store / 控制器 / 面板均就位，见下方 `:146-149`）。
- *      此前本行写「**尚未落地** ⇒ 宁可不渲染」—— 那是**接通前**的形态。
+ * ★ **触发条落点 = 视口数学**（原 `L3.jsx:20-49`，**逐行**）：
+ *   用 `useViewport()` 的 `{x,y,zoom}` 把选中节点包围盒（`useReactFlow().getNodesBounds`）
+ *   换算成视口坐标，浮在包围盒**上/下方**（常量 `Xd/Yd/Jd/R3` 见 `@/constants`）。
+ *   ⚠️ 因此本组件**必须住在 `ReactFlowProvider` 内**（与 `GenPanel` 同因）——
+ *      由 `CanvasHost` 渲染，**不在** `AppShell`。
+ *
+ * ⚠️ 「加入队列」按钮（原 `L3.jsx:187-189`）**已接通并渲染**（队列子系统：纯逻辑 / store /
+ *    控制器 / 面板均就位，见下方 `:146-149`）。
  *
  * ⚠️ 原则 1：本组件**不写 store**（状态写回走 `setNodeSendState` 这个 **action**，
  *    批量编排走 `useBatchSend()`）—— 与源版把两者就地 `setState` 不同，但结论一致。
  */
 
 import { useMemo, useRef, useState } from 'react';
+import { useReactFlow, useViewport } from '@xyflow/react';
 import { useBatchSend, useSendQueue, useStore } from '@/state';
 import type { BatchDecision, BatchResultItem, BatchSummary } from '@/core/usecases/sendQueue';
+import {
+  BS_TRIGGER_GAP,
+  BS_TRIGGER_MARGIN_X,
+  BS_TRIGGER_MIN_TOP,
+  BS_TRIGGER_OFFSET_Y,
+} from '@/constants';
 import { BATCH_SEND_TEXT } from '@/constants/text';
+import { log } from '@/lib/log';
 import styles from './BatchSendPanel.module.css';
+import shared from '@/ui/common/shared.module.css';
+import { PanelShell } from '@/ui/common/PanelShell';
 
 type Phase = 'idle' | 'running' | 'done';
 
@@ -57,6 +67,55 @@ export function BatchSendPanel() {
     () => nodes.filter((n) => n.selected && (n.type === 'text' || n.type === 'genvideo')).map((n) => n.id),
     [nodes],
   );
+
+  /** 画布视口（原 `Tu()`）—— 把 flow 坐标换算成视口坐标 */
+  const viewport = useViewport();
+  /** `getNodesBounds`（原 `Kr()`）—— 传 **id** 即可（xyflow 从内部 store 解析，免类型断言） */
+  const { getNodesBounds } = useReactFlow();
+
+  /**
+   * ★ 触发条落点（原 `L3.jsx:20-49`，**逐行**）—— 相对 `.wrap`/`.react-flow` 原点的视口坐标。
+   *
+   * 源逐行：
+   * ```js
+   * if (r.length < 2) return null;                       // r = 选中的 text/genvideo
+   * const S = e.filter(R => R.selected);
+   * if (S.length < 2) return null;                       // 选中总数 < 2 也不出
+   * let E; try { E = n(S); } catch { return null; }
+   * const P = t.zoom || 1;
+   * const j = (E.x + E.width / 2) * P + t.x;             // 中心 X
+   * const I = E.y * P + t.y;                             // 上边 Y
+   * const z = (E.y + E.height) * P + t.y;                // 下边 Y
+   * const O = I - Xd - Yd - Jd >= R3;                    // 上方放得下吗
+   * return { left: j, top: O ? I - Xd - Yd - Jd : z + Xd + Yd + Jd,
+   *          transform: O ? 'translate(-50%, -100%)' : 'translate(-50%, 0)' };
+   * ```
+   * ⚠️ 源的 `catch {}` 是**空吞**（ReactFlow 实例未就绪时会抛）—— 本实现**留痕**（原则 6），
+   *    语义等价（失败 ⇒ 不出触发条，不重试）。
+   */
+  const triggerPos = useMemo(() => {
+    if (targetIds.length < 2) return null;
+    const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
+    if (selectedIds.length < 2) return null;
+    let bounds: { x: number; y: number; width: number; height: number };
+    try {
+      bounds = getNodesBounds(selectedIds);
+    } catch (err) {
+      log.warn('[BatchSendPanel] getNodesBounds 失败（画布未就绪？）:', err);
+      return null;
+    }
+    const zoom = viewport.zoom || 1;
+    const centerX = (bounds.x + bounds.width / 2) * zoom + viewport.x;
+    const topY = bounds.y * zoom + viewport.y;
+    const bottomY = (bounds.y + bounds.height) * zoom + viewport.y;
+    const offset = BS_TRIGGER_MARGIN_X + BS_TRIGGER_OFFSET_Y + BS_TRIGGER_GAP;
+    const above = topY - offset >= BS_TRIGGER_MIN_TOP;
+    return {
+      left: centerX,
+      top: above ? topY - offset : bottomY + offset,
+      transform: above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+    };
+  }, [nodes, targetIds, viewport, getNodesBounds]);
 
   const abortAll = (): void => {
     abortedRef.current = true;
@@ -121,7 +180,7 @@ export function BatchSendPanel() {
   };
 
   // 原 `L3.jsx:170-172`：没有触发位置且空闲 ⇒ 不渲染
-  if (phase === 'idle' && targetIds.length < 2) return null;
+  if (phase === 'idle' && !triggerPos) return null;
 
   const settled = items.filter((i) => ['success', 'error', 'skipped'].includes(i.status)).length;
   const okCount = items.filter((i) => i.status === 'success').length;
@@ -129,9 +188,13 @@ export function BatchSendPanel() {
   const skipCount = items.filter((i) => i.status === 'skipped').length;
 
   return (
-    <div className={styles.root} data-testid="batch-send-panel">
-      {phase === 'idle' ? (
-        <>
+    <>
+      {phase === 'idle' && triggerPos ? (
+        <div
+          className={styles.triggerGroup}
+          data-testid="batch-send-panel"
+          style={{ left: triggerPos.left, top: triggerPos.top, transform: triggerPos.transform }}
+        >
           <button
             type="button"
             className={styles.trigger}
@@ -165,30 +228,32 @@ export function BatchSendPanel() {
           >
             {BATCH_SEND_TEXT.triggerQueue}
           </button>
-        </>
+        </div>
       ) : (
-        <div className={styles.card}>
-          <div className={styles.head}>
-            <div className={styles.title}>
-              {phase === 'running'
-                ? BATCH_SEND_TEXT.running(settled, items.length)
-                : BATCH_SEND_TEXT.done(okCount, failCount, skipCount)}
-            </div>
-            {phase === 'running' ? (
+        <PanelShell
+          overlay
+          testId="batch-send-panel"
+          className={styles.card}
+          title={
+            phase === 'running'
+              ? BATCH_SEND_TEXT.running(settled, items.length)
+              : BATCH_SEND_TEXT.done(okCount, failCount, skipCount)
+          }
+          actions={
+            phase === 'running' ? (
               <button type="button" className={styles.abort} onClick={abortAll}>
                 {BATCH_SEND_TEXT.abortAll}
               </button>
-            ) : (
-              <button type="button" className={styles.close} onClick={() => setPhase('idle')}>
-                {BATCH_SEND_TEXT.close}
-              </button>
-            )}
-          </div>
+            ) : undefined
+          }
+          onClose={phase === 'running' ? undefined : () => setPhase('idle')}
+          closeLabel={BATCH_SEND_TEXT.close}
+        >
 
           {phase === 'running' && (
-            <div className={styles.progress}>
+            <div className={shared.progressTrack}>
               <div
-                className={styles.progressBar}
+                className={shared.progressFill}
                 style={{ width: `${items.length ? (settled / items.length) * 100 : 0}%` }}
               />
             </div>
@@ -196,12 +261,12 @@ export function BatchSendPanel() {
 
           <div className={styles.list}>
             {items.map((it, i) => (
-              <div className={`${styles.item} ${styles[`st_${it.status}`] ?? ''}`} key={it.nodeId}>
+              <div className={`${shared.listItem} ${styles[`st_${it.status}`] ?? ''}`} key={it.nodeId}>
                 <span className={styles.idx}>{i + 1}.</span>
                 <span className={styles.name} title={it.name}>
                   {it.name}
                 </span>
-                <span className={styles.chip}>{BATCH_SEND_TEXT.status[it.status] ?? it.status}</span>
+                <span className={shared.pill}>{BATCH_SEND_TEXT.status[it.status] ?? it.status}</span>
                 <span className={styles.msg} title={it.msg || ''}>
                   {it.msg || ''}
                 </span>
@@ -239,8 +304,8 @@ export function BatchSendPanel() {
               <div className={styles.note}>{BATCH_SEND_TEXT.summaryNote}</div>
             </div>
           )}
-        </div>
+        </PanelShell>
       )}
-    </div>
+    </>
   );
 }

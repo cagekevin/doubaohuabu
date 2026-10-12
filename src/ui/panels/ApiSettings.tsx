@@ -34,6 +34,7 @@ import { API_SETTINGS_TEXT } from '@/constants/text';
 import { DEFAULT_API_CONCURRENCY } from '@/constants';
 import { formatLocalDate } from '@/lib/time';
 import styles from './ApiSettings.module.css';
+import shared from '@/ui/common/shared.module.css';
 
 /** 没有配置记录 / 用户没改过时的草稿（原 `c[S.id] || {}` 的等价物） */
 function fromConfig(cfg: ApiProviderConfig | undefined): ProviderDraft {
@@ -249,7 +250,7 @@ export function ApiSettings({ onClose }: ApiSettingsProps) {
                     checked={enabled}
                     onChange={() => void apiOps.toggleEnabled(p.id, !enabled)}
                   />
-                  <span className={styles.cardName}>{p.name}</span>
+                  <span className={shared.panelTitle}>{p.name}</span>
                 </label>
                 <span className={styles.caps}>{(p.capabilities ?? []).map(capLabel).join(' · ')}</span>
               </div>

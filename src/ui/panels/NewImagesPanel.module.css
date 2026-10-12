@@ -28,15 +28,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
-
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-}
+
 
 .title {
   display: flex;
@@ -92,15 +84,11 @@
 .collapsed .foldBody {
   display: none;
 }
+
 
-.body {
-  flex: 1;
-  min-width: 0;
-}
-
-/* 空态 —— 复用真源 `.emptyInline`（`padding` / 字色 / 字号），只补**布局** */
+/* 空态 —— 复用真源 `.isInline`（`padding` / 字色 / 字号），只补**布局** */
 .empty {
-  composes: emptyInline from '../common/shared.module.css';
+  composes: empty isInline from '../common/shared.module.css';
   display: flex;
   flex-direction: column;
   align-items: flex-start;

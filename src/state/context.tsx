@@ -19,6 +19,7 @@ import type { LicenseOpsController } from './licenseOps';
 import type { HostOpsController } from './hostOps';
 import type { ProjectOpsController } from './projectOps';
 import type { ApiOpsController } from './apiOps';
+import type { PullResultController } from './pullResult';
 
 const StoreContext = createContext<AppStore | null>(null);
 const GenContext = createContext<GenController | null>(null);
@@ -31,6 +32,7 @@ const LicenseOpsContext = createContext<LicenseOpsController | null>(null);
 const HostOpsContext = createContext<HostOpsController | null>(null);
 const ProjectOpsContext = createContext<ProjectOpsController | null>(null);
 const ApiOpsContext = createContext<ApiOpsController | null>(null);
+const PullResultContext = createContext<PullResultController | null>(null);
 
 export function StoreProvider({
   store,
@@ -44,6 +46,7 @@ export function StoreProvider({
   hostOps,
   projectOps,
   apiOps,
+  pullResult,
   children,
 }: {
   store: AppStore;
@@ -67,6 +70,8 @@ export function StoreProvider({
   projectOps: ProjectOpsController;
   /** API 配置控制器（provider / 密钥 / 测试连接 —— 组件不得直调 `window.api`） */
   apiOps: ApiOpsController;
+  /** 「拉取结果」控制器（视频节点 → 按 vid 拉无水印直链 → 落节点） */
+  pullResult: PullResultController;
   children: ReactNode;
 }) {
   return (
@@ -80,7 +85,9 @@ export function StoreProvider({
                   <LicenseOpsContext.Provider value={licenseOps}>
                     <HostOpsContext.Provider value={hostOps}>
                       <ProjectOpsContext.Provider value={projectOps}>
-                        <ApiOpsContext.Provider value={apiOps}>{children}</ApiOpsContext.Provider>
+                        <ApiOpsContext.Provider value={apiOps}>
+                          <PullResultContext.Provider value={pullResult}>{children}</PullResultContext.Provider>
+                        </ApiOpsContext.Provider>
                       </ProjectOpsContext.Provider>
                     </HostOpsContext.Provider>
                   </LicenseOpsContext.Provider>
@@ -207,4 +214,11 @@ export function useApiOps(): ApiOpsController {
   const a = useContext(ApiOpsContext);
   if (!a) throw new Error('useApiOps 必须在 <StoreProvider> 内使用');
   return a;
+}
+
+/** 取「拉取结果」控制器（组件**不得**直接调 `core/usecases`） */
+export function usePullResult(): PullResultController {
+  const p = useContext(PullResultContext);
+  if (!p) throw new Error('usePullResult 必须在 <StoreProvider> 内使用');
+  return p;
 }

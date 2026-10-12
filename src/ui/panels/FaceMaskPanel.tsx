@@ -21,6 +21,7 @@ import { toPercent } from '@/lib/math';
 import { FACEMASK_TEXT } from '@/constants/text';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import styles from './FaceMaskPanel.module.css';
+import { PanelShell } from '@/ui/common/PanelShell';
 
 /** 面板实测尺寸（原 `_Component40.jsx:54-55` 的 `l`/`c`）—— 只用来夹视口 */
 const PANEL_W = 232;
@@ -61,21 +62,15 @@ export function FaceMaskPanel({ nodeId, x, y, onClose }: FaceMaskPanelProps) {
   const hint = FACE_MASK_EFFECT_LABEL[faceMaskOpts.effect].hint;
 
   return (
-    <div
+    <PanelShell
       className={`${styles.panel} nodrag nopan`}
-      ref={panelRef}
+      wrapperRef={panelRef}
       style={{ left, top }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onDoubleClick={(e) => e.stopPropagation()}
+      bodyClassName={styles.body}
+      title={FACEMASK_TEXT.title}
+      onClose={onClose}
+      closeLabel={FACEMASK_TEXT.closeTitle}
     >
-      <div className={styles.head}>
-        <span className={styles.title}>{FACEMASK_TEXT.title}</span>
-        <button type="button" className={styles.close} title={FACEMASK_TEXT.closeTitle} onClick={onClose}>
-          {FACEMASK_TEXT.closeGlyph}
-        </button>
-      </div>
-
-      <div className={styles.body}>
         <div className={styles.label}>{FACEMASK_TEXT.mode}</div>
         <div className={styles.effects}>
           {FACE_MASK_EFFECTS.map((effect) => (
@@ -124,7 +119,6 @@ export function FaceMaskPanel({ nodeId, x, y, onClose }: FaceMaskPanelProps) {
         />
 
         <div className={styles.foot}>{FACEMASK_TEXT.hint(faceCount)}</div>
-      </div>
-    </div>
+    </PanelShell>
   );
 }

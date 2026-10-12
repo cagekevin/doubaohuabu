@@ -20,6 +20,8 @@ import { Thumb } from '@/ui/common/Thumb';
 import { EmptyState } from '@/ui/common/EmptyState';
 import { LIBRARY_TEXT } from '@/constants/text';
 import styles from './MaterialPickerModal.module.css';
+import shared from '@/ui/common/shared.module.css';
+import { PanelShell } from '@/ui/common/PanelShell';
 
 export interface MaterialPickerModalProps {
   /** 要换图的素材节点 id */
@@ -64,10 +66,23 @@ export function MaterialPickerModal({ nodeId, onClose }: MaterialPickerModalProp
   };
 
   return (
-    <div className={styles.backdrop} onMouseDown={onClose}>
-      {/* ⚠️ 源 `:29-31`：面板自身 `stopPropagation`（点里面不关） */}
-      <div className={styles.panel} onMouseDown={(e) => e.stopPropagation()} data-testid="material-picker">
-        <div className={styles.title}>{LIBRARY_TEXT.pickFromLibrary}</div>
+    <PanelShell
+      overlay
+      onClose={onClose}
+      testId="material-picker"
+      className={styles.panel}
+      title={LIBRARY_TEXT.pickFromLibrary}
+      footer={
+        <>
+          <button type="button" className={shared.btn} onClick={() => void pickFromFile()} disabled={busy}>
+            {LIBRARY_TEXT.pickFromFile}
+          </button>
+          <button type="button" className={`${shared.btn} ${shared.btnGhost}`} onClick={onClose}>
+            {LIBRARY_TEXT.pickerCancel}
+          </button>
+        </>
+      }
+    >
         {library.length === 0 ? (
           <EmptyState title={LIBRARY_TEXT.empty} />
         ) : (
@@ -87,15 +102,6 @@ export function MaterialPickerModal({ nodeId, onClose }: MaterialPickerModalProp
             ))}
           </div>
         )}
-        <div className={styles.foot}>
-          <button type="button" className={styles.btn} onClick={() => void pickFromFile()} disabled={busy}>
-            {LIBRARY_TEXT.pickFromFile}
-          </button>
-          <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={onClose}>
-            {LIBRARY_TEXT.pickerCancel}
-          </button>
-        </div>
-      </div>
-    </div>
+    </PanelShell>
   );
 }

@@ -29,6 +29,8 @@ import { createLocalizeOps, type LocalizeOpsController } from '@/state/localizeO
 import { VIDEO_BACKFILL_DELAY_MS } from '@/constants';
 import { createProjectOps, type ProjectOpsController } from '@/state/projectOps';
 import { createApiOps, type ApiOpsController } from '@/state/apiOps';
+import { createPullResultController, type PullResultController } from '@/state/pullResult';
+import { createSendWatchController } from '@/state/sendWatch';
 import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/lib/hostEnv';
 import { filterWinScreens, filterWinWebgl } from '@/core/rules/fingerprintGenerator';
 import { createSubscriptions, type Subscriptions } from '@/state/subscriptions';
@@ -76,6 +78,8 @@ export interface Container {
   projectOps: ProjectOpsController;
   /** API 配置控制器（provider / 密钥 / 测试连接；原 `_Component46` 直调 `window.api` 的收口） */
   apiOps: ApiOpsController;
+  /** ★ 「拉取结果」控制器（接 `core/usecases/fetchWatermarkFree`，此前 0 生产消费） */
+  pullResult: PullResultController;
   /** 视频本地化控制器（★ `core/usecases/localizeVideos` 的唯一调用方 —— 链 18「视频必须落盘」） */
   localizeOps: LocalizeOpsController;
   /**
@@ -193,11 +197,18 @@ export function createContainer(): Container {
   // ★ 视频本地化（`core/usecases/localizeVideos` 的**唯一**接线处 —— 此前 0 调用方：
   //   链 18「视频必须落盘」整条没接，`MediaPort.saveVideoFromUrl` 也一直无人消费）
   const localizeOps = createLocalizeOps(store, ports);
+  /**
+   * ★ 「发送后监测」控制器（原 `_Component43.jsx:3010` 的 `watchSendReply`）
+   *
+   * ⚠️ 先于 `gen` 创建（`gen` 要它来在发送成功后起监测）—— 它自己只依赖 `store`/`ports`，
+   *   **不反向依赖 `gen`** ⇒ 无环。
+   */
+  const sendWatch = createSendWatchController(store, ports);
 
   return {
     store,
     ports,
-    gen: createGenController(store, ports),
+    gen: createGenController(store, ports, sendWatch),
     analyze: createAnalyzeController(store, ports),
     accountOps: createAccountOps(store, ports, {
       // ⚠️ 与下面 `capture` 同法：**运行环境在组合根读**，`state` 层不碰 `document`（TD-16-54 的教训）
@@ -219,6 +230,7 @@ export function createContainer(): Container {
       flush: (reason) => persist.flush(reason),
     }),
     apiOps: createApiOps(store, ports),
+    pullResult: createPullResultController(store, ports),
     localizeOps,
     /**
      * ★ 启动后 **5s** 回填视频直链（源 `_Component48.jsx:92-99`：挂载 5s 后 `backfillLocalVideos()`）

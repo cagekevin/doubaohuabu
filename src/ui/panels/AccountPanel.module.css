@@ -58,42 +58,9 @@
   background: var(--color-success-bg);
 }
 
-/* ── 选平台（源版是 `_ComponentTP` 弹窗；这里做成内联展开，省一个弹窗件）── */
-.pick {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-half);
-  padding: var(--space-2);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.pickTitle {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
-}
-
-.pickItem {
-  composes: listItem from '../common/shared.module.css';
-  border: 0;
-}
-
-.pickItem:hover {
-  background: var(--color-surface-sunken);
-}
-
-.pickCancel {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
-  position: absolute;
-  right: var(--space-1);
-  top: var(--space-1);
-}
-
 /* ── 账号列表（原 `.account-row`）── */
 .empty {
-  composes: emptyInline from '../common/shared.module.css';
+  composes: empty isInline from '../common/shared.module.css';
 }
 
 .list {
@@ -120,8 +87,8 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-1);
   color: var(--color-text-strong);
   background: transparent;
@@ -134,6 +101,31 @@
   background: var(--color-surface-hover);
 }
 
+/* 头像（原 `OP.jsx:720-725` 的 `.account-avatar`）—— 分组色作底，字是名字里的数字 */
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--dim-6);
+  height: var(--dim-6);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semi);
+  line-height: var(--line-height-none);
+  user-select: none;
+}
+
+/* 名字 + 状态（原 `.account-meta`）—— **必须 `min-width: 0`**，否则 flex 不肯缩、文字竖排 */
+.metaCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .name {
   max-width: 100%;
   overflow: hidden;
@@ -142,19 +134,37 @@
 }
 
 .meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
 }
 
-.rowBtn,
-.rowBtnDanger {
+/* 「检测登录」（本工程新增：未登录账号才有）—— 文字钮，窄一点 */
+.rowBtn {
   composes: btn btnSm from '../common/shared.module.css';
+  flex: none;
+  padding: 0 var(--space-1);
   background: transparent;
 }
 
-.rowBtnDanger {
+/* 图标钮（原 `.lib-icon`）—— 方块，不占宽度 */
+.iconBtn {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  flex: none;
+  width: var(--dim-5);
+  height: var(--dim-5);
+  color: var(--color-text-muted);
+}
+.iconBtn:hover:not(:disabled) {
+  color: var(--color-text-strong);
+}
+
+/* 移除（原 `.lib-icon.del`）—— 悬停走危险色 */
+.iconDel:hover:not(:disabled) {
   color: var(--color-danger-text);
-  border-color: var(--color-danger-border);
 }
 
 /* ── 面板底部操作条（原 `.panel-foot`）── */

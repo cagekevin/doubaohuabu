@@ -4,39 +4,20 @@
  * ⚠️ 原则 5：色值只走 token
  */
 
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-  background: var(--color-mask);
-}
-
+/*
+ * ★★ **2026-10-12 收口**：自拼的 `.backdrop`（遮罩）与 `.panelHead` / 文本「关闭」钮已删 ——
+ *   全部归 `PanelShell` 的真源（`.overlay` / `.panel` / `.panelHead` / `.panelClose`）。
+ *   本模块只剩**尺寸**。
+ */
 .panel {
-  composes: overlay from '../common/shared.module.css';
-  display: flex;
-  flex-direction: column;
+  composes: panel from '../common/shared.module.css';
   width: 100%;
   max-width: 880px;
   max-height: 80vh;
   overflow: hidden;
 }
-
-.head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.title {
-  flex: 0 0 auto;
-  font-weight: var(--font-weight-bold);
-}
+
+
 
 /* 原 `.lovart-gallery-sub` */
 .sub {
@@ -56,10 +37,7 @@
   gap: var(--space-1);
 }
 
-/* ★ 查 6：次要按钮走共享真源 */
-.btn {
-  composes: btn from '../common/shared.module.css';
-}
+/* ★ 查 6：次要按钮走共享真源 */
 
 .ghost {
   color: var(--color-text-muted);
@@ -75,13 +53,7 @@
   height: 14px;
   background: var(--color-border);
 }
-
-.body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: var(--space-2) var(--space-3);
-}
+
 
 .grid {
   display: grid;
@@ -98,27 +70,17 @@
 
 /* ⚠️ 卡片自身的样式在 `GalleryCard.module.css`（判据 C1 抽出，见 `GalleryCard.tsx` 头注释） */
 
-/* ── 底部（原 `.lovart-gallery-foot` / `-hint` / `-actions`）── */
-.foot {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
+/*
+ * ── 底部（原 `.lovart-gallery-foot` / `-hint` / `-actions`）──
+ * ⚠️ 自造的 `.foot` / `.footActions` 已删 —— 脚归真源 `.panelFoot`
+ *   （`flex` + `justify-content: flex-end` + `gap` + 上下边框）。源版这行是「提示（左）· 按钮（右）」
+ *   ⇒ 提示靠 `margin-right: auto` 顶到左边（真源没设 `margin`，属"只追加真源未设的属性"）。
+ */
 .footHint {
-  flex: 1;
+  margin-right: auto;
   min-width: 0;
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
-}
-
-.footActions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 /* ★ 查 6：底部两个按钮走共享真源 */
@@ -130,10 +92,7 @@
   composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
-/* 原 `.lovart-gallery-empty*` */
-.empty {
-  composes: empty from '../common/shared.module.css';
-}
+/* 原 `.lovart-gallery-empty*` */
 
 .emptyIcon {
   font-size: var(--font-size-2xl);

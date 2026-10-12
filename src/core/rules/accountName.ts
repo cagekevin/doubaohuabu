@@ -120,3 +120,15 @@ export function nextAccountName(
 
 /** 全站类型列表（供 UI 的"选平台"用；与 `SITE_TYPES` 同源） */
 export const ACCOUNT_TYPES = SITE_TYPES;
+
+/**
+ * 账号头像里的那一个字（原 `OP.jsx:724`）
+ *
+ * 源逐字：`type === 'other' ? '其' : ((name||'豆').match(/\d+/)||[])[0] || (name||'豆').slice(0,1)`
+ *   ⇒ `other` 恒 `其`；否则取名字里**第一段数字**（`豆包01` → `01`），没有数字就取**首字**。
+ */
+export function accountAvatarText(account: { type: string; name?: string }): string {
+  if (normalizeAccountType(account.type) === 'other') return '其';
+  const name = account.name || '豆';
+  return name.match(/\d+/)?.[0] || name.slice(0, 1);
+}

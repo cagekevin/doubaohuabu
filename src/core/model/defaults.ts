@@ -6,13 +6,22 @@
  */
 
 import type { NodeDataOf, NodeType } from '@/stable/model/node';
-import { DEFAULT_IMAGE_COUNT, DEFAULT_IMAGE_RESOLUTION } from '@/constants/models';
+import {
+  DEFAULT_IMAGE_COUNT,
+  DEFAULT_IMAGE_RESOLUTION,
+  NODE_DEFAULT_RATIO,
+  NODE_DEFAULT_RATIO_LABEL,
+} from '@/constants/models';
 import { GROUP_Z_INDEX } from '@/constants';
 
+/**
+ * ★ 三类带比例的节点，默认比例一律 `NODE_DEFAULT_RATIO_LABEL`（= `'4:3'`）
+ * ⚠️ 与源不同（源是 `16:9` / `16:9` / `1:1`）—— 见 `constants/models.ts` 的 `NODE_DEFAULT_RATIO` 注。
+ */
 export const NODE_DEFAULTS = {
   text: {
     text: '',
-    aspectRatio: '16:9',
+    aspectRatio: NODE_DEFAULT_RATIO_LABEL,
     duration: 7,
     linkOrder: [],
     referenceOrder: [],
@@ -30,7 +39,7 @@ export const NODE_DEFAULTS = {
   genvideo: {
     label: '文生视频',
     text: '',
-    aspectRatio: '16:9',
+    aspectRatio: NODE_DEFAULT_RATIO_LABEL,
     duration: 5,
     sendAccount: 'auto',
     styleIds: [],
@@ -39,7 +48,7 @@ export const NODE_DEFAULTS = {
   imggen: {
     label: '文生图',
     text: '',
-    aspectRatio: '1:1',
+    aspectRatio: NODE_DEFAULT_RATIO_LABEL,
     channel: 'doubao',
     sendAccount: 'auto',
     imageCount: DEFAULT_IMAGE_COUNT,
@@ -83,12 +92,17 @@ export const GROUP_NODE_Z_INDEX = GROUP_Z_INDEX;
  *    `group`（框选成组）都**不经**这条创建路径，故不给尺寸（缺项 ⇒ 用 `lt` 的兜底 200×180）。
  * ⚠️ 用途目前只有一个：**在边上插入节点时算中点**（原 `lt` 543-560 的 `Oe.w/Oe.h`）。
  */
+/** 由宽度与**默认比例**算出节点高度（`NODE_CREATE_SIZES` 与 `nodeCreateSize` 兜底共用一处） */
+const sizeH = (w: number): number => Math.round(w / NODE_DEFAULT_RATIO);
+
 export const NODE_CREATE_SIZES: Readonly<Partial<Record<NodeType, { w: number; h: number }>>> = {
-  text: { w: 280, h: 150 },
-  genvideo: { w: 380, h: 240 },
-  imggen: { w: 380, h: 300 },
-  account: { w: 420, h: 220 },
-  download: { w: 280, h: 200 },
+  // ★ **2026-10-12 用户裁定**：宽高比一律 `NODE_DEFAULT_RATIO`（4:3）——
+  //   宽度保留源值（那是"这个节点该多宽"的既有判断），高由比例算出。
+  text: { w: 280, h: sizeH(280) },
+  genvideo: { w: 380, h: sizeH(380) },
+  imggen: { w: 380, h: sizeH(380) },
+  account: { w: 420, h: sizeH(420) },
+  download: { w: 280, h: sizeH(280) },
 };
 
 /**
@@ -105,5 +119,6 @@ export const NODE_CREATE_SIZES: Readonly<Partial<Record<NodeType, { w: number; h
  *     （日后源改一处，另两处会被静默带偏）。**它们只是取值巧合相同。**
  */
 export function nodeCreateSize(type: string): { w: number; h: number } {
-  return NODE_CREATE_SIZES[type as NodeType] ?? { w: 200, h: 180 };
+  // ⚠️ 兜底尺寸的**宽**保留源值 `200`；**高**同样由 `NODE_DEFAULT_RATIO` 算出（原 `180`）
+  return NODE_CREATE_SIZES[type as NodeType] ?? { w: 200, h: sizeH(200) };
 }

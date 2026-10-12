@@ -14,7 +14,7 @@
 }
 
 .panel {
-  composes: overlay from '../common/shared.module.css';
+  composes: panel from '../common/shared.module.css';
   position: fixed;
   z-index: var(--z-overlay);
   min-width: 160px;
@@ -24,9 +24,9 @@
 }
 
 .title {
+  composes: panelTitle from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   padding: var(--space-1) var(--space-2);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-sm);
 }
 
 .option {

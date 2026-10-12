@@ -3,15 +3,31 @@
  * ⚠️ 原则 5：色值一律走 `var(--...)`（字面量只允许在 `styles/tokens.css`）
  */
 
-/* ── 节点上的浮动按钮组（原 `.mat-float-actions.nodrag.nopan`）── */
+/* ── 节点上的浮动动作条（原 `.mat-float-actions.nodrag.nopan`，`fL.jsx:162`）──
+   ★ 默认落点 = **贴在图片下沿**（`left:0; bottom:0`，逐字对源）。
+   ⚠️ 此前是「浮在容器上方居中」（`bottom:100%`）—— 于是「分析提示词」跑到节点**框外上方**，
+      与源（压在图片左下角、和「编辑图片」同一行）不符。 */
 .floatActions {
   position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface-raised);
+  border-top-right-radius: var(--radius-sm);
+  opacity: 0.92;
+}
+
+/* 浮在容器上沿之外（`YL.jsx` 无分析按钮 ⇒ 这条是本仓既有落点，见组件头注） */
+.floatAbove {
   left: 50%;
   bottom: 100%;
   transform: translateX(-50%);
   margin-bottom: var(--space-1);
-  display: flex;
-  gap: var(--space-1);
+  padding: 0;
+  background: none;
+  opacity: 1;
 }
 
 .analyzeBtn {
@@ -22,7 +38,12 @@
   color: var(--btn-ghost-fg-hover);
 }
 
-/* ── 结果浮层（原 `.mat-prompt-pop.nodrag.nopan.nowheel`）── */
+/*
+ * ── 结果浮层（原 `.mat-prompt-pop.nodrag.nopan.nowheel`）──
+ * ★ **2026-10-12 收口**：卡片壳（底 / 边框 / 圆角 / 阴影）已删 —— 归 `PanelShell` 的真源 `.panel`；
+ *   自绘的 `×` 关闭钮（`.close`）也删，走真源 `.panelClose`（`✕`）。
+ *   本类**只留定位与尺寸**（`className` 只许追加真源未设的属性）。
+ */
 .pop {
   position: absolute;
   left: 0;
@@ -30,48 +51,18 @@
   margin-top: var(--space-1);
   width: 300px;
   z-index: var(--z-overlay);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
   font-size: var(--font-size-xs);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-}
 
-.badge {
-  composes: pill from '../common/shared.module.css';
-}
 
-.badgeDone {
-  composes: pillOk from '../common/shared.module.css';
-}
 
-.badgeFailed {
-  composes: pillErr from '../common/shared.module.css';
-}
 
-.title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-muted);
-}
 
-.close {
-  composes: btn btnIcon btnGhost from '../common/shared.module.css';
-}
 
-.body {
-  padding: var(--space-2);
-}
+
+
+
 
 .error {
   /* ★ 查 1.5：反馈色**当文字**用 ⇒ 走文字版（底色版在白底上只有 3.76:1）*/
@@ -93,9 +84,7 @@
   color: var(--color-text-muted);
 }
 
-.spinner {
-  composes: spinnerRing from '../common/shared.module.css';
-}
+
 
 /* ── tab 区（原 `.mpp-tabs` / `.mpp-content` / `.mpp-pre`）── */
 .tabs {

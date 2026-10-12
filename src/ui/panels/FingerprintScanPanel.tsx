@@ -1,19 +1,11 @@
 /**
  * 指纹撞车体检面板 —— 对应原 `DP.jsx`（体检报告 + 历史列表的**视图半**）
  *
- * ★★ **它补的是 `scanHistory` 那条链的最后一环**：纯层（`rules/fingerprintScan.ts`，19 条单测）
- *   + 记录纯层（`rules/scanHistory.ts`，11 条单测）+ store 切片 + 落盘都就位了，
- *   但**没有任何地方调 `recordScan`** ⇒ 历史只能读不能写（判据 B5 盯的正是这种"落了没人调"）。
+ * ★ **报告是实时算的**（`useMemo(() => scanFingerprintCollisions(accounts))`，不进 store）；
+ *   **只有 `history` 是持久化的**。
  *
- * ★ **源版的分工（照抄）**：报告**是实时算的**（`useMemo(() => zk(accounts))`，不进 store）；
- *   **只有 `history` 是持久化的**（由账号页 `OP.jsx` 调 `recordScan` 写入）。
- *   本组件把两件事放在一起：**看报告** + **把这份报告记进历史**（源版是自动记的，
- *   见下"一处偏离"）。
- *
- * ⚠️ **一处有意偏离（留痕）**：源版 `OP.jsx` 大概在**打开体检时自动 `recordScan`**；
- *   本实现改成**显式按钮**（「记录到历史」由「开始体检」承担）——
- *   理由：自动记会让**每次打开面板**都往历史里塞一条（而有去重签名兜着，用户看不出差别），
- *   显式更符合"历史是记录，不是打开次数"。**这一处是我加的判断，不是源版行为。**
+ * ★ **写入方 = 账号页**（原 `OP.jsx:26-40`）：报告稳定 1.5s 后自动 `recordScan`
+ *   —— 见 `AccountPanel` 的那个 effect。本组件**只读**（源 `DP.jsx` 里也没有「记录」按钮）。
  *
  * ⚠️ **原则 1**：本组件只调 `useStore` 暴露的 action 与**纯规则**（`scanFingerprintCollisions`
  *   是纯函数（组件调 `core/rules` 纯规则是允许的 —— 同 `SendQueuePanel` 调 `resolveGenProgress`）。
@@ -28,6 +20,8 @@ import {
   scanFingerprintCollisions,
 } from '@/core/rules/fingerprintScan';
 import styles from './FingerprintScanPanel.module.css';
+import shared from '@/ui/common/shared.module.css';
+import { PanelShell } from '@/ui/common/PanelShell';
 
 export interface FingerprintScanPanelProps {
   onClose: () => void;
@@ -36,9 +30,7 @@ export interface FingerprintScanPanelProps {
 export function FingerprintScanPanel({ onClose }: FingerprintScanPanelProps) {
   const accounts = useStore((s) => s.accounts);
   const history = useStore((s) => s.scanHistory);
-  const recordScan = useStore((s) => s.recordScan);
   const clearScanHistory = useStore((s) => s.clearScanHistory);
-  const pushToast = useStore((s) => s.pushToast);
 
   /**
    * ⚠️ 当前时刻**必须收进 state**：渲染期直接调 `Date.now()` 是**不纯调用**
@@ -52,42 +44,24 @@ export function FingerprintScanPanel({ onClose }: FingerprintScanPanelProps) {
   const dimTotal = FINGERPRINT_DIMENSIONS.length;
 
   return (
-    <div className={styles.backdrop} onClick={onClose} data-testid="fp-scan-panel">
-      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.head}>
-          <span className={styles.title}>{FP_SCAN_TEXT.title}</span>
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.primary}`}
-              title={FP_SCAN_TEXT.recordTitle}
-              onClick={() => {
-                const recorded = recordScan(report);
-                // ⚠️ 不静默：源版同签名时是静默 return，用户会以为"没反应"
-                pushToast(
-                  recorded ? '已记入体检历史' : '与上一条结论相同，未重复记录',
-                  undefined,
-                  recorded ? 'info' : 'warn',
-                );
-              }}
-            >
-              {FP_SCAN_TEXT.run}
-            </button>
-            <button
-              type="button"
-              className={styles.btn}
-              disabled={history.length === 0}
-              onClick={() => clearScanHistory()}
-            >
-              {FP_SCAN_TEXT.clearHistory}
-            </button>
-            <button type="button" className={`${styles.btn} ${styles.ghost}`} onClick={onClose}>
-              {FP_SCAN_TEXT.close}
-            </button>
-          </div>
-        </div>
-
-        <div className={styles.body}>
+    <PanelShell
+      overlay
+      onClose={onClose}
+      className={styles.panel}
+      bodyClassName={styles.body}
+      testId="fp-scan-panel"
+      title={FP_SCAN_TEXT.title}
+      actions={
+        <button
+          type="button"
+          className={shared.btn}
+          disabled={history.length === 0}
+          onClick={() => clearScanHistory()}
+        >
+          {FP_SCAN_TEXT.clearHistory}
+        </button>
+      }
+    >
           {/* 报告（逐字对齐源的五行） */}
           <div className={styles.report}>
             <div>{FP_SCAN_TEXT.scanned(report.withFpCount, report.noFp)}</div>
@@ -143,8 +117,6 @@ export function FingerprintScanPanel({ onClose }: FingerprintScanPanelProps) {
               </div>
             ))}
           </div>
-        </div>
-      </div>
-    </div>
+    </PanelShell>
   );
 }

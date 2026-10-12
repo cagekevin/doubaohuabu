@@ -21,9 +21,18 @@
 
 /** 节点通知（原 `setNodeNotice` 写入的形状） */
 export interface NodeNotice {
-  level: 'info' | 'warn';
+  /**
+   * 语气档 —— **三档**（`error` 必须有）：源 `Qh` 里 `infringe` / `cannot-return` 两条是
+   * `level: 'error'`（`shared.js:25032-25040`），`ye` 直接把它透传给 `setNodeNotice`（`:2602`）。
+   */
+  level: 'info' | 'warn' | 'error';
   code: string;
-  accountId: string | null;
+  /**
+   * 产出这条通知的账号 —— **可选**：源 6 个 `setNodeNotice` 调用点里**只有 2 个**传它
+   * （`_Component43.jsx:1806`/`:1824`），另外 4 个（`:2571`/`:2601`/`:2629`/`:2991`）**根本不传**
+   * ⇒ 形状里不能强制它（源 `setNodeNotice` 是 `{...r, at}` 直接展开）。
+   */
+  accountId?: string | null;
   title: string;
   text: string;
   /** 写入时刻（原 `setNodeNotice` 的 `at: Date.now()`） */

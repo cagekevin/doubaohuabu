@@ -4,14 +4,27 @@
  */
 
 /* ── Modal ── */
-.mask {
+/* 遮罩（原 `.mask` 改名 —— mockup 定稿「遮罩」就叫 `.overlay`）*/
+/* ★ **遮罩只有一种**（2026-10-12 用户裁定）：全屏 + 居中 + 暗底。
+   ⚠️ mockup 里 `.bs-backdrop` / `.login-backdrop` / `.gen-panel-layer` 是 `absolute`（盖画布），
+   而 `.panel-backdrop` / `.modal-overlay` / `.style-lib-layer` / `.ie-overlay-root` 是 `fixed`（盖视口）——
+   **那点差别不影响任何功能** ⇒ 不分档，一律 `fixed`。 */
+.overlay {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--space-5);
   background: var(--color-mask-strong);
+}
+/* 媒体遮罩（原 `ImageEditor.backdrop`）—— 压在**图 / 视频**上，不是界面遮罩。
+   对应另一个 token：`--color-scrim`（媒体）vs `--color-mask-strong`（界面）。 */
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--color-scrim);
 }
 .dialog {
   min-width: 320px;
@@ -24,25 +37,81 @@
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
-.header {
+/**
+ * 面板头 —— **默认 = 面板的多数值**（9 个面板实测都挤在 `padding 4/8` · `gap 8`）。
+ * ⚠️ 变体必须在真源内定义（使用方本地覆盖会被真源盖掉，实证见计划 §5 刀 6 铁律）。
+ * 顺序：基类在前，变体在后（同优先级靠书写顺序取胜）。
+ */
+.panelHead {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-semi);
 }
-.body {
-  padding: var(--space-5);
+.panelBody {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--space-3);
   overflow: auto;
 }
-.footer {
+.panelFoot {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--color-border);
+}
+/* 面板题（原各模块自造的 `.title` / `.xxxTitle` / `.bs-title` …） */
+.panelTitle {
+  flex: 0 0 auto;
+  min-width: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 头部中槽（计数 / 账号 / 时长）—— 与 `panelHeadActions` 的区别：**不靠右**（紧跟在标题之后）。
+ * ⚠️ plan §4 只列了 `panelHeadActions`；中槽是 `PanelShell` 落 `meta` 时必需的 ⇒ 一并补上。
+ */
+.panelHeadMid {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* 头部右槽（历史 / 保存 / 关闭钮之前的动作）—— plan §4 已列 */
+.panelHeadActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+/* 节标题（**内容区**里的小标题，不是面板题）—— 原 ApiSettings/GroupManagerModal 的 `.sectionTitle`、
+   FingerprintScanPanel 的 `.historyTitle`、ProxyPoolPanel 的 `.assignTitle`、AccountPanel 的 `.pickTitle` */
+.sectionTitle {
+  flex: 0 0 auto;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-strong);
+}
+.sectionTitleSub {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-faint);
 }
 /* ── ContextMenu ── */
 /* 注：`.menu` 已挪到 `.overlay` 之后（同源，见该处） */
@@ -297,28 +366,21 @@
 /* 纯图标方块（宽 = 高）*/
 .btnIcon { width: var(--btn-height); padding: 0; flex: none; }
 
-/* 弹窗关闭按钮 —— ★ 原来定义在文件**前部**（`.btn` 之前），
-   而 `composes` 要求被引用的类在**引用点之前** ⇒ 必须挪到按钮段之后才能走真源。 */
-.close {
+/* 弹窗关闭按钮 —— ★ 必须定义在 `.btn*` 之后（同文件 `composes` 约束）。
+   mockup 定稿：关闭钮统一 24×24（原 28×28）。危险态走 `.isDanger` 修饰。 */
+.panelClose {
   composes: btn btnIcon btnGhost;
-  width: 28px;
-  height: 28px;
+  width: var(--dim-5);
+  height: var(--dim-5);
   display: grid;
   place-items: center;
 }
-
-/* 保存失败提示条的关闭按钮（20×20 危险色）—— 与 `.close` 同理：
-   原先定义在 `.btn` 之前 ⇒ 同文件 `composes` 不可用；现挪到这里。 */
-.saveErrorClose {
-  composes: btn btnIcon btnGhost;
-  flex: none;
-  width: 20px;
-  height: 20px;
+/* 危险态（原 `.saveErrorClose` 并入）：危险色 + 危险悬停底 */
+.panelClose.isDanger {
   color: var(--color-danger-text);
   font-size: var(--font-size-lg);
 }
-/* 危险态悬停（覆盖真源 `.btnGhost:hover` 的底色 —— 同类同优先级，靠书写顺序取胜）*/
-.saveErrorClose:hover:not(:disabled) {
+.panelClose.isDanger:hover:not(:disabled) {
   background: var(--color-danger-border);
 }
 
@@ -367,8 +429,12 @@
    改造前 6 处各写一遍（CreatePanel / FingerprintScanPanel / GenPanel / GalleryPanel 叫 `.panel`，
    BatchSendPanel / ActivatePage 叫 `.card`），阴影有 3 种值。
    只含**视觉壳**（底 / 边框 / 圆角 / 阴影）；定位与尺寸留在各自类里。
+   ★ mockup 定稿：「卡片壳」叫 `.panel`（原 `.overlay` 语义冲突：既是卡片又被当遮罩）。
 */
-.overlay {
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
@@ -376,12 +442,11 @@
 }
 
 /**
- * 右键菜单浮层（`ContextMenu`）—— ★ 与 `.overlay` 同源。
- * ⚠️ 原先定义在文件**前部**（`.menuItem` 上方），而 `composes` 要求目标类在引用点**之前**
- *   ⇒ 必须挪到 `.overlay` 之后。这正是规范 §6 的通用解法：**优先挪顺序，别放弃收口**。
+ * 右键菜单浮层（`ContextMenu`）—— ★ 与 `.panel` 同源。
+ * ⚠️ `composes` 要求目标类在引用点**之前** ⇒ 必须放在 `.panel` 之后。
  */
 .menu {
-  composes: overlay;
+  composes: panel;
   position: fixed;
   z-index: var(--z-overlay);
   min-width: 160px;
@@ -419,10 +484,13 @@
 /* ★ 三态扫描补：按下反馈（hover 与 sunken 同色，只能靠位移区分）*/
 .listItemClickable:active { transform: translateY(1px); }
 
-/* ── 基础控件：行内小提示（不是空态，只是一句话）── */
-.emptyInline {
+/* ── 空态的「横排」变体（用法：`composes: empty isInline`）──
+   ⚠️ 独立类而非 `.empty.isInline` 复合：`composes` 只能引用**独立类名**。
+   与 `.empty` 同文件、写在其后 ⇒ 顺序有保证（`flex-direction: row` 能盖过 `.empty` 的 column）。 */
+.isInline {
+  flex-direction: row;
   padding: var(--space-2);
-  color: var(--color-text-faint);
+  text-align: left;
   font-size: var(--font-size-xs);
 }
 

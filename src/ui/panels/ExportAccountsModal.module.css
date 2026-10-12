@@ -12,7 +12,7 @@
 }
 
 .empty {
-  composes: emptyInline from '../common/shared.module.css';
+  composes: empty isInline from '../common/shared.module.css';
 }
 
 .list {

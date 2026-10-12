@@ -29,6 +29,7 @@ import type { LibraryItem } from '@/stable/model/project';
 import type { ApiJobAttempt } from '@/stable/model/gen';
 import { appendGenHistoryAttempt, patchGenHistoryAttempt } from '@/core/rules/genHistory';
 import { IMAGE_GEN_RESULT_LIMIT } from '@/constants';
+import { NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
 import { clampImageCount } from '@/core/rules/prompt';
 
 /** 落库的一张图（原 `addToLibrary` 的入参项） */
@@ -158,7 +159,9 @@ export function createApiLandingActions(
       const params = {
         text: (typeof data.text === 'string' ? data.text : '') || '',
         channel: (typeof data.channel === 'string' && data.channel) || 'doubao',
-        aspectRatio: (typeof data.aspectRatio === 'string' && data.aspectRatio) || '1:1',
+        // ⚠️ 兜底吃**默认比例真源**（2026-10-12 收口：此前又写了一遍 `'1:1'`，
+        //    与 `NODE_DEFAULTS.imggen.aspectRatio`（现 4:3）不是一个值）
+        aspectRatio: (typeof data.aspectRatio === 'string' && data.aspectRatio) || NODE_DEFAULT_RATIO_LABEL,
         styleIds: Array.isArray(data.styleIds) ? data.styleIds : [],
         imageCount: clampImageCount(data.imageCount),
         igModel: (typeof data.igModel === 'string' && data.igModel) || '',

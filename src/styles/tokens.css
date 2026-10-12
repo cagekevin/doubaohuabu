@@ -66,6 +66,7 @@
   /* ── 品牌候选色阶 ── */
   --p-indigo-400: #818cf8;  --p-indigo-500: #6366f1;  --p-indigo-600: #4f46e5;
   --p-blue-400:   #60a5fa;  --p-blue-500:   #3b82f6;  --p-blue-600:   #2563eb;
+  --p-blue-500-ch: 59 130 246;  /* ★ 通道值：info 半透明底 / 边用 */
   --p-violet-400: #a78bfa;  --p-violet-500: #8b5cf6;  --p-violet-600: #7c3aed;
   --p-green-400:  #34d399;  --p-green-500:  #10b981;  --p-green-600:  #059669;
   --p-green-700:  #047857; /* ★ 新增：文字用 */
@@ -154,6 +155,11 @@
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 循环类周期（转一圈 / 跳一下，不是 UI 过渡时长，单独成档）*/
+  --dur-spinner: 700ms;
+  --dur-spinner-slow: 800ms;
+  --dur-bounce: 1000ms;
+  --dur-bounce-step: 150ms;   /* 三点跳动的错峰延迟 */
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -164,21 +170,25 @@
   --brand-400: var(--p-indigo-400);
   --brand-500: var(--p-indigo-500);
   --brand-600: var(--p-indigo-600);
+  --brand-500-ch: 99 102 241;   /* ★ 通道值（`r g b`）：供 `rgb(var(--brand-500-ch) / α)` 用，换品牌跟着切 */
 }
 [data-brand='blue'] {
   --brand-400: var(--p-blue-400);
   --brand-500: var(--p-blue-500);
   --brand-600: var(--p-blue-600);
+  --brand-500-ch: 59 130 246;
 }
 [data-brand='violet'] {
   --brand-400: var(--p-violet-400);
   --brand-500: var(--p-violet-500);
   --brand-600: var(--p-violet-600);
+  --brand-500-ch: 139 92 246;
 }
 [data-brand='green'] {
   --brand-400: var(--p-green-400);
   --brand-500: var(--p-green-500);
   --brand-600: var(--p-green-600);
+  --brand-500-ch: 16 185 129;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -229,9 +239,11 @@
   --color-border-strong: var(--p-gray-300);
 
   /* ── 动作（★ 原本这 6 个语义全挤在 --color-primary 一个变量里）── */
-  --color-action-primary:       var(--brand-500);  /* 主按钮底 */
-  --color-action-primary-hover: var(--brand-600);  /* 主按钮 hover */
-  --color-accent-text:          var(--brand-500);  /* 强调文字 / 图标 */
+  /* ★ 实底 / 文字取 600 档：brand-500 配白字只有 4.47:1（差 0.03），600 得 6.27:1。
+     brand-500 继续用于描边 / 光环 / 连线端点等**非文字**角色。 */
+  --color-action-primary:       var(--brand-600);  /* 主按钮底 */
+  --color-action-primary-hover: color-mix(in srgb, var(--brand-600) 88%, var(--p-ink-950));  /* hover 再深一档 */
+  --color-accent-text:          var(--brand-600);  /* 强调文字 / 图标 */
   --color-selected-border:      var(--brand-500);  /* 选中框 */
   --color-selected-ring:        var(--brand-500);  /* 选中光环 box-shadow */
   --color-focus-ring:           var(--brand-500);  /* 键盘 focus 环 */
@@ -239,15 +251,13 @@
   --color-handle:               var(--brand-500);  /* 连线端点 */
   --color-edge:                 var(--brand-500);  /* 连线本体 */
 
-  /* ── 反馈 ── */
-  --color-success: var(--p-green-500);
-  /**
-   * 成功态底色 —— ★ 修正悬空：`ActivatePage.module.css` 一直在引用它，
-   * 但**从未有定义**（旧 `tokens.css` 里只有 `--color-danger-bg`，没有 success 版）。
-   */
+  /* ── 反馈 ──
+     ★ 实底版回**深档**：green-500 / amber-500 / red-500 配白字只有 2.54 / 2.15 / 3.76:1，
+       green-700 / amber-700 / red-600 得 5.5 / 5.0 / 4.8:1 ⇒ 既可当底（配白字）、也可当文字。 */
+  --color-success: var(--p-green-700);
   --color-success-bg: rgb(var(--p-green-500-ch) / 0.10);
-  --color-warning: var(--p-amber-500);
-  --color-danger:  var(--p-red-500);
+  --color-warning: var(--p-amber-700);
+  --color-danger:  var(--p-red-600);
   /**
    * ★ 新增：**文字版**的反馈色（比「底色版」深一档）。
    *   底色要亮才显眼、文字要深才读得清 —— 原先两边共用同一个 `--color-danger`，
@@ -259,6 +269,11 @@
   --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.08);
   --color-danger-border: rgb(var(--p-red-500-ch) / 0.24);
   --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.10);
+  /* 信息态（原版 --info：可拉取芯片 / 等待倒计时 / 账号徽章 / 提示条）*/
+  --color-info:      var(--p-blue-600);
+  --color-info-bg:     rgb(var(--p-blue-500-ch) / 0.10);
+  --color-info-border: rgb(var(--p-blue-500-ch) / 0.24);
+  --color-info-text:  var(--p-blue-600);
 
   /* ── 叠加 ── */
   --color-shadow:        rgb(var(--p-black-ch) / 0.08);
@@ -281,7 +296,8 @@
    *   界面遮罩只做层级分离（0.32 够用）；媒体遮罩要压住**任意照片**的亮部（0.55 才够）。
    */
   --color-scrim:         rgb(var(--p-black-ch) / 0.55);
-  --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.08);
+  /* ★ 选中底色走品牌通道值（原写死 indigo ⇒ 换品牌色时选中底色不变） */
+  --color-selection-bg:  rgb(var(--brand-500-ch) / 0.08);
 
   /* ── 节点类型色 ── */
   --color-node-material: var(--p-node-material);
@@ -307,20 +323,15 @@
    *   （四个品牌全不达标：indigo 2.98 / blue 2.54 / violet 2.72 / green 1.92）。
    *   暗色主题的按钮应是「浅底 + 深字」⇒ 改用深色字（5.91:1 ✅）。
    */
-  --color-text-on-brand: var(--p-ink-900);
+  --color-text-on-brand: var(--p-ink-950);
 
   --color-border:        var(--p-ink-800);
   --color-border-strong: var(--p-ink-700);
 
   /* 暗色下品牌色要提亮一档，否则压在深底上发闷 */
   --color-action-primary:       var(--brand-400);
-  /**
-   * ★ 修正（深色主题覆盖扫描）：原先 light 段定义了 hover（500→600），
-   *   dark 段**漏了** ⇒ 暗色下按钮 hover 会从 brand-400 跳到 brand-600（**变暗**），
-   *   与"暗色提亮"的直觉相反，且与其余 7 个品牌色的档位不一致。
-   *   现在 dark 也保持"深一档"：400 → 500。
-   */
-  --color-action-primary-hover: var(--brand-500);
+  /* hover 在暗色下要**更亮**（混合白，而非跳到更暗的档）*/
+  --color-action-primary-hover: color-mix(in srgb, var(--brand-400) 86%, var(--p-white));
   --color-accent-text:          var(--brand-400);
   --color-selected-border:      var(--brand-400);
   --color-selected-ring:        var(--brand-400);
@@ -342,7 +353,7 @@
    * ★ 修正：暗色的 danger 提亮到 red-400（更浅）⇒ **白字压上去对比度不足**，
    *   改用深色字。light 段仍是白字（red-500 够深，不需要覆盖）。
    */
-  --color-text-on-danger: var(--p-ink-900);
+  --color-text-on-danger: var(--p-ink-950);
 
   /**
    * ★ 修正：light 段那 5 个「半透明底 / 边」用 `rgb(通道 / α)` 定义 ——
@@ -350,10 +361,16 @@
    *   dark 段把 α 提到约 1.8×（0.08→0.18 / 0.24→0.36 / 0.10→0.18）。
    */
   --color-success-bg:    rgb(var(--p-green-500-ch) / 0.18);
-  --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.18);
-  --color-danger-border: rgb(var(--p-red-500-ch) / 0.36);
+  --color-danger-bg:     rgb(var(--p-red-500-ch) / 0.16);
+  --color-danger-border: rgb(var(--p-red-500-ch) / 0.40);
   --color-warning-bg:    rgb(var(--p-amber-500-ch) / 0.18);
-  --color-selection-bg:  rgb(var(--p-indigo-500-ch) / 0.16);
+  /* ★ 选中底色走品牌通道值（原写死 indigo） */
+  --color-selection-bg:  rgb(var(--brand-500-ch) / 0.16);
+  /* 信息态（暗色下 400 档够亮；半透明底 α 提到 ~1.8×）*/
+  --color-info:      var(--p-blue-400);
+  --color-info-bg:     rgb(var(--p-blue-500-ch) / 0.18);
+  --color-info-border: rgb(var(--p-blue-500-ch) / 0.40);
+  --color-info-text:  var(--p-blue-400);
 
   --color-shadow:        rgb(var(--p-black-ch) / 0.40);
   --color-shadow-strong: rgb(var(--p-black-ch) / 0.56);
@@ -412,9 +429,11 @@
 
   --duration-fast: var(--dur-fast);
   --duration-base: var(--dur-base);
-  /* ⚠️ 原先这里写了 `--ease-out: var(--ease-out);` —— **自我引用 = 无效值**，
-     导致所有 `transition` 的缓动都失效（落到浏览器默认 `ease`）。
-     L1 已有 `--ease-out` 原始值 ⇒ **删除该条**，组件直接用 L1 那个名字。 */
+  --duration-spinner:      var(--dur-spinner);
+  --duration-spinner-slow: var(--dur-spinner-slow);
+  --duration-bounce:       var(--dur-bounce);
+  --duration-bounce-step:  var(--dur-bounce-step);
+  /* 缓动直接用 L1 的 `--ease-out`（不在此重复声明 —— `--x: var(--x)` 是无效值）*/
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -422,8 +441,8 @@
    ══════════════════════════════════════════════════════════════════ */
 :root {
   /* ── 按钮 ── */
-  /* ★ 取多数派（7 个主按钮里 6 个原本就是 --radius-sm）—— 统一后视觉几乎不动 */
-  --btn-radius:      var(--radius-sm);
+  /* ★ mockup 为准：按钮圆角 = radius-md（8px） */
+  --btn-radius:      var(--radius-md);
   --btn-font-size:   var(--font-size-sm);
   --btn-height:      calc(var(--dim-6) * var(--density));
   --btn-padding-x:   var(--space-3);
@@ -463,7 +482,7 @@
   --panel-bg:        var(--color-surface-raised);
   --panel-border:    var(--color-border);
   --panel-radius:    var(--radius-md);
-  --panel-shadow:    var(--shadow-md);
+  --panel-shadow:    0 2px 12px var(--color-shadow);  /* ★ mockup 为准（原 var(--shadow-md) = 0 4px 16px）*/
   /**
    * ★ 浮层卡片专用阴影（比普通面板更重，悬浮感）
    * 改造前 6 个浮层各写一遍：`0 4px 16px` / `0 8px 32px` / `0 12px 40px` 三种值，
@@ -488,14 +507,23 @@
   --node-head-size:    var(--font-size-xs);
   --node-body-padding: var(--space-2);
   --node-min-width:    180px;
+  /* ★ mockup 骨架内距 / 尺寸旋钮（原 --mk-node-pad-* / --mk-head-gap / --mk-btn-h / --mk-thumb / --mk-stage-ratio）*/
+  --node-pad-x:        var(--space-3);
+  --node-pad-y:        var(--space-2);
+  --node-strip-pad-y:  var(--space-1);
+  --node-head-gap:     var(--space-1);
+  --node-btn-h:        22px;   /* 节点内小钮高（比标准 --dim-5 矮一档）*/
+  --node-thumb:        36px;
+  --node-stage-ratio:  16 / 9;
 
   /* ── 连线 ── */
-  --edge-stroke:        var(--color-edge);
-  --edge-stroke-width:  2;
-  --edge-stroke-selected: var(--color-action-primary-hover);
+  /* ★ mockup 为准：连线 = 中性灰 1px（端点仍是品牌色，线不抢戏）*/
+  --edge-stroke:        var(--color-text-faint);
+  --edge-stroke-width:  1;
+  --edge-stroke-selected: var(--color-action-primary);
   --handle-bg:          var(--color-handle);
   --handle-border:      var(--color-surface-raised);
-  --handle-size:        8px;
+  --handle-size:        14px;  /* ★ mockup 为准（原版 .react-flow__handle 14×14，逐字对源）*/
 
   /* ── 药丸 / 徽章 ── */
   --chip-bg:     var(--color-surface-sunken);
@@ -540,13 +568,15 @@
    */
   --node-dot-material: var(--color-node-material);
   --node-dot-other:    var(--color-node-other);
-  --node-dot-account:  var(--color-node-account);
-  --node-dot-download: var(--color-success);
+  --node-dot-account:  var(--color-success);
+  --node-dot-download: var(--color-warning);
+  --node-dot-text:     var(--color-warning);
+  --node-dot-video:    var(--color-danger);
 
   /* ── 加载指示 ── */
   --spinner-color: var(--color-action-primary);
-  /* 转一圈的周期 —— 与交互动效（--duration-*）是两个概念，故单独成旋钮 */
-  --spinner-duration: 0.8s;
+  /* 转一圈的周期 —— 走 L1 循环类档（原写死 0.8s = --dur-spinner-slow）*/
+  --spinner-duration: var(--duration-spinner-slow);
 
   /* ── 进度条 ── */
   --progress-fill:  var(--color-action-primary);

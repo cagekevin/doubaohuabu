@@ -24,13 +24,13 @@
 }
 
 .assignTitle {
+  composes: sectionTitleSub from '../common/shared.module.css';
+  /* 仅追加真源未设的属性 */
   margin-top: var(--space-2);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
 }
 
 .empty {
-  composes: emptyInline from '../common/shared.module.css';
+  composes: empty isInline from '../common/shared.module.css';
 }
 
 .list {

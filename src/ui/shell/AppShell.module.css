@@ -15,17 +15,80 @@
   min-height: 0;
 }
 
+/**
+ * 栏容器（原 `.side.left-side` / `.side.right-side`）—— 真值 = `docs/mockup/assets/mockup.css:1928-1944`：
+ *  左栏 **256px**、右栏 **248px**，两栏均可收起（`.collapsed` ⇒ 宽 0）。
+ * ⚠️ `position: relative` 是**折叠钮**（绝对定位）的定位上下文。
+ */
 .side {
-  width: 260px;
+  position: relative;
   flex-shrink: 0;
-  overflow: auto;
+  width: 256px;
   background: var(--color-surface-raised);
   border-right: 1px solid var(--color-border);
 }
 
 .sideRight {
+  width: 248px;
   border-right: none;
   border-left: 1px solid var(--color-border);
+}
+
+/**
+ * 收起态（原 `.side.collapsed`）—— **只把栏宽收成 0**；
+ * ⚠️ `overflow: hidden` **必须落在 `.sideClip`**（原 `.side-clip`），不能落在本类：
+ *   折叠钮是 `left/right: 100%` 的绝对定位元素，栏宽为 0 时它就落在栏的**框内**
+ *   ⇒ 本类若裁溢出，钮会被一起裁掉（点了就再也展不开）。
+ */
+.sideCollapsed {
+  width: 0;
+  border: none;
+}
+
+/* 栏内裁剪（原 `.side-clip`）—— 真正滚动 / 裁溢出的那一层 */
+.sideClip {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/**
+ * 折叠钮（原 `.side-toggle`）—— **22×52 骑马钮**，贴在栏边上（`mockup.css:1934-1944`）。
+ * ⚠️ 基类 = **左栏**的落点（`left: 100%`）；右栏在下方覆盖成 `right: 100%`。
+ */
+.sideToggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 100%;
+  margin-left: 2px;
+  width: 22px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  box-shadow: var(--panel-shadow);
+  z-index: var(--z-panel);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-none);
+}
+
+.sideRight .sideToggle {
+  left: auto;
+  right: 100%;
+  margin-left: 0;
+  margin-right: 2px;
+}
+
+.sideToggle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
 }
 
 .centerStage {
@@ -47,46 +110,72 @@
   color: var(--color-text-muted);
 }
 
+/*
+ * ★★ **画布顶栏**（原 `.canvas-topbar`，`_Component42.jsx:1563`）——
+ *    **不是全宽条**：它**浮在画布上方、水平居中**，且自身不吃指针（`pointer-events: none`，
+ *    由每个子项自己开）。样式真值 = `docs/mockup/assets/mockup.css:1892-1896`。
+ * ⚠️ 它靠 `.centerStage` 的 `position: relative` 定位（与画布同一个定位上下文）。
+ */
 .topbar {
-  height: var(--topbar-height);
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-panel);
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--topbar-padding-x);
-  background: var(--topbar-bg);
-  border-bottom: 1px solid var(--topbar-border);
+  gap: var(--space-2);
+  pointer-events: none;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
 
-/* 顶栏：项目名 / 节点数 —— 原为 inline style */
-.topbarName {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
+/* 项目名（原 `.topbar-project-name` / `.topbar-project-label`）—— 双击重命名 */
+.topbarProjectName {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * ⚠️ 原版 CSS 未入库、mockup 只给了 `padding: 0 16px`（无底无框）；而**参考截图**
+ *   （`docs/参考-原版界面/01`）里项目名 / 存储 / 后台入口都是**同一款胶囊**（浅底 + 描边 + 阴影）
+ *   ⇒ 三者统一走 `.topbar-toggle` 那款（判据「能一种的别搞两种」）。
+ */
+.topbarProjectLabel {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 var(--space-4);
   color: var(--color-text-strong);
+  font-weight: var(--font-weight-semi);
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--panel-shadow);
 }
-.topbarCount {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
-}
-/* 右侧弹性占位（原 `style={{ flex: 1 }}`）*/
-.topbarSpacer { flex: 1; }
 
 /*
  * 顶栏「豆包后台」入口（原 `.topbar-toggle` / `.topbar-icon`，`_Component42.jsx:1606`）
- * ⚠️ `docs/mockup/assets/mockup.css` 里**没有** `.topbar-toggle` / `.topbar-icon`
- *   （抽取时未收）⇒ 按 token 自写，不假装有真身。
+ * 真值 = `docs/mockup/assets/mockup.css:1917-1925`。
  */
 .topbarToggle {
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  min-height: 36px;
+  padding: 0 var(--space-4);
   background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--panel-shadow);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semi);
+  color: var(--color-text-strong);
   cursor: pointer;
 }
 
@@ -95,34 +184,77 @@
 }
 
 .topbarIcon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-none);
 }
 
 /*
- * 顶栏「项目保存路径」区（原 `.topbar-project-storage`）—— 按钮一律 `composes` 共享真源（`docs/17` 查 6）
+ * 顶栏「项目保存路径」区（原 `.topbar-project-storage`）
+ * 真值 = `docs/mockup/assets/mockup.css:1903-1913`。
  * ⚠️ 图标是**内联 svg**（viewBox 20×20，path 逐字抄源 `_Component42.jsx:1593`）⇒ 只给尺寸与 `fill`。
  */
 .storage {
-  display: flex;
-  align-items: center;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 132px;
+  max-width: 260px;
+  height: 36px;
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--panel-shadow);
 }
 
 .storageMain {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0 var(--space-3) 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semi);
+  border: none;
+  background: transparent;
+  color: var(--color-text-strong);
+  cursor: pointer;
+}
+
+.storageLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ★ 未设置保存路径 ⇒ 告警色（原 `.topbar-project-storage:not(.configured) .topbar-storage-label`） */
+.storage:not(.storageConfigured) .storageLabel {
+  color: var(--color-warning-text);
 }
 
 .storageIcon {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
 }
 
 .storageReveal {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  flex: 0 0 31px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-none);
+  cursor: pointer;
 }
 
 /*

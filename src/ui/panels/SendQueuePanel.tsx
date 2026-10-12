@@ -41,6 +41,8 @@ import {
 import { queueStats } from '@/core/rules/sendQueueOps';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
 import styles from './SendQueuePanel.module.css';
+import shared from '@/ui/common/shared.module.css';
+import { PanelShell } from '@/ui/common/PanelShell';
 
 /** 面板假想尺寸（原 `Qd(e, t, n, r)` 的 `n`/`r`）—— 用于把坐标夹进视口 */
 const PANEL_W = 320;
@@ -176,30 +178,36 @@ export function SendQueuePanel() {
     //    加进来**不会**导致重复绑定（这是当初那条 eslint warning 的正确修法：改**代码**，不是放宽门禁）
   }, [dragging, q]);
 
-  if (items.length === 0 && collapsed) return null;
+  /**
+   * ★ **队列为空 ⇒ 整个面板不渲染**（原 `z3.jsx:186-188`：`if (!m.length) return null;`）
+   *
+   * ⚠️ 此前写的是 `items.length === 0 && collapsed` ⇒ 空队列且**未折叠**时照样渲染一个
+   *    空浮窗，常驻左下角**压住画布的缩放控件**（`+ / − / ⛶`）。
+   *    源里根本没有"空态面板"这一形态 —— 有队列才出现。
+   */
+  if (items.length === 0) return null;
 
   const done = stats.success + stats.failed + stats.cancelled;
 
   return (
-    <div
-      ref={panelRef}
+    <PanelShell
+      wrapperRef={panelRef}
       className={`${styles.panel} ${dragging ? styles.dragging : ''}`}
-      data-testid="send-queue-panel"
       // 没拖过时贴左下角（源版默认也是屏幕左下，位置来自 `U3` 的兜底）
       style={pos ? { left: pos.x, top: pos.y } : undefined}
-    >
-      <div
-        className={styles.head}
-        title={SEND_QUEUE_TEXT.dragTitle}
-        onPointerDown={onPointerDown}
-      >
-        <span className={styles.title}>{SEND_QUEUE_TEXT.title}</span>
-        <span className={styles.conc} title={SEND_QUEUE_TEXT.concurrencyTitle(concurrency)}>
-          {`×${concurrency}`}
-        </span>
-        <span className={styles.statusline}>
-          {paused ? SEND_QUEUE_TEXT.paused : SEND_QUEUE_TEXT.running(done, stats.total)}
-        </span>
+      testId="send-queue-panel"
+      title={SEND_QUEUE_TEXT.title}
+      meta={
+        <>
+          <span className={styles.conc} title={SEND_QUEUE_TEXT.concurrencyTitle(concurrency)}>
+            {`×${concurrency}`}
+          </span>
+          <span className={styles.statusline}>
+            {paused ? SEND_QUEUE_TEXT.paused : SEND_QUEUE_TEXT.running(done, stats.total)}
+          </span>
+        </>
+      }
+      actions={
         <button
           type="button"
           className={styles.chevron}
@@ -210,22 +218,21 @@ export function SendQueuePanel() {
         >
           {collapsed ? '▼' : '▲'}
         </button>
-      </div>
+      }
+      headProps={{ title: SEND_QUEUE_TEXT.dragTitle, onPointerDown }}
+    >
 
       {!collapsed && (
         <>
-          <div className={styles.track}>
+          <div className={shared.progressTrack}>
             <div
-              className={styles.fill}
+              className={shared.progressFill}
               style={{ width: `${stats.total ? Math.round((done / stats.total) * 100) : 0}%` }}
             />
           </div>
 
-          {items.length === 0 ? (
-            <div className={styles.empty}>{SEND_QUEUE_TEXT.empty}</div>
-          ) : (
-            <div className={styles.list}>
-              {items.map((it, idx) => {
+          <div className={styles.list}>
+            {items.map((it, idx) => {
                 const node = nodeById.get(it.nodeId);
                 // ★ 后台进度（源 `A.queueProgress[item.id]`）—— 由 `state/sendQueue` 的 `runQueuePing` 写（`TD-16-103`）
                 const progress: GenReplyLite | null = queueProgress[it.id] ?? null;
@@ -302,8 +309,7 @@ export function SendQueuePanel() {
                   </div>
                 );
               })}
-            </div>
-          )}
+          </div>
 
           <div className={styles.foot}>
             <button type="button" className={styles.btn} onClick={() => (paused ? q.resume() : q.pause())}>
@@ -316,6 +322,6 @@ export function SendQueuePanel() {
           </div>
         </>
       )}
-    </div>
+    </PanelShell>
   );
 }

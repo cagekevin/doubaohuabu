@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  accountAvatarText,
   accountNamePrefix,
   isDefaultAccountName,
   makeAccountName,
@@ -16,6 +17,26 @@ import type { Account } from '@/stable/model/account';
 
 const acc = (id: string, name: string, type: Account['type'] = 'doubao', groupId: string | null = null): Account =>
   ({ id, name, type, groupId }) as Account;
+
+describe('accountAvatarText（原 `OP.jsx:724`）', () => {
+  it('★ 取名字里的**第一段数字**（`豆包01` → `01`）', () => {
+    expect(accountAvatarText({ type: 'doubao', name: '豆包01' })).toBe('01');
+    expect(accountAvatarText({ type: 'lovart', name: 'lovart12' })).toBe('12');
+  });
+
+  it('★ 没有数字 ⇒ 取**首字**', () => {
+    expect(accountAvatarText({ type: 'doubao', name: '主号' })).toBe('主');
+  });
+
+  it('★ `other` 恒 `其`（不看名字）', () => {
+    expect(accountAvatarText({ type: 'other', name: '豆包01' })).toBe('其');
+  });
+
+  it('★ 空名 / 缺名 ⇒ 兜底 `豆`', () => {
+    expect(accountAvatarText({ type: 'doubao', name: '' })).toBe('豆');
+    expect(accountAvatarText({ type: 'doubao' })).toBe('豆');
+  });
+});
 
 describe('accountNamePrefix（原 Mk 26504）', () => {
   it('★ 逐字对齐源（含大小写差异）', () => {

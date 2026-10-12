@@ -53,6 +53,7 @@ import {
 } from '@/core/rules/newImages';
 import type { ScanPhaseEvent } from '@/core/ports/site.port';
 import styles from './NewImagesPanel.module.css';
+import shared from '@/ui/common/shared.module.css';
 
 export function NewImagesPanel() {
   const accounts = useStore((s) => s.accounts);
@@ -292,7 +293,7 @@ export function NewImagesPanel() {
   return (
     <div className={`${styles.wrap} ${folded ? styles.collapsed : ''}`} data-testid="new-images-panel">
       <div className={styles.strip}>
-        <div className={styles.head}>
+        <div className={shared.panelHead}>
           <div className={styles.title}>
             {NEW_IMAGES_TEXT.title}
             <span className={styles.count}>{items.length}</span>
@@ -312,7 +313,7 @@ export function NewImagesPanel() {
         </div>
 
         <div className={styles.foldBody}>
-          <div className={styles.body}>
+          <div className={shared.panelBody}>
             {items.length === 0 ? (
               <div className={styles.empty}>
                 <span>{NEW_IMAGES_TEXT.emptyHint}</span>

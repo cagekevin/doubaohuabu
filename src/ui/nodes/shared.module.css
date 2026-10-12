@@ -4,25 +4,35 @@
 
 .node {
   /* ⚠️ 必须 relative：节点上的**浮层**（提示词分析浮层，原 `.mat-prompt-pop`）是 `position: absolute`，
-     没有它就会相对某个更远的祖先定位（见 `AnalyzePrompt.module.css`） */
+     没有它就会相对某个更远的祖先定位（见 `AnalyzePrompt.module.css`）；
+     端口（`CustomHandle`）也以本元素为定位基准 */
   position: relative;
   min-width: 120px;
+  /*
+   * ★ **竖排 flex** —— 真值 = `docs/mockup/assets/mockup.css:293-295`（逐条对照原版 CSS）：
+   *   `.node { display: flex; flex-direction: column }`。
+   * ⚠️ **2026-10-12 补**：此前是普通块级流 ⇒ `.node-head` 与 `.node-body` 只按内容堆叠，
+   *   正文区**拿不到剩余高度** ⇒ 素材图 / 生成舞台都只能按自身比例撑（撑破卡片、把
+   *   底部的 `.gv-meta` 顶到框外）。这一条是「媒体撑破卡片」那一族的总因。
+   */
+  display: flex;
+  flex-direction: column;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
-  /* 默认裁掉溢出 —— **素材节点的通栏缩略图靠它裁圆角**（`padded={false}`） */
-  overflow: hidden;
+  /* ⚠️ **本层不得裁溢出**：端口圆心贴在节点边缘上（外移半个自身尺寸）⇒ 一裁就成半圆，
+     且「有的节点裁、有的不裁」会让端口**部分正常部分残缺**。裁剪下移到 `.nodeBody`。 */
 }
 
 /**
  * 允许溢出（`NodeShell` 的 `overflowVisible`）
  * ⚠️ **只有需要渲染"框外浮层"的节点才用**：源版生成节点把「分析提示词」浮动按钮与
  *    提示词浮层都渲染在**节点根内、但位置在框外**（`ZL.jsx:256` 的 `bottom:100%` 与
- *    `321` 的 `top:100%`）⇒ `overflow:hidden` 会把它们整块裁掉。
+ *    `321` 的 `top:100%`）⇒ 正文区的裁剪会把它们整块裁掉。
  * ⚠️ 不给「缩略图要通栏」的节点开这个（那会露出直角）。
  */
-.overflowVisible {
+.overflowVisible .nodeBody {
   overflow: visible;
 }
 
@@ -30,43 +40,100 @@
   border-color: var(--node-selected-border);
   box-shadow: 0 0 0 2px var(--node-selected-ring);
 }
+/* 组是容器：选中只描边、不加光环（光环会给布局加抖动 —— 原 `.groupSelected` 的理由） */
+.node[data-type='group'].selected {
+  box-shadow: none;
+}
 
-.header {
+/* 节点头（mockup 定稿 `.node-head`）—— 四槽：dot / title / mid / actions */
+.nodeHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   background: var(--color-surface-sunken);
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
+  /* 头部自带底色 ⇒ 必须自己收顶部圆角（`.node` 已不裁溢出） */
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
 }
 
-.body {
-  padding: var(--space-2);
+/* 类型圆点（mockup `.node-dot`）—— 颜色由**根**的 `data-type` 一处决定 */
+.nodeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex: 0 0 auto;
 }
-
-.text {
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 160px;
-  overflow: auto;
+/* 组的文件夹图标（dot 槽有内容 = 覆盖默认类型圆点）—— 不套 8×8 圆点 */
+.nodeDot:not(:empty) {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
 }
+.node[data-type='text'] .nodeDot     { background: var(--node-dot-text); }
+.node[data-type='material'] .nodeDot { background: var(--node-dot-material); }
+.node[data-type='account'] .nodeDot  { background: var(--node-dot-account); }
+.node[data-type='video'] .nodeDot    { background: var(--node-dot-video); }
+.node[data-type='download'] .nodeDot { background: var(--node-dot-download); }
+.node[data-type='genvideo'] .nodeDot { background: var(--color-action-primary); }
+.node[data-type='imggen'] .nodeDot   { background: var(--color-info); }
 
-/**
- * 节点名**改名态**（原 `CL.jsx:732` 的 `.node-name-edit`）
- * ⚠️ 只在改名时挂；平时是普通 `<span>`（源版也是两态切换）
- */
-.nameEdit {
-  min-width: 40px;
-  padding: 0 var(--space-1);
+/* 标题（mockup `.node-title`）—— 可收缩出省略号 */
+.nodeTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text-strong);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--node-name-edit-border);
-  border-radius: var(--radius-sm);
-  outline: none;
 }
+
+/* 中槽（mockup `.node-head-mid`）—— flex + gap 容纳多个并列元素（如 video 的账号·时长·分辨率） */
+.nodeHeadMid {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* 右槽（mockup `.node-head-actions`）—— margin-left:auto 推到最右 */
+.nodeHeadActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+/* 头部右侧**浮层**操作组（不占头部布局，绝对定位贴右）*/
+.nodeTitleRight {
+  position: absolute;
+  right: var(--space-1);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nodeBody {
+  /* ★ 吃掉剩余高度并**内部竖排** —— 真值 = mockup.css:338（逐条对照原版 CSS）：
+     `.node-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }` */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  /* 正文区裁溢出（通栏媒体的圆角靠它）；顶部两角不裁，免得切掉头部的圆角背景 */
+  overflow: hidden;
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
 
 /**
  * 正文编辑框（原 `CL.jsx:818` 的 `.text-edit.nodrag.nowheel`）
@@ -103,14 +170,6 @@
   composes: thumbImg from '../common/shared.module.css';
 }
 
-.placeholder {
-  display: grid;
-  place-items: center;
-  min-height: 80px;
-  padding: var(--space-3);
-  color: var(--color-text-faint);
-  background: var(--color-surface-sunken);
-}
 
 /*
  * ── 生成节点「舞台」（原 `.gv-stage` / `.gv-waiting` / `.gvw-*` / `.gv-preview-*` /
@@ -121,6 +180,16 @@
  */
 .gvStage {
   position: relative;
+  /*
+   * ⚠️ **必须可缩**：`aspect-ratio`（内联给，数据驱动）算出的高常常**高于**正文区
+   *   （如 `1:1` × 380 宽 = 380px，而节点只有 300 高）⇒ 不加这两行，舞台会把
+   *   `.gv-meta` 顶到卡片**外面**（实测：文生图卡片的 meta 整行消失）。
+   *   `flex-basis: auto` 保留比例高（节点高度自适应时按比例），`flex-shrink` 让它在
+   *   正文区不够高时**压回去**；`min-height` 防塌。
+   */
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow: hidden;
 }
 
 .gvWaiting {
@@ -165,8 +234,7 @@
 }
 
 .gvPreviewTitle {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  composes: sectionTitle from '../common/shared.module.css';
 }
 
 .gvPreviewSub {
@@ -403,8 +471,7 @@
 }
 
 .gvHistTitle {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  composes: sectionTitleSub from '../common/shared.module.css';
 }
 
 .gvHistItem {
@@ -486,25 +553,6 @@
   top: -20px;
   left: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-/* 账号节点 */
-.accountRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.dot {
-  composes: dot dotLg from '../common/shared.module.css';
-}
-.dotInvalid {
-  composes: dotInvalid from '../common/shared.module.css';
-}
-
-/* 生成中（文字型 · 与 AnalyzePrompt 的圆环型 spinner 区分开）*/
-.spinner {
-  composes: spinnerText from '../common/shared.module.css';
   font-size: var(--font-size-xs);
 }
 
@@ -632,10 +680,11 @@
   gap: var(--space-1);
 }
 
-.accountRow {
+/* 原 `.account-top-row`（`OL.jsx:432`）—— 账号下拉 + 发送按钮**同一行** */
+.accountTopRow {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 /* 原 `.auto-send-toggle`：源版是个滑块，这里用原生 checkbox（观感不同、语义相同） */
@@ -649,28 +698,16 @@
   color: var(--color-text-strong);
 }
 
-.accountPreview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-half);
-  max-height: 96px;
-  overflow: auto;
+/* 原 `.account-summary`（`OL.jsx:521`） */
+.accountSummary {
+  color: var(--color-text-faint);
   font-size: var(--font-size-xs);
 }
 
-.accountPreviewTitle {
-  color: var(--color-text-faint);
-}
-
-.accountItem {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-muted);
-}
-
-.accountEmpty {
-  color: var(--color-text-faint);
+/* 发送按钮里的两个字形（原 `.send-spinner` / `.send-icon`） */
+.sendSpinner,
+.sendIcon {
+  flex: none;
 }
 
 /* 原 `.account-feedback`（四态：sending / ok / err） */
@@ -702,13 +739,6 @@
 /* 节点特有语义：未接通时用灰底（比通用 disabled 的降透明更明确）*/
 .accountSend:disabled {
   background: var(--color-text-faint);
-}
-
-/* 未接通说明（**本工程新增** —— 只写进 `title` 等于要悬停才知道按钮为何点不动） */
-.accountPending {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-tight);
 }
 
 /**
@@ -772,19 +802,10 @@
   text-overflow: ellipsis;
 }
 
-/* ── 组节点（原 `GL.jsx` 的 `.group-node` / `.group-node-head` / `.group-ungroup-btn`）── */
-.groupSelected {
-  /* 选中态（原 `group-node selected`）—— 只加描边，不改尺寸（不给布局加抖动） */
-  border-color: var(--node-selected-border);
-}
-
-.groupHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  /* 组头高度与 `GROUP_HEADER_H = 34` 对齐（源版几何常量） */
+/* ── 组节点（原 `GL.jsx`）—— 卡壳/头/选中态已并入统一骨架（`.node` / `.nodeHead` / `.selected`）── */
+/* 组的两个特殊：头 34px 高 + move 光标（拖动把手）—— 用 data-type 选择器，不另起类 */
+.node[data-type='group'] .nodeHead {
   height: 34px;
-  padding: 0 var(--space-2);
   cursor: move;
 }
 
@@ -793,16 +814,8 @@
   color: var(--color-text-faint);
 }
 
-.groupName {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-muted);
-}
-
-.groupCount {
+/* 数量徽章（组 / 下载节点的中槽共用 —— 原 `.groupCount` / `.materialCount` 两份） */
+.nodeCount {
   flex: 0 0 auto;
   padding: 0 var(--space-1);
   color: var(--color-text-faint);
@@ -822,61 +835,14 @@
   border-color: var(--color-danger-border);
 }
 
-/* ── 素材节点（原 `fL.jsx` 的 `.material-*` / `.node-head` / `.mat-float-actions`）── */
-
-.materialNode {
-  display: flex;
-  flex-direction: column;
-  /* ⚠️ 与 `.node` 的裁剪一致：素材缩略图要**通栏** ⇒ 圆角靠外层裁（不开 overflowVisible） */
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.materialHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-}
-
-/* 原 `.dot.material-dot` —— 素材类型的状态点（用信息色，与发送状态的绿点区分） */
-/* ★ 查 2.3/7.1：形状走真源 `.dot`，只覆盖身份色 */
-.materialDot {
-  composes: dot from '../common/shared.module.css';
-  background: var(--node-dot-material);
-}
-
-.materialTitle {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-sm);
-  /* 双击改名是它的主要交互 ⇒ 鼠标给文本光标以外的暗示（源版靠 `title` 说明） */
-  cursor: default;
-}
-
-/* 原 `.video-rename-input`（素材节点复用了这个类名） */
-.materialRename {
-  flex: 1;
-  min-width: 0;
-  padding: 0 var(--space-1);
-  color: var(--color-text-strong);
-  font: inherit;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--node-name-edit-border);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
+/* ── 素材节点（原 `fL.jsx`）—— 卡壳/头/圆点/标题/改名已并入统一骨架 ── */
 
 .materialImgWrap {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  /* 通栏缩略图的下圆角（外层 `.materialNode` 已裁，这里只补内层） */
+  /* 通栏缩略图自带裁剪与下圆角（`.node` 不裁溢出 ⇒ 圆角必须由本层自己收） */
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
@@ -894,18 +860,8 @@
   text-align: center;
 }
 
-/* 原 `.mat-float-actions`：贴在图片下沿的一行动作 */
-.matFloatActions {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--color-surface-raised);
-  border-top-right-radius: var(--radius-sm);
-  opacity: 0.92;
-}
+/* ⚠️ `.matFloatActions` 已删 —— 那条动作条的容器现在归 `AnalyzePrompt.module.css` 的
+   `.floatActions`（源里两颗按钮同住 `.mat-float-actions`，由 `leading` 传前面那颗）。 */
 
 .matFloatBtn {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
@@ -916,31 +872,7 @@
   color: var(--color-text-faint);
 }
 
-/* ── 下载节点（原 `WL.jsx` 的 `.download-node` / `.dn-*`）── */
-
-.downloadNode {
-  display: flex;
-  flex-direction: column;
-  min-width: 260px;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-/* ★ 查 2.3/7.1：形状走真源 `.dot` */
-.downloadDot {
-  composes: dot from '../common/shared.module.css';
-  background: var(--node-dot-download);
-}
-
-.downloadTitle {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-sm);
-}
+/* ── 下载节点（原 `WL.jsx`）—— 卡壳/头/圆点/标题已并入统一骨架 ── */
 
 .downloadBody {
   display: flex;
@@ -1036,22 +968,7 @@
   font-size: var(--font-size-xs);
 }
 
-/* ── 视频节点（原 `BL.jsx` 的 `.video-node-*` / `.vn-*`）── */
-
-.videoNode {
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-/* ★ 查 2.3/7.1：形状走真源 `.dot` */
-.videoDot {
-  composes: dot from '../common/shared.module.css';
-  background: var(--node-dot-other);
-}
+/* ── 视频节点（原 `BL.jsx`）—— 卡壳/头/圆点已并入统一骨架 ── */
 
 /* 原 `.video-node-account` / `.video-node-dur` / `.video-node-res` —— 三处同款小字 */
 .videoMeta {
@@ -1315,6 +1232,11 @@
   flex-shrink: 0;
 }
 
+/* 截图钮（原 `.vt-btn.vt-shot`，`BL.jsx:535`）—— 与时间文字同住在时间线里，**不参与拉伸** */
+.vtShot {
+  flex: none;
+}
+
 /**
  * 人脸遮罩层（原 `iL.jsx:170-191` 的 `.face-marks-layer` / `.face-mark*`）
  *
@@ -1404,35 +1326,22 @@
   white-space: nowrap;
 }
 
-/* ── 文本节点的「拆分」按钮（原 `.split-md-btn`，`CL.jsx:751`）── */
-.splitFoot {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 var(--space-1) var(--space-1);
-}
-
+/*
+ * ── 文本节点头部右槽的三颗动作钮（`自动匹配` / `拆分` / `保存预设`，`CL.jsx:745-780`）──
+ * ⚠️ 原版 CSS 未入库、mockup 也未收录这三颗 ⇒ 走**真源按钮类**。
+ * ⚠️ **2026-10-12**：原为 `btnGhost`（无边框、低对比）⇒ 三颗钮在头部看起来像**一串标题文字**。
+ *   参考图里它们是**按钮**（有描边、可点）⇒ 改回真源默认款（`btnSm` 自带边框与底色）。
+ */
 .splitBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
-/* ── 文本节点的「自动匹配」按钮（原 `.auto-match-btn`，`CL.jsx:745`）──
-   ⚠️ 原版 CSS 未入库、mockup 也未收录 ⇒ 走**真源按钮类**（与同行的 `.split-md-btn` 同法）。 */
 .autoMatchBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
-/* `head-actions`（原 `.head-actions`，`CL.jsx:773`）—— 样式真源 = mockup.css:323（逐字译） */
-.headActions {
-  display: flex;
-  flex-shrink: 0;
-  gap: var(--space-1);
-  margin-left: auto;
-}
-
-/* 「保存预设」按钮（原 `.save-preset-btn`，`CL.jsx:774`）——
-   ⚠️ 原版 CSS 未入库、mockup 也未收录 ⇒ 走**真源按钮类**（同 `.auto-match-btn` / `.split-md-btn`）。 */
 .savePresetBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: btn btnSm from '../common/shared.module.css';
 }
 
 /*

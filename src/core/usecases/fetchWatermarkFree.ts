@@ -16,7 +16,7 @@ import { err, type Result } from '@/core/model/result';
 import { withBackendPage, type SendToSiteDeps } from './sendToSite';
 
 /** 注入（`bootstrap/container.ts` 组装）—— 与 `sendToSite` 同一套（选号 + 占用 + 后台页） */
-export interface FetchWatermarkFreeDeps extends SendToSiteDeps {}
+export type FetchWatermarkFreeDeps = SendToSiteDeps;
 
 /** 指定账号拉取（源 `xt(ee, o)` 的 `o` 是**指定账号**，不走池） */
 export interface FetchWatermarkFreeInput {

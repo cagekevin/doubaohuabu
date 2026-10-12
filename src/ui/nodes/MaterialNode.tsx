@@ -17,19 +17,18 @@
  *     `ui/nodes/FaceMarksLayer.tsx`（识别人脸 → 角标 → 单击遮脸 / 双击设参数）
  *     + `ui/panels/FaceMaskPanel.tsx`（参数面板，挂在外壳 `CanvasHost`）。
  *
- * ⚠️ **与源版的一处措辞差异（有意）**：源版改名输入框的 `onKeyDown` 里**有 `Escape` 取消**
- *   （原 143-146）。本工程的 `Escape` 处理只允许住 `ui/common/`（`原则8/rule-of-three`）
- *   ⇒ 改用 `useEscapeKey`（**行为相同**：取消改名、不提交）。
+ * ⚠️ **改名收口在 `NodeTitle`**（显示态 ↔ 编辑态 + `Enter` 提交 + `Esc` 取消 + focus/全选）。
+ *   `Esc` 处理住 `ui/common/useEscapeKey`（键盘 `Escape` 只允许住 `ui/common/`）。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { NodeResizer } from '@xyflow/react';
+import { useState } from 'react';
 import { useStore } from '@/state';
 import { withThumb } from '@/stable/protocols/img';
 import { MATERIAL_NODE_TEXT } from '@/constants/text';
-import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import { AnalyzePrompt } from './AnalyzePrompt';
 import { FaceMarksLayer } from './FaceMarksLayer';
+import { NodeShell } from './NodeShell';
+import { NodeTitle } from './NodeTitle';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
 
@@ -42,82 +41,37 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
 
   /** 图片**自然尺寸**（原 157-160 的 `{w,h}`）—— 脸框落点要按它换算 */
   const [nat, setNat] = useState({ w: 0, h: 0 });
-  const [editingName, setEditingName] = useState(false);
-  const [draft, setDraft] = useState(label);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  /** 原 105-110：进入改名态后 **focus + 全选**（否则用户还要手点一次） */
-  useEffect(() => {
-    if (editingName && nameInputRef.current) {
-      nameInputRef.current.focus();
-      nameInputRef.current.select();
-    }
-  }, [editingName]);
-
-  /** 进入改名态（原 `F` 111-117：`stopPropagation` + 把草稿重置成当前名） */
-  const startRename = useCallback(
-    (e?: { stopPropagation?: () => void }) => {
-      e?.stopPropagation?.();
-      setDraft(label);
-      setEditingName(true);
-    },
-    [label],
-  );
-
-  /**
-   * 提交改名（原 `M` 118-131）
-   * ⚠️ 与源逐字一致：**`trim()` 后为空** 或 **与当前名相同** ⇒ **不调 actio**（但**仍然退出改名态**）
-   */
-  const commitRename = useCallback(() => {
-    const next = draft.trim();
-    if (next && next !== label) renameMaterialNode(id, next);
-    setEditingName(false);
-  }, [draft, label, id, renameMaterialNode]);
-
-  /** ⚠️ `Esc` 取消改名 —— 走 `ui/common`（源版同行为，见文件头） */
-  const onEscape = useEscapeKey(editingName, () => setEditingName(false));
 
   return (
-    <div className={`${styles.materialNode} ${selected ? styles.groupSelected : ''}`} data-testid="material-node">
-      {/* 原 134：`minWidth=140` / `minHeight=100` + **只在选中时可见** */}
-      <NodeResizer minWidth={140} minHeight={100} isVisible={!!selected} />
-
-      <div className={styles.materialHead}>
-        <span className={styles.materialDot} />
-        {editingName ? (
-          <input
-            ref={nameInputRef}
-            className={`${styles.materialRename} nodrag nopan nowheel`}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={(e) => {
-              // Enter 提交（原 140-142）
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                commitRename();
-                return;
-              }
-              // Escape 取消（原 143-146）—— 收口在 `ui/common/useEscapeKey`
-              onEscape(e);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <span
-            className={styles.materialTitle}
-            title={MATERIAL_NODE_TEXT.renameTitle}
-            onDoubleClick={startRename}
-          >
-            {MATERIAL_NODE_TEXT.headPrefix}
-            {/* 原 154 的 `素材 · {a}`，` · ` 逐字 */}
-            {' · '}
-            {label}
-          </span>
-        )}
-      </div>
+    <NodeShell
+      type="material"
+      title={
+        /*
+         * 改名收口到 `NodeTitle`（显示态 ↔ 编辑态 + Enter 提交 + Esc 取消 + focus/全选）。
+         * ⚠️ 与源逐字一致：**`trim()` 后为空** 或 **与当前名相同** ⇒ **不调 action**（但退出改名态）
+         *   —— `defaultTitle` 传当前 `label`，使"清空后提交"回落到当前名（不误改名）。
+         */
+        <NodeTitle
+          label={label}
+          defaultTitle={label}
+          prefix={
+            <>
+              {MATERIAL_NODE_TEXT.headPrefix}
+              {/* 原 154 的 `素材 · {a}`，` · ` 逐字 */}
+              {' · '}
+            </>
+          }
+          onRename={(next) => {
+            if (next && next !== label) renameMaterialNode(id, next);
+          }}
+        />
+      }
+      selected={selected}
+      minWidth={140}
+      minHeight={100}
+      padded={false}
+      testId="material-node"
+    >
 
       <div className={styles.materialImgWrap}>
         {data.dataUrl ? (
@@ -147,39 +101,41 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
           />
         )}
 
-        {data.dataUrl && (
-          <div className={`${styles.matFloatActions} nodrag nopan`}>
-            <button
-              type="button"
-              className={styles.matFloatBtn}
-              /*
-               * ★ 原 163-178 的 `mat-edit-float`：`onMouseDown` stopPropagation 保选中、
-               *   `onClick` stopPropagation 后 `openImageEditor({nodeId, imgRef, label})`。
-               * ★ **2026-10-12 解禁（`TD-09-4`）**：图片编辑器已落（`ui/panels/ImageEditor.tsx`）。
-               */
-              title={MATERIAL_NODE_TEXT.editImageTitle}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                openImageEditor(id, data.dataUrl, label);
-              }}
-            >
-              {MATERIAL_NODE_TEXT.editImage}
-            </button>
-          </div>
-        )}
       </div>
 
       {/*
         ★ 分析提示词（原 179-192）—— 这套按钮 + 面板与生成节点**逐字相同**
           ⇒ 判据 C1：复用 `ui/nodes/AnalyzePrompt.tsx`（第 3 处消费，仍走同一组件）
+
+        ⚠️ **`leading` = 「编辑图片」**：源里 `mat-edit-float` 与 `mat-analyze-float` 是
+           **同一个 `.mat-float-actions` 里的兄弟**（`fL.jsx:162-192`）⇒ 动作条由
+           `AnalyzePrompt` 出容器，本组件只把「前面那颗」传进去（两条 bar 合成一条）。
       */}
       <AnalyzePrompt
         nodeId={id}
         imageUrl={data.dataUrl}
         state={data.analyzePrompt ?? null}
         showButton={!!data.dataUrl}
+        leading={
+          <button
+            type="button"
+            className={styles.matFloatBtn}
+            /*
+             * ★ 原 163-178 的 `mat-edit-float`：`onMouseDown` stopPropagation 保选中、
+             *   `onClick` stopPropagation 后 `openImageEditor({nodeId, imgRef, label})`。
+             * ★ **2026-10-12 解禁（`TD-09-4`）**：图片编辑器已落（`ui/panels/ImageEditor.tsx`）。
+             */
+            title={MATERIAL_NODE_TEXT.editImageTitle}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              openImageEditor(id, data.dataUrl, label);
+            }}
+          >
+            {MATERIAL_NODE_TEXT.editImage}
+          </button>
+        }
       />
-    </div>
+    </NodeShell>
   );
 }

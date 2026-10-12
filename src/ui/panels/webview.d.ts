@@ -21,11 +21,12 @@ interface WebviewAttrs extends React.HTMLAttributes<HTMLElement> {
   preload?: string;
   webpreferences?: string;
   /**
-   * ⚠️ **不要在这里声明 `allowpopups`** —— `@types/react` 的 `HTMLAttributes`
-   *    已经声明了它（`allowpopups?: boolean`，React 为 Electron 场景内置的）。
-   *    重复声明成 `string` 会与它冲突（`TS2322`）。
-   *    源版写的是字符串 `"true"`（`_Component25.jsx:355`），Electron 只认「属性存在」
-   *    ⇒ 用布尔 `allowpopups`（React 渲染成 `allowpopups=""`）**行为等价**。
+   * ⚠️ **不在这里声明 `allowpopups`**：`@types/react` 的 `WebViewHTMLAttributes` 已声明
+   *    `allowpopups?: boolean`（且该声明**生效**，本文件覆盖不掉）。
+   *    但 React **运行时不认它是布尔属性** ⇒ 传裸布尔 `true` 会告警
+   *    （"Received `true` for a non-boolean attribute"）。
+   *    Electron 只认「属性存在」，源版写的就是字符串 `"true"`（`_Component25.jsx:355`）
+   *    ⇒ 调用点传字符串 + 一次边界断言，见 `BackendView.tsx`。
    */
 }
 

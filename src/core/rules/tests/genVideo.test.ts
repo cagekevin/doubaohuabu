@@ -29,10 +29,13 @@ describe('stageRatio（原 `v`，`YL.jsx:64-75`）', () => {
     expect(stageRatio('16:9')).toBe('16 / 9');
   });
 
-  it('★ 空值与**其它比例**一律 `16 / 9`（源只有三个分支 —— `4:3` 也不例外）', () => {
+  it('★ `4:3` 有自己的分支（2026-10-12 用户裁定：空节点默认 4:3 ⇒ 舞台跟上）', () => {
+    expect(stageRatio('4:3')).toBe('4 / 3');
+  });
+
+  it('★ 空值与**其余未列出的比例**仍一律 `16 / 9`', () => {
     expect(stageRatio(undefined)).toBe('16 / 9');
     expect(stageRatio('')).toBe('16 / 9');
-    expect(stageRatio('4:3')).toBe('16 / 9');
     expect(stageRatio('3:4')).toBe('16 / 9');
   });
 });
@@ -212,8 +215,11 @@ describe('三帧→画布参考图（原 `se`，`YL.jsx:206-348`）', () => {
     expect(frameTargetRatio('auto')).toBeCloseTo(16 / 9);
     expect(frameTargetRatio(undefined)).toBeCloseTo(16 / 9);
     expect(frameTargetRatio('weird')).toBeCloseTo(16 / 9);
-    // ★ 反证：`stageRatio` 把 4:3 当 16/9，而这里 4:3 **是** 4/3
-    expect(stageRatio('4:3')).toBe('16 / 9');
+    // ★ 反证：两张表仍是**两张表** —— `stageRatio` 的 4:3 是 CSS 串 `'4 / 3'`，
+    //   本表的 4:3 是**数值** 4/3；且 `stageRatio` 对 `3:4` 仍给 16/9（本表给 3/4）
+    expect(stageRatio('4:3')).toBe('4 / 3');
+    expect(stageRatio('3:4')).toBe('16 / 9');
+    expect(frameTargetRatio('3:4')).toBeCloseTo(3 / 4);
     expect(frameTargetRatio('4:3')).not.toBeCloseTo(16 / 9);
   });
 

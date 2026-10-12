@@ -37,6 +37,7 @@ import { defaultPartitionOf } from '@/core/rules/partition';
 import { NewImagesPanel } from './NewImagesPanel';
 import { WatermarkPanel } from './WatermarkPanel';
 import styles from './BackendView.module.css';
+import shared from '@/ui/common/shared.module.css';
 
 /**
  * `<webview>` 的 `src`（原 `_Component25.jsx:355` 的六路三目）
@@ -123,8 +124,14 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
       // ⚠️ 渲染侧守卫（不是 effect 里重置状态）：`other` 类型永远不挂 preload，
       //    这样即使类型从有指纹的站点改成 `other`，也不会把旧 preload 带过去
       {...(account.type !== 'other' && preloadUrl ? { preload: preloadUrl } : {})}
-      // ⚠️ 源版写 `"true"`（字符串）；Electron 只认「属性存在」⇒ 布尔等价（见 d.ts 注释）
-      allowpopups
+      /*
+       * ⚠️ **必须传字符串**（源版 `_Component25.jsx:355` 也是 `"true"`）：
+       *    React 不认 `allowpopups` 是布尔属性 ⇒ 裸布尔 `true` 会告警
+       *    （"Received `true` for a non-boolean attribute"）；Electron 只认「属性存在」⇒ 等价。
+       * ⚠️ 类型层要跨一次断言：`@types/react` 的 `WebViewHTMLAttributes` 把它声明成 `boolean`，
+       *    而运行时事实是**字符串**（第三方类型 ↔ 运行时事实的边界，**不是**本仓的类型双轨）。
+       */
+      allowpopups={'true' as unknown as boolean}
       // 可见性（原 `I0` 的三态；本工程只用到「当前账号可见 / 其余隐藏」两态）
       className={active ? styles.active : styles.hidden}
     />
@@ -235,7 +242,7 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
         <div className={`${styles.head} ${headCollapsed ? styles.headCollapsed : ''}`}>
           <div className={styles.headClip}>
             <div className={styles.headInner}>
-              <div className={styles.title}>
+              <div className={shared.panelTitle}>
                 {/* 原 `3231-3232`：站点标题 · 账号名（未选账号 ⇒ `未选择账号`） */}
                 {BACKEND_VIEW_TEXT.title[active?.type ?? ''] ?? BACKEND_VIEW_TEXT.title.doubao} ·{' '}
                 {active?.name || BACKEND_VIEW_TEXT.noAccount}

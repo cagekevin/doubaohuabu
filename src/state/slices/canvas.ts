@@ -52,8 +52,9 @@ import { genImageCurrentUrl } from '@/core/rules/genImage';
  * 拆分出来的文本节点的 `data`（原两条拆分路径**各写一份**的那个字面量）
  *
  * ★ **2026-10-12 收口（判据 C1）**：源在 `splitDirect` 与 `splitApplyPreset:28761-28767`
- *   各写了一份语义相同的 `data`（后者多写 `aspectRatio:'16:9'` / `duration:7`）⇒
- *   本仓**只留这一份** —— 于是"按关键词拆"与"按预设拆"产出的节点**必然同形**。
+ *   各写了一份语义相同的 `data`（后者多写 `aspectRatio:'16:9'` / `duration:7` —— **源的旧值**）⇒
+ *   本仓**只留这一份**（比例/时长走 `NODE_DEFAULTS.text` 的当前默认）——
+ *   于是"按关键词拆"与"按预设拆"产出的节点**必然同形**。
  */
 const splitTextData = (part: SplitPart): CanvasNode['data'] =>
   ({
@@ -69,8 +70,8 @@ const splitTextData = (part: SplitPart): CanvasNode['data'] =>
  * ⚠️ 只映射本仓 `TextNodeData` **确有**的字段：源还叠一个 `model: canvasDefaults.model || null`，
  *   而本仓文本节点**没有 `model` 字段**（见 `core/model/defaults.ts` 的 `NODE_DEFAULTS.text`）——
  *   那属"文本节点带生成参数"整条功能，**不在这里擅自加字段**（铁律 2）。
- * ⚠️ 空值（`''` / `0`）⇒ **不写**：让 `NODE_DEFAULTS.text` 的静态默认（`16:9` / `7`）生效 ——
- *   与源的 `|| '16:9'`（falsy ⇒ 落默认）**等价**。
+ * ⚠️ 空值（`''` / `0`）⇒ **不写**：让 `NODE_DEFAULTS.text` 的静态默认
+ *   （`aspectRatio: '4:3'` / `duration: 7`）生效 —— 与源的 `|| '16:9'`（falsy ⇒ 落默认）**同序**。
  */
 function textDefaultsPatch(d: { ratio: string; duration: number }): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
@@ -248,9 +249,18 @@ export interface CanvasSlice extends ApiLandingActions {
    *    （文生图 / 文生视频 / 账号 / 下载 / 组 **零入口**）⇒ `GenPanel` 实际不可达。这是**未登记的断链**。
    *
    * 数据来自 `NODE_DEFAULTS`（8 类齐备）；`patch` 用于覆盖/补充（如 `accountId` / `folder` / `libId`）。
+   *
+   * ★ **2026-10-12**：新增可选 `size` —— **不给** ⇒ 取 `nodeCreateSize(type)`（= **空节点**的
+   *   默认框，比例 4:3，用户裁定）；**给了** ⇒ 用它（带内容的渠道：如「三帧→画布参考图」
+   *   按视频比例算出来的框）。此前本函数**完全不写宽高**（由内容自适应）⇒ 各渠道建出来的框不一。
    * @returns 新节点 id
    */
-  addNode: (type: NodeType, position: { x: number; y: number }, patch?: Record<string, unknown>) => string;
+  addNode: (
+    type: NodeType,
+    position: { x: number; y: number },
+    patch?: Record<string, unknown>,
+    size?: { w: number; h: number },
+  ) => string;
   /**
    * ★ 在一条边上**插入**节点（原 `mode:'edge'`，`_Component42.jsx:783-794`）
    *
@@ -572,7 +582,8 @@ export function createCanvasSlice(
     presets?: Preset[];
     /**
      * ★ **2026-10-12**：`addNode` 建**文本节点**时要吃「画布默认值」
-     *   （原 `29440-29442` / `29486-29488` 的 `canvasDefaults.ratio || '16:9'` 那三目）
+     *   （原 `29440-29442` / `29486-29488` 的 `canvasDefaults.ratio || <默认比例>` 那三目；
+     *   本仓的默认比例真源 = `NODE_DEFAULT_RATIO_LABEL`，现为 `'4:3'`）
      *   —— 它住 `ui` 片 ⇒ 与 `lovartGalleries`/`presets` **同法**在这里显式声明。
      */
     canvasDefaults?: { model: string; duration: number; ratio: string };
@@ -738,13 +749,23 @@ export function createCanvasSlice(
       set({ nodes: out.nodes, edges: out.edges });
     },
 
-    addNode: (type, position, patch) => {
+    addNode: (type, position, patch, size) => {
       const s = get();
       const id = makeNodeId(type, deps.now(), ++nodeSeq);
+      /**
+       * ★★ **2026-10-12 补尺寸**：此前这里**不写 `width`/`height`** ⇒ 新节点由内容自适应撑开
+       *   （空文本节点就是一条细缝、不同渠道建出来的框大小不一）。
+       *   用户裁定「**4:3 指的是空的、里面什么都没有的时候的默认比例**」⇒ 与 `insertNodeOnEdge` 同法，
+       *   **没显式给尺寸时**一律取 `nodeCreateSize(type)`（其比例由 `NODE_DEFAULT_RATIO` 保证）；
+       *   带内容的渠道（如「三帧→画布参考图」按视频比例算出的框）**显式传 `size` 覆盖**。
+       */
+      const box = size ?? nodeCreateSize(type);
       const node = {
         id,
         type,
         position,
+        width: box.w,
+        height: box.h,
         // ★ 2026-10-12：**文本节点吃画布默认值**（源 `29440-29442`：建框时 `aspectRatio/duration/model` 三目）
         //   —— `patch` 在最后 ⇒ 显式传参仍然优先（与源的 `r || canvasDefaults…` 同序）
         data: {
@@ -908,7 +929,8 @@ export function createCanvasSlice(
         label: input.name || VIDEO_NODE_TEXT.rerunLabel,
         text: input.prompt || '',
         ...(input.model ? { model: input.model } : {}),
-        // ⚠️ 源版的兜底是 `|| 默认值 || 7` / `|| 默认值 || '16:9'`（原 29485-29486）
+        // ⚠️ 源版的兜底是 `|| 默认值 || 7` / `|| 默认值 || '16:9'`（原 29485-29486）；
+        //   本仓 `RECIPE_TEXT_FALLBACKS.ratio` 吃 `NODE_DEFAULT_RATIO_LABEL`（4:3）
         duration: input.duration || RECIPE_TEXT_FALLBACKS.duration,
         aspectRatio: input.ratio || RECIPE_TEXT_FALLBACKS.ratio,
         styleIds: input.styleId ? [input.styleId] : [],
@@ -932,11 +954,20 @@ export function createCanvasSlice(
       const prefix = (typeof d.name === 'string' && d.name) || (typeof d.label === 'string' && d.label) || '素材';
       const name = (opts.name ?? '').trim() || `${prefix}·已编辑`;
       const libId = makeLibraryId(deps.now(), ++nodeSeq);
+      /** 新图的**原始**尺寸（写进库条目与 `data.natW/natH`） */
       const w = opts.w || Number(d.natW) || 0;
       const h = opts.h || Number(d.natH) || 0;
       const ratio = w && h ? w / h : 0;
       const prevRatio = Number(d.natW) && Number(d.natH) ? Number(d.natW) / Number(d.natH) : 0;
-      // ④ 宽高比变了（> 2%）且节点有宽 ⇒ 重设高度（下限 120，源的两条魔法数）
+      /*
+       * ★ **换图 ⇒ 节点跟着新图的比例变**（源 29088 一带的 `resize`，**保留**）。
+       *
+       * ⚠️ **2026-10-12 用户裁定（原话）**：「**换图，图变了比例当然节点就变了**」——
+       *   我一度把这一段删掉（理由写成"素材框恒定 4:3"）⇒ **删错了**，已恢复。
+       * ★ 正确的口径：**「4:3」是节点**新建时的初始比例**（空节点、或刚落下来的那一张），
+       *   **不是**给已有节点上的枷锁 —— 图换了、比例自然跟着换。
+       * ⚠️ 阈值与下限逐字对源：比例变化 **> 2%** 且节点有宽才重设；高**下限 120**。
+       */
       const resize =
         ratio > 0 && prevRatio > 0 && Math.abs(ratio - prevRatio) / prevRatio > 0.02 && node.width
           ? { width: node.width, height: Math.max(120, Math.round(node.width / ratio)) }

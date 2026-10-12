@@ -12,6 +12,25 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   server: { port: 5175, open: false },
+  css: {
+    modules: {
+      /**
+       * ★ 显式锁定 CSS Modules 命名约定（P7）：
+       *   `localsConvention: 'camelCase'` = 类名**原名 + camelCase 双导出**。
+       *
+       *   为什么必须是 `camelCase`、不能是 `camelCaseOnly` / `dashesOnly`：
+       *   - 多数组件用 `styles.videoPanelClose` 这类 camelCase 点访问；
+       *   - **另有 6 处方括号动态访问 snake_case 类名**：
+       *     `styles[`st_${status}`]`（AccountNode / BatchSendPanel / SendQueuePanel）、
+       *     `styles[msgKind]`（ActivatePage）、`styles[`handle${h}`]`（ImageEditor）。
+       *     这些键**依赖原名导出**。改 `camelCaseOnly` 会把 `st_ok` 变成 `stOk` ⇒
+       *     `styles['st_ok']` 变 `undefined` ⇒ **没样式、不报错**（静默失效）。
+       *
+       *   ⚠️ 改动本配置前先跑 `npx vite build` 确认无 CssSyntaxError 且 6 处动态键仍命中。
+       */
+      localsConvention: 'camelCase',
+    },
+  },
   build: {
     outDir: 'dist',
     // ⚠️ 本机环境的安全护栏会拦截 `fs.rmSync`（Vite 清空 outDir 时调用）

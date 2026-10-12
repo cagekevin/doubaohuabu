@@ -56,6 +56,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useHostOps, useStore } from '@/state';
 import { COMMON_TEXT, GEN_VIDEO_TEXT, MEDIA_PLAYER_TEXT } from '@/constants/text';
+import { DEFAULT_VIDEO_DURATION } from '@/constants/models';
 import { countInputs } from '@/core/rules/linkedMaterials';
 import { isCardClick } from '@/core/rules/cardClick';
 import {
@@ -115,8 +116,8 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
   const produced = hasResult(data);
   /** 生成中（原 `m` 在本仓的等价物；见文件头 ⚠️） */
   const generating = !!data.generating;
-  /** 计划时长（原 `w = d.duration || 5`） */
-  const plannedDuration = data.duration || 5;
+  /** 计划时长（原 `w = d.duration || ES`）—— 兜底吃 SSOT（原 `ES = 5`） */
+  const plannedDuration = data.duration || DEFAULT_VIDEO_DURATION;
   /** 海报缩略图（原 `Xt(d.resultPoster, 480)`） */
   const poster = data.resultPoster
     ? withThumb(data.resultPoster, GEN_VIDEO_TEXT.posterThumbWidth)
@@ -396,7 +397,10 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
           (e) => e.source === id && nodes.find((n) => n.id === e.target)?.type === 'material',
         ).length;
         const place = framePlacement(sourceNode, neighborCount, data.aspectRatio);
-        const newId = addNode('material', place.position, { name: label, dataUrl });
+        // ⚠️ **必须把 `place` 算出的宽高传进去**：`addNode` 的默认框是「**空节点**」的 4:3，
+        //   而这里的新节点**带着图**（且框是 `framePlacement` 按视频比例算的）——
+        //   不传就会把三帧参考图塞进 200×150，连同列距/行距一起错位。
+        const newId = addNode('material', place.position, { name: label, dataUrl }, { w: place.w, h: place.h });
         if (newId) connect({ source: id, target: newId });
         pushToast(GEN_VIDEO_TEXT.frameToast(label), undefined, 'info');
       } catch (err) {
@@ -419,12 +423,13 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
     // ⚠️ 用 Fragment 包住：弹层走 `createPortal` 到 `document.body`（源 `YL.jsx:585` 同法）
     <>
       <NodeShell
+      type="genvideo"
       title={GEN_VIDEO_TEXT.title}
       selected={selected}
       // 有框外浮层（分析按钮 / 提示词浮层）⇒ 不能被 `.node` 的 overflow 裁掉
       overflowVisible
-      // `gv-hist-btn`（原 479-483）：有历史才显示，位于头部**最右**（`gv-head-grow` 之后）
-      meta={
+      // `gv-hist-btn`（原 479-483）：有历史才显示，位于头部**最右**（右槽 actions）
+      actions={
         attempts.length > 0 ? (
           <button
             ref={histBtnRef}
@@ -449,8 +454,10 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         if (isCardClick(start, { x: e.clientX, y: e.clientY })) openGeneratePanel(id);
       }}
     >
-      <div className={styles.text}>{data.text || COMMON_TEXT.emptyPrompt}</div>
-      {/* `gv-stage`（原 485-530）：按比例撑开的舞台，等待浮层叠在其上 */}
+      {/*
+        `gv-stage`（原 485-530）：按比例撑开的舞台，等待浮层叠在其上
+        ⚠️ **2026-10-12 对齐源**：此前舞台之上多印一行 `（空提示词）`（源卡片**没有**这行）。
+      */}
       <div className={styles.gvStage} style={{ aspectRatio: stageRatio(data.aspectRatio) }}>
         {generating && (
           <div className={styles.gvWaiting} aria-label={GEN_VIDEO_TEXT.waitingAria}>
@@ -637,6 +644,8 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         imageUrl={data.resultUrl}
         state={data.analyzePrompt ?? null}
         showButton={!!data.resultUrl}
+        /* ⚠️ 源 `YL.jsx` **没有**分析按钮 ⇒ 保留本仓既有的「浮在节点上方」落点（TD-16-80） */
+        placement="above"
       />
       </NodeShell>
       {/* `gv-hist-pop`（原 585-620）：历史版本弹层（portal 到 body，按按钮位置定位） */}
