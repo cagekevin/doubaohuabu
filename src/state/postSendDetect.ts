@@ -10,16 +10,18 @@
  * ⚠️ **原则 1**：只有本文件写 store（`setDetectDebugInfo` / `addVideoShare` / `addVideoNode` / 计时器）。
  * ⚠️ **原则 6**：取数失败**如实记**（源 `Ae({lastError, status: 检测失败，稍后重试…})`）—— 不静默、不编文案。
  * ⚠️ **不开自动轮询**（`docs/过程.md` #4）：轮询只在**本函数调用期间**存在，返回即停。
- * ⚠️ **两处如实标注**（未落，不假装）：
- *   ① 「已提交」页内探测（源 `ze(Y, Hd, 'detect-gen-submit')`）未落（需页内脚本）⇒ 计时器只走
- *      **兜底档**（等满 `DETECT_TIMER_FALLBACK_MS` 才启动）；
- *   ② 源 `Z` 里「同一 `vid` 已落过就跳过」由 `addVideoNode` 内部去重承担（本仓同）。
+ * ⚠️ **一处如实标注**（未落，不假装）：源 `Z` 里「同一 `vid` 已落过就跳过」由 `addVideoNode`
+ *   内部去重承担（本仓同）。
+ *
+ * ★ **2026-10-13 补**（`BP-04`）：计时器启动接上**页内探测**（原 `ze(Y, Hd, 'detect-gen-submit')`，
+ *   `:1565`）—— 此前恒走兜底档（等满 `DETECT_TIMER_FALLBACK_MS`）。现在：命中「已提交」回复 ⇒
+ *   **立刻**起计时；探不到 / 站点无该能力 ⇒ 退回兜底档（`SitePort.probeGenSubmitted`）。
  */
 
 import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
 import type { Account } from '@/stable/model/account';
-import type { ImageQuestionContext } from '@/core/ports/site.port';
+import type { ImageQuestionContext, SitePort } from '@/core/ports/site.port';
 import type { DetectedVideo } from '@/core/ports/host.port';
 import type { DetectDebugInfo } from './slices/nodeStatus';
 import { matchVideosToNodes, type SendJobRecord } from '@/core/rules/media';
@@ -150,14 +152,47 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
     return count;
   };
 
-  /** 计时器兜底启动（原 `xe`，`:1536-1553`）—— ⚠️ 「已提交」探测未落 ⇒ 只走兜底档 */
-  const startPendingTimer = (nodeId: string): void => {
-    const s = st();
-    const pendingAt = s.nodePendingTimers[nodeId];
+  /** 已启动过计时的节点（原 `G`，`:1552`）—— 防同一节点被重复启动 */
+  const startedTimer = new Set<string>();
+
+  /**
+   * 计时器启动（原 `xe`，`:1553-1583`）
+   *
+   * ★ **两档**（探测优先、兜底收尾）：
+   *   ① 页内探测到「已提交 / 正在生成」回复 ⇒ **立刻**起计时（起点 = 此刻）；
+   *   ② 探测不到 / 站点没这个能力 ⇒ 等满 `DETECT_TIMER_FALLBACK_MS` 起（起点 = 入队时刻 + 兜底）。
+   * ⚠️ **fire-and-forget**（源 `:1711-1713` 的 `xe(Q).catch(() => {})`）—— 探测慢不许拖住检测轮。
+   * ⚠️ **探测失败不阻塞**（源 `try{}catch{}` 空吞）：退回兜底档，**绝不卡死**（原则 6：只留痕）。
+   */
+  const startPendingTimer = async (
+    nodeId: string,
+    ctx: ImageQuestionContext,
+    site: SitePort | undefined,
+  ): Promise<void> => {
+    if (!nodeId || startedTimer.has(nodeId)) return;
+    const pendingAt = st().nodePendingTimers[nodeId];
     if (pendingAt == null) return;
-    if (shouldStartTimer(pendingAt, ports.clock.now(), false, DETECT_TIMER_FALLBACK_MS)) {
-      s.setNodeTimer(nodeId, pendingAt + DETECT_TIMER_FALLBACK_MS);
-      s.removeNodePendingTimer(nodeId);
+
+    // ① 页内探测（原 `ze(Y, Hd, 'detect-gen-submit')`，`:1565`）—— 缺能力 / 失败 ⇒ 当没命中
+    let hit = false;
+    if (site?.probeGenSubmitted) {
+      const r = await site.probeGenSubmitted(ctx);
+      if (r.ok) hit = r.value.hit;
+      else log.warn('[postSendDetect] 「已提交」探测失败（退回兜底档）：', r.message);
+    }
+
+    const now = ports.clock.now();
+    if (!shouldStartTimer(pendingAt, now, hit, DETECT_TIMER_FALLBACK_MS)) return;
+
+    // 源 `:1573`：命中 ⇒ 起点 = 此刻；兜底 ⇒ 起点 = 入队时刻 + 兜底阈值
+    st().setNodeTimer(nodeId, hit ? now : pendingAt + DETECT_TIMER_FALLBACK_MS);
+    st().removeNodePendingTimer(nodeId);
+    startedTimer.add(nodeId);
+    if (!hit) {
+      // 源 `:1577` 的 `console.warn`
+      log.warn(
+        `[postSendDetect] 节点=${nodeId} 兜底启动计时器（${DETECT_TIMER_FALLBACK_MS / 1000}s 内未探测到「已提交」回复）`,
+      );
     }
   };
 
@@ -256,7 +291,12 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
           emitted = true;
           lastProgress = ports.clock.now();
         }
-        if (sourceNodeId) startPendingTimer(sourceNodeId);
+        // 原 `:1711-1713`：`if (Q) { xe(Q).catch(() => {}); }` —— **fire-and-forget**
+        if (sourceNodeId) {
+          void startPendingTimer(sourceNodeId, ctx, site).catch((e: unknown) => {
+            log.warn('[postSendDetect] 计时器启动异常：', e);
+          });
+        }
 
         patchDebug({
           apiOk: true,

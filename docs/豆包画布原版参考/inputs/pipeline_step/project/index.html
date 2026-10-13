@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>豆包画布 (还原源码验证)</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.api = {
+        hostOS: 'windows',
+        getLicenseStatus: async () => ({ ok: true, status: 'ok', licenseKey: 'DEV-MOCK', expireAt: 9999999999999 }),
+        getMachineCode: async () => 'DEV-MOCK-MACHINE-CODE',
+        activateWithCode: async () => ({ ok: true }),
+        importFiles: async () => [],
+        saveFile: async () => ({}),
+        loadFile: async () => null,
+        selectFolder: async () => null,
+        openExternal: async () => {},
+        copyTextToClipboard: async () => ({ ok: true }),
+        readClipboardImage: async () => ({ ok: false }),
+        onClipboardImageChanged: () => () => {},
+      };
+    </script>
+    <script type="module" src="/src/expanded.js"></script>
+  </body>
+</html>

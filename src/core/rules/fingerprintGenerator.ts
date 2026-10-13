@@ -40,9 +40,8 @@
  */
 
 import type { Fingerprint, SecChUaHints, UserAgentDataLike } from '@/stable/model/account';
-
-/** 指纹版本（原 `Zh` 25120 = 3）—— 与 `stable/model/account.ts` 的注释同值 */
-export const FINGERPRINT_VERSION = 3;
+// ★ 指纹版本（原 `Zh` 25120 = 3）的**唯一真源在 `constants/fingerprint.ts`** —— 此处只消费
+import { FINGERPRINT_VERSION } from '@/constants/fingerprint';
 
 /** 真实引擎主版本的兜底（原 `S$` 25116 的 `return 126`） */
 export const FALLBACK_CHROME_MAJOR = 126;

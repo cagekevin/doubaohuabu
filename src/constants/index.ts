@@ -361,6 +361,23 @@ export const ATTACH_IMAGE_ATTEMPTS = 3;
 export const ATTACH_IMAGE_RETRY_MS = 1500;
 /** 剪贴板粘贴后的静置（ms，原 `hS` 38930 的 `fr(2500)`） */
 export const ATTACH_IMAGE_PASTE_SETTLE_MS = 2500;
+
+// ── 发送管线的 Phase 2 附图（原 `_Component43` 的 `Be`，`:888-1051`）──
+// ⚠️ 与上面 `hS` 那三只**不是同一段**：`hS` 服务 `askWithImage`（`gS`/`yS` 调），
+//    `Be` 的 Phase 2 服务**发送管线**（CDP 主通路 + 逐张剪贴板回退 + 按键补充 + 2b 增量重试）。
+
+/** CDP 直喂后**确认附件**的轮询轮数（原 `:914` 的 `for (let ot = 0; ot < 8; ot++)`） */
+export const ATTACH_CDP_CONFIRM_POLLS = 8;
+/** 上述轮询的间隔（ms，原 `:915-917` 的 `setTimeout(…, 1200)`） */
+export const ATTACH_CDP_CONFIRM_POLL_MS = 1200;
+/** 剪贴板逐张粘贴后**确认附件**的轮询轮数（原 `:975` 的 `for (let $t = 0; $t < 3; $t++)`） */
+export const ATTACH_CLIPBOARD_CONFIRM_POLLS = 3;
+/** 上述轮询的间隔（ms，原 `:976-978` 的 `setTimeout(…, 1200)`） */
+export const ATTACH_CLIPBOARD_CONFIRM_POLL_MS = 1200;
+/** 按键补充（`Ctrl/Cmd+V`）后的静置（ms，原 `:988-990` 的 `setTimeout(…, 2500)`） */
+export const ATTACH_KEY_SUPPLEMENT_SETTLE_MS = 2500;
+/** Phase 2b 增量重试里，粘贴后的静置（ms，原 `:1033-1035` 的 `setTimeout(…, 2000)`） */
+export const ATTACH_RETRY_SETTLE_MS = 2000;
 /**
  * 发送图片后到「开始等回复」之间的静置（ms，原 `gS` 39173 / `yS` 39375 的 `fr(1200)`）
  * ⚠️ 给页面时间把气泡渲染出来，否则回复轮询会读到"还没出现"直接空转
@@ -401,6 +418,9 @@ export const DEFAULT_API_CONCURRENCY = 3;
 
 /** 生成图片流上限（原 27132-27160） */
 export const IMAGE_GEN_FEED_LIMIT = 80;
+
+/** 已交付计数表上限（原 `addImageGenResult` 27427-27435 的 `200`；超出按 `ts` 升序砍最旧） */
+export const IMAGE_GEN_DELIVERED_MAX = 200;
 
 /** 文生图节点 `results` 上限（原 `attachImageResultToNode` 27273 的 `slice(0, 40)`） */
 export const IMAGE_GEN_RESULT_LIMIT = 40;

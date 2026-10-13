@@ -34,6 +34,8 @@ import { log } from '@/lib/log';
 import { hash32 } from '@/lib/hash';
 // ★ 源 Phase 1 的 `In(text)`（HTML 实体/标签归一）—— 本仓同一份实现在 `lib/text`
 import { stripHtml } from '@/lib/text';
+// ★ 原图尺寸（原 `Lc` 的 `<img>` 半）—— 量不到 ⇒ `0`（与 `Pu` 的 `200×160` 兜底不是一回事）
+import { measureNaturalSize } from '@/lib/readDroppedFile';
 import { GEN_POLL_MS, GEN_SCAN_MIN_SIDE, GEN_SEND_GRACE_MS } from '@/constants';
 // ★ 出片轮询的**纯判定**（去重键 / 基线 / 结束三档 / 跨会话去重表 —— 原 `DR` 的四段）
 import {
@@ -52,7 +54,18 @@ import { perceptualHash } from '@/lib/phash';
 import { LS_IMGGEN_DEDUP } from '@/stable/contracts/keys';
 import type { ImggenDedupTable } from '@/stable/contracts/lsValues';
 import { fillText } from './fillText';
-import { buildClickSendScript } from './scripts';
+// ★ 发送管线的 **Phase 2 · 附图**（原 `Be` 的 `:888-1051` 全段：CDP 主通路 + 剪贴板回退 + 按键补充 + 2b）
+import { attachImagesPhase2 } from './attachPhase2';
+import { ATTACH_FINGERPRINT_SCRIPT, buildClickSendScript, READ_INPUT_STATE_SCRIPT } from './scripts';
+// ★ **Phase 3a · 发送前完整性校验**（图数 / 图序）—— 纯判据住 `core/rules/precheckAttach`
+import {
+  attachPrecheck,
+  attachPrecheckDiag,
+  attachPrecheckIssue,
+  compareImageOrder,
+  type ImageOrder,
+} from '@/core/rules/precheckAttach';
+import { ATTACH_PRECHECK_TEXT } from '@/constants/text';
 import {
   enableDolaForce30s,
   runDolaForcePanelUi,
@@ -68,14 +81,15 @@ import {
   createDoubaoLeaveDetectPage,
   createDoubaoPingQueueProgress,
 } from './analyze';
-// ★ 发送后监测的 4 个页内探测（原 `_Component43` 的 `watchSendReply`）
+// ★ 发送后监测的页内探测（原 `_Component43` 的 `watchSendReply` + `postSendDetect` 的 `Hd`）
 import {
   createDoubaoProbeGenAck,
+  createDoubaoProbeGenSubmitted,
   createDoubaoProbeQuotaUsage,
   createDoubaoProbeReplyNotice,
   createDoubaoProbeWaitTime,
 } from './watch';
-import { requireWebview, webviewEval } from '../shared/webview';
+import { requireWebview, webviewEval, webviewEvalSafe } from '../shared/webview';
 import { buildResultScanScript } from '../shared/scanScripts';
 
 /** 点击发送的结果（原 `Zl` 返回 `{ok, clicked, tag, strategy}`） */
@@ -159,7 +173,14 @@ async function fetchScanImage(host: HostPort, item: ResultScanItem): Promise<Res
 function saveGenResult(
   host: HostPort,
   dataUrl: string,
-  ctx: { source: 'doubao' | 'dola'; accountName: string; key: string },
+  ctx: {
+    source: 'doubao' | 'dola';
+    accountName: string;
+    key: string;
+    /** 原 `D.natW || 0` / `D.natH || 0`（`shared.js:36524-36525`） */
+    natW: number;
+    natH: number;
+  },
 ): Result<GenResult> {
   const saved = host.media.saveImageSync(dataUrl);
   if (!saved.ok) return saved;
@@ -172,6 +193,8 @@ function saveGenResult(
     ratio: '',
     prompt: '',
     params: {},
+    natW: ctx.natW,
+    natH: ctx.natH,
   });
 }
 
@@ -235,6 +258,9 @@ export function createDoubaoSite(
     probeWaitTime: createDoubaoProbeWaitTime(),
     probeReplyNotice: createDoubaoProbeReplyNotice(),
     probeQuotaUsage: createDoubaoProbeQuotaUsage(),
+    // ★ 「已提交」探测（原 `Hd`，`shared.js:37494`）—— 服务 **`postSendDetect` 的计时器启动**
+    //   （源 `ze(Y, Hd, 'detect-gen-submit')`，`_Component43.jsx:1565`）；**不属上面那族**
+    probeGenSubmitted: createDoubaoProbeGenSubmitted(),
 
     /**
      * 发送（原 `Bu` → transport `kS` → `_Component43` 的 `Be`）—— **本仓落的六段**：
@@ -283,38 +309,40 @@ export function createDoubaoSite(
         let textInserted = true; // 源 `ae` 的初值：无文本 ⇒ 视作"已填入"（`:884`）
         if (payload.text && payload.text.trim()) {
           const filled = await fillText(host, view, wcId, stripHtml(payload.text));
-          if (!filled.ok) {
-            // ⚠️ 源**不在此处中止**：它把「文本没进输入框」记为 **Phase 3a 校验不过** ——
-            //   `autoSend` 时那是**硬闸**（`if (Ne) 点击 else return { reason:'precheck-fail' }`，
-            //   `:1238-1276`）；`autoSend=false` 时它照走 `ok` 但带 `precheck.pass=false`，
-            //   由账号节点显示成 `err` + 那句警告（`OL.jsx:353-355`）。**两档 message 同一句**。
-            //   本仓 3a 的**图数/图序**那两档未落（见 `docs/过程.md（原 plan/02）`）⇒ 这里只落**文本那一档**，
-            //   并用源 `:1271` / `:1189` 的**逐字**话术（不再用 `fillText` 那句提问域文案）。
-            return err('precheck-fail', '发送前校验未通过：文本未填入聊天框');
-          }
-          textInserted = true;
+          // ⚠️ **源不在此处中止**：它只把「文本没进输入框」记为 `ae = false`，判定交给 **Phase 3a** ——
+          //   `autoSend` 时那是**硬闸**（`if (Ne) 点击 else return { reason:'precheck-fail' }`，`:1264-1307`）；
+          //   `autoSend=false` 时它照走 `ok` 但带 `precheck.pass=false`，由账号节点显示成 `err` + 警告
+          //   （`OL.jsx:353-355`）。⇒ 2026-10-13 起本仓同源（此前这里**提前 return**，把两档压成一档）。
+          textInserted = filled.ok;
         }
 
-        // ① 附图（**经 HostPort** —— TD-05-1）
-        //    源 `imagesAttached` = `max(过程计数, 页内计数, 指纹数, 期望数)`（`:1166-1172`）——
-        //    本仓走 **CDP 直喂**，回执带真贴上去的张数 ⇒ 用它（源的页内探测未落，见 `docs/过程.md（原 plan/02）`）。
+        // ① 附图（**原 Phase 2 全段 + 2b**，`./attachPhase2`；经 `HostPort` —— TD-05-1）
+        //    ⚠️ 2026-10-13 补：此前这里只有「CDP 一次直喂」，**没有**基数/增量确认、剪贴板回退、
+        //       按键补充、Phase 2b —— 那是源 `Be` 的 Phase 2 全段（`:888-1051`），与 `hS`（服务
+        //       `askWithImage` 的那份）**不是同一个函数**。现在按源逐段落。
         let imagesAttached = 0;
+        /** 去重后张数（源 `K.length`）—— Phase 3a 的「期望张数」就是它 */
+        let imagesUnique = payload.images.length;
+        /** 去重掉的张数（源 `de`） */
+        let duplicatesRemoved = 0;
         if (payload.images.length > 0) {
-          // ★ 诊断回传（原 `ct`，`_Component43.jsx:903`）—— 本仓的附图通路**就是** CDP 直喂
-          diag(`Phase2 主通路 CDP 直喂 ${payload.images.length} 张…`);
-          const attached = await host.clipboard.attachImages(
+          diag(`Phase2 主通路 CDP 直喂 ${payload.images.length} 张…`); // 源 `:903`
+          const p2 = await attachImagesPhase2(
+            { clipboard: host.clipboard, isMac: () => host.os === 'macos' },
+            view,
             wcId,
-            payload.images.map((ref) => ({ dataUrl: ref })),
+            payload.images,
           );
-          if (!attached.ok) return attached; // ★ 转发原始错误
-          const attachErrors = attached.value.errors ?? [];
-          if (attachErrors.length > 0) {
-            // ★ 部分失败**如实上报**（不虚报成功）
-            diag(`Phase2 主通路失败 ${attachErrors.join('；')}`); // 源 `:941`
-            return err('unknown', attachErrors.join(' | '));
+          if (!p2.ok) return p2; // ★ 转发原始错误
+          imagesAttached = p2.value.attached;
+          imagesUnique = p2.value.total;
+          duplicatesRemoved = p2.value.dropped;
+          if (p2.value.dropped > 0) {
+            // 源 `:842`：`图片去重：原始 N 张 → 去重后 M 张（去除 d 张重复）`
+            diag(`Phase2 参考图去重：原始 ${payload.images.length} 张 → 去重后 ${imagesUnique} 张`);
           }
-          imagesAttached = attached.value.count ?? payload.images.length;
-          diag(`Phase2 主通路喂文件成功 ${imagesAttached} 张`); // 源 `:912`（源另有 `nodeId=`，本仓无对应值 ⇒ 不发）
+          diag(`Phase2 ${p2.value.via} 通路确认附件 ${imagesAttached} 张`); // 源 `:933` / `:999`
+          // ⚠️ 「一张都没贴上」源**不报错** ⇒ 交给下面的 Phase 3a 图数校验去判（同源）
         }
 
         // ② **应用生成参数**（原 `Be` 的 **Phase 2c**，`:1058-1138`）——
@@ -325,7 +353,49 @@ export function createDoubaoSite(
           await applyGenParams(view, payload.params);
         }
 
-        // ③ **Dola 面板 UI 自动化**（原 `Be` 的 **Phase 2d**，`:1212-1240`）——
+        // ③ **Phase 3a · 发送前完整性校验**（图数 / 图序；原 `:1169-1241`）
+        //   ⚠️ **位置照源**：在 **Phase 2c 之后、Phase 2d 之前**（源的 Phase 2d 块就在它下面）
+        let textOk = textInserted;
+        if (payload.text && payload.text.trim() && !textOk) {
+          // 源 `:1172-1175`：文本「该有但没有」⇒ 用页内读数复核一次（`Ql`）
+          const st = await webviewEvalSafe<{ valueLen?: unknown }>(view, READ_INPUT_STATE_SCRIPT);
+          textOk = !!st && typeof st.valueLen === 'number' && st.valueLen > 0;
+        }
+        const expected = imagesUnique;
+        let order: ImageOrder = 'unknown';
+        let liveCount = 0;
+        let sigCount = 0;
+        let probe: { inputTag?: unknown; inputArea?: unknown; edCount?: unknown } | null = null;
+        if (expected > 0) {
+          const fp = await webviewEvalSafe<{
+            sigs?: unknown;
+            count?: unknown;
+            inputTag?: unknown;
+            inputArea?: unknown;
+            edCount?: unknown;
+          }>(view, ATTACH_FINGERPRINT_SCRIPT);
+          if (fp) {
+            probe = fp;
+            liveCount = typeof fp.count === 'number' ? fp.count : 0;
+            const sigs = Array.isArray(fp.sigs) ? fp.sigs : [];
+            sigCount = sigs.length;
+            order = compareImageOrder(sigs, payload.images);
+          }
+          diag(`Phase3a 图序=${order} 期望=${expected} 页内元素=${liveCount} 指纹=${sigCount}`);
+        }
+        const pre = attachPrecheck({
+          textOk,
+          expected,
+          processCount: imagesAttached,
+          liveCount,
+          sigCount,
+          order,
+        });
+        const precheckDiag = attachPrecheckDiag(expected, probe, liveCount, imagesAttached, sigCount);
+        const precheckIssue = attachPrecheckIssue(pre.issues, precheckDiag);
+        diag(`Phase3a 结论=${pre.pass ? 'PASS' : 'FAIL'}${pre.issues ? ` 明细=${pre.issues}` : ''}`);
+
+        // ④ **Dola 面板 UI 自动化**（原 `Be` 的 **Phase 2d**，`:1242-1263`）——
         //   「强开 Seedance 2.5 ＋ 目标时长」。闸与 `Mt` **同一份**（`isDolaForceTarget`，判据 C1）。
         //   ⚠️ 它只**尽力**：面板没停在「视频生成」模式时 `ok:false` **属正常** —— 网络层（`JP`）兜底
         //      （源也把它整体包在 `try/catch` 里，失败只记诊断串）。
@@ -334,9 +404,11 @@ export function createDoubaoSite(
           await runDolaForcePanelUi(view);
         }
 
-        // ④ **只填不点**（原 `Be` 的 **Phase 3**，`:1281-1284`）—— `autoSend === false` 时
-        //   到此为止：不点发送、也就没有轮询（源那一路直接走到「填入完成」返回 `:1285-1302`）。
+        // ⑤ **只填不点**（原 `Be` 的 **Phase 3**，`:1311-1314`）—— `autoSend === false` 时
+        //   到此为止：不点发送、也就没有轮询（源那一路直接走到「填入完成」返回 `:1315-1332`）。
         //   ⇒ 账号节点的「填入」语义就落在这里（开关 `autoSend` 由节点给）。
+        //   ⚠️ **这条路不拦校验**：源照走 `ok`，只把 `precheck.pass=false` 带出去，
+        //      由账号节点显示成 `err` + 警告（`OL.jsx:353-355`）—— 硬闸只设在下面的 `autoSend` 分支。
         if (!payload.autoSend) {
           sentSessions.add(sessionId);
           return ok({
@@ -347,11 +419,23 @@ export function createDoubaoSite(
             autoClicked: false,
             imagesAttached,
             imagesTotal: payload.images.length,
+            imagesUnique,
+            duplicatesRemoved,
             textInserted,
+            precheck: pre,
+            precheckIssue,
           });
         }
 
-        // ⑤ 点发送（四级降级，全在脚本内；原 Phase 3b `:1235-1277`）
+        // ★ **Phase 3a 的硬闸**（原 `:1264-1307`）—— `autoSend` 开着时校验不过 ⇒ **阻止自动发送**。
+        //   ⚠️ 源在**这里**才拦（不是在校验处算完就拦）—— 只填入那条路**不拦**（上面已返回）。
+        if (!pre.pass) {
+          const issues = pre.issues || ATTACH_PRECHECK_TEXT.fallbackIssues;
+          diag(ATTACH_PRECHECK_TEXT.blockedLog(issues)); // 源 `:1297`
+          return err('precheck-fail', ATTACH_PRECHECK_TEXT.blocked(issues)); // 源 `:1298-1301`
+        }
+
+        // ⑥ 点发送（四级降级，全在脚本内；原 Phase 3b `:1264-1294` 的点击段）
         let click: ClickResult | null;
         try {
           click = (await webviewEval(view, buildClickSendScript())) as ClickResult;
@@ -368,7 +452,7 @@ export function createDoubaoSite(
 
         sentSessions.add(sessionId);
 
-        // ⑥ 等结果 —— **仅图片通道**（原 `DR` 同步轮询出片）。
+        // ⑦ 等结果 —— **仅图片通道**（原 `DR` 同步轮询出片）。
         //   ⚠️ 视频（`canvas-text-node`）/ 账号节点（`canvas-account-node`）**发完即返回**：
         //      源 `Be` 对视频是 fire-and-forget，结果由 `postSendDetect` / `dolaMedia` 异步归属；
         //      本仓此前把视频也塞进 `pollResults`（它扫的是**页面新图**）⇒ 等不到视频、超时（真 bug，BP-08）。
@@ -391,7 +475,11 @@ export function createDoubaoSite(
             autoClicked: true,
             imagesAttached,
             imagesTotal: payload.images.length,
+            imagesUnique,
+            duplicatesRemoved,
             textInserted,
+            precheck: pre,
+            precheckIssue,
           });
         }
 
@@ -404,7 +492,11 @@ export function createDoubaoSite(
           autoClicked: true,
           imagesAttached,
           imagesTotal: payload.images.length,
+          imagesUnique,
+          duplicatesRemoved,
           textInserted,
+          precheck: pre,
+          precheckIssue,
         });
       } finally {
         // ★ **强开清理**（原 `zt`）—— 发送结束（无论成败）后 **3s** 删页面上的配置
@@ -571,7 +663,10 @@ async function pollResults(
           continue;
         }
 
-        const saved = saveGenResult(host, dataUrl, ctx);
+        // ④b 量原始尺寸（原 `Lc` 的 `<img>` 半，`shared.js:23812-23820`）—— 量不到 ⇒ `0`
+        const size = await measureNaturalSize(dataUrl);
+
+        const saved = saveGenResult(host, dataUrl, { ...ctx, natW: size.natW, natH: size.natH });
         if (!saved.ok) {
           failures.push(saved.message);
           continue;

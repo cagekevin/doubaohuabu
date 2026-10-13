@@ -31,9 +31,15 @@ import { buildMaterialBatch, type MaterialBatchInput } from './materialBatch';
 //   （与 `materialBatch.ts` 同法：`canvas.ts` 代码行已到 `max-lines` 上限〔⚠️ 该规则已于 2026-10-11 关闭〕）
 import { createApiLandingActions, type ApiLandingActions } from './apiLanding';
 // ⚠️ `按配方重跑` 反建出来的文本框默认名（SSOT，不内联中文）
-import { VIDEO_NODE_TEXT } from '@/constants/text';
+import { VIDEO_NODE_TEXT, type ToastLevel } from '@/constants/text';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
-import type { ImageGenDeliveredKeys, ImageGenKeyParams } from '@/core/rules/imageGenKey';
+import type {
+  ImageGenDeliveredKeys,
+  ImageGenFeedItem,
+  ImageGenKeyNodes,
+  ImageGenKeyParams,
+  ImageGenKeyTargets,
+} from '@/core/rules/imageGenKey';
 import { screenshotNodePlacement } from '@/core/rules/capture';
 import { groupSelectedNodes, ungroupNodes as ungroupPure } from '@/core/rules/group';
 import { planArrange, planSelectedGrid, type ArrangeMode } from '@/core/rules/arrange';
@@ -133,6 +139,18 @@ export interface CanvasSliceDeps {
    *   源是在 `commit` 里现读 store；本仓把这两件交给注入实现，slice 只给 `type` 与画布规模。
    */
   logOperation?(e: Omit<OperationLogEvent, 'projectId'>): void;
+  /**
+   * ★ **提示**（原 `showToast`）—— 写的是 `ui` 片的 `toasts`（跨片 ⇒ 注入，判据 D1）
+   *
+   * ⚠️ 消费者：`apiLanding.addImageGenResult` 的「文生图已完成 / 收图中」（原 `:27445-27447`）。
+   */
+  pushToast(message: string, duration?: number, level?: ToastLevel): void;
+  /**
+   * ★ **释放账号占用**（原 `releaseAccountBusy`）—— 写的是 `global` 片的 `accountBusy`（跨片 ⇒ 注入）
+   *
+   * ⚠️ 消费者：`apiLanding.addImageGenResult` 的「收满即释放」（原 `:27440-27444`）。
+   */
+  releaseAccount(accountId: string): void;
 }
 
 export interface CanvasSlice extends ApiLandingActions {
@@ -155,6 +173,27 @@ export interface CanvasSlice extends ApiLandingActions {
    * **内存态**（不进工程持久化）。
    */
   imageGenDeliveredKeys: ImageGenDeliveredKeys;
+  /**
+   * ★ **网页通道：`genKey → 节点 id`**（原 `imageGenKeyNode`，`shared.js:27168`）
+   *
+   * 生产者 = `bindImageGenKey`；消费者 = `addImageGenResult`（按 key 反查节点落图）。
+   * **内存态**（不进工程持久化）。
+   */
+  imageGenKeyNode: ImageGenKeyNodes;
+  /**
+   * ★ **网页通道：`genKey → 期望张数`**（原 `imageGenKeyTarget`，`shared.js:27169`）
+   *
+   * 生产者 = `bindImageGenKey`；消费者 = `addImageGenResult` 的张数推导（原 `f`）。
+   * **内存态**。
+   */
+  imageGenKeyTarget: ImageGenKeyTargets;
+  /**
+   * ★ **生成图片流**（原 `imageGenFeed`，`shared.js:27131`）
+   *
+   * 生产者 = `pushImageGenFeed`（`addImageGenResult` / `applyApiJobEvent`）；
+   * 消费者 = `clearImageGenFeed`。上限 `IMAGE_GEN_FEED_LIMIT`。**内存态**。
+   */
+  imageGenFeed: ImageGenFeedItem[];
   /**
    * ★ **无水印视频分享**（原 `videoShares`，`shared.js:27900-27939` 的 `addVideoShare` 写入）
    *
@@ -626,6 +665,9 @@ export function createCanvasSlice(
     library: [],
     imageGenKeyParams: {},
     imageGenDeliveredKeys: {},
+    imageGenKeyNode: {},
+    imageGenKeyTarget: {},
+    imageGenFeed: [],
     videoShares: [],
     snap: true,
     soundEnabled: true,
@@ -1407,6 +1449,10 @@ export function createCanvasSlice(
       persistImage: deps.persistImage,
       nextLibraryId: () => makeLibraryId(deps.now(), ++nodeSeq),
       nextVideoNodeId: () => makeNodeId('video', deps.now(), ++nodeSeq),
+      // 原 `Pt('ig')` —— 生成图片流的项 id（与 imggen 节点同前缀）
+      nextFeedId: () => makeNodeId('imggen', deps.now(), ++nodeSeq),
+      pushToast: deps.pushToast,
+      releaseAccount: deps.releaseAccount,
     }),
   };
 }

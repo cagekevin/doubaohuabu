@@ -244,6 +244,47 @@ export const API_TEXT = {
   unknownError: COMMON_TEXT.unknownReason,
 } as const;
 
+/**
+ * 文生图出图落点文案（原 `addImageGenResult` / `pushImageGenFeed`，`shared.js:27352-27453` · `:27132-27161`）
+ */
+export const IMAGE_GEN_TEXT = {
+  /** 原 `` `文生图 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}` ``（落资源库的名字） */
+  libraryName: (clock: string) => `文生图 ${clock}`,
+  /** 原 `h.name = '文生图'`（生成图片流的项名） */
+  feedName: '文生图',
+  /** 原 `l.name || '生成图片'`（`pushImageGenFeed` 的项名兜底） */
+  feedFallbackName: '生成图片',
+  /** 原 `showToast(w ? '文生图已完成，已存入资源库' : …)` */
+  completed: '文生图已完成，已存入资源库',
+  /** 原 `` `文生图收图中（${(d && d.got || 0) + 1}/${f}）` `` */
+  collecting: (got: number, target: number) => `文生图收图中（${got}/${target}）`,
+} as const;
+
+/**
+ * Phase 3a · 发送前完整性校验（图数 / 图序）的文案
+ * 依据（逐字）：原 `_Component43.jsx` 的 `Be`，`:1205` · `:1218-1226` · `:1296-1304`
+ */
+export const ATTACH_PRECHECK_TEXT = {
+  /** 原 `at.push('文本未填入聊天框')`（`:1219`） */
+  textMissing: '文本未填入聊天框',
+  /** 原 `` at.push(`参考图缺失（${Me}/${G}）`) ``（`:1222`） */
+  imagesMissing: (got: number, expected: number) => `参考图缺失（${got}/${expected}）`,
+  /** 原 `at.push('图片顺序与素材顺序不一致')`（`:1225`） */
+  orderMismatch: '图片顺序与素材顺序不一致',
+  /** 原诊断串的前缀（`:1304` 的 `` `诊断: ${W}` ``） */
+  diagPrefix: '诊断: ',
+  /** 原 `:1205` 的警告（粘贴动作都执行了、但 DOM 没探到附件 ⇒ 不视为已填入） */
+  pastedButInvisible: (actions: number, expected: number) =>
+    `${actions}/${expected} 张参考图「粘贴动作」已执行，但输入区未探测到对应附件 — 不视为已填入`,
+  /** 原 `:1296` 的兜底明细（`Fe || '漏图/漏文本/顺序错乱'`） */
+  fallbackIssues: '漏图/漏文本/顺序错乱',
+  /** 原 `:1301` 的 `precheck-fail` 文案 */
+  blocked: (issues: string) => `发送前校验未通过：${issues}`,
+  /** 原 `:1297` 的日志句 */
+  blockedLog: (issues: string) =>
+    `发送前校验未通过（${issues}）→ 已阻止自动发送，请人工核对豆包对话框`,
+} as const;
+
 /** 画布空态 / 提示 */
 export const CANVAS_TEXT = {
   emptyTitle: '画布为空',

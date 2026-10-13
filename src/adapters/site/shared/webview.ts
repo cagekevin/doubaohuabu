@@ -38,6 +38,16 @@ export interface WebviewElement extends HTMLElement {
   getURL?(): string;
   /** 只读：guest 的 webContents id（部分 API 需要） */
   getWebContentsId?(): number;
+  /**
+   * 往 guest 页面发**输入事件**（原 `Je` 的按键补充，`_Component43.jsx:589-603`）——
+   * 剪贴板已写好但粘贴没生效时，用 `Ctrl/Cmd+V` 再补一次。
+   * ⚠️ 非 Electron 环境没有 ⇒ 可选；缺项时 `Je` 的等价物**返回 false**（源 `if (!ee.sendInputEvent) return false`）
+   */
+  sendInputEvent?(event: {
+    type: 'keyDown' | 'char' | 'keyUp';
+    keyCode: string;
+    modifiers?: readonly string[];
+  }): void;
 }
 
 /** webview 元素的定位键：用 session partition（每个账号一个） */
@@ -129,6 +139,30 @@ export function findWebview(
  */
 export async function webviewEval<T = unknown>(view: WebviewElement, script: string): Promise<T> {
   return (await view.executeJavaScript(script, true)) as T;
+}
+
+/**
+ * 页内脚本执行 · **失败不抛**（原 `ze`，`_Component43.jsx:542-556`）
+ *
+ * 源逐字：
+ * ```js
+ * try { return await ee.executeJavaScript(Q); }
+ * catch (ve) { console.warn(…); return { _execError: true, error: qe }; }
+ * ```
+ * ⚠️ **为什么需要它**（与 `webviewEval` 的分工）：源的调用点一律写成
+ *    `fe && !fe._execError && fe.attachImgCount || 0` —— 即「**探不到就当 0**」。
+ *    本仓把「执行失败」收敛成 **`null`**，调用方按"没探到"处理（同义）。
+ * ⚠️ 需要「失败必须上报」的地方（如 `probe` / `scan`）**仍用 `webviewEval`**（它抛，由调用方转 `Result`）。
+ */
+export async function webviewEvalSafe<T = unknown>(
+  view: WebviewElement,
+  script: string,
+): Promise<T | null> {
+  try {
+    return (await view.executeJavaScript(script, true)) as T;
+  } catch {
+    return null;
+  }
 }
 
 /** 给 webview 挂一次性事件（**返回取消函数** —— 与 `on*` 契约一致） */

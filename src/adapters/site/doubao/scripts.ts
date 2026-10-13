@@ -13,6 +13,17 @@
  * ⚠️ **版本兼容思路**：命中即停、逐级降级；Dola 用**服务端稳定 id**（`data-input-engine-actionbar-control-key`、
  *    `ability_type=17`）抵抗文案 / 地区变化
  * ⚠️ **零注入**：只读 + 派发鼠标事件（不改全局）
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ * ★ **本文件里有两段脚本共用同一套「输入区缩略图收集」实现 —— 改 DOM 定位时必须同时改两处**
+ *
+ * `ATTACH_COUNT_SCRIPT`（原 `_a`，`shared.js:36887-37061`）与 `ATTACH_FINGERPRINT_SCRIPT`
+ * （原 `cD`，`37266-37448`）共用：`deepQuery`（穿透 Shadow DOM）· `okCls`（排除 UI 装饰）·
+ * 输入框锚定 · `isPreviewCandidate` / `isNearInput` · 全页 img 与 background-image 筛选 ·
+ * inputBar 后代兜底。
+ *
+ * ⚠️ 两份都在源里（源的 `_a`/`cD` 就是两份）⇒ **改一处必须改两处**。
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
 // ★ 监测脚本的规则表/模式表住 `constants/sendWatch.ts`（SSOT：页面脚本与 app 侧共用一份）
@@ -277,6 +288,400 @@ export const INPUT_FOCUS_SCRIPT = `(function(){
     return false;
   } catch(e) { return { error: e.message || String(e) }; }
 })()`;
+
+/**
+ * ★ **附件缩略图计数**（原 `_a`，`shared.js:36887-37061`）—— **逐字抄录**
+ *
+ * 用途（源 `_Component43` 的 Phase 2）：发送前先取**基数** `attachImgCount`，附图后反复探测
+ * **增量**，据此判「这张到底贴上去了没有」—— CDP 主通路、剪贴板回退、按键补充、Phase 2b
+ * 增量重试**四档都靠它**。
+ *
+ * 返回：`{attachImgCount, strategy, inputFound, inputTag, inputArea, edCount, nearCount, bgCount, inputBarCount, totalImgTags}`
+ * （异常 ⇒ `{attachImgCount:0, strategy:'error', error}`）
+ *
+ * ⚠️ **纯读**（只 `querySelectorAll` / `getBoundingClientRect` / `getComputedStyle`）—— 不碰页面状态，合「零注入」
+ * ⚠️ 定位思路（源注释原话）：**放弃容器定位**（豆包可能把缩略图渲染在 textarea 的**兄弟**容器里，
+ *    容器爬升法会漏）⇒ 改「**位置近邻**」（参考图必在输入框附近）；另兜底穿透 Shadow DOM 查 inputBar 后代
+ * ⚠️ 去重用**局部 `WeakSet`**，**绝不用 DOM 自定义属性**（源注释明写）
+ * ⚠️ ★ **与 `ATTACH_FINGERPRINT_SCRIPT` 共用同一套元素收集实现**（源里也是两份）——
+ *    改这里的 DOM 定位**必须同时改那边**；见文件头注
+ */
+export const ATTACH_COUNT_SCRIPT = `
+(function(){
+  try {
+    // ─────────────────────────────────────────────────────────────
+    // 核心思路：放弃容器定位（豆包可能把图片缩略图渲染在 textarea 的
+    // 兄弟容器而非后代，容器爬升法会漏），改为「位置近邻」——
+    // 参考图必然位于输入框正上方（≤300px），按 bbox 位置筛选全页图片元素。
+    // 同时也兜底保留 inputBar 后代查询（穿透 Shadow DOM）。
+    // 注意：去重用局部 seen，绝不能用 DOM 自定义属性。
+    // ─────────────────────────────────────────────────────────────
+    var out = [];
+    var seen = new WeakSet();
+    function add(el) {
+      if (!el || seen.has(el)) return;
+      seen.add(el);
+      out.push(el);
+    }
+    function okCls(el) {
+      var c = (el.className || '').toString();
+      // 只排除明确的 UI 装饰（头像/logo/收藏/昵称/光标）；参考图缩略图的包装元素常含 icon/btn/close 等字眼，
+      // 若据此误删会漏计真实参考图。是否是真缩略图交由位置与尺寸判定（isPreviewCandidate / isNearInput）负责。
+      return !/avatar|logo|favicon|nickname|cursor/i.test(c);
+    }
+
+    // 深查询：穿透 Shadow DOM
+    function deepQuery(root, selector) {
+      var res = [];
+      var walks = [root];
+      var wi = 0;
+      while (wi < walks.length) {
+        var cur = walks[wi++];
+        if (!cur || !cur.querySelectorAll) continue;
+        try {
+          res = res.concat(Array.prototype.slice.call(cur.querySelectorAll(selector)));
+          var els = cur.querySelectorAll('*');
+          for (var ei = 0; ei < els.length; ei++) {
+            if (els[ei].shadowRoot) walks.push(els[ei].shadowRoot);
+          }
+        } catch (e) {}
+      }
+      return res;
+    }
+
+    // ── 步骤 A：定位输入框/编辑器（优选「可见面积最大」的可编辑元素）──
+    // 解析：豆包为 Semi Design 单页应用，同一页可能同时存在多个 textarea/可编辑元素
+    // （主聊天输入框、视频生成弹窗输入框、搜索框等）。document.querySelector('textarea')
+    // 只取 DOM 中【第一个】，极易锚定到错误甚至隐藏的目标，导致参考图「临近输入框」判定失效、漏计。
+    // 改为收集所有可见可编辑元素，以可见面积最大者为锚点。
+    var inputEl = null;
+    var inputRect = null;
+    var edCands = [];
+    var edAll = document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable], [role="textbox"]');
+    for (var ei = 0; ei < edAll.length; ei++) {
+      var ed = edAll[ei];
+      var er;
+      try { er = ed.getBoundingClientRect(); } catch (e) { continue; }
+      var earea = er.width * er.height;
+      if (er.width < 60 || er.height < 24) continue;        // 仅保留可见且有实际面积的编辑器
+      edCands.push({ el: ed, rect: er, area: earea });
+    }
+    if (edCands.length) {
+      var bestEd = edCands[0];
+      for (var bi2 = 1; bi2 < edCands.length; bi2++) if (edCands[bi2].area > bestEd.area) bestEd = edCands[bi2];
+      inputEl = bestEd.el; inputRect = bestEd.rect;
+    } else {
+      var fbEd = document.querySelector('textarea') ||
+        document.querySelector('[contenteditable="true"]') ||
+        document.querySelector('[role="textbox"]');
+      if (fbEd) { inputEl = fbEd; inputRect = fbEd.getBoundingClientRect(); }
+    }
+
+    // 判定元素是否位于「输入框附近的图片预览区域」——放宽几何窗口，以同时兼容
+    // 参考图与输入框「上下堆叠」（Seedance 弹窗：缩略图在输入框上方）与
+    // 「同层并列」（缩略图在输入框左侧）两种布局；仅通过尺寸排除明显非缩略图的元素。
+    function isPreviewCandidate(rect) {
+      if (!inputRect) return false;
+      if (rect.width < 20 || rect.height < 20) return false;     // 过小：多为图标/光标
+      if (rect.width > 430 || rect.height > 430) return false;   // 过大：多为大图/弹窗主图
+      // 垂直：缩略图底部最多低于 input.top+200，顶部向上可探 620px
+      if (rect.bottom > inputRect.top + 200) return false;
+      if (inputRect.top - rect.top > 620) return false;
+      // 横向：±220px（同层并列时缩略图位于输入框一侧）
+      if (rect.right < inputRect.left - 220) return false;
+      if (rect.left > inputRect.right + 220) return false;
+      return true;
+    }
+    // 进一步放宽：与输入框中心点距离 ≤ 520px（兜底）
+    function isNearInput(rect) {
+      if (!inputRect) return false;
+      var dx = Math.max(inputRect.left - rect.right, rect.left - inputRect.right, 0);
+      var dy = Math.max(inputRect.top - rect.bottom, rect.top - inputRect.bottom, 0);
+      return Math.sqrt(dx*dx + dy*dy) <= 520;
+    }
+
+    // ── 步骤 B：全页 img 位置近邻筛选（≥16px，排除 UI 类） ──
+    var allImgs = document.querySelectorAll('img');
+    var nearCount = 0;
+    for (var i = 0; i < allImgs.length; i++) {
+      var r = allImgs[i].getBoundingClientRect();
+      if (r.width < 16 || r.height < 16) continue;
+      if (!okCls(allImgs[i])) continue;
+      if (isPreviewCandidate(r) || isNearInput(r)) { add(allImgs[i]); nearCount++; }
+    }
+
+    // ── 步骤 C：全页 background-image 元素位置近邻筛选（≥40px，排除 UI） ──
+    var bgCount = 0;
+    var allDivs = document.querySelectorAll('div, span, section, button, a');
+    for (var b = 0; b < allDivs.length; b++) {
+      try {
+        var st = window.getComputedStyle(allDivs[b]);
+        var bg = st.backgroundImage || '';
+        if (!bg || bg === 'none' || bg.indexOf('url(') === -1) continue;
+        var rb = allDivs[b].getBoundingClientRect();
+        if (rb.width < 40 || rb.height < 40) continue;
+        if (!okCls(allDivs[b])) continue;
+        // 背景图元素不能包含 img 子元素（避免双计）
+        if (allDivs[b].querySelector('img')) continue;
+        if (isPreviewCandidate(rb) || isNearInput(rb)) { add(allDivs[b]); bgCount++; }
+      } catch (e) {}
+    }
+
+    // ── 步骤 D：输入框所在容器（inputBar）后代穿透 Shadow DOM ──
+    // 即便参考图是兄弟容器而非后代，输入框所在的 footer-bar 容器通常也包含预览区
+    var imgBarCount = 0;
+    if (inputEl) {
+      var node = inputEl.parentElement;
+      var guard = 0;
+      var inputBar = null;
+      while (node && node !== document.body && guard < 14) {
+        var rc = node.getBoundingClientRect();
+        if (rc.height > 0 && rc.height <= 700) inputBar = node;
+        else break;
+        node = node.parentElement;
+        guard++;
+      }
+      if (inputBar) {
+        var bAll = deepQuery(inputBar, 'img');
+        for (var bi = 0; bi < bAll.length; bi++) {
+          if (seen.has(bAll[bi])) continue;
+          var rb2 = bAll[bi].getBoundingClientRect();
+          if (rb2.width >= 16 && rb2.height >= 16 && okCls(bAll[bi])) {
+            add(bAll[bi]); imgBarCount++;
+          }
+        }
+        var bBg = deepQuery(inputBar, 'div,span,section,button,a');
+        for (var bb = 0; bb < bBg.length; bb++) {
+          if (seen.has(bBg[bb])) continue;
+          try {
+            var st2 = window.getComputedStyle(bBg[bb]);
+            var bg2 = st2.backgroundImage || '';
+            if (!bg2 || bg2 === 'none' || bg2.indexOf('url(') === -1) continue;
+            var rbg = bBg[bb].getBoundingClientRect();
+            if (rbg.width >= 40 && rbg.height >= 40 && okCls(bBg[bb]) && !bBg[bb].querySelector('img')) {
+              add(bBg[bb]); imgBarCount++;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    return {
+      attachImgCount: out.length,
+      strategy: 'position-proximity',
+      inputFound: !!inputEl,
+      inputTag: inputEl ? (inputEl.tagName.toLowerCase() + '.' + (inputEl.className || '').toString().split(/s+/)[0]) : null,
+      inputArea: inputRect ? Math.round(inputRect.width * inputRect.height) : 0,
+      edCount: edCands ? edCands.length : 0,
+      nearCount: nearCount,
+      bgCount: bgCount,
+      inputBarCount: imgBarCount,
+      totalImgTags: allImgs.length
+    };
+  } catch(e) { return { attachImgCount: 0, strategy: 'error', error: e.message || String(e) }; }
+})()
+`;
+
+/**
+ * ★ **附件指纹**（原 `cD`，`shared.js:37266-37448`）—— **逐字抄录**
+ *
+ * 用途（源 Phase 3a）：读输入区**已贴上的**参考图指纹，交给 `uD` 与期望顺序比对
+ * ⇒ 判「图够不够 / 顺序对不对」。
+ *
+ * 返回：`{sigs, count, sigCount, totalImgs, inputFound, inputTag, inputArea, edCount}`
+ * （异常 ⇒ `{sigs:[], count:0, error}`）
+ *
+ * ⚠️ 与 `ATTACH_COUNT_SCRIPT`（原 `_a`）**不是同一个**：那个只**数**元素（`attachImgCount`），
+ *    这个还要**取指纹**（`sigs`）—— 两者的「收集元素」那半**同源同逻辑**（位置近邻 + inputBar 兜底），
+ *    源里就是**各写一份**；本仓照抄两份（合并会改变两边各自的 `add` 去重语义）。
+ * ⚠️ ★ **与 `_a` 共用同一套元素收集实现** —— 改 DOM 定位**必须同时改两处**；见文件头注。
+ * ⚠️ 指纹形态（`sigOf`）：`DATA$<base64 体去空白截 600>` / `BLOB$<alt|前 55 字>` /
+ *    `SRC$<url 前 200>` / `ALT$<alt 前 40>`；**四种「空壳」形态会被丢掉**（`:37432`）
+ * ⚠️ **纯读**（合「零注入」）
+ */
+export const ATTACH_FINGERPRINT_SCRIPT = `
+(function(){
+  try {
+    // 深查询：穿透 Shadow DOM
+    function deepQuery(root, selector) {
+      var res = [];
+      var walks = [root];
+      var wi = 0;
+      while (wi < walks.length) {
+        var cur = walks[wi++];
+        if (!cur || !cur.querySelectorAll) continue;
+        try {
+          res = res.concat(Array.prototype.slice.call(cur.querySelectorAll(selector)));
+          var els = cur.querySelectorAll('*');
+          for (var ei = 0; ei < els.length; ei++) {
+            if (els[ei].shadowRoot) walks.push(els[ei].shadowRoot);
+          }
+        } catch (e) {}
+      }
+      return res;
+    }
+
+    function okCls(el) {
+      var c = (el.className || '').toString();
+      // 只排除明确的 UI 装饰（头像/logo/收藏/昵称/光标）；参考图缩略图的包装元素常含 icon/btn/close 等字眼，
+      // 若据此误删会漏计真实参考图。是否是真缩略图交由位置与尺寸判定（isPreviewCandidate / isNearInput）负责。
+      return !/avatar|logo|favicon|nickname|cursor/i.test(c);
+    }
+
+    // 统一收集：位置近邻 + 输入栏容器 双重保险，img + background-image 合并去重
+    function collectAll(){
+      var out = [];
+      var seen = new WeakSet();
+      function add(el) {
+        if (!el) return;
+        var key = el._el || el;
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(el);
+      }
+
+      // 定位输入框/编辑器（优选「可见面积最大」的可编辑元素，避免锚定到 DOM 中第一个隐藏 textarea）
+      var inputEl = null;
+      var inputRect = null;
+      var edCands = [];
+      var edAll = document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable], [role="textbox"]');
+      for (var ei = 0; ei < edAll.length; ei++) {
+        var ed = edAll[ei];
+        var er;
+        try { er = ed.getBoundingClientRect(); } catch (e) { continue; }
+        var earea = er.width * er.height;
+        if (er.width < 60 || er.height < 24) continue;
+        edCands.push({ el: ed, rect: er, area: earea });
+      }
+      if (edCands.length) {
+        var bestEd = edCands[0];
+        for (var bi2 = 1; bi2 < edCands.length; bi2++) if (edCands[bi2].area > bestEd.area) bestEd = edCands[bi2];
+        inputEl = bestEd.el; inputRect = bestEd.rect;
+      } else {
+        var fbEd = document.querySelector('textarea') ||
+          document.querySelector('[contenteditable="true"]') ||
+          document.querySelector('[role="textbox"]');
+        if (fbEd) { inputEl = fbEd; inputRect = fbEd.getBoundingClientRect(); }
+      }
+
+      function isPreviewCandidate(rect) {
+        if (!inputRect) return false;
+        if (rect.width < 20 || rect.height < 20) return false;
+        if (rect.width > 430 || rect.height > 430) return false;
+        if (rect.bottom > inputRect.top + 200) return false;
+        if (inputRect.top - rect.top > 620) return false;
+        if (rect.right < inputRect.left - 220) return false;
+        if (rect.left > inputRect.right + 220) return false;
+        return true;
+      }
+      function isNearInput(rect) {
+        if (!inputRect) return false;
+        var dx = Math.max(inputRect.left - rect.right, rect.left - inputRect.right, 0);
+        var dy = Math.max(inputRect.top - rect.bottom, rect.top - inputRect.bottom, 0);
+        return Math.sqrt(dx*dx + dy*dy) <= 520;
+      }
+
+      // ── 步骤 A：全页 img 位置近邻筛选 ──
+      var allImgs = document.querySelectorAll('img');
+      for (var i = 0; i < allImgs.length; i++) {
+        var r = allImgs[i].getBoundingClientRect();
+        if (r.width < 16 || r.height < 16) continue;
+        if (!okCls(allImgs[i])) continue;
+        if (isPreviewCandidate(r) || isNearInput(r)) add(allImgs[i]);
+      }
+
+      // ── 步骤 B：全页 background-image 元素位置近邻筛选 ──
+      var allDivs = document.querySelectorAll('div, span, section, button, a');
+      for (var b = 0; b < allDivs.length; b++) {
+        try {
+          var st = window.getComputedStyle(allDivs[b]);
+          var bg = st.backgroundImage || '';
+          if (!bg || bg === 'none' || bg.indexOf('url(') === -1) continue;
+          var rb = allDivs[b].getBoundingClientRect();
+          if (rb.width < 40 || rb.height < 40) continue;
+          if (!okCls(allDivs[b])) continue;
+          if (allDivs[b].querySelector('img')) continue;
+          if (isPreviewCandidate(rb) || isNearInput(rb)) {
+            var m = bg.match(/url\\(["']?([^"')]+)["']?\\)/);
+            var obj = { src: (m && m[1]) || bg.substring(0, 200), alt: '', _bg: true, _el: allDivs[b] };
+            add(obj);
+          }
+        } catch (e) {}
+      }
+
+      // ── 步骤 C：输入框所在容器（inputBar）后代兜底（穿透 Shadow DOM） ──
+      if (inputEl) {
+        var node = inputEl.parentElement;
+        var guard = 0;
+        var inputBar = null;
+        while (node && node !== document.body && guard < 14) {
+          var rc = node.getBoundingClientRect();
+          if (rc.height > 0 && rc.height <= 700) inputBar = node;
+          else break;
+          node = node.parentElement;
+          guard++;
+        }
+        if (inputBar) {
+          var bAll = deepQuery(inputBar, 'img');
+          for (var bi = 0; bi < bAll.length; bi++) {
+            if (seen.has(bAll[bi])) continue;
+            var rb2 = bAll[bi].getBoundingClientRect();
+            if (rb2.width >= 16 && rb2.height >= 16 && okCls(bAll[bi])) add(bAll[bi]);
+          }
+          var bBg = deepQuery(inputBar, 'div,span,section,button,a');
+          for (var bj = 0; bj < bBg.length; bj++) {
+            if (seen.has(bBg[bj])) continue;
+            try {
+              var st2 = window.getComputedStyle(bBg[bj]);
+              var bg2 = st2.backgroundImage || '';
+              if (!bg2 || bg2 === 'none' || bg2.indexOf('url(') === -1) continue;
+              var rbg = bBg[bj].getBoundingClientRect();
+              if (rbg.width >= 40 && rbg.height >= 40 && okCls(bBg[bj]) && !bBg[bj].querySelector('img')) {
+                var m2 = bg2.match(/url\\(["']?([^"')]+)["']?\\)/);
+                add({ src: (m2 && m2[1]) || bg2.substring(0, 200), alt: '', _bg: true, _el: bBg[bj] });
+              }
+            } catch (e) {}
+          }
+        }
+      }
+      return { list: out, inputFound: !!inputEl, inputTag: inputEl ? (inputEl.tagName.toLowerCase() + '.' + (inputEl.className || '').toString().split(/s+/)[0]) : null, inputArea: inputRect ? Math.round(inputRect.width * inputRect.height) : 0, edCount: edCands ? edCands.length : 0 };
+    }
+    function sigOf(img){
+      var src = (img.getAttribute && img.getAttribute('src')) || img.src || '';
+      var alt = (img.alt || '').trim();
+      if (src && src.indexOf('data:') === 0) {
+        var comma = src.indexOf(',');
+        var body = comma >= 0 ? src.substring(comma + 1) : src.substring(5);
+        body = body.replace(/\\s+/g, '');
+        return 'DATA$' + body.substring(0, 600);
+      }
+      if (src && src.indexOf('blob:') === 0) return 'BLOB$' + (alt || src.substring(5, 60));
+      if (src) return 'SRC$' + src.substring(0, 200);
+      return 'ALT$' + alt.substring(0, 40);
+    }
+    var sigs = [];
+    var seen = {};
+    var cols = collectAll();
+    var imgs = cols.list;
+    for (var k = 0; k < imgs.length; k++) {
+      var s = sigOf(imgs[k]);
+      if (!s || s === 'DATA$' || s === 'BLOB$' || s === 'SRC$' || s === 'ALT$') continue;
+      if (!seen[s]) { seen[s] = 1; sigs.push(s); }
+    }
+    // count = 实际找到的元素数（用于 Phase 3a 数量兜底）；sigCount = 去重后可比对指纹数
+    return {
+      sigs: sigs,
+      count: imgs.length,
+      sigCount: sigs.length,
+      totalImgs: imgs.length,
+      inputFound: cols.inputFound,
+      inputTag: cols.inputTag,
+      inputArea: cols.inputArea,
+      edCount: cols.edCount
+    };
+  } catch(e) { return { sigs: [], count: 0, error: e.message || String(e) }; }
+})()
+`;
 
 /**
  * 「读输入框状态」脚本（原 `Ql` 36861）—— 返回 `{found, valueLen, textContentLen, focused}`

@@ -4,10 +4,11 @@
  * ★ **做什么**：后端（挂了 CDP 调试器的 webview）把捕获到的**图 / 视频**推过来；本控制器
  *   把它归属到账号（`wcId → accountId`）→ 落到画布与「无水印分享」。
  *
- * ⚠️ **视频支**（`:229-336`）＝ `landVideo`（`state/videoLanding`）。
- * ⚠️ **图像支**（`:185-228`，★ BP-03）＝ `ingestImageGenCdp`（下载 `imageFetchDataUrl` →
- *   `addImageGenResult` 查 `imageGenKeyParams` 回填 `params`）。**任务键**由 `registerSent`
- *   的 `key` 参数带进来（**不用源 `imggen:${m}` 前缀 hack** —— 本仓 `CdpJob` 直接存真节点 id）。
+ * ⚠️ **视频支**（`:232-336`）＝ `landVideo`（`state/videoLanding`）。
+ * ⚠️ **图像支**（`:154-231`）＝ `ingestImageGenCdp`（下载 `imageFetchDataUrl` → `addImageGenResult`
+ *   按 `imageGenKeyNode[key]` 反查节点 + 查 `imageGenKeyParams` 回填 `params`）。
+ *   **任务键**走原版协议：图像作业的 `nodeId` = `'imggen:' + key`（原 `shared.js:42921`），
+ *   挑项用 `isImageGenJobId`、取回 key 用 `imageGenKeyOfJobId`（原 `slice(7)`）。
  * ⚠️ **原则 1**：只有 `state/**` 写 store（经 `videoLanding` / `apiLanding` 的具名 action）。
  * ⚠️ **原则 2**：订阅在 `state/subscriptions.ts`（唯一注册点），本文件只提供 `handle`。
  * ⚠️ `S`（`wcId → accountId`）**不另建注册表** —— 事件到达时**按需解析**（扫账号 ＋
@@ -21,17 +22,21 @@ import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
 import type { DolaMediaItem, DolaMediaEvent } from '@/core/ports/host.port';
 import { log } from '@/lib/log';
+import { imageGenKeyOfJobId, isImageGenJobId } from '@/core/rules/imageGenKey';
 import { landVideo } from './videoLanding';
 
-/** 待归属的一条 CDP 任务（源 `C.current` 的元素） */
+/**
+ * 待归属的一条 CDP 任务（源 `C.current` 的元素，`_Component43.jsx:2963-2968`）
+ *
+ * ⚠️ **`nodeId` 对图像任务是「作业 id」**（`'imggen:' + key`，原 `shared.js:42921`）——
+ *    源的图像支就靠 `startsWith('imggen:')` 挑项、`slice(7)` 取回 key；视频任务才是真节点 id。
+ */
 interface CdpJob {
   nodeId: string;
   accountId: string;
   accountName: string;
   sentAt: number;
   satisfied: boolean;
-  /** ★ 图像任务的生成键（CDP 回流时查 `imageGenKeyParams` 回填 `params`）；视频任务为 `undefined` */
-  key?: string;
 }
 
 /** 「同一账号刚 satisfied 过」的**静默窗**（原 `K = 12000`，`:332`） */
@@ -42,8 +47,12 @@ const JOB_MAX_AGE_MS = 3000000;
 const QUEUE_MAX = 20;
 
 export interface DolaMediaController {
-  /** **发送成功后**登记一条待归属任务（原 `C.current.push`，`:2957-2970`）；图像任务带 `key` */
-  registerSent(accountId: string, sourceNodeId: string, key?: string): void;
+  /**
+   * **发送成功后**登记一条待归属任务（原 `C.current.push`，`:2963-2968`）
+   *
+   * ⚠️ **图像任务传作业 id**（`imageGenJobId(key)`，原 `'imggen:'+m`）；视频任务传真节点 id。
+   */
+  registerSent(accountId: string, nodeId: string): void;
   /** 收到一次推送（**订阅转发入口**，由 `state/subscriptions.ts` 调） */
   handle(event: DolaMediaEvent): void;
 }
@@ -78,7 +87,9 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
    *    无账号 ⇒ 全局找 `sentAt` 最小的匹配项（源 `:260-275`）。
    */
   const dequeueJob = (accountId: string | null, now: number, wantImage: boolean): CdpJob | null => {
-    const match = (j: CdpJob): boolean => (wantImage ? j.key != null : j.key == null);
+    // 原 `_Component43.jsx:166`（图像支）/ `:244-256`（视频支）各挑自己那一类
+    const match = (j: CdpJob): boolean =>
+      wantImage ? isImageGenJobId(j.nodeId) : !isImageGenJobId(j.nodeId);
     const prune = (list: CdpJob[]): void => {
       while (list.length > 0 && now - (list[0]?.sentAt ?? 0) > JOB_MAX_AGE_MS) list.shift();
     };
@@ -158,31 +169,22 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
     }
   };
 
-  /** 图像支（原 `:185-228`）—— CDP 推送图像 → 下载 → 落点（查 `imageGenKeyParams` 回填） */
+  /** 图像支（原 `:154-231` + `ingestImageGenCdp` `:27454-27499`）—— CDP 推送图像 → 下载 → 落点 */
   const ingestImageGenCdp = async (job: CdpJob, url: string): Promise<void> => {
-    // ① 下载（原 `ingestImageGenCdp` 的 `imageFetchDataUrl`，`:27468-27474`；失败静默 —— 源 `try{}catch{}` 吞）
+    // ① 下载（原 `ingestImageGenCdp` 的 `imageFetchDataUrl`，`:27466-27480`；失败静默 —— 源 `try{}catch{}` 吞）
     const fetched = await ports.host.media.imageFetchDataUrl(url);
     if (!fetched.ok || !fetched.value) return;
 
-    // ② 落点（原 `addImageGenResult`，`:27492-27498`）
+    // ② 落点（原 `:27489-27498`）—— key 由作业 id 取回；**释放占用在 `addImageGenResult` 内部**
+    //   （原 `:27440-27444`，此处不再另写一份）
     const account = st().accounts.find((a) => a.id === job.accountId);
-    const source = account?.type === 'dola' ? 'dola' : 'doubao';
-    const outcome = st().addImageGenResult({
-      key: job.key ?? '',
+    st().addImageGenResult({
+      key: imageGenKeyOfJobId(job.nodeId),
       dataUrl: fetched.value,
-      source,
+      source: account?.type === 'dola' ? 'dola' : 'doubao',
       accountName: job.accountName,
-      nodeId: job.nodeId,
+      accountId: job.accountId,
     });
-
-    // ③ 收满 ⇒ 释放账号占用（原 `:27440-27444`）
-    if (outcome.satisfied) {
-      try {
-        st().releaseAccount(job.accountId);
-      } catch (e: unknown) {
-        log.warn('[dolaMedia] 释放账号失败：', e);
-      }
-    }
   };
 
   /** 图像支调度（原 `:185-231`） */
@@ -207,17 +209,16 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
   };
 
   return {
-    registerSent(accountId, sourceNodeId, key) {
-      if (!accountId || !sourceNodeId) return;
+    registerSent(accountId, nodeId) {
+      if (!accountId || !nodeId) return;
       const acc = st().accounts.find((a) => a.id === accountId);
       const list = queues.get(accountId) ?? [];
       list.push({
-        nodeId: sourceNodeId,
+        nodeId,
         accountId,
         accountName: acc?.name || '豆包',
         sentAt: ports.clock.now(),
         satisfied: false,
-        ...(key ? { key } : {}),
       });
       queues.set(accountId, list);
       if (list.length > QUEUE_MAX) list.shift();

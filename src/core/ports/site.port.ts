@@ -176,6 +176,28 @@ export interface SendResult {
   imagesTotal?: number;
   /** 文本有没有填进输入框（原 `textInserted`） */
   textInserted?: boolean;
+  /** 参考图**去重后**张数（原 `imagesUnique` = `K.length`，`:1324`） */
+  imagesUnique?: number;
+  /** 去重掉的张数（原 `duplicatesRemoved` = `de`，`:1325`） */
+  duplicatesRemoved?: number;
+  /**
+   * ★ **Phase 3a 校验结果**（原 `Be` 回执的 `precheck`，`:1209-1216` / `:1329`）
+   *
+   * ⚠️ 它是**唯一**能把「图数/图序没通过但没到硬闸」这件事告诉上层的东西 ——
+   *    `autoSend=false`（只填入）时源**照走 `ok`** 但带 `pass:false`，
+   *    由账号节点显示成 `err` + 警告（`OL.jsx:353-355`）。
+   */
+  precheck?: {
+    pass: boolean;
+    text: boolean;
+    imagesExpected: number;
+    imagesAttached: number;
+    imagesOk: boolean;
+    /** 源 `$`（`'ok' | 'mismatch' | 'unknown'`） */
+    order: string;
+  };
+  /** ★ 校验明细（原 `precheckIssue`，`:1304` / `:1330`）—— 无问题 ⇒ `null` */
+  precheckIssue?: string | null;
 }
 
 /** 站点可用性探测 */
@@ -386,6 +408,16 @@ export interface SitePort {
   readonly probeReplyNotice?: (ctx: ImageQuestionContext) => Promise<Result<ReplyNoticeReading>>;
 
   /**
+   * ★ **读「已提交 / 正在生成」回复**（原 `Hd`，`shared.js:37494-37518`）
+   *
+   * ⚠️ **与上面 4 个不是同一族**：那 4 个服务 `sendWatch`（发送后监测的**旁路读数**），
+   *    本项服务 **`postSendDetect` 的计时器启动**（源 `ze(Y, Hd, 'detect-gen-submit')`，
+   *    `_Component43.jsx:1565`）—— 命中 ⇒ 计时器**立刻**起，不命中 ⇒ 等满兜底档。
+   * ⚠️ **缺项 ⇒ 调用方退回兜底档**（不回落、不报错）—— 与其余探测同法。
+   */
+  readonly probeGenSubmitted?: (ctx: ImageQuestionContext) => Promise<Result<GenSubmittedReading>>;
+
+  /**
    * ★ **无人值守轮询**能力（原 `_Component26` 的 `Ee` 428-592）—— **注册制：站点细节由 adapter 声明**
    *
    * ★★ **为什么它是「能力声明」而不是 `core`/`state`/`ui` 里的站点判断**：
@@ -479,6 +511,21 @@ export interface GenAckReading {
 export type WaitTimeReading =
   | { hit: true; minutes: number; seconds: number; text: string }
   | { hit: false };
+
+/**
+ * 「已提交」回复读数（原 `Hd` 的返回，`shared.js:37494-37518`）
+ *
+ * ★ **用途**：`postSendDetect` 每轮拿它判「这条消息已经提交给豆包了」——
+ *   命中 ⇒ **立刻**启动节点计时器（`setNodeTimer(nodeId, now)`）；不命中 ⇒ 等满兜底档。
+ * ⚠️ 源还返回 `count` / `bodyLen` / `inputLen` / `src` —— 消费端**只读 `hit` 与 `text`**
+ *    （`text` 进日志）⇒ 按判据 B4（接口窄而深）只收这两个。
+ */
+export interface GenSubmittedReading {
+  /** 是否命中「已提交 / 正在生成」完成态 */
+  hit: boolean;
+  /** 命中的那句原文（无 ⇒ `''`；仅用于日志） */
+  text: string;
+}
 
 /** 额度用量读数（原 `hD` 的返回，`shared.js:37667`） */
 export interface QuotaUsageReading {

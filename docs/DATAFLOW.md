@@ -108,7 +108,7 @@ adapters/**    →  只转发事件（subscribeXxx(cb): () => void），不得�
 ui/canvas/CanvasHost.tsx        【ReactFlow 宿主；8 类节点经 ui/nodes 注册】
   → state/slices/canvas          【唯一写入点：nodes / edges / library + undo 栈】
        ├─ core/rules/undo        【撤销栈纯逻辑（快照时机 = 变更之前）】
-       ├─ core/rules/graph       【连线环检测 applyConnection / detachConnection】
+       ├─ core/rules/graph       【连线环检测 applyConnection / 批量连线 planConnectBatch】
        ├─ core/rules/project     【makeNodeId / makeLibraryId】
        └─ core/rules/arrange     【选中节点网格排布 planSelectedGrid（右键「自动排列」）】
   → state/store 的 setPartial     【画布 → 工程的镜像：唯一同步点】
@@ -178,11 +178,9 @@ ui/panels/StyleLibraryModal（← ui/panels/GenPanel）
 - 报文 = `core/rules/payload.ts` 的 `buildImagePayload` / `buildVideoPayload` → `toSitePayload`（**扁平形态** = `SitePort.send` 入参）★ 跨进程报文（`content.*` 嵌套，`batchSend` 用）与扁平形态是两套，`toSitePayload` 是唯一转换点。
 - API 提交：图片 = `jobBatch(base, N 个 {})`（**N 张 = N 个任务**）；视频单发 = `jobSubmit`；视频批量 = `jobBatch(base, BATCH_RATIOS.map(…))` —— ⚠️ `matrix` **必须是数组**（后端按 `Array.isArray` 判，传对象 ⇒ **提交 0 个却报成功**）。报文形状契约住 `electron/api/job-manager.js`。
 - attempt 记录 = `core/rules/genHistory.ts`（`makeGenAttempt` / `patchGenHistoryAttempt` / `appendGenHistoryAttempt`）+ `state/generate.makeAttemptId`（时间经 `ClockPort`，序号在闭包内自增）。
-
-**断点**：
-- 网页通道 Phase 2 的**回退链**（附图的剪贴板回落 + 按键补充）与 **2b 增量重试**未落 —— `send` 只走 CDP 一级，失败即 `err('unknown')`。
-- Phase 3a 只有**文本**那档硬闸；**图数 / 图序**未落。
-- `_pendingAttempt` / `_pendingAttempts` **无写入方**（只有 `stable/migrations/resetStaleJobs` 清）⇒「本账号待确认尝试」语义在本仓不存在。
+- 发送管线的**五段**（`doubao/index.ts` 的 `send`，顺序即语义）：① 文本填入（原 Phase 1）→ ② **附图 = Phase 2 全段 + 2b**（`doubao/attachPhase2.ts`：CDP 主通路 + 8×1.2s 确认 → 剪贴板逐张回退 → 按键补充 → 2b 增量重试；纯判据住 `core/rules/attachRefImages.ts`）→ ③ 生成参数（Phase 2c）→ ④ **发送前完整性校验 = Phase 3a**（`core/rules/precheckAttach.ts` + `doubao/scripts.ts` 的指纹脚本）→ ⑤ Dola 面板（Phase 2d）→ ⑥ 点发送（Phase 3b）。
+- **Phase 3a 的硬闸只在 `autoSend` 分支**：只填入（`autoSend=false`）时照走 `ok` 带 `precheck.pass=false`（源 `OL.jsx:353` 显示成 `err`）。
+- `_pendingAttempt` / `_pendingAttempts` 的**写入方 = `state/pendingAttempt.ts`**（三条发送路径：`accountOps` 直调 · `generate.ts` 走 `GenDeps.onSent` 钩子 · `batchSend.transport` 直调），消费方 = `videoLanding` / `addVideoNode`（认领归属 + `conversationId`）。
 
 ---
 
@@ -234,15 +232,14 @@ adapters/host/electron/api.onJobEvent(cb)   【只订阅、只转发】
   → settings.upsertApiJob(job)              【按 jobId 覆盖 / 追加】
   → core/usecases/applyApiJobEvent          【纯决策：事件 + 当前节点 → 「要做哪些事」】
   → state/slices/apiLanding.ts（canvas 片） 【★ 落点，顺序逐条对源】
-      addToLibrary → attachVideoResultToNode → patchNodeData → attachImageResultToNode → pushToast
+      addToLibrary → pushImageGenFeed → addVideoNode → patchNodeData → attachImageResultToNode → pushToast
   → state/store
 
-adapters/host/electron/media.onDolaMedia(cb)  → state/subscriptions.ts → state/dolaMedia   【视频支；图像支见 §二十四】
+adapters/host/electron/media.onDolaMedia(cb)  → state/subscriptions.ts → state/dolaMedia   【视频支 + 图像支，见 §二十四】
 adapters/host/electron/clipboard.onChanged(cb) → state/hostOps ← ui/canvas/CanvasHost      【★ 只读不写 store：Ctrl+V 图片回落 + 时间戳】
 ```
 
 **关键边**：`onJobEvent` 是 `ApiPort` 唯一的订阅方法；`createSubscriptions` 由 `container.ts` 装配一次。`applyApiJobEvent` **零 store 依赖**（决策与落点分开）；事件缺 `jobId` ⇒ 什么都不做。
-⚠️ **断点**：决策里的 `feed` 字段**算了但没人落、也没人读**（源 `imageGenFeed` 无读者 —— 源把它当 state 维护这件事，本仓不落）。
 
 ---
 
@@ -526,7 +523,8 @@ deps 组装：state/sendDeps.sendToSiteDeps —— sites / backendPage / holdAcc
        首轮：建基线 = 旧视频 key 集 ⇒ 写回（源 b.current）；同时处理"首轮新片"（:1606-1655）
        后续轮：新片（key ∉ 基线 ∧ created_at > 基线时间）⇒ 分配 ⇒ 落库（:1657-1695）
        空闲 900_000ms 结束（:1696）—— ⚠️ 源日志文案写"5min"，与常量 900000 不符
-       xe(nodeId)（:1523-1553）：探测「已提交」回复 ⇒ setNodeTimer + removeNodePendingTimer
+       xe(nodeId)（:1553-1583）：SitePort.probeGenSubmitted（原 ze(Y,Hd,'detect-gen-submit')）命中「已提交」回复
+         ⇒ setNodeTimer(nodeId, now) + removeNodePendingTimer；探不到 ⇒ 等满 DETECT_TIMER_FALLBACK_MS 兜底起
        每轮纯决策：core/rules/genDetect.ts（classifyFirstRound 首轮分类 / pickFreshVideos 新片 / detectCutoff / shouldStartTimer）
 分配（纯）：core/rules/media.matchVideosToNodes + filterLiveJobs（源 hR shared.js:35767 / Kk :35758）
         —— jobs 先按（nodeId 存在 ∧ 节点存活 ∧ now-sendTime ≤ maxAge）筛，再与视频按时间差做最小化总匹配（双向 DP，shared.js:35813-35905）
@@ -540,7 +538,7 @@ CDP 支（源 onDolaMedia :130-351 视频分支）：adapters/host/electron/medi
 调试：setDetectDebugInfo（源 Ae() :1327-1345）—— store 只写不读（源自己的幽灵）
 ```
 
-⚠️ **断点**：源 `xe` 的「已提交」**页内探测**（`ze(Y,Hd,'detect-gen-submit')`）未落 ⇒ 计时器只走**兜底档**（等满 `DETECT_TIMER_FALLBACK_MS` 才启动）。
+**关键边**：计时器启动（`xe`）走 `SitePort.probeGenSubmitted`（第 5 个窄探测，原 `Hd`）—— 命中即起、探不到退回兜底档；调用是 **fire-and-forget**（源 `xe(Q).catch(()=>{})`）。
 
 ---
 
@@ -602,7 +600,8 @@ Dola 30s 强开（源 :758-806；仅"发送 Dola ∧ duration>15 ∧ model==='se
 
 | 断的边（本仓侧） | 说明（源名见括注） |
 |---|---|
-| **图像回流（CDP 图片支）** | **部分落**：API 通道键表已接（`bindImageGenJobs` → `attachImageResultToNode` 查 `genKey || jobId` 回填 `params`，纯层 `core/rules/imageGenKey.ts`）；网页通道 CDP 回流**待落**（`ingestImageGenCdp` + `addImageGenResult` + `bindImageGenKey` 未接 ⇒ `dolaMedia` 图像支仍只记 `seenImages` 去重）。源 `onDolaMedia` 图片分支 `:185-231` + 节流 `I` |
+| **`imageGenJobNode`** | **不落**：源 `bindImageGenJobs` 写它（`:27218`）但**全仓 0 读者** ⇒ 落它=第二份真相（API 节点 id 由 `event.nodeId` 直给）。`TD-16-111` |
+| **`aspectRatio` 末档兜底** | **差异**：`resolveImageGenParams` 用 `NODE_DEFAULT_RATIO_LABEL`(4:3)，源是字面量 `'1:1'`（`:27251`）—— 复用本仓「节点默认比例」SSOT。`TD-16-112` |
 | **生成参数派生** | **不落**：唯一消费者是源那两个 0 调用方法 + 自检面板态 ⇒ 一起不落（源 `le` `:352-395`） |
 | **任务占用计数** | **不造**：消费者（`dv-send-overlay` / `isForced`）本仓没有 ⇒ 0 读者（源 `Uu` `shared.js:35353-35404`） |
 | **参数自检（自动设置 / 测试 / 脚本）** | **不落**：源内全目录 0 调用 ⇒ 只服务它们的状态/派生一起不落（源 `At` / `_t` / `runParamScript`） |

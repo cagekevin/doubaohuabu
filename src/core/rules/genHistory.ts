@@ -50,6 +50,20 @@ export interface GenAttemptInput {
   note?: string;
 }
 
+/**
+ * 造尝试 id（原 `O$` `shared.js:25514-25517`）
+ *
+ * ```js
+ * let Gl = 1;
+ * const O$ = () => `a${Date.now().toString(36)}${(Gl++).toString(36)}`;
+ * ```
+ * ⚠️ **只收形状**：`now` / `seq` 由调用方给（原则 4 禁 `core` 自取时间；`seq` 由各调用方
+ *    持自己的计数器 —— 本仓 `test.isolate:false`，模块级计数器会跨测试文件泄漏）。
+ */
+export function makeAttemptId(now: number, seq: number): string {
+  return `a${now.toString(36)}${seq.toString(36)}`;
+}
+
 export function makeGenAttempt(input: GenAttemptInput): Record<string, unknown> {
   const {
     id,

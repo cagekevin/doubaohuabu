@@ -226,28 +226,9 @@ export function applyConnection(
   return ok({ nodes: [...nodes], edge: createEdge(conn) });
 }
 
-/**
- * 移除一条边后，清理 `referenceOrder`（原实现未显式处理；这里补上以免残留悬空引用）
- *
- * ⚠️ 这是**行为增强**，非原实现等价物 —— 已记入 `09-校验记录` 的差异说明。
- */
-export function detachConnection(
-  nodes: readonly CanvasNode[],
-  edges: readonly CanvasEdge[],
-  edge: CanvasEdge,
-): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
-  const nextEdges = edges.filter((e) => e.id !== edge.id);
-  const nextNodes = nodes.map((n) => {
-    if (n.id !== edge.target || n.type !== 'text') return n;
-    const order = Array.isArray(n.data.referenceOrder) ? n.data.referenceOrder : [];
-    if (!order.includes(edge.source)) return n;
-    return {
-      ...n,
-      data: { ...n.data, referenceOrder: order.filter((id) => id !== edge.source) },
-    } as CanvasNode;
-  });
-  return { nodes: nextNodes, edges: nextEdges };
-}
+// ⚠️ **本仓自造的 `detachConnection` 已删**：它做的是「删边后清 `referenceOrder`」——
+//    源里**没有这个函数**，删边就是 `removeEdge`（`shared.js:27046-27053`：`commit('delete')` + 过滤边）。
+//    ⇒ 按「照抄原版、不造差异」删掉；悬空 `referenceOrder` 是**源自身的行为**，不在这里"顺手改好"。
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 批量连线（原 `connectBatch` 27054-27069 · `connectManyToTarget` 27070-27094）

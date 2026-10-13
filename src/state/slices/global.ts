@@ -48,11 +48,12 @@ import {
   type RosterDeps,
 } from '@/core/rules/accountRoster';
 import {
-  FINGERPRINT_VERSION,
   generateFingerprint,
   type ScreenSpec,
   type WebglSpec,
 } from '@/core/rules/fingerprintGenerator';
+// ★ 指纹版本（原 `Zh`）的**唯一真源在 `constants/fingerprint.ts`**
+import { FINGERPRINT_VERSION } from '@/constants/fingerprint';
 import type { Result } from '@/core/model/result';
 import { PROJECT_STORAGE_TEXT } from '@/constants/text';
 

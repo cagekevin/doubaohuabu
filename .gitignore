@@ -4,6 +4,9 @@ node_modules/
 # ── 构建产物 ──
 dist/
 
+# ── 原版参考 · 脚本产出（inputs/ 与 scripts/ 才是源，outputs/ 一律脚本生成）──
+docs/豆包画布原版参考/outputs/
+
 # ── 探针 / 临时产物（不变量检查的 journal）──
 .probe/
 

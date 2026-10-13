@@ -173,6 +173,12 @@ export interface GenResult {
   params: unknown;
   /** 视频才有 */
   poster?: string;
+  /**
+   * 原图原始尺寸（原 `DR` 的项带 `natW`/`natH`，`shared.js:36524-36525`）
+   * ⚠️ 量不到 ⇒ `0`（源 `D.natW || 0`）；`addImageGenResult` 用 `natW && natH` 判「有才写库」
+   */
+  natW?: number;
+  natH?: number;
 }
 
 

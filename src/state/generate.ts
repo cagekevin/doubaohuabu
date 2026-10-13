@@ -15,6 +15,7 @@ import { generateImage, generateVideo, type GenDeps } from '@/core/usecases/gene
 import type { SendWatchController } from './sendWatch';
 import type { PostSendDetectController } from './postSendDetect';
 import type { DolaMediaController } from './dolaMedia';
+import type { PendingAttemptController } from './pendingAttempt';
 import { countUsable } from '@/core/rules/accountPool';
 import { busyIdsOf } from '@/core/rules/accountBusy';
 import { resolveApiProviderId } from '@/core/rules/apiProvider';
@@ -23,6 +24,7 @@ import { FAIL_LABEL } from '@/constants/failure';
 import { DEFAULT_IMAGE_RESOLUTION } from '@/constants/models';
 import { clampImageCount, resolveRefMaterial } from '@/core/rules/prompt';
 import type { ImageGenParams } from '@/core/rules/imageGenKey';
+import { imageGenJobId } from '@/core/rules/imageGenKey';
 import { parseRefChips, refsToRawNames, refsToReferenceLabels } from '@/core/rules/refs';
 import { stripHtml } from '@/lib/text';
 import { stylePrefixOf } from '@/core/rules/style';
@@ -55,6 +57,8 @@ export function createGenController(
   postSendDetect?: PostSendDetectController,
   /** ★ CDP 待归属队列（无 `detectVideos` 能力的站点走它）—— 单例，由 `container` 注入 */
   dolaMedia?: DolaMediaController,
+  /** ★ 待归属尝试写入器（原 `sendPayload` 的两处写入）—— 单例，由 `container` 注入 */
+  pendingAttempt?: PendingAttemptController,
 ): GenController {
   /**
    * 尝试 id 的自增段（原 `O$` 的模块级计数器 `Oy`）
@@ -82,6 +86,29 @@ export function createGenController(
     },
     // ★ TD-02-16：选号必须**实时**知道哪些账号在忙（用例跨重试多次选号）
     busyIds: () => busyIdsOf(store.useStore.getState().accountBusy, ports.clock.now()),
+    /**
+     * ★ **发送结束 ⇒ 写「待归属尝试」**（原 `sendPayload` 里 `Be` 返回后那两处，`:2907-2913` / `:2935-2941`）
+     *
+     * ⚠️ **只对 `genvideo` 写**：源在这条路上传的 `sourceNodeId` 就是**真节点 id**；而网页文生图
+     *    那条传的是 `'imggen:' + key`（`shared.js:42921`）⇒ 源 `updateNodeData` 找不到节点 ⇒ **空写**
+     *    （⚠️ 但它**仍会 push 一次撤销快照** —— 那处怪癖照实不复制）。
+     */
+    onSent: async ({ accountId, payload, sourceNodeId, ok, message }) => {
+      const nodeId = sourceNodeId ?? '';
+      if (!nodeId) return;
+      const node = store.useStore.getState().nodes.find((n) => n.id === nodeId);
+      if (!node || node.type !== 'genvideo') return;
+      if (ok) {
+        await pendingAttempt?.recordSent({
+          nodeId,
+          accountId,
+          prompt: payload.text,
+          payloadParams: payload.params,
+        });
+      } else {
+        pendingAttempt?.recordFailed({ nodeId, accountId, prompt: payload.text, note: message });
+      }
+    },
   };
 
   return {
@@ -224,11 +251,12 @@ export function createGenController(
         };
 
         if (res.value.via === 'web') {
-          // ★ BP-03：网页通道（原 `tO` + `DR`）—— `bindImageGenKey`（key → params + 期望张数）＋
-          //   `pollResults` 结果每张走 `addImageGenResult`（查表回填 + 去重）；CDP 推送作补充（同键去重协调）。
+          // ★ BP-03：网页通道（原 `_Component45.jsx:1032` + `DR`）—— `bindImageGenKey`（key → 节点 +
+          //   期望张数 + 提交参数）＋ 每张结果走 `addImageGenResult`（按 key 反查节点 + 查表回填 + 去重）；
+          //   CDP 推送作补充（同键去重协调）。
           const key = res.value.key;
           if (key) {
-            store.useStore.getState().bindImageGenKey(key, genParams, count);
+            store.useStore.getState().bindImageGenKey(key, nodeId, count, genParams);
 
             for (const r of res.value.results ?? []) {
               store.useStore.getState().addImageGenResult({
@@ -236,23 +264,27 @@ export function createGenController(
                 dataUrl: r.ref,
                 source: r.source,
                 accountName: r.accountName,
-                nodeId,
+                accountId: res.value.accountId ?? null,
+                ...(r.natW && r.natH ? { natW: r.natW, natH: r.natH } : {}),
               });
             }
 
             // ★ 登记 CDP 图像任务（后端 CDP 推送补充出片；与 pollResults 靠 `imageGenDeliveredKeys` 去重）
-            if (res.value.accountId) dolaMedia?.registerSent(res.value.accountId, nodeId, key);
+            //   ⚠️ 作业 id = `'imggen:' + key`（原 `shared.js:42921`）—— 源的 CDP 队列就按这个前缀挑图像任务
+            if (res.value.accountId) {
+              dolaMedia?.registerSent(res.value.accountId, imageGenJobId(key));
+            }
           } else {
             // 没有 key（结构上不可达）：只清「生成中」
             store.useStore.getState().patchNodeData(nodeId, { generating: false });
           }
         } else if (res.value.via === 'api' && res.value.batch) {
-          // ★ BP-03：API 通道提交成功 ⇒ 绑定 `jobId[] → 提交参数`（原 `bindImageGenJobs`，
+          // ★ BP-03：API 通道提交成功 ⇒ 绑定 `jobId[] → 节点 + 提交参数`（原 `bindImageGenJobs`，
           //   `_Component45.jsx:955`）—— 结果到达时 `attachImageResultToNode` 按 `genKey || jobId`
           //   查表回填 `params` 并删键（否则历史版本的参数只能拿节点**当前值**兜底，不是提交值）。
           const jobIds = res.value.batch.jobIds.filter((id): id is string => Boolean(id));
           if (jobIds.length > 0) {
-            store.useStore.getState().bindImageGenJobs(jobIds, genParams);
+            store.useStore.getState().bindImageGenJobs(jobIds, nodeId, genParams);
           }
         }
 

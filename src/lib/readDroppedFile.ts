@@ -69,6 +69,20 @@ export interface DroppedImage {
 }
 
 /**
+ * 量一个 `dataUrl` 的**原始尺寸**，量不到 ⇒ `0`（原 `Lc` 的 `<img>` 那半，`shared.js:23812-23820`）
+ *
+ * ⚠️ 与 `measureImageSize` 的**兜底不同**（那条是 `Pu` 的 `200 × 160`）：源 `Lc` 失败给 `0`，
+ *    而 `addImageGenResult` 用 `natW && natH` 判「有尺寸才写进库条目」⇒ **两者不能混**。
+ * ⚠️ 消费者：`adapters/site/doubao` 的出片轮询（原 `DR` 的项带 `natW`/`natH`）。
+ */
+export function measureNaturalSize(dataUrl: string): Promise<{ natW: number; natH: number }> {
+  return loadImage(dataUrl).then(
+    (img) => ({ natW: img.naturalWidth || 0, natH: img.naturalHeight || 0 }),
+    () => ({ natW: 0, natH: 0 }),
+  );
+}
+
+/**
  * 量一个**已读好的 `dataUrl`** 的原始尺寸（原 `Pu` 的 `<img>` 那半）
  *
  * ⚠️ **两次都不 reject**（源同法：只丢尺寸，不丢图）—— 加载失败 / `naturalWidth` 为 0
@@ -77,10 +91,10 @@ export interface DroppedImage {
  *    后者从系统对话框拿到的是**现成 dataUrl**（没有 `File` 可读）。
  */
 export function measureImageSize(dataUrl: string): Promise<{ natW: number; natH: number }> {
-  return loadImage(dataUrl).then(
-    (img) => ({ natW: img.naturalWidth || FALLBACK_W, natH: img.naturalHeight || FALLBACK_H }),
-    () => ({ natW: FALLBACK_W, natH: FALLBACK_H }),
-  );
+  return measureNaturalSize(dataUrl).then((s) => ({
+    natW: s.natW || FALLBACK_W,
+    natH: s.natH || FALLBACK_H,
+  }));
 }
 
 export function readImageFile(file: File): Promise<DroppedImage> {

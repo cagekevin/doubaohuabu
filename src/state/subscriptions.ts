@@ -28,22 +28,21 @@ export interface Subscriptions {
 /**
  * 装配宿主事件订阅。**由 `bootstrap/container.ts` 调用一次**。
  *
- * **当前接线（M8 + 2026-10-10 修 + 2026-10-11 落点接通）**：
+ * **当前接线**：
  *   - `host.api.onJobEvent` → `settings.upsertApiJob`（API 任务状态进 store，**键 = `jobId`**）
  *   - ★ **落点生效**：同一条事件再走 `core/usecases/applyApiJobEvent`（**纯决策**）→
- *     `addToLibrary` / `addVideoNode` / `patchNodeData` / `attachImageResultToNode` / `pushToast`。
- *     ⇒ **API 通道的「出片落画布」至此闭环**（原 `applyApiJobEvent` 直接写 store 的六件事）。
+ *     `addToLibrary` / `pushImageGenFeed` / `addVideoNode` / `patchNodeData` /
+ *     `attachImageResultToNode` / `pushToast`。
+ *     ⇒ **API 通道的「出片落画布」闭环**（原 `applyApiJobEvent` 直接写 store 的六件事）。
  *
  * ★ **载荷字段是 `jobId`**（不是 `id`）：类型声明成 `ApiJobLite`（字段 `id`）⇒
  *   而后端事件字段名是 **`jobId`** ⇒ `upsertApiJob` 按 `id` 去重时恒拿到 `undefined`
  *   ⇒ **所有任务塌进同一条记录**（订阅等于失效）。现已改用 `ApiJobEvent`（`jobId`）。
  *
  * **待接线（各自用例落地时补，仍只在本文件）**：
- *   - ~~`host.clipboard.onChanged` → 剪贴板图片~~ ★ **已接（2026-10-12 复核）**：走 `state/hostOps.ts:134`
+ *   - ~~`host.clipboard.onChanged` → 剪贴板图片~~ ★ **已接**：走 `state/hostOps.ts:134`
  *     ← `ui/canvas/CanvasHost.tsx:225`（**不经本文件** —— 若日后要收口"订阅唯一写入点"，这是落点）
- *   - ★ `host.media.onDolaMedia` → `state/dolaMedia`（**2026-10-12 已接**；**图像支未落** —— 见该文件头）
- *   - ⚠️ `applyApiJobEvent` 决策的 **`feed` 字段未落**（`pushImageGenFeed`）：源把它当 state 维护，
- *     但 119 个展开组件里**无读者** ⇒ `docs/过程.md` §2.9 裁定「派生视图」⇒ 不落（TD-16-85）。
+ *   - ★ `host.media.onDolaMedia` → `state/dolaMedia`（**已接**：视频支 + 图像支）
  */
 /** 订阅要调到的控制器（由 `bootstrap/container` 给 —— 订阅本身**只在本文件**） */
 export interface SubscriptionDeps {
@@ -74,6 +73,8 @@ export function createSubscriptions(
       // ⚠️ 顺序**逐条对源**（30719-30836）：库 → 视频 → 节点补丁 → 图片附加 → 提示。
       //    顺序有意义：视频/图片附加与 `nodePatch` 都改**同一个节点的 data**，先后不能反。
       if (decision.library.length > 0) st.addToLibrary(decision.library);
+      // ★ 生成图片流（原 `pushImageGenFeed`，`:30733-30739`）—— 源在「落库」那两支里各调一次
+      if (decision.feed) st.pushImageGenFeed([decision.feed]);
       if (decision.videoNode) {
         st.addVideoNode({
           url: decision.videoNode.url,

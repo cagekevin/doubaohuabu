@@ -69,11 +69,9 @@ export const PRESET_ID_PREFIX = 'pre_';
 /** 素材库 id 前缀（原 `lib_...`） */
 export const LIBRARY_ID_PREFIX = 'lib_';
 /**
- * ⚠️ **2026-10-12 删除 `IMAGE_GEN_FEED_ID_PREFIX = 'ig_'`**（`TD-01-7`）：两个理由 ——
- *   ① **撞值**：`core/rules/project.ts:41` 的 `NODE_ID_PREFIX.imggen` **就是 `'ig_'`**
- *      ⇒ 同值两份（母体 M3），而节点那份**有真消费者**（`makeNodeId('imggen', …)`）；
- *   ② **配套形状不落**：它服务的 `imageGenFeed` 已被裁定为「**派生视图**，不落 store」
- *      （`TD-16-84`）⇒ 前缀失去服务对象。留节点那份足矣。
+ * ⚠️ **`IMAGE_GEN_FEED_ID_PREFIX = 'ig_'` 已删**（`TD-01-7`）：它与
+ *   `core/rules/project.ts` 的 `ID_PREFIX.imggen`（`'ig'`）**同值**（母体 M3）。
+ *   ⇒ `imageGenFeed` 的项 id **复用节点那一份**（`makeId('imggen', …)`，原 `Pt('ig')`）。
  */
 /** 连线 id 前缀（原 `e_...`） */
 export const EDGE_ID_PREFIX = 'e_';

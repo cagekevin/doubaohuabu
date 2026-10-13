@@ -23,6 +23,7 @@ import type { HostOS } from '@/constants';
 import type { PostSendDetectController } from './postSendDetect';
 import type { DolaMediaController } from './dolaMedia';
 import type { AutoConfirmController } from './autoConfirm';
+import type { PendingAttemptController } from './pendingAttempt';
 import { hasVideoDescendant } from '@/core/rules/genDetect';
 import {
   applyProxyAssignments,
@@ -320,6 +321,11 @@ export interface AccountOpsDeps {
   postSendDetect: PostSendDetectController;
   /** ★ **CDP 待归属队列**（原 `sendPayload` 的 `C.current.push`）—— 同 `postSendDetect`：**单例** */
   dolaMedia: DolaMediaController;
+  /**
+   * ★ **待归属尝试写入器**（原 `sendPayload` 的 `_pendingAttempt(s)` 两处，`:2907/2935`）
+   * —— 同 `postSendDetect`：**单例**（它持有尝试 id 计数器）。
+   */
+  pendingAttempt: PendingAttemptController;
   /**
    * ★ **生成确认**（原 `sendPayload` 的基线读取 ＋ `kt(...)`，`:2846` / `:3001`）
    * ⚠️ 必须是 `container` 里的**单例**（它自己持有 running / onceKey 两张表）。
@@ -779,10 +785,26 @@ export function createAccountOps(
       if (!r.ok) {
         // ⑤ 失败：`msg` **原样透传**（原则 6）—— 源那两处兜底句（`:367` / `:373`）只在**没有** message 时用
         const msg = r.message || ACCOUNT_NODE_TEXT.fillFailed;
+        // ★ **失败也写 `_pendingAttempt(s)`**（原 `sendPayload:2921-2942` 的 `finally` 分支）
+        deps.pendingAttempt.recordFailed({
+          nodeId,
+          accountId: account.id,
+          prompt: sitePayload.text,
+          note: msg,
+        });
         store.useStore.getState().setNodeSendState(nodeId, { status: 'error', msg });
         scheduleFeedbackClear(nodeId);
         return err(r.reason, msg);
       }
+
+      // ★ **成功写 `_pendingAttempt(s)`**（原 `sendPayload:2865-2913`）—— 必须在「发送后检测 / CDP 登记」
+      //   **之前**（源就是先读会话 id、写尝试，再分流）—— 出片时靠它认领归属、拿 `conversationId`。
+      await deps.pendingAttempt.recordSent({
+        nodeId,
+        accountId: account.id,
+        prompt: sitePayload.text,
+        payloadParams: sitePayload.params,
+      });
 
       // ⑥ 成功摘要（原 `:339-359`）+ 「最近发送账号」（原 `:360`）
       const feedback = accountSendFeedback({

@@ -118,7 +118,7 @@ function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0
 function makeDeps(
   site: SitePort | null,
   api: ApiPort,
-  over: Partial<Pick<GenDeps, 'holdAccount' | 'releaseAccount' | 'busyIds'>> = {},
+  over: Partial<Pick<GenDeps, 'holdAccount' | 'releaseAccount' | 'busyIds' | 'onSent'>> = {},
 ): GenDeps {
   const sites: SiteRegistry = site ? { doubao: site } : {};
   return {
@@ -139,6 +139,65 @@ function makeDeps(
     ...over,
   };
 }
+
+/**
+ * ★ **`onSent` 钩子**（原 `sendPayload` 里 `Be` 返回后立刻做的那件事，`_Component43.jsx:2865-2913` /
+ *   `:2921-2942`）—— 它是本仓「待归属尝试」写入的**唯一注入点**。
+ *
+ * 这一组锁三件事（任一改坏必红）：
+ *   ① 成功 / 失败**都会**回调（源两处都写）；
+ *   ② 回调带的 `sourceNodeId` 就是源 `sendPayload` 的第三个入参 `me`；
+ *   ③ **时序**：回调在 `releaseAccount` **之前**（源把写入放在 `finally` 内、释放动作之前）。
+ */
+describe('generateImage · onSent 钩子（原 sendPayload 的 _pendingAttempt 写入位置）', () => {
+  it('★ 成功 ⇒ 回调一次，带 accountId / sourceNodeId / ok=true', async () => {
+    const seen: Array<{ accountId: string; sourceNodeId: string | null; ok: boolean }> = [];
+    const { site } = makeSite([{ ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    await generateImage(
+      makeDeps(site, api, {
+        onSent: (e) => {
+          seen.push({ accountId: e.accountId, sourceNodeId: e.sourceNodeId, ok: e.ok });
+        },
+      }),
+      { accounts: [acc('a')], text: '猫', channel: 'doubao', sourceNodeId: 'gv_1' },
+    );
+    expect(seen).toEqual([{ accountId: 'a', sourceNodeId: 'gv_1', ok: true }]);
+  });
+
+  it('★ 失败 ⇒ 也回调，且 message 是**原文**（原则 6）', async () => {
+    const notes: string[] = [];
+    const { site } = makeSite([{ reason: 'send-stuck', message: '卡住' }]);
+    const { api } = makeApi([{ ok: true }]);
+    const r = await generateImage(
+      makeDeps(site, api, {
+        onSent: (e) => {
+          notes.push(`${e.ok}:${e.message}`);
+        },
+      }),
+      { accounts: [acc('a')], text: '猫', channel: 'doubao', sourceNodeId: 'gv_1' },
+    );
+    expect(r.ok).toBe(false);
+    // ⚠️ `send-stuck` 是**不可重试**类（`core/rules/failure` 的 `f3` 表）⇒ 只发一次、只回调一次
+    expect(notes).toEqual(['false:卡住']);
+  });
+
+  it('★ 时序：onSent 必须在 releaseAccount **之前**', async () => {
+    const order: string[] = [];
+    const { site } = makeSite([{ ok: true }]);
+    const { api } = makeApi([{ ok: true }]);
+    await generateImage(
+      makeDeps(site, api, {
+        onSent: () => {
+          order.push('onSent');
+        },
+        releaseAccount: (id) => order.push(`release:${id}`),
+      }),
+      { accounts: [acc('a')], text: '猫', channel: 'doubao', sourceNodeId: 'gv_1' },
+    );
+    expect(order).toEqual(['onSent', 'release:a']);
+  });
+});
 
 describe('generateImage · 网页通道（成功路径）', () => {
   it('★ 成功 → 返回 via=web + 账号 + 结果', async () => {

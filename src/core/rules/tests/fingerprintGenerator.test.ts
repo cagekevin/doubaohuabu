@@ -15,7 +15,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   FALLBACK_CHROME_MAJOR,
-  FINGERPRINT_VERSION,
   buildSecChUaHints,
   buildUserAgentData,
   createSeededRandom,
@@ -24,6 +23,8 @@ import {
   fnv1a32,
   generateFingerprint,
 } from '../fingerprintGenerator';
+// ★ 指纹版本的真源在 `constants/fingerprint.ts`（`fingerprintGenerator` 只消费）
+import { FINGERPRINT_VERSION } from '@/constants/fingerprint';
 
 describe('fnv1a32（原 b$ 25061）', () => {
   it('★ 与标准 FNV-1a 32 位一致', () => {

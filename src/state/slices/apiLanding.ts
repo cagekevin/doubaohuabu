@@ -17,9 +17,7 @@
  * ── 未落（如实标注，判据 B5：不留「落了但没人调」）──────────────────────────
  * | 缺 | 源 | 原因 |
  * |---|---|---|
- * | ~~`imageGenKeyParams[u]` 查表~~ ✅ **已落（API 通道）**：`bindImageGenJobs`（`state/generate.ts` API 提交后绑定 `jobId[] → 提交参数`）→ `attachImageResultToNode` 按 `genKey || jobId` 查表回填 + 删键（纯层 `core/rules/imageGenKey.ts`）。网页通道的 `bindImageGenKey` 待 CDP 图像回流（BP-03 后半） |
- * | `pushImageGenFeed` / `imageGenFeed` | 27131-27167 | 源把它当 state 维护（去重 + 上限 80），但**119 个展开组件里无任何读者** ⇒ `docs/过程.md` §2.9 已裁定为「派生视图」⇒ 不落（判据 B5；已登记 TD-16-85） |
- * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | ⚠️ **2026-10-11 回写**：`localizeNodeVideos` **已接线** —— `state/localizeOps`（← `state/generate` 写完 `resultUrl` 后 · 启动 5s 的 `container.startVideoBackfill()`）；**只剩海报抓取**（`_cmp_bk`）未落（需宿主能力，TD-02-5 家族） |
+ * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | `localizeNodeVideos` **已接线** —— `state/localizeOps`（← `state/generate` 写完 `resultUrl` 后 · 启动 5s 的 `container.startVideoBackfill()`）；**只剩海报抓取**（`_cmp_bk`）未落（需宿主能力，TD-02-5 家族） |
  */
 
 import type { CanvasNode, XY } from '@/stable/model/node';
@@ -36,15 +34,26 @@ import {
 } from '@/constants';
 import {
   bindImageGenJobs,
+  bindImageGenKey,
+  deliveredTarget,
   dropImageGenKey,
   isImageGenSatisfied,
+  isPlaceholderDataUrl,
+  planImageGenFeed,
   resolveImageGenParams,
   tickImageGenDelivered,
   type ImageGenDeliveredKeys,
+  type ImageGenFeedInput,
+  type ImageGenFeedItem,
+  type ImageGenKeyNodes,
   type ImageGenKeyParams,
+  type ImageGenKeyTargets,
   type ImageGenParams,
   type ImageGenNodeFallback,
 } from '@/core/rules/imageGenKey';
+import { IMAGE_GEN_TEXT, type ToastLevel } from '@/constants/text';
+import { formatClockTime } from '@/lib/time';
+import { log } from '@/lib/log';
 
 /** 缺尺寸时的兜底比例（原 `addVideoNode` 内的 `16/9`，`shared.js:28025`） */
 const VIDEO_FALLBACK_RATIO = 16 / 9;
@@ -71,23 +80,29 @@ export interface ImgAttachResult {
   jobId?: string | null;
 }
 
-/** CDP 图像回流的落点入参（原 `addImageGenResult` 的解构，`:27352-27359`） */
+/** 图像回流的落点入参（原 `addImageGenResult` 的解构，`:27352-27359`） */
 export interface AddImageGenResultInput {
-  key: string;
+  /** 网页通道生成键（`bindImageGenKey` 的 key）；缺 ⇒ 只落库 + feed，**不落节点** */
+  key?: string | null;
   dataUrl: string;
-  source: string;
-  accountName: string | null;
-  /** 目标节点 id（本仓 CdpJob 直接存节点 id，**不反查 `imageGenKeyNode`**） */
-  nodeId: string;
+  source?: string;
+  accountName?: string | null;
+  /** 收满时释放占用（原 `releaseAccountBusy(a)`，`:27440-27444`） */
+  accountId?: string | null;
+  /** 原图尺寸（进资源库条目，原 `natW`/`natH`） */
+  natW?: number;
+  natH?: number;
 }
 
-/** CDP 图像回流落点结果（原 `addImageGenResult` 的 `{ok, added, satisfied}`） */
+/** 图像回流落点结果（原 `addImageGenResult` 的返回，`:27448-27452`） */
 export interface AddImageGenResultOutcome {
   ok: boolean;
-  /** 已收满（调用方据此 toast「已完成」/ 释放账号） */
-  satisfied: boolean;
-  /** 已收满被拒（去重，`:27370-27376`） */
-  duplicate: boolean;
+  /** `no-data` / `duplicate-key` / `placeholder`（原 `:27364` / `:27373` / `:27382`） */
+  error?: 'no-data' | 'duplicate-key' | 'placeholder';
+  /** 已收满（`duplicate-key` 分支亦带 `true`） */
+  satisfied?: boolean;
+  /** 资源库是否真的进了（原 `p`；`addToLibrary` 抛错 ⇒ `false`） */
+  added?: boolean;
 }
 
 /**
@@ -120,24 +135,45 @@ export interface VideoNodeInput {
 
 export interface ApiLandingActions {
   /**
-   * ★ **绑定一批 API 图片任务 → 提交参数**（原 `bindImageGenJobs` 的 params 半，`:27207-27215`）
+   * ★ **API 通道绑定**（原 `bindImageGenJobs`，`:27196-27225`）：`jobId[] → 节点 id + 提交参数`
    *
-   * 提交成功后由 `state/generate.ts` 调；结果到达时 `attachImageResultToNode` 按
+   * API 提交成功后由 `state/generate.ts` 调；结果到达时 `attachImageResultToNode` 按
    * `genKey || jobId` 查表回填 `params` 并删键（防膨胀）。
    */
-  bindImageGenJobs: (jobIds: readonly string[], params: ImageGenParams) => void;
+  bindImageGenJobs: (
+    jobIds: readonly (string | null | undefined)[],
+    nodeId: string | null | undefined,
+    params: ImageGenParams | null | undefined,
+  ) => void;
   /**
-   * ★ **绑定网页通道单键**（原 `bindImageGenKey`，`:27171-27194`）：`key → 提交参数 + 期望张数`
+   * ★ **网页通道绑定**（原 `bindImageGenKey`，`:27171-27194`）：
+   * `key → 节点 id + 期望张数 + 提交参数`（三张表一次写）
    *
-   * 网页通道发送成功后由 `state/generate.ts` 调；CDP 图像回流时 `addImageGenResult` 按
-   * `key` 查表回填 `params` 并按期望张数去重。
+   * 网页通道发送成功后由 `state/generate.ts` 调；图像回流时 `addImageGenResult` 按
+   * `imageGenKeyNode[key]` 反查节点、按 `imageGenKeyTarget[key]` 判收满。
    */
-  bindImageGenKey: (key: string, params: ImageGenParams, target: number) => void;
+  bindImageGenKey: (
+    key: string,
+    nodeId: string,
+    target: number,
+    params: ImageGenParams | null | undefined,
+  ) => void;
   /**
-   * ★ **CDP 图像回流落点**（原 `addImageGenResult`，`:27352-27453`）：
-   * 去重 → 落节点（`attachImageResultToNode` 查表回填）→ 计数。
+   * ★ **图像回流落点**（原 `addImageGenResult`，`:27352-27453`）
+   *
+   * 顺序（逐行对源）：① 空 `dataUrl` ⇒ `no-data` ② 已收满 ⇒ `duplicate-key` ③ 占位图 ⇒ `placeholder`
+   * ④ 落资源库 ⑤ 进生成图片流 ⑥ 按 `imageGenKeyNode[key]` 反查节点落图 ⑦ 计数（收满判定）
+   * ⑧ 收满 ⇒ 释放占用 ⑨ toast。
    */
   addImageGenResult: (input: AddImageGenResultInput) => AddImageGenResultOutcome;
+  /**
+   * ★ **生成图片流入表**（原 `pushImageGenFeed`，`:27132-27161`）
+   *
+   * 去重 + 倒序插到最前 + 上限 `IMAGE_GEN_FEED_LIMIT`（80）。
+   */
+  pushImageGenFeed: (items: readonly ImageGenFeedInput[]) => void;
+  /** ★ **清空生成图片流**（原 `clearImageGenFeed`，`:27163-27167`） */
+  clearImageGenFeed: () => void;
   /**
    * ★ **落资源库**（原 `addToLibrary` 27101）
    *
@@ -173,7 +209,14 @@ interface ApiLandingReadable {
   library: LibraryItem[];
   imageGenKeyParams: ImageGenKeyParams;
   imageGenDeliveredKeys: ImageGenDeliveredKeys;
+  imageGenKeyNode: ImageGenKeyNodes;
+  imageGenKeyTarget: ImageGenKeyTargets;
+  imageGenFeed: ImageGenFeedItem[];
   commit: (key: string) => void;
+  /** 同片的具名 action（源 `addImageGenResult` 内部直调的那几个） */
+  addToLibrary(items: readonly LibraryAddItem[]): void;
+  attachImageResultToNode(nodeId: string, result: ImgAttachResult): boolean;
+  pushImageGenFeed(items: readonly ImageGenFeedInput[]): void;
 }
 
 /** 本片段**写**的字段（都属 `canvas` 片） */
@@ -182,6 +225,9 @@ interface ApiLandingWritable {
   library: LibraryItem[];
   imageGenKeyParams: ImageGenKeyParams;
   imageGenDeliveredKeys: ImageGenDeliveredKeys;
+  imageGenKeyNode: ImageGenKeyNodes;
+  imageGenKeyTarget: ImageGenKeyTargets;
+  imageGenFeed: ImageGenFeedItem[];
 }
 
 export interface ApiLandingDeps {
@@ -192,6 +238,12 @@ export interface ApiLandingDeps {
   nextLibraryId(): string;
   /** 原 `Pt('vid')` —— 网格新建视频节点的 id */
   nextVideoNodeId(): string;
+  /** 原 `Pt('ig')` —— 生成图片流的项 id */
+  nextFeedId(): string;
+  /** 原 `showToast`（写 `ui` 片的 `toasts`；跨片 ⇒ 注入） */
+  pushToast(message: string, duration?: number, level?: ToastLevel): void;
+  /** 原 `releaseAccountBusy`（写 `global` 片的 `accountBusy`；跨片 ⇒ 注入） */
+  releaseAccount(accountId: string): void;
 }
 
 export function createApiLandingActions(
@@ -249,50 +301,133 @@ export function createApiLandingActions(
   };
 
   return {
-    bindImageGenJobs: (jobIds, params) => {
-      const s = get();
-      if (!Array.isArray(jobIds) || jobIds.length === 0 || !params) return;
-      set({ imageGenKeyParams: bindImageGenJobs(s.imageGenKeyParams, jobIds, params) });
+    bindImageGenJobs: (jobIds, nodeId, params) => {
+      const next = bindImageGenJobs(get().imageGenKeyParams, jobIds, nodeId, params);
+      // `null` = 源里的条件不成立（`if (!!r && Array.isArray(n) && n.length !== 0)`）⇒ 不写
+      if (!next) return;
+      set({ imageGenKeyParams: next });
     },
 
-    bindImageGenKey: (key, params, target) => {
+    bindImageGenKey: (key, nodeId, target, params) => {
       const s = get();
-      if (!key || !params) return;
-      const clamped = Math.max(1, Math.min(4, target | 0 || 1));
+      const next = bindImageGenKey(
+        { keyNodes: s.imageGenKeyNode, keyTargets: s.imageGenKeyTarget, keyParams: s.imageGenKeyParams },
+        key,
+        nodeId,
+        target,
+        params,
+      );
+      // `null` = 源里的提前 `return`（缺 key 或 nodeId）⇒ 不写
+      if (!next) return;
       set({
-        imageGenKeyParams: { ...s.imageGenKeyParams, [key]: params },
-        imageGenDeliveredKeys: {
-          ...s.imageGenDeliveredKeys,
-          [key]: { ts: deps.now(), target: clamped, got: 0 },
-        },
+        imageGenKeyNode: next.keyNodes,
+        imageGenKeyTarget: next.keyTargets,
+        imageGenKeyParams: next.keyParams,
       });
     },
 
     addImageGenResult: (input) => {
+      // ① 空 `dataUrl` ⇒ `no-data`（原 `:27361-27366`）
+      const dataUrl = input?.dataUrl;
+      if (!dataUrl) return { ok: false, error: 'no-data' };
+
       const s = get();
-      if (!input || !input.dataUrl || !input.key || !input.nodeId) {
-        return { ok: false, satisfied: false, duplicate: false };
+      const key = input.key || null;
+      const delivered = key ? s.imageGenDeliveredKeys[key] : undefined;
+      const target = deliveredTarget(s.imageGenKeyTarget, s.imageGenDeliveredKeys, key);
+
+      // ② 已收满 ⇒ `duplicate-key`（原 `:27370-27376`）
+      //   ⚠️ 判据走纯层（`isImageGenSatisfied`），**不在此重写一份 `got >= target`**
+      if (isImageGenSatisfied(s.imageGenDeliveredKeys, s.imageGenKeyTarget, key)) {
+        return { ok: false, error: 'duplicate-key', satisfied: true };
       }
 
-      // ① 去重（原 `:27370-27376`：已收满 ⇒ duplicate）
-      if (isImageGenSatisfied(s.imageGenDeliveredKeys, input.key)) {
-        return { ok: false, satisfied: true, duplicate: true };
+      // ③ 占位图 ⇒ `placeholder`（原 `:27377-27385`）
+      if (isPlaceholderDataUrl(dataUrl)) return { ok: false, error: 'placeholder' };
+
+      // ④ 落资源库（原 `:27386-27400`）—— 源 `try/catch` ⇒ 失败只记 `added=false`，**不中断**
+      let added = true;
+      try {
+        get().addToLibrary([
+          {
+            name: IMAGE_GEN_TEXT.libraryName(formatClockTime(deps.now())),
+            dataUrl,
+            ...(input.natW && input.natH ? { natW: input.natW, natH: input.natH } : {}),
+          },
+        ]);
+      } catch {
+        added = false;
       }
 
-      // ② 落节点（原 `:27409-27414`：`imageGenKeyNode[n]` 反查节点 —— 本仓由 CdpJob 直接带 `nodeId`）
+      // ⑤ 进生成图片流（原 `:27401-27408`）
+      const item = {
+        name: IMAGE_GEN_TEXT.feedName,
+        dataUrl,
+        source: input.source === 'dola' ? 'dola' : input.source || 'doubao',
+        accountName: input.accountName || '',
+        genKey: key,
+      };
+      get().pushImageGenFeed([item]);
+
+      // ⑥ 按 `imageGenKeyNode[key]` 反查节点并落图（原 `:27409-27414`）
       //   `doAttachImage` 内部查 `imageGenKeyParams[key]` 回填 `params` 并删键。
-      doAttachImage(input.nodeId, {
-        dataUrl: input.dataUrl,
-        source: input.source || 'doubao',
-        accountName: input.accountName,
-        genKey: input.key,
+      const nodeId = key ? s.imageGenKeyNode[key] : undefined;
+      if (nodeId) {
+        try {
+          get().attachImageResultToNode(nodeId, item);
+        } catch {
+          // 源 `try{}catch{}` 空吞；本仓**留痕不吞**（原则 6），但**不因此中断**
+          log.warn('[apiLanding] 图像回流落节点失败：', nodeId);
+        }
+      }
+
+      // ⑦ 计数（原 `:27415-27439`）—— 无 key ⇒ 恒「已满」（源 `let w = !n`）
+      let satisfied = !key;
+      if (key) {
+        const ticked = tickImageGenDelivered(get().imageGenDeliveredKeys, key, target, deps.now());
+        satisfied = ticked.satisfied;
+        set({ imageGenDeliveredKeys: ticked.table });
+      }
+
+      // ⑧ 收满 ⇒ 释放占用（原 `:27440-27444`）
+      if (input.accountId && satisfied) {
+        try {
+          deps.releaseAccount(input.accountId);
+        } catch {
+          log.warn('[apiLanding] 释放账号失败：', input.accountId);
+        }
+      }
+
+      // ⑨ 提示（原 `:27445-27447`）
+      try {
+        deps.pushToast(
+          satisfied
+            ? IMAGE_GEN_TEXT.completed
+            : IMAGE_GEN_TEXT.collecting((delivered?.got || 0) + 1, target),
+          undefined,
+          'success',
+        );
+      } catch {
+        log.warn('[apiLanding] 出图提示失败');
+      }
+
+      return { ok: true, added, satisfied };
+    },
+
+    pushImageGenFeed: (items) => {
+      const s = get();
+      const next = planImageGenFeed(s.imageGenFeed, items, {
+        nextId: () => deps.nextFeedId(),
+        now: () => deps.now(),
+        persistImage: (u) => deps.persistImage(u),
       });
+      // `null` = 源里的 `return {}`（空入参 / 全被去重）⇒ 不写
+      if (!next) return;
+      set({ imageGenFeed: next });
+    },
 
-      // ③ 计数（原 `:27416-27438`）
-      const ticked = tickImageGenDelivered(get().imageGenDeliveredKeys, input.key, deps.now());
-      set({ imageGenDeliveredKeys: ticked.table });
-
-      return { ok: true, satisfied: ticked.satisfied, duplicate: false };
+    clearImageGenFeed: () => {
+      set({ imageGenFeed: [] });
     },
 
     addToLibrary: (items) => {

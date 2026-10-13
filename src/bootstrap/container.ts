@@ -35,6 +35,9 @@ import { createSendWatchController } from '@/state/sendWatch';
 import { createPostSendDetect } from '@/state/postSendDetect';
 import { createDolaMedia } from '@/state/dolaMedia';
 import { createAutoConfirm } from '@/state/autoConfirm';
+import { createPendingAttempt } from '@/state/pendingAttempt';
+import { sleep } from '@/lib/async';
+import { makeAttemptId } from '@/core/rules/genHistory';
 import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/adapters/host/shared/env';
 import { filterWinScreens, filterWinWebgl } from '@/core/rules/fingerprintGenerator';
 import { createSubscriptions, type Subscriptions } from '@/state/subscriptions';
@@ -257,10 +260,25 @@ export function createContainer(): Container {
    */
   const autoConfirm = createAutoConfirm(store, ports);
 
+  /**
+   * ★ **待归属尝试写入器**（原 `_Component43` 的 `sendPayload` 里那两处 `_pendingAttempt(s)` 写入）
+   *
+   * ⚠️ **单例**：它持有尝试 id 计数器（源 `O$` 的模块级 `Gl`）；在别处现建会让 id 撞车。
+   */
+  let attemptSeq = 0;
+  const pendingAttempt = createPendingAttempt(store, ports, {
+    now: () => ports.clock.now(),
+    makeAttemptId: () => {
+      attemptSeq += 1;
+      return makeAttemptId(ports.clock.now(), attemptSeq);
+    },
+    sleep,
+  });
+
   return {
     store,
     ports,
-    gen: createGenController(store, ports, sendWatch, postSendDetect, dolaMedia),
+    gen: createGenController(store, ports, sendWatch, postSendDetect, dolaMedia, pendingAttempt),
     analyze: createAnalyzeController(store, ports),
     accountOps: createAccountOps(store, ports, {
       // ⚠️ 与下面 `capture` 同法：**运行环境在组合根读**，`state` 层不碰 `document`（TD-16-54 的教训）
@@ -272,8 +290,9 @@ export function createContainer(): Container {
       postSendDetect,
       dolaMedia,
       autoConfirm,
+      pendingAttempt,
     }),
-    batchSend: createBatchSendController(store, ports),
+    batchSend: createBatchSendController(store, ports, pendingAttempt),
     capture: createCaptureController(store, ports, {
       // ⚠️ 运行环境在这里读（`container` 是组合根）—— `state` 层不碰 `window`
       dpr: () => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),

@@ -192,6 +192,13 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
         // ⚠️ 与下面的 `GallerySliceDeps.normalizeImage` 是**同一个东西**（原 `Tn`）
         persistImage,
         logOperation: deps.logOperation,
+        // ★ 跨片注入（判据 D1）：`apiLanding.addImageGenResult` 要写 `ui` 的 toast 与 `global` 的占用表。
+        //   ⚠️ 经 `getState()` 转发 —— 这两个 action 在**同一批** slice 里定义，构造期拿不到引用，
+        //      但调用期 store 已装配完整（与 `videoLanding` 等处的跨片调用同法）。
+        pushToast: (message, duration, level) => getState().pushToast(message, duration, level),
+        releaseAccount: (accountId) => {
+          getState().releaseAccount(accountId);
+        },
       }),
       // ★ UI 开关（折叠 / 只留本画布）的读写在 `persistKeys` 的**唯一落点**上（原版直接 `localStorage`）
       ...createUiSlice({

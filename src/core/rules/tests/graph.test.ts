@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import {
   applyConnection,
   collectLinkedTexts,
-  detachConnection,
   detectCycle,
   edgeInsertPosition,
   planConnectBatch,
@@ -156,18 +155,6 @@ describe('W6 · applyConnection', () => {
     const before = JSON.stringify(nodes);
     applyConnection(nodes, [], { source: 'A', target: 'B' }, makeEdge);
     expect(JSON.stringify(nodes)).toBe(before);
-  });
-});
-
-describe('detachConnection（删除边时清理 referenceOrder）', () => {
-  it('删边后 target 的 referenceOrder 移除 source', () => {
-    const nodes = [textNode('A'), textNode('B', ['A'])];
-    const edge: CanvasEdge = { id: 'e1', source: 'A', target: 'B', type: 'interactive' };
-    const out = detachConnection(nodes, [edge], edge);
-
-    expect(out.edges).toHaveLength(0);
-    const b = out.nodes.find((n) => n.id === 'B') as { data: { referenceOrder: string[] } };
-    expect(b.data.referenceOrder).toEqual([]);
   });
 });
 

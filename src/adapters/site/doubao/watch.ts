@@ -1,23 +1,25 @@
 /**
- * 豆包 / Dola 的「发送后监测」4 个页内探测（原 `_Component43.jsx:2638-2700` 的 `watchSendReply`）
+ * 豆包 / Dola 的「发送后监测」页内探测（原 `_Component43.jsx:2638-2700` 的 `watchSendReply`）
  *
  * 依据（**逐字回源**）：
- *   | 方法 | 源脚本 | 语义 |
- *   |---|---|---|
- *   | `probeGenAck` | `dD` `shared.js:37544-37576` | 「已接单」回复**计数**（增量判定用） |
- *   | `probeWaitTime` | `fD` `37577-37616` | 解析「预计等待 N 分钟/秒」 |
- *   | `probeReplyNotice` | `pD` `37617-37651` | 按 `REPLY_NOTICE_RULES` 计数 |
- *   | `probeQuotaUsage` | `hD` `37652-37734` | 额度预警 |
+ *   | 方法 | 源脚本 | 语义 | 谁在用 |
+ *   |---|---|---|---|
+ *   | `probeGenAck` | `dD` `shared.js:37544-37576` | 「已接单」回复**计数**（增量判定用） | `sendWatch`（`probeSendRound`） |
+ *   | `probeWaitTime` | `fD` `37577-37616` | 解析「预计等待 N 分钟/秒」 | 同上 |
+ *   | `probeReplyNotice` | `pD` `37617-37651` | 按 `REPLY_NOTICE_RULES` 计数 | 同上 |
+ *   | `probeQuotaUsage` | `hD` `37652-37734` | 额度预警 | 同上 |
+ *   | `probeGenSubmitted` | `Hd` `37494-37518` | 「已提交 / 正在生成」**是否命中** | ⚠️ **不是上面那族** —— 它服务 `postSendDetect` 的**计时器启动**（原 `ze(Y, Hd, 'detect-gen-submit')`，`_Component43.jsx:1565`） |
  *
  * ⚠️ 脚本封装在 `./scripts.ts`，本文件只做「找 webview → 跑脚本 → 判形状」。
- * ⚠️ **原则 6 的一处有意偏离（留痕）**：源版 4 个 helper（`ae`/`we`/`Se`/`$`）全是
+ * ⚠️ **原则 6 的一处有意偏离（留痕）**：源版这几个 helper 全是
  *   `try { … } catch {}` + `return null`（**静默吞**，连日志都没有）⇒ 本实现把脚本自己的
  *   `error` 字段**如实转成 `err`**，由调用方决定"这一轮跳过"还是"结束监测"。
- * ⚠️ 4 个脚本都是**只读**（`document.body.innerText`）⇒ 不违反站点层零注入。
+ * ⚠️ 全部脚本都是**只读**（`document.body.innerText`）⇒ 不违反站点层零注入。
  */
 
 import type {
   GenAckReading,
+  GenSubmittedReading,
   ImageQuestionContext,
   QuotaUsageReading,
   ReplyNoticeReading,
@@ -28,7 +30,13 @@ import { err, ok, type Result } from '@/core/model/result';
 import { BACKEND_PAGE_TEXT } from '@/constants/text';
 import { viewOfContext } from '../shared/webview';
 import { runProbe } from '../shared/waits';
-import { QUOTA_USAGE_SCRIPT, REPLY_NOTICE_SCRIPT, SEND_REPLY_ACK_SCRIPT, WAIT_TIME_SCRIPT } from './scripts';
+import {
+  GEN_SUBMITTED_COUNT_SCRIPT,
+  QUOTA_USAGE_SCRIPT,
+  REPLY_NOTICE_SCRIPT,
+  SEND_REPLY_ACK_SCRIPT,
+  WAIT_TIME_SCRIPT,
+} from './scripts';
 
 /** 4 个脚本的 `catch` 分支都会带一个 `error` 字段（源逐字如此） */
 interface ScriptError {
@@ -72,6 +80,27 @@ type QuotaUsageScript = ScriptError & {
   reason?: string;
   sample?: string;
 };
+/** `Hd` 的返回形状（原 `shared.js:37513`；`catch` 分支给 `{hit:false,count:0}`） */
+type GenSubmittedScript = ScriptError & { hit?: boolean; count?: number; text?: string };
+
+/**
+ * 构造 `SitePort.probeGenSubmitted` 的实现（原 `Hd`，`shared.js:37494-37518`）
+ *
+ * ⚠️ 消费端**只看 `hit`**（`postSendDetect` 的 `xe`）；`text` 只进日志。
+ */
+export function createDoubaoProbeGenSubmitted(): NonNullable<SitePort['probeGenSubmitted']> {
+  return async (ctx) => {
+    const r = await probeScript<GenSubmittedScript>(ctx, GEN_SUBMITTED_COUNT_SCRIPT);
+    if (!r.ok) return r;
+    const v = r.value;
+    // `Hd` 恒返回 `hit`（连 catch 分支也给 `false`）⇒ 不是布尔 = 脚本坏了，明确报错
+    if (typeof v.hit !== 'boolean') return err('page-error', BACKEND_PAGE_TEXT.probeBadShape);
+    return ok({
+      hit: v.hit,
+      text: typeof v.text === 'string' ? v.text : '',
+    } satisfies GenSubmittedReading);
+  };
+}
 
 /** 构造 `SitePort.probeGenAck` 的实现（原 `ae` 用的 `dD`） */
 export function createDoubaoProbeGenAck(): NonNullable<SitePort['probeGenAck']> {
