@@ -92,6 +92,14 @@
   color: var(--color-text-strong);
 }
 
+/* 生成节点标题后的自定义标签（原 `gv-label`：`label && label !== 默认标题` 时显示）—— 次要小字 */
+.gvLabel {
+  margin-left: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 /* 中槽（mockup `.node-head-mid`）—— flex + gap 容纳多个并列元素（如 video 的账号·时长·分辨率） */
 .nodeHeadMid {
   flex: 0 0 auto;

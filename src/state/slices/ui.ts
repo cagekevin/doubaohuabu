@@ -114,8 +114,6 @@ export interface UiSlice {
   // ── state ──
   toasts: ToastItem[];
   backendErrors: BannerError[];
-  /** 画布选中数（工具条用） */
-  selectedCount: number;
   /**
    * 当前**显示**在后台视图里的账号（原 `_Component43` 的 `o`）
    *
@@ -251,7 +249,6 @@ export interface UiSlice {
   pushBackendError: (kind: BackendErrorKind, message: string) => void;
   dismissBackendError: (id: string) => void;
   clearBackendErrors: () => void;
-  setSelectedCount: (n: number) => void;
   setActiveAccountId: (id: string | null) => void;
   /** 原 `setLastSentAccount`（`shared.js:30395`）—— 写方只有发送成功路径 */
   setLastSentAccount: (id: string | null) => void;
@@ -282,7 +279,6 @@ export function createUiSlice(deps: UiSliceDeps) {
   return (set: (partial: Partial<UiSlice>) => void, get: () => UiSlice): UiSlice => ({
     toasts: [],
     backendErrors: [],
-    selectedCount: 0,
     activeAccountId: null,
     // ★ 原 `lastSentAccountId: null`（**内存态**；真正的初值由发送路径写入）
     lastSentAccountId: null,
@@ -330,7 +326,6 @@ export function createUiSlice(deps: UiSliceDeps) {
 
     clearBackendErrors: () => set({ backendErrors: [] }),
 
-    setSelectedCount: (n) => set({ selectedCount: n }),
     setActiveAccountId: (activeAccountId) => set({ activeAccountId }),
     // ★ 原 `setLastSentAccount`（`shared.js:30395`：`{ lastSentAccountId: n }`）
     setLastSentAccount: (lastSentAccountId) => set({ lastSentAccountId }),

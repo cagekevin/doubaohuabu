@@ -17,7 +17,7 @@
  * ── 未落（如实标注，判据 B5：不留「落了但没人调」）──────────────────────────
  * | 缺 | 源 | 原因 |
  * |---|---|---|
- * | `imageGenKeyParams[u]` 查表（`u = genKey || jobId`） | 27247 / 27280 | 该表**无生产者**（`bindImageGenKey` / `bindImageGenJobs` 未接线）⇒ 恒为 `null` ⇒ 全走节点自身兜底 ⇒ 与源在「无绑定」时**逐字等价**（已登记 TD-16-84） |
+ * | ~~`imageGenKeyParams[u]` 查表~~ ✅ **已落（API 通道）**：`bindImageGenJobs`（`state/generate.ts` API 提交后绑定 `jobId[] → 提交参数`）→ `attachImageResultToNode` 按 `genKey || jobId` 查表回填 + 删键（纯层 `core/rules/imageGenKey.ts`）。网页通道的 `bindImageGenKey` 待 CDP 图像回流（BP-03 后半） |
  * | `pushImageGenFeed` / `imageGenFeed` | 27131-27167 | 源把它当 state 维护（去重 + 上限 80），但**119 个展开组件里无任何读者** ⇒ `docs/过程.md` §2.9 已裁定为「派生视图」⇒ 不落（判据 B5；已登记 TD-16-85） |
  * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | ⚠️ **2026-10-11 回写**：`localizeNodeVideos` **已接线** —— `state/localizeOps`（← `state/generate` 写完 `resultUrl` 后 · 启动 5s 的 `container.startVideoBackfill()`）；**只剩海报抓取**（`_cmp_bk`）未落（需宿主能力，TD-02-5 家族） |
  */
@@ -34,8 +34,17 @@ import {
   VIDEO_GRID_OFFSET,
   VIDEO_NODE_WIDTH,
 } from '@/constants';
-import { NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
-import { clampImageCount } from '@/core/rules/prompt';
+import {
+  bindImageGenJobs,
+  dropImageGenKey,
+  isImageGenSatisfied,
+  resolveImageGenParams,
+  tickImageGenDelivered,
+  type ImageGenDeliveredKeys,
+  type ImageGenKeyParams,
+  type ImageGenParams,
+  type ImageGenNodeFallback,
+} from '@/core/rules/imageGenKey';
 
 /** 缺尺寸时的兜底比例（原 `addVideoNode` 内的 `16/9`，`shared.js:28025`） */
 const VIDEO_FALLBACK_RATIO = 16 / 9;
@@ -58,6 +67,27 @@ export interface ImgAttachResult {
   source: string;
   accountName: string | null;
   genKey: string | null;
+  /** ★ BP-03：API 通道的任务 id（查表键 = `genKey || jobId`，原 `:27246`） */
+  jobId?: string | null;
+}
+
+/** CDP 图像回流的落点入参（原 `addImageGenResult` 的解构，`:27352-27359`） */
+export interface AddImageGenResultInput {
+  key: string;
+  dataUrl: string;
+  source: string;
+  accountName: string | null;
+  /** 目标节点 id（本仓 CdpJob 直接存节点 id，**不反查 `imageGenKeyNode`**） */
+  nodeId: string;
+}
+
+/** CDP 图像回流落点结果（原 `addImageGenResult` 的 `{ok, added, satisfied}`） */
+export interface AddImageGenResultOutcome {
+  ok: boolean;
+  /** 已收满（调用方据此 toast「已完成」/ 释放账号） */
+  satisfied: boolean;
+  /** 已收满被拒（去重，`:27370-27376`） */
+  duplicate: boolean;
 }
 
 /**
@@ -89,6 +119,25 @@ export interface VideoNodeInput {
 }
 
 export interface ApiLandingActions {
+  /**
+   * ★ **绑定一批 API 图片任务 → 提交参数**（原 `bindImageGenJobs` 的 params 半，`:27207-27215`）
+   *
+   * 提交成功后由 `state/generate.ts` 调；结果到达时 `attachImageResultToNode` 按
+   * `genKey || jobId` 查表回填 `params` 并删键（防膨胀）。
+   */
+  bindImageGenJobs: (jobIds: readonly string[], params: ImageGenParams) => void;
+  /**
+   * ★ **绑定网页通道单键**（原 `bindImageGenKey`，`:27171-27194`）：`key → 提交参数 + 期望张数`
+   *
+   * 网页通道发送成功后由 `state/generate.ts` 调；CDP 图像回流时 `addImageGenResult` 按
+   * `key` 查表回填 `params` 并按期望张数去重。
+   */
+  bindImageGenKey: (key: string, params: ImageGenParams, target: number) => void;
+  /**
+   * ★ **CDP 图像回流落点**（原 `addImageGenResult`，`:27352-27453`）：
+   * 去重 → 落节点（`attachImageResultToNode` 查表回填）→ 计数。
+   */
+  addImageGenResult: (input: AddImageGenResultInput) => AddImageGenResultOutcome;
   /**
    * ★ **落资源库**（原 `addToLibrary` 27101）
    *
@@ -122,6 +171,8 @@ export interface ApiLandingActions {
 interface ApiLandingReadable {
   nodes: CanvasNode[];
   library: LibraryItem[];
+  imageGenKeyParams: ImageGenKeyParams;
+  imageGenDeliveredKeys: ImageGenDeliveredKeys;
   commit: (key: string) => void;
 }
 
@@ -129,6 +180,8 @@ interface ApiLandingReadable {
 interface ApiLandingWritable {
   nodes: CanvasNode[];
   library: LibraryItem[];
+  imageGenKeyParams: ImageGenKeyParams;
+  imageGenDeliveredKeys: ImageGenDeliveredKeys;
 }
 
 export interface ApiLandingDeps {
@@ -146,7 +199,102 @@ export function createApiLandingActions(
   get: () => ApiLandingReadable,
   deps: ApiLandingDeps,
 ): ApiLandingActions {
+  /** 附加图片结果到 `imggen` 节点（原 `attachImageResultToNode`，`:27227-27292`）—— 供 action 内部复用 */
+  const doAttachImage = (nodeId: string, result: ImgAttachResult): boolean => {
+    const s = get();
+    if (!nodeId || !result || !result.dataUrl) return false;
+
+    const node = s.nodes.find((n) => n.id === nodeId && n.type === 'imggen');
+    if (!node) return false;
+
+    const dataUrl = deps.persistImage(result.dataUrl);
+    const data = node.data;
+    const prev: Array<Record<string, unknown>> = Array.isArray(data.results) ? data.results : [];
+    if (prev.some((r) => r.dataUrl === dataUrl)) return false;
+
+    // ★ BP-03：查表回填提交参数（原 `:27246-27257`：`u = genKey || jobId`，`d = imageGenKeyParams[u]`）。
+    //   有 ⇒ 用提交值；无 ⇒ 走节点自身兜底（与源「无绑定」时逐字等价）。
+    const key = result.genKey || result.jobId || null;
+    const bound = key ? s.imageGenKeyParams[key] : undefined;
+    const params = resolveImageGenParams(bound, data as ImageGenNodeFallback);
+    const item = {
+      dataUrl,
+      source: result.source || 'api',
+      accountName: result.accountName || null,
+      genKey: result.genKey || null,
+      ts: deps.now(),
+      ratio: params.aspectRatio || null,
+      prompt: (params.text || '').slice(0, 80) || null,
+      params,
+    };
+
+    get().commit('imggen-result');
+    // ⚠️ `overrides` 走 `Record<string, unknown>`（与 `canvas.patchNodeData` 同法）——
+    //    `viewUrl: null` / `prompt: null` 这些是源版真的会写的值，但冻结形状把它们标成 `string`。
+    const overrides: Record<string, unknown> = {
+      results: [item, ...prev].slice(0, IMAGE_GEN_RESULT_LIMIT),
+      resultUrl: dataUrl,
+      dataUrl,
+      viewUrl: null,
+      generating: false,
+    };
+    set({
+      nodes: s.nodes.map((n) =>
+        n.id === nodeId ? ({ ...node, data: { ...node.data, ...overrides } } as CanvasNode) : n,
+      ),
+      // ★ 结果消费后删键（原 `:27280-27288`，防键表无限膨胀）
+      imageGenKeyParams: key ? dropImageGenKey(s.imageGenKeyParams, key) : s.imageGenKeyParams,
+    });
+    return true;
+  };
+
   return {
+    bindImageGenJobs: (jobIds, params) => {
+      const s = get();
+      if (!Array.isArray(jobIds) || jobIds.length === 0 || !params) return;
+      set({ imageGenKeyParams: bindImageGenJobs(s.imageGenKeyParams, jobIds, params) });
+    },
+
+    bindImageGenKey: (key, params, target) => {
+      const s = get();
+      if (!key || !params) return;
+      const clamped = Math.max(1, Math.min(4, target | 0 || 1));
+      set({
+        imageGenKeyParams: { ...s.imageGenKeyParams, [key]: params },
+        imageGenDeliveredKeys: {
+          ...s.imageGenDeliveredKeys,
+          [key]: { ts: deps.now(), target: clamped, got: 0 },
+        },
+      });
+    },
+
+    addImageGenResult: (input) => {
+      const s = get();
+      if (!input || !input.dataUrl || !input.key || !input.nodeId) {
+        return { ok: false, satisfied: false, duplicate: false };
+      }
+
+      // ① 去重（原 `:27370-27376`：已收满 ⇒ duplicate）
+      if (isImageGenSatisfied(s.imageGenDeliveredKeys, input.key)) {
+        return { ok: false, satisfied: true, duplicate: true };
+      }
+
+      // ② 落节点（原 `:27409-27414`：`imageGenKeyNode[n]` 反查节点 —— 本仓由 CdpJob 直接带 `nodeId`）
+      //   `doAttachImage` 内部查 `imageGenKeyParams[key]` 回填 `params` 并删键。
+      doAttachImage(input.nodeId, {
+        dataUrl: input.dataUrl,
+        source: input.source || 'doubao',
+        accountName: input.accountName,
+        genKey: input.key,
+      });
+
+      // ③ 计数（原 `:27416-27438`）
+      const ticked = tickImageGenDelivered(get().imageGenDeliveredKeys, input.key, deps.now());
+      set({ imageGenDeliveredKeys: ticked.table });
+
+      return { ok: true, satisfied: ticked.satisfied, duplicate: false };
+    },
+
     addToLibrary: (items) => {
       const s = get();
       if (!Array.isArray(items) || items.length === 0) return;
@@ -168,60 +316,7 @@ export function createApiLandingActions(
       set({ library: [...s.library, ...added] });
     },
 
-    attachImageResultToNode: (nodeId, result) => {
-      const s = get();
-      if (!nodeId || !result || !result.dataUrl) return false;
-
-      const node = s.nodes.find((n) => n.id === nodeId && n.type === 'imggen');
-      if (!node) return false;
-
-      const dataUrl = deps.persistImage(result.dataUrl);
-      const data = node.data;
-      const prev: Array<Record<string, unknown>> = Array.isArray(data.results) ? data.results : [];
-      if (prev.some((r) => r.dataUrl === dataUrl)) return false;
-
-      // ⚠️ 源此处先查 `imageGenKeyParams[u]`（`u = genKey || jobId`）—— 该表**无生产者**
-      //    ⇒ `d` 恒为 `null` ⇒ 下面全部走**节点自身**兜底（与源在「无绑定」时逐字等价）。
-      const params = {
-        text: (typeof data.text === 'string' ? data.text : '') || '',
-        channel: (typeof data.channel === 'string' && data.channel) || 'doubao',
-        // ⚠️ 兜底吃**默认比例真源**（2026-10-12 收口：此前又写了一遍 `'1:1'`，
-        //    与 `NODE_DEFAULTS.imggen.aspectRatio`（现 4:3）不是一个值）
-        aspectRatio: (typeof data.aspectRatio === 'string' && data.aspectRatio) || NODE_DEFAULT_RATIO_LABEL,
-        styleIds: Array.isArray(data.styleIds) ? data.styleIds : [],
-        imageCount: clampImageCount(data.imageCount),
-        igModel: (typeof data.igModel === 'string' && data.igModel) || '',
-        igResolution: (typeof data.igResolution === 'string' && data.igResolution) || '',
-        sendAccount: (typeof data.sendAccount === 'string' && data.sendAccount) || 'auto',
-      };
-      const item = {
-        dataUrl,
-        source: result.source || 'api',
-        accountName: result.accountName || null,
-        genKey: result.genKey || null,
-        ts: deps.now(),
-        ratio: params.aspectRatio || null,
-        prompt: (params.text || '').slice(0, 80) || null,
-        params,
-      };
-
-      get().commit('imggen-result');
-      // ⚠️ `overrides` 走 `Record<string, unknown>`（与 `canvas.patchNodeData` 同法）——
-      //    `viewUrl: null` / `prompt: null` 这些是源版真的会写的值，但冻结形状把它们标成 `string`。
-      const overrides: Record<string, unknown> = {
-        results: [item, ...prev].slice(0, IMAGE_GEN_RESULT_LIMIT),
-        resultUrl: dataUrl,
-        dataUrl,
-        viewUrl: null,
-        generating: false,
-      };
-      set({
-        nodes: s.nodes.map((n) =>
-          n.id === nodeId ? ({ ...node, data: { ...node.data, ...overrides } } as CanvasNode) : n,
-        ),
-      });
-      return true;
-    },
+    attachImageResultToNode: (nodeId, result) => doAttachImage(nodeId, result),
 
     addVideoNode: (input) => {
       const s = get();
@@ -305,6 +400,8 @@ export function createApiLandingActions(
         data.resultPoster = poster || null;
         data.resultVid = vid || null;
         data.resultAt = deps.now();
+        // ★ BP-08：视频走异步出片 ⇒ 出片即清「生成中」（本仓 genvideo 用 `generating` 布尔，源用 `apiJob`/`_pendingAttempt` 推导）
+        data.generating = false;
 
         // `_pendingAttempt(s)` 清理（原 28091-28101）
         const hadPending = !!prevData._pendingAttempt;

@@ -13,7 +13,7 @@
 
 import type { Account, PoolStrategy } from '@/stable/model/account';
 import type { HostPort } from '@/core/ports/host.port';
-import type { SiteRegistry } from '@/core/ports/site.port';
+import type { SendResult, SiteRegistry } from '@/core/ports/site.port';
 import type { ClockPort } from '@/core/ports/clock.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { decideByReason } from '@/core/rules/failure';
@@ -86,6 +86,10 @@ export interface GenOutcome {
   accountId?: string;
   /** 网页通道：生成结果 */
   results?: GenResult[];
+  /** ★ BP-44：网页通道的轮询终止原因（`timeout` 且 0 结果 ⇒ state 提示「等待超时」） */
+  endReason?: SendResult['endReason'];
+  /** ★ BP-03：网页通道的生成键（`sessionId`）—— state 用它 `bindImageGenKey`（回填 params） */
+  key?: string;
   /** API 通道：单个任务 id（结果经 `onJobEvent` 回来） */
   jobId?: string;
   /** API 通道：批量提交结果（逐位 `jobIds` / `errors`） */
@@ -167,7 +171,7 @@ async function sendViaWeb(
   deps: GenDeps,
   input: CommonInput,
   buildPayload: (account: Account) => Parameters<AnySitePort['send']>[1],
-): Promise<Result<{ accountId: string; results: GenResult[] }>> {
+): Promise<Result<{ accountId: string; sessionId: string; results: GenResult[]; endReason: SendResult['endReason'] }>> {
   const excluded: string[] = [];
   /** ⚠️ `attempt` 从 **1** 起（与源码 `g3` 的 `Number(attempt) || 1` 一致） */
   let attempt = 1;
@@ -222,7 +226,12 @@ async function sendViaWeb(
     if (!res) return err('busy', ACCOUNT_PICK_TEXT.holdFailed);
 
     if (res.ok) {
-      return ok({ accountId: account.id, results: res.value.results });
+      return ok({
+        accountId: account.id,
+        sessionId: res.value.sessionId,
+        results: res.value.results,
+        endReason: res.value.endReason,
+      });
     }
 
     // ★ 转发原始错误（不改写）
@@ -292,7 +301,13 @@ export async function generateImage(deps: GenDeps, input: ImageGenInput): Promis
     ),
   );
   if (!web.ok) return web;
-  return ok({ via: 'web', accountId: web.value.accountId, results: web.value.results });
+  return ok({
+    via: 'web',
+    accountId: web.value.accountId,
+    key: web.value.sessionId,
+    results: web.value.results,
+    endReason: web.value.endReason,
+  });
 }
 
 /** 生成视频（`batch` = 按 16:9 / 9:16 / 1:1 各出一片） */
@@ -396,7 +411,7 @@ export async function generateVideo(deps: GenDeps, input: VideoGenInput): Promis
     ),
   );
   if (!web.ok) return web;
-  return ok({ via: 'web', accountId: web.value.accountId, results: web.value.results });
+  return ok({ via: 'web', accountId: web.value.accountId, results: web.value.results, endReason: web.value.endReason });
 }
 
 /** 供上层透传：把抛出物转原文（**不做任何加工**） */

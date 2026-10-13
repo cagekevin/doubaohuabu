@@ -424,7 +424,14 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
     <>
       <NodeShell
       type="genvideo"
-      title={GEN_VIDEO_TEXT.title}
+      title={
+        <>
+          {GEN_VIDEO_TEXT.title}
+          {data.label && data.label !== GEN_VIDEO_TEXT.title ? (
+            <span className={styles.gvLabel}>{data.label}</span>
+          ) : null}
+        </>
+      }
       selected={selected}
       // 有框外浮层（分析按钮 / 提示词浮层）⇒ 不能被 `.node` 的 overflow 裁掉
       overflowVisible

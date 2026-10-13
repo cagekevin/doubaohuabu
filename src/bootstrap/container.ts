@@ -191,7 +191,7 @@ export function createContainer(): Container {
   });
 
   // ★ 把 persist 接到 store：**只有"该存的数据"变了才安排落盘**
-  //   （不订阅 toast/selectedCount 这类纯 UI 状态 —— 避免无意义写盘）
+  //   （不订阅 toast 这类纯 UI 状态 —— 避免无意义写盘）
   const pick = (s: ReturnType<typeof store.useStore.getState>) => [
     s.projects,
     s.activeId,
@@ -260,7 +260,7 @@ export function createContainer(): Container {
   return {
     store,
     ports,
-    gen: createGenController(store, ports, sendWatch),
+    gen: createGenController(store, ports, sendWatch, postSendDetect, dolaMedia),
     analyze: createAnalyzeController(store, ports),
     accountOps: createAccountOps(store, ports, {
       // ⚠️ 与下面 `capture` 同法：**运行环境在组合根读**，`state` 层不碰 `document`（TD-16-54 的教训）

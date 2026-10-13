@@ -8,11 +8,23 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import styles from './shared.module.css';
 
-export interface MenuItem {
+/** 可点项 */
+export interface MenuActionItem {
   key: string;
   label: ReactNode;
   disabled?: boolean;
   onSelect: () => void;
+}
+/** 分隔线项（不响应点击 / 键盘导航） */
+export interface MenuSeparatorItem {
+  key: string;
+  separator: true;
+}
+
+export type MenuItem = MenuActionItem | MenuSeparatorItem;
+
+export function isMenuSeparator(it: MenuItem | undefined): it is MenuSeparatorItem {
+  return it != null && 'separator' in it;
 }
 
 export interface ContextMenuProps {
@@ -20,12 +32,16 @@ export interface ContextMenuProps {
   x: number;
   y: number;
   items: readonly MenuItem[];
+  /** 可选标题（渲染在菜单顶部，如「移动到…」） */
+  title?: ReactNode;
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+export function ContextMenu({ x, y, items, title, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(0);
+  // ★ active 初始指向第一个可点项（跳过可能的前导分隔线）
+  const firstSelectable = items.findIndex((it) => !isMenuSeparator(it));
+  const [active, setActive] = useState(firstSelectable < 0 ? 0 : firstSelectable);
 
   // 点击外部关闭（全应用唯一实现）
   useEffect(() => {
@@ -36,15 +52,22 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     return () => document.removeEventListener('mousedown', onDown);
   }, [onClose]);
 
-  // 键盘导航 + ESC 关闭
+  // 键盘导航 + ESC 关闭（★ 跳过分隔线）
   useEffect(() => {
+    const step = (dir: 1 | -1): void => {
+      setActive((cur) => {
+        let next = cur + dir;
+        while (next >= 0 && next < items.length && isMenuSeparator(items[next])) next += dir;
+        return next >= 0 && next < items.length ? next : cur;
+      });
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return onClose();
-      if (e.key === 'ArrowDown') return setActive((i) => Math.min(i + 1, items.length - 1));
-      if (e.key === 'ArrowUp') return setActive((i) => Math.max(i - 1, 0));
+      if (e.key === 'ArrowDown') return step(1);
+      if (e.key === 'ArrowUp') return step(-1);
       if (e.key === 'Enter') {
         const it = items[active];
-        if (it && !it.disabled) {
+        if (it && !isMenuSeparator(it) && !it.disabled) {
           it.onSelect();
           onClose();
         }
@@ -56,23 +79,28 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
 
   return (
     <div ref={ref} className={styles.menu} style={{ left: x, top: y }} role="menu">
-      {items.map((it, i) => (
-        <button
-          key={it.key}
-          type="button"
-          className={styles.menuItem}
-          data-active={i === active}
-          disabled={it.disabled}
-          role="menuitem"
-          onMouseEnter={() => setActive(i)}
-          onClick={() => {
-            it.onSelect();
-            onClose();
-          }}
-        >
-          {it.label}
-        </button>
-      ))}
+      {title && <div className={styles.menuTitle}>{title}</div>}
+      {items.map((it, i) =>
+        isMenuSeparator(it) ? (
+          <div key={it.key} className={styles.menuSep} role="separator" />
+        ) : (
+          <button
+            key={it.key}
+            type="button"
+            className={styles.menuItem}
+            data-active={i === active}
+            disabled={it.disabled}
+            role="menuitem"
+            onMouseEnter={() => setActive(i)}
+            onClick={() => {
+              it.onSelect();
+              onClose();
+            }}
+          >
+            {it.label}
+          </button>
+        ),
+      )}
     </div>
   );
 }

@@ -13,6 +13,8 @@ import type { AppStore } from './store';
 import { sendToSiteDeps } from './sendDeps';
 import { generateImage, generateVideo, type GenDeps } from '@/core/usecases/generate';
 import type { SendWatchController } from './sendWatch';
+import type { PostSendDetectController } from './postSendDetect';
+import type { DolaMediaController } from './dolaMedia';
 import { countUsable } from '@/core/rules/accountPool';
 import { busyIdsOf } from '@/core/rules/accountBusy';
 import { resolveApiProviderId } from '@/core/rules/apiProvider';
@@ -20,7 +22,7 @@ import { planVideoBatchLanding } from '@/core/rules/apiBatch';
 import { FAIL_LABEL } from '@/constants/failure';
 import { DEFAULT_IMAGE_RESOLUTION } from '@/constants/models';
 import { clampImageCount, resolveRefMaterial } from '@/core/rules/prompt';
-import { localizeNodeInto } from './localizeOps';
+import type { ImageGenParams } from '@/core/rules/imageGenKey';
 import { parseRefChips, refsToRawNames, refsToReferenceLabels } from '@/core/rules/refs';
 import { stripHtml } from '@/lib/text';
 import { stylePrefixOf } from '@/core/rules/style';
@@ -49,6 +51,10 @@ export function createGenController(
    *   缺省 `undefined` ⇒ 只跳过监测（单测里不必造它）。
    */
   sendWatch?: SendWatchController,
+  /** ★ 「发送后检测」控制器（BP-08：视频发完即返回 ⇒ 交它异步检测出片）—— 单例，由 `container` 注入 */
+  postSendDetect?: PostSendDetectController,
+  /** ★ CDP 待归属队列（无 `detectVideos` 能力的站点走它）—— 单例，由 `container` 注入 */
+  dolaMedia?: DolaMediaController,
 ): GenController {
   /**
    * 尝试 id 的自增段（原 `O$` 的模块级计数器 `Oy`）
@@ -195,7 +201,6 @@ export function createGenController(
             })
           : await sendGenVideo(node.data.sendAccount);
 
-      const now = ports.clock.now();
       if (!res.ok) {
         // ★ 原样写进 backendErrors（原则 6）—— 同上，走唯一写入口
         store.useStore.getState().patchNodeData(nodeId, { generating: false });
@@ -203,23 +208,69 @@ export function createGenController(
         return false;
       }
 
-      // 成功：把结果落到节点（`imggen` 写 results / `genvideo` 写 resultUrl）
-      const first = res.value.results?.[0];
+      // 成功：`imggen` 落结果（网页通道走 `addImageGenResult` 查表回填；API 通道经 `onJobEvent` 异步回来）
       if (node.type === 'imggen') {
-        const prev = node.data.results ?? [];
-        store.useStore.getState().patchNodeData(nodeId, {
-          generating: false,
-          ...(first ? { results: [...prev, first], resultUrl: first.ref } : {}),
-        });
-      } else {
-        store.useStore.getState().patchNodeData(nodeId, {
-          generating: false,
-          ...(first ? { resultUrl: first.ref, resultAt: now } : {}),
-        });
-        // ★ 视频本地化（源 `_Component43.jsx:3160`：写完 `attempt.url` 后**立刻** `localizeNodeVideos`）
-        //   链 18（`docs/过程.md` #9）「视频必须落盘」；`void` 调 —— 落盘是收尾，不该拖住"生成成功"的返回
-        void localizeNodeInto(store, ports, nodeId);
+        const count = clampImageCount(node.data.imageCount);
+        /** 提交参数（原 `_Component45.jsx:900-909` 的 `fe`）—— 网页/API 两通道共用 */
+        const genParams: ImageGenParams = {
+          text: apiText,
+          channel: isApi ? 'api' : 'doubao',
+          aspectRatio: ratio ?? '',
+          styleIds,
+          imageCount: count,
+          igModel: node.data.igModel ?? '',
+          igResolution: node.data.igResolution ?? DEFAULT_IMAGE_RESOLUTION,
+          sendAccount: node.data.sendAccount,
+        };
+
+        if (res.value.via === 'web') {
+          // ★ BP-03：网页通道（原 `tO` + `DR`）—— `bindImageGenKey`（key → params + 期望张数）＋
+          //   `pollResults` 结果每张走 `addImageGenResult`（查表回填 + 去重）；CDP 推送作补充（同键去重协调）。
+          const key = res.value.key;
+          if (key) {
+            store.useStore.getState().bindImageGenKey(key, genParams, count);
+
+            for (const r of res.value.results ?? []) {
+              store.useStore.getState().addImageGenResult({
+                key: r.genKey || key,
+                dataUrl: r.ref,
+                source: r.source,
+                accountName: r.accountName,
+                nodeId,
+              });
+            }
+
+            // ★ 登记 CDP 图像任务（后端 CDP 推送补充出片；与 pollResults 靠 `imageGenDeliveredKeys` 去重）
+            if (res.value.accountId) dolaMedia?.registerSent(res.value.accountId, nodeId, key);
+          } else {
+            // 没有 key（结构上不可达）：只清「生成中」
+            store.useStore.getState().patchNodeData(nodeId, { generating: false });
+          }
+        } else if (res.value.via === 'api' && res.value.batch) {
+          // ★ BP-03：API 通道提交成功 ⇒ 绑定 `jobId[] → 提交参数`（原 `bindImageGenJobs`，
+          //   `_Component45.jsx:955`）—— 结果到达时 `attachImageResultToNode` 按 `genKey || jobId`
+          //   查表回填 `params` 并删键（否则历史版本的参数只能拿节点**当前值**兜底，不是提交值）。
+          const jobIds = res.value.batch.jobIds.filter((id): id is string => Boolean(id));
+          if (jobIds.length > 0) {
+            store.useStore.getState().bindImageGenJobs(jobIds, genParams);
+          }
+        }
+
+        // ★ BP-44：网页通道 timeout 且 0 结果 ⇒ 清「生成中」+ 提示「等待超时」（原 `_Component45.jsx:1093-1095`）
+        if (res.value.via === 'web' && res.value.endReason === 'timeout' && !res.value.results?.length) {
+          store.useStore.getState().patchNodeData(nodeId, { generating: false });
+          const acc = res.value.accountId
+            ? store.useStore.getState().accounts.find((a) => a.id === res.value.accountId)
+            : undefined;
+          store.useStore.getState().pushToast(
+            GEN_PANEL_TEXT.genTimeout(acc?.type === 'dola' ? 'Dola' : '豆包'),
+            5000,
+            'warn',
+          );
+        }
       }
+      // ★ BP-08：`genvideo` 发完即返回（`results` 恒空）⇒ **不写 `resultUrl` / 不清 `generating`**，
+      //   等 `postSendDetect` 异步检测出片后由 `addVideoNode` 落（resultUrl + generating:false + 本地化）。
 
       // ★ 「发送后监测」（原 `_Component43.jsx:3010`：发送链尾部起 `watchSendReply`）
       //   网页通道发送成功 ⇒ 后台监测 180s（已接单 / 预计等待 / 额度 / 回复通知）。
@@ -232,6 +283,17 @@ export function createGenController(
           // ★ 换号重发的能力**留在发送源头**（本文件持有那次发送的全部参数）
           resend: async (accountId) => (await sendGenVideo(accountId)).ok,
         });
+        // ★ BP-08：视频发完即返回 ⇒ 交 `postSendDetect` 异步检测（按站点能力分流，同 `accountOps`）
+        if (node.type === 'genvideo') {
+          const acc = store.useStore.getState().accounts.find((a) => a.id === res.value.accountId);
+          if (acc) {
+            if (ports.sites[acc.type]?.detectVideos) {
+              postSendDetect?.notifySent({ accountId: acc.id, sourceNodeId: nodeId });
+            } else {
+              dolaMedia?.registerSent(acc.id, nodeId);
+            }
+          }
+        }
       }
       return true;
     },

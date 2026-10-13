@@ -139,8 +139,8 @@ ui/canvas/CanvasHost.tsx        【ReactFlow 宿主；8 类节点经 ui/nodes �
   → core/usecases/generate
        ├─ node.data.channel === 'api' ⇒ ports.host.api.jobSubmit / jobBatch → adapters/host/electron/api   【回流见 §十】
        └─ 网页 ⇒ pickAccount（带 busy）→ holdAccount → SitePort.send → finally releaseAccount           【send 分段见 §二十】
-  → 成功落节点：imggen ⇒ results[] · genvideo ⇒ resultUrl（+ localizeNodeInto 落盘）
-  → 网页成功 ⇒ state/sendWatch.start（180s 监测，见 §二十二）
+  → 成功落节点：imggen ⇒ results[] · genvideo ⇒ **发完即返回**（resultUrl 由 §二十一 `addVideoNode` 异步落）
+  → 网页成功 ⇒ state/sendWatch.start（180s 监测，见 §二十二）；视频生成另按站点能力分流 → postSendDetect.notifySent（见 §二十一）
   → 站点实现：adapters/site/doubao（同一工厂产出 doubao / dola）· adapters/site/gpt；注册表 adapters/site/registry.ts（createSiteRegistry）
   → 视频海报：ui/nodes/GenVideoNode.tsx → lib/videoPoster.generateVideoPoster（源 YL.jsx:450 那条 lazy；源另一处 eager 未落，结果等价）
 ```
@@ -183,7 +183,6 @@ ui/panels/StyleLibraryModal（← ui/panels/GenPanel）
 - 网页通道 Phase 2 的**回退链**（附图的剪贴板回落 + 按键补充）与 **2b 增量重试**未落 —— `send` 只走 CDP 一级，失败即 `err('unknown')`。
 - Phase 3a 只有**文本**那档硬闸；**图数 / 图序**未落。
 - `_pendingAttempt` / `_pendingAttempts` **无写入方**（只有 `stable/migrations/resetStaleJobs` 清）⇒「本账号待确认尝试」语义在本仓不存在。
-- 网页通道的 `send` **图 / 视频共用同一份 `pollResults`**（逐行对的是源图片通道 `DR`）⇒ 图片等价；**视频与源偏离**（源：`Be` 发完即返回、由异步检测补）。
 
 ---
 
@@ -502,8 +501,8 @@ deps 组装：state/sendDeps.sendToSiteDeps —— sites / backendPage / holdAcc
 - ⓪ 文本填入（`In` 归一 → 剪贴板 → 聚焦粘贴 → 验证）· ① 附图（**CDP 一次直喂**，不走源那条"逐图剪贴板 + 按键兜底"）
 - ② **Phase 2c 生成参数** → `adapters/site/doubao/setGenParams.applyGenParams`（脚本 `yD` 逐字搬入；dola 跳过；失败只留痕）；取参闸 = `core/rules/genParams.collectGenParams`
 - ③ **Phase 2d Dola 面板 UI** → `runDolaForcePanelUi`
-- ④ 点发送 · ⑤ 等结果（`DR` 轮询，**结束即停**）
-- 发送成功后（`:2943-3013`）：按站点能力分流 —— 有 `site.detectVideos` ⇒ `postSendDetect.notifySent`；否则 ⇒ `dolaMedia.registerSent`；并按 `hasVideoDescendant` 登记 `setNodePendingTimer`
+- ④ 点发送 · ⑤ 等结果（**仅图片通道**走 `pollResults`（原 `DR`）轮询，**结束即停**；视频 / 账号节点**发完即返回**，交 §二十一异步归属）
+- 发送成功后（`:2943-3013`）：按站点能力分流 —— 有 `site.detectVideos` ⇒ `postSendDetect.notifySent`；否则 ⇒ `dolaMedia.registerSent`；并按 `hasVideoDescendant` 登记 `setNodePendingTimer`。★ 触发点两处：账号节点（`accountOps.sendAccountNode`）· 视频生成（`state/generate.runForNode` 的 `genvideo` 支）
 - `precheck` 已落：`core/rules/accountNode.ts` + `constants/failure.ts` + `adapters/site/doubao/index.ts`
 - 幂等：`sessionId = ${account.id}:${payload.source}:${hash32(payload.text)}` → `sentSessions` 防重发
 
@@ -517,7 +516,7 @@ deps 组装：state/sendDeps.sendToSiteDeps —— sites / backendPage / holdAcc
 > ⇒ `postSendDetect` 是**视频通道**因「`Be` 发完即返回、不等结果」才必须的后台补救；本仓图像回流走 `pollResults`（原 `DR`）。
 
 ```
-触发：① sendPayload 成功 && store.autoVideoDetect（:2943-2955，先把 {nodeId,sendTime} 记进 k）
+触发：① sendPayload 成功 && store.autoVideoDetect（:2943-2955，先把 {nodeId,sendTime} 记进 k）—— 本仓 = 账号节点 `accountOps` ＋ 视频生成 `state/generate` 两处
       ② pullResult 的 conversationId 分支（:3196-3206，记 k 时带 pull:true）
 控制器：state/postSendDetect.ts（notifySent / stop）—— 不占租约（走 BackendPagePort.webContentsIdOf），轮询只在调用期间存在
   ① te(id) 取 webview；未就绪 ⇒ 轮询 executeJavaScript('!!document.body') 至多 15s（:1458-1479）
@@ -603,7 +602,7 @@ Dola 30s 强开（源 :758-806；仅"发送 Dola ∧ duration>15 ∧ model==='se
 
 | 断的边（本仓侧） | 说明（源名见括注） |
 |---|---|
-| **图像回流（CDP 图片支）** | **未落**：需 `ingestImageGenCdp` + `addImageGenResult`（本仓皆无）；生产者 `bindImageGenKey` / `bindImageGenJobs` 未接线 ⇒ `imageGenKeyParams` 恒空 ⇒ 当前只记 `seenImages` 去重，事件不落库（不假装）。源 `onDolaMedia` 图片分支 `:185-231` + 节流 `I` |
+| **图像回流（CDP 图片支）** | **部分落**：API 通道键表已接（`bindImageGenJobs` → `attachImageResultToNode` 查 `genKey || jobId` 回填 `params`，纯层 `core/rules/imageGenKey.ts`）；网页通道 CDP 回流**待落**（`ingestImageGenCdp` + `addImageGenResult` + `bindImageGenKey` 未接 ⇒ `dolaMedia` 图像支仍只记 `seenImages` 去重）。源 `onDolaMedia` 图片分支 `:185-231` + 节流 `I` |
 | **生成参数派生** | **不落**：唯一消费者是源那两个 0 调用方法 + 自检面板态 ⇒ 一起不落（源 `le` `:352-395`） |
 | **任务占用计数** | **不造**：消费者（`dv-send-overlay` / `isForced`）本仓没有 ⇒ 0 读者（源 `Uu` `shared.js:35353-35404`） |
 | **参数自检（自动设置 / 测试 / 脚本）** | **不落**：源内全目录 0 调用 ⇒ 只服务它们的状态/派生一起不落（源 `At` / `_t` / `runParamScript`） |

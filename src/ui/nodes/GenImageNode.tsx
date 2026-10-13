@@ -136,7 +136,14 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
     <>
       <NodeShell
         type="imggen"
-        title={GEN_IMAGE_TEXT.title}
+        title={
+          <>
+            {GEN_IMAGE_TEXT.title}
+            {data.label && data.label !== GEN_IMAGE_TEXT.title ? (
+              <span className={styles.gvLabel}>{data.label}</span>
+            ) : null}
+          </>
+        }
         selected={selected}
         // 有框外浮层（分析按钮 / 提示词浮层）⇒ 不能被 `.node` 的 overflow 裁掉
         overflowVisible

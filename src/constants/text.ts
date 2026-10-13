@@ -1073,8 +1073,30 @@ export const ACCOUNT_PANEL_TEXT = {
   removeGlyph: '✕',
   /** 新增：确认（源版 `OP.jsx:801` 的 onClick 里自带确认逻辑，此处用最简单的一种） */
   confirmRemove: (name: string) => `确定移除「${name}」？其登录数据会一并清理。`,
-  /** 新增：去掉分组概念的说明（源版有分组，本工程尚未落地） */
-  groupPending: '（分组功能尚未实现）',
+
+  // ── 账号多选（原 `OP.jsx` 的 ctrl/meta 点选 + 右键「移动到分组」+「取消 N 个选中」）──
+  /** 取消所有选中按钮 `title`（原 `OP.jsx:817`，逐字） */
+  deselectAllTitle: '取消所有选中',
+  /** 取消按钮文案（原 `OP.jsx:818` 的 `取消 {ae} 个选中`） */
+  deselectAll: (n: number) => `取消 ${n} 个选中`,
+  /** 右键菜单标题（原 `OP.jsx:974` 的「移动到…」，逐字） */
+  moveToTitle: '移动到…',
+  /** 右键菜单标题里的选中计数（原 `OP.jsx:974` 的 `{ae} 个账号`） */
+  moveToCount: (n: number) => `${n} 个账号`,
+  /** 移出分组项（原 `OP.jsx:987` 的「移出分组（未分组）」，逐字） */
+  moveUngrouped: '移出分组（未分组）',
+  /** 移动成功 toast（原 `OP.jsx:450` 的 `已将 {N} 个账号移至「{name}」`） */
+  moveDone: (n: number, name: string) => `已将 ${n} 个账号移至「${name}」`,
+  /** 分组找不到时的兜底名（原 `OP.jsx:448-449` 的 `'指定分组'`） */
+  groupFallback: '指定分组',
+  /** 未分组名（原 `OP.jsx:449` 的 `'未分组'`） */
+  ungroupedName: '未分组',
+  /** 行 `title` 单选态（原 `OP.jsx:718`，逐字） */
+  rowTitleIdle: '点击选择账号（关闭时不加载页面）；Ctrl+点击多选；右键移动到分组',
+  /** 行 `title` 已选态（原 `OP.jsx:718` 的「已选中（右键可移动到分组）」，逐字） */
+  rowTitleSelected: '已选中（右键可移动到分组）',
+  /** 行 `title` 已选且是当前账号（原 `OP.jsx:718` 的「当前选中 + 后台」，逐字） */
+  rowTitleActiveSelected: '当前选中 + 后台',
 
   // ── 面板底部操作条（原 `OP.jsx:925-941` 的 `.panel-foot`）──
   /** 网格吸附（原 926 的 `.snap-toggle` 文案，逐字） */

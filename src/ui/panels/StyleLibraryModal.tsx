@@ -20,7 +20,7 @@
 import { useRef, useState } from 'react';
 import { useStore } from '@/state';
 import { Modal } from '@/ui/common/Modal';
-import { readImageFile } from '@/lib/readDroppedFile';
+import { compressCoverImage } from '@/lib/compressCover';
 import { STYLE_LIB_TEXT } from '@/constants/text';
 import { normalizeStyleName, normalizeStylePrefix, styleCoverGradient, UNNAMED_STYLE } from '@/core/rules/style';
 import type { StylePreset } from '@/constants/stylePresets';
@@ -98,13 +98,14 @@ export function StyleLibraryModal({ selectedIds, onToggle, onUseNone, onClose }:
 
   const pickCover = async (file: File | undefined): Promise<void> => {
     if (!file) return;
-    const r = await readImageFile(file);
-    if (!r.dataUrl) {
+    try {
+      // 原 `J3`：读图 + 解析 + 压到 560px jpeg；读/解析失败 reject（坏图不能塞进 store）
+      const dataUrl = await compressCoverImage(file);
+      setDraft((d) => ({ ...d, cover: dataUrl }));
+    } catch {
       // 源版是 `console.warn`（静默）⇒ 本仓按「失败可见」给一条 toast（有意差异，见 TD-03-10）
       pushToast(STYLE_LIB_TEXT.coverFailed, 3000, 'error');
-      return;
     }
-    setDraft((d) => ({ ...d, cover: r.dataUrl }));
   };
 
   return (

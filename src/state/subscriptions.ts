@@ -96,6 +96,8 @@ export function createSubscriptions(
           source: decision.attachImage.source,
           accountName: decision.attachImage.accountName,
           genKey: decision.attachImage.genKey,
+          // ★ BP-03：API 通道查表键 = `genKey || jobId`（原 `:27246`）
+          jobId: decision.attachImage.jobId,
         });
       }
       if (decision.toast) st.pushToast(decision.toast.text, decision.toast.durationMs, decision.toast.level);

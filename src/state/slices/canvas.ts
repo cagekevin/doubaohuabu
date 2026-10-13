@@ -19,7 +19,6 @@ import {
 } from '@/core/rules/undo';
 import {
   applyConnection,
-  detachConnection,
   edgeInsertPosition,
   planConnectBatch,
   planConnectManyToTarget,
@@ -34,6 +33,7 @@ import { createApiLandingActions, type ApiLandingActions } from './apiLanding';
 // ⚠️ `按配方重跑` 反建出来的文本框默认名（SSOT，不内联中文）
 import { VIDEO_NODE_TEXT } from '@/constants/text';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
+import type { ImageGenDeliveredKeys, ImageGenKeyParams } from '@/core/rules/imageGenKey';
 import { screenshotNodePlacement } from '@/core/rules/capture';
 import { groupSelectedNodes, ungroupNodes as ungroupPure } from '@/core/rules/group';
 import { planArrange, planSelectedGrid, type ArrangeMode } from '@/core/rules/arrange';
@@ -141,6 +141,21 @@ export interface CanvasSlice extends ApiLandingActions {
   edges: CanvasEdge[];
   library: LibraryItem[];
   /**
+   * ★ **图像生成提交参数表**（原 `imageGenKeyParams`，`shared.js:27170`）
+   *
+   * `genKey` / `jobId` → 提交参数。生产者 = `bindImageGenJobs`（API 通道）/ `bindImageGenKey`（网页通道）；
+   * 结果到达时 `attachImageResultToNode` 查表回填 `params` 并删键。**内存态**（随出片即删，不进工程持久化）。
+   */
+  imageGenKeyParams: ImageGenKeyParams;
+  /**
+   * ★ **图像生成已交付计数**（原 `imageGenDeliveredKeys`，`shared.js:27226`）
+   *
+   * `genKey` → `{ts, target, got}`。网页通道 `bindImageGenKey` 初始化 `target`；
+   * `addImageGenResult` 每次 `got+1` 并按 `got >= target` 判「收满」（去重）。
+   * **内存态**（不进工程持久化）。
+   */
+  imageGenDeliveredKeys: ImageGenDeliveredKeys;
+  /**
    * ★ **无水印视频分享**（原 `videoShares`，`shared.js:27900-27939` 的 `addVideoShare` 写入）
    *
    * 随 `ProjectData` 持久化（`setPartial` 镜像进 `projects[activeId].data.videoShares`）。
@@ -217,8 +232,6 @@ export interface CanvasSlice extends ApiLandingActions {
   commit: (key: string) => void;
   undoAction: () => void;
   redoAction: () => void;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
 
   /**
    * 添加连线（原 `onConnect`）—— 内含环检测 + `referenceOrder` 维护
@@ -248,9 +261,6 @@ export interface CanvasSlice extends ApiLandingActions {
    *   ① 目标节点不存在；② 滤掉源里**等于目标**的；③ 滤完为空。
    */
   connectManyToTarget: (sourceIds: readonly string[], targetId: string) => void;
-  /** 删除连线（并清理 `referenceOrder`） */
-  disconnect: (edge: CanvasEdge) => void;
-
   /** ★ 建文本节点（原「双击画布创建文本框」）—— 返回新节点 id */
   addTextNode: (position: { x: number; y: number }) => string;
   /**
@@ -614,6 +624,8 @@ export function createCanvasSlice(
     nodes: [],
     edges: [],
     library: [],
+    imageGenKeyParams: {},
+    imageGenDeliveredKeys: {},
     videoShares: [],
     snap: true,
     soundEnabled: true,
@@ -716,9 +728,6 @@ export function createCanvasSlice(
       });
     },
 
-    canUndo: () => get().undo.past.length > 0,
-    canRedo: () => get().undo.future.length > 0,
-
     connect: (conn) => {
       const s = get();
       const res = applyConnection(s.nodes, s.edges, conn, deps.makeEdge);
@@ -761,13 +770,6 @@ export function createCanvasSlice(
       // 变更前 commit（统一约定）
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-add', deps.now()) });
       if (plan.edges.length > 0) set({ edges: [...s.edges, ...plan.edges] });
-    },
-
-    disconnect: (edge) => {
-      const s = get();
-      set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-delete', deps.now()) });
-      const out = detachConnection(s.nodes, s.edges, edge);
-      set({ nodes: out.nodes, edges: out.edges });
     },
 
     addNode: (type, position, patch, size) => {

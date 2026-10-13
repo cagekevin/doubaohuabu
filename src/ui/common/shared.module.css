@@ -480,6 +480,20 @@
   padding: var(--space-1);
 }
 
+/* 右键菜单标题（如「移动到…」）—— 次要小字，带在菜单顶部 */
+.menuTitle {
+  padding: var(--space-half) var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* 右键菜单分隔线 */
+.menuSep {
+  height: 1px;
+  margin: var(--space-half) 0;
+  background: var(--color-border);
+}
+
 /* ── 基础控件：列表项（可点行）──
    改造前 AccountPicker `.item` 与 RefAutocomplete `.item` 几乎逐字相同。
 */

@@ -13,6 +13,18 @@
   overflow: auto;
 }
 
+/* 「取消 N 个选中」（原 `OP.jsx:816-820` 的 `.panel-head .btn.sm.ghost`）—— 有选中才显示 */
+.deselectBtn {
+  composes: btn btnSm btnGhost from '../common/shared.module.css';
+}
+
+/* 右键菜单标题里的选中计数（原 `.ctx-menu-count`） */
+.moveCount {
+  margin-left: var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
 /* ── 「＋ 添加账号」（原 `OP.jsx:822-827` 的 `.account-actions` 主按钮）── */
 /* ★ 查 6：主按钮不再自造 —— 引用共享真源 */
 .addBtn {

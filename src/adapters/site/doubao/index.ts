@@ -368,21 +368,38 @@ export function createDoubaoSite(
 
         sentSessions.add(sessionId);
 
-        // ⑥ 等结果（轮询只在 `send` 期间存在；**结束即停**，不自启常驻定时器）
-        const { results, endReason, failures } = await pollResults(host, storage, partition, {
-          source: kind,
-          accountName: account.name,
-          key: sessionId,
-        });
+        // ⑥ 等结果 —— **仅图片通道**（原 `DR` 同步轮询出片）。
+        //   ⚠️ 视频（`canvas-text-node`）/ 账号节点（`canvas-account-node`）**发完即返回**：
+        //      源 `Be` 对视频是 fire-and-forget，结果由 `postSendDetect` / `dolaMedia` 异步归属；
+        //      本仓此前把视频也塞进 `pollResults`（它扫的是**页面新图**）⇒ 等不到视频、超时（真 bug，BP-08）。
+        if (payload.source === 'canvas-image-gen') {
+          const { results, endReason, failures } = await pollResults(host, storage, partition, {
+            source: kind,
+            accountName: account.name,
+            key: sessionId,
+          });
 
-        // ★ 全部失败且无结果 ⇒ 如实报错（不伪装成 timeout）
-        if (results.length === 0 && failures.length > 0) {
-          return err('page-error', failures.join(' | '));
+          // ★ 全部失败且无结果 ⇒ 如实报错（不伪装成 timeout）
+          if (results.length === 0 && failures.length > 0) {
+            return err('page-error', failures.join(' | '));
+          }
+          return ok({
+            sessionId,
+            endReason,
+            results,
+            fillOnly: false,
+            autoClicked: true,
+            imagesAttached,
+            imagesTotal: payload.images.length,
+            textInserted,
+          });
         }
+
+        // 视频 / 账号节点：发完即返回（结果由上层异步归属）
         return ok({
           sessionId,
-          endReason,
-          results,
+          endReason: 'settled',
+          results: [],
           fillOnly: false,
           autoClicked: true,
           imagesAttached,

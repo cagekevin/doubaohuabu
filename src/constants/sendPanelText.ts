@@ -110,6 +110,8 @@ export const BATCH_SEND_TEXT = {
 export const GEN_PANEL_TEXT = {
   /** 面板标题 —— 文生图（原 `_Component45.jsx` 的 `Ge`） */
   imageTitle: '文生图',
+  /** ★ BP-44：网页通道生成超时（原 `_Component45.jsx:1094` 的 `等待超时：未收到图片（可去${Te}会话查看该对话）`） */
+  genTimeout: (sessionName: string) => `等待超时：未收到图片（可去${sessionName}会话查看该对话）`,
   /** 提示词正文的 `aria-label`（原 `Z3_1.jsx:1005`，逐字） */
   promptAria: '提示词正文',
   /** 提示词占位 —— 文生视频（原 `Z3_1.jsx:1005` 的 `data-placeholder`，逐字） */

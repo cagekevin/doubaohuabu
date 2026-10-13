@@ -23,13 +23,14 @@
  *    指纹体检（`FingerprintScanPanel`）· **账号行 🔍 指纹诊断 + ↻ 重新生成指纹** ·
  *    **🧹 清理缓存**（`HostPort.media.clearBrowserCache`）· **实时隔离体检**（`fp-health` 状态按钮）·
  *    面板底部三件（网格吸附 / 返回首页 / 清空画布）。
- * ⚠️ 仍未落地的（见 `docs/过程.md`）：`取消所有选中` —— 它**依赖账号列表多选**（源 `ae = Ie.size`），
- *    那是另一个特性（ctrl/meta 点选 + 拖拽入组），本面板没有 ⇒ **不假装有**。
+ * ✅ **2026-10-13 补齐「账号多选」**：ctrl/meta 点选（原 `we`）+ 右键「移动到分组」（原 `Se`/`Le`）
+ *    + 「取消 N 个选中」（原 `Ge`）—— 组件局部 `selectedIds` state，移组走已测纯层 `moveAccountsToGroup`。
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useAccountOps, useStore } from '@/state';
-import { ACCOUNT_STATUS, isAccountUsable, type SiteType } from '@/stable/model/account';
+import { ACCOUNT_STATUS, isAccountUsable, type Account, type SiteType } from '@/stable/model/account';
+import { ContextMenu, type MenuItem } from '@/ui/common/ContextMenu';
 // ⚠️ 头像字是**纯规则**（原 `OP.jsx:724`）⇒ 住 `core/rules`，不在组件里内联
 import { accountAvatarText } from '@/core/rules/accountName';
 import { AccountTypePicker } from './AccountTypePicker';
@@ -87,6 +88,8 @@ export function AccountPanel() {
   const setSnap = useStore((s) => s.setSnap);
   const showStartup = useStore((s) => s.showStartup);
   const clearCanvas = useStore((s) => s.clearCanvas);
+  /** ★ 批量移组（原 `OP.jsx:446` 的 `N`）—— 已测纯层 `moveAccountsToGroupPure` 落 store */
+  const moveAccountsToGroup = useStore((s) => s.moveAccountsToGroup);
 
   const [picking, setPicking] = useState(false);
   /**
@@ -97,6 +100,14 @@ export function AccountPanel() {
   const [probing, setProbing] = useState<string | null>(null);
   /** ★ 正在查看哪个账号的画廊（`null` = 不显示）—— 原 `_Component23` 是覆盖层模态 */
   const [galleryFor, setGalleryFor] = useState<string | null>(null);
+  /**
+   * ★ 账号多选（原 `OP.jsx:214` 的 `const [Ie, De] = useState(new Set())`）——
+   *   组件局部 state，**不入 store**（同左右栏折叠态）。
+   * ⚠️ ctrl/meta 点选 + 右键「移动到分组」+ 「取消 N 个选中」三件一体。
+   */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  /** ★ 右键菜单定位（原 `OP.jsx:226` 的 `const [Be, it] = useState(null)`） */
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   /** ★ 是否打开指纹体检面板（原 `OP.jsx` 里的 `DP`） */
   const [scanOpen, setScanOpen] = useState(false);
   /** ★ 导出弹窗（原 `PP.jsx`）是否打开 */
@@ -188,6 +199,62 @@ export function AccountPanel() {
     await accountOps.removeAccount(id);
   };
 
+  // ── 账号多选（原 `OP.jsx` 的 `we` / `Se` / `Le` / `Ge`）──
+  /** 行点击（原 `we`，`:391-404`）：ctrl/meta ⇒ toggle 多选；否则单选（保持本仓既有 toggle） */
+  const onRowClick = (e: React.MouseEvent, id: string): void => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      return;
+    }
+    setActiveAccountId(id === activeAccountId ? null : id);
+  };
+
+  /** 行右键（原 `Se`，`:405-415`）：未选中则先单选它，再开「移动到分组」菜单 */
+  const openMenu = (e: React.MouseEvent, id: string): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedIds.has(id)) setSelectedIds(new Set([id]));
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  /** 批量移组（原 `Le`，`:438-456`）—— 移完清空多选并关菜单 */
+  const moveSelected = (groupId: string | null): void => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    moveAccountsToGroup(ids, groupId);
+    const name = groupId
+      ? (groups.find((g) => g.id === groupId)?.name ?? ACCOUNT_PANEL_TEXT.groupFallback)
+      : ACCOUNT_PANEL_TEXT.ungroupedName;
+    pushToast(ACCOUNT_PANEL_TEXT.moveDone(ids.length, name), 2500, 'info');
+    setSelectedIds(new Set());
+  };
+
+  /** 取消所有选中（原 `Ge`，`:457-459`） */
+  const clearSelection = (): void => setSelectedIds(new Set());
+
+  /** 行 `title`（原 `OP.jsx:718` 的三态） */
+  const rowTitle = (a: Account): string => {
+    if (selectedIds.has(a.id)) {
+      return a.id === activeAccountId
+        ? ACCOUNT_PANEL_TEXT.rowTitleActiveSelected
+        : ACCOUNT_PANEL_TEXT.rowTitleSelected;
+    }
+    return ACCOUNT_PANEL_TEXT.rowTitleIdle;
+  };
+
+  /** 右键菜单项（原 `OP.jsx:967-988`：标题 + 各分组 + 分隔线 + 移出分组） */
+  const menuItems: MenuItem[] = [
+    ...groups.map<MenuItem>((g) => ({ key: g.id, label: g.name, onSelect: () => moveSelected(g.id) })),
+    { key: '__sep__', separator: true as const },
+    { key: '__ungroup__', label: ACCOUNT_PANEL_TEXT.moveUngrouped, onSelect: () => moveSelected(null) },
+  ];
+
   /** 已登录账号数（原 `OP.jsx:835-837` 的导出按钮禁用判据） */
   const loggedInCount = accounts.filter(
     (a) => (a.status || ACCOUNT_STATUS.loggedIn) === ACCOUNT_STATUS.loggedIn,
@@ -249,6 +316,17 @@ export function AccountPanel() {
 
   return (
     <div className={styles.column}>
+      {/* ★ 取消所有选中（原 `OP.jsx:816-820` 的 `.panel-head`）—— 有选中才显示 */}
+      {selectedIds.size > 0 && (
+        <button
+          type="button"
+          className={styles.deselectBtn}
+          title={ACCOUNT_PANEL_TEXT.deselectAllTitle}
+          onClick={clearSelection}
+        >
+          {ACCOUNT_PANEL_TEXT.deselectAll(selectedIds.size)}
+        </button>
+      )}
       <button type="button" className={styles.addBtn} onClick={() => setPicking(true)}>
         {ACCOUNT_PANEL_TEXT.addAccount}
       </button>
@@ -358,12 +436,13 @@ export function AccountPanel() {
               <li
                 key={a.id}
                 className={`${styles.row} ${a.id === activeAccountId ? styles.rowActive : ''}`}
+                onContextMenu={(e) => openMenu(e, a.id)}
               >
                 <button
                   type="button"
                   className={styles.rowMain}
-                  title={a.type}
-                  onClick={() => setActiveAccountId(a.id === activeAccountId ? null : a.id)}
+                  title={rowTitle(a)}
+                  onClick={(e) => onRowClick(e, a.id)}
                 >
                   {/* 头像（原 `OP.jsx:720-725`）：名字里的数字 / 首字；分组色作底 */}
                   <span className={styles.avatar} style={tint ? { background: tint } : undefined}>
@@ -509,6 +588,22 @@ export function AccountPanel() {
           {ACCOUNT_PANEL_TEXT.clearCanvas}
         </button>
       </div>
+
+      {/* ★ 右键「移动到分组」菜单（原 `OP.jsx:967-988` 的 `.ctx-menu`）—— 走共享件 `ContextMenu` */}
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          title={
+            <>
+              {ACCOUNT_PANEL_TEXT.moveToTitle}
+              <span className={styles.moveCount}>{ACCOUNT_PANEL_TEXT.moveToCount(selectedIds.size)}</span>
+            </>
+          }
+          items={menuItems}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }
