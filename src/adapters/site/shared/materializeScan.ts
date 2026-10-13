@@ -22,12 +22,14 @@
  */
 
 import type { HostPort } from '@/core/ports/host.port';
-import type { ScannedImage, UnreadRoot } from '@/core/ports/site.port';
+import type { ScanDiag, ScannedImage, UnreadRoot } from '@/core/ports/site.port';
 // ★ 扫描枚举的**运行时真源**在 `core/rules/scanChain.ts`（从端口迁出，TD-04-4）——
 //   本文件只消费真源，**不自持副本**（同一真相抄两份 = 母体 M3 / TD-16-24）。
 import { SCAN_SCOPES, type ScanScope, type ScanStrategy } from '@/core/rules/scanChain';
 // ★ 已见过滤（原 `wp:32588`）—— **必须在下面取图之前**（源顺序：清洗 → 过滤 → 截断 → 取图）
 import { excludeSeenImages } from '@/core/rules/scanClean';
+// ★ 诊断的**收窄**（页内脚本是运行时数据，形状不由 TS 保证）—— 缺字段 ⇒ `null`，不补默认值
+import { normalizeScanDiag } from '@/core/rules/scanDiag';
 import { log } from '@/lib/log';
 import { isRecord } from '@/lib/object';
 import { isImgRef, isInlineImage } from '@/stable/protocols/img';
@@ -79,6 +81,11 @@ export interface ScanAttempt {
   unread?: UnreadRoot[];
   /** ★ 逐张**落盘失败**的张数（原 `wp.failed`） */
   failed?: number;
+  /**
+   * ★ **抓取诊断**（原 `hp` 的 `p`）—— 只有**页内脚本**那条路会给
+   *   （frames 通道的原始形状是 `{items, href}`，没有 diag ⇒ 该项缺省）
+   */
+  diag?: ScanDiag;
 }
 
 /**
@@ -234,6 +241,8 @@ export async function scanAttemptFromRaw(
   // ★ 已在库的**不下载**（原 `wp` 的 `x = b.filter(...)`）
   const fresh = excludeSeenImages(raws, opts.seenUrls);
   const m = await materializeScannedImages(host, fresh.items, via);
+  // ★ 诊断（原 `hp` 的 `diag`）—— 页内脚本是**运行时数据** ⇒ 必须**收窄**（缺字段 ⇒ `null`，不补默认值）
+  const diag = normalizeScanDiag(raw.diag);
   return {
     via,
     ok: true,
@@ -244,5 +253,6 @@ export async function scanAttemptFromRaw(
     skipped: (typeof raw.skipped === 'number' ? raw.skipped : 0) + fresh.skipped,
     unread,
     failed: m.failed,
+    ...(diag ? { diag } : {}),
   };
 }

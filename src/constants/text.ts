@@ -479,6 +479,98 @@ export const FINGERPRINT_TEXT = {
   dimDist: '维度分布（不同值数量，越少越容易被关联）',
 } as const;
 
+/**
+ * 抓取诊断（原 `GT`，`shared.js:32453-32477` ＋ 空结果文案 `:32652`）
+ *
+ * ★ **它解决什么**：抓不到图时把**为什么**说清楚（"页面上 0 个 img"与"32 个 img 但都量不到尺寸"
+ *   是两件事）。摘要逐档顺序即语义，**逐字对源**。
+ *
+ * ⚠️ 源 `GT` 的第一档 `frame N 个` **不在本表**：它读 `diag.frames`，而 `hp` 从不写该字段
+ *   ⇒ 源里是死分支（见 `core/ports/site.port.ScanDiag`）。源的 `网络图 N` 同样不落（本仓无 perf 取图通道）。
+ */
+export const SCAN_DIAG_TEXT = {
+  /** 没有诊断数据（原 `GT` 的第一句 `:32455`） */
+  noData: '（无诊断数据）',
+  /** 分段分隔符（原 `GT` 的 `t.join(' · ')`，`:32476`） */
+  separator: ' · ',
+  /** 原 `:32461` —— ⚠️ 源是 `e.docCount || 1`（缺省按 1） */
+  doc: (n: number) => `文档 ${n}`,
+  /** 原 `:32463` */
+  iframe: (n: number) => `iframe ${n}`,
+  /** 原 `:32466` */
+  shadowRoot: (n: number) => `shadowRoot ${n}`,
+  /** 原 `:32468` */
+  img: (total: number, usable: number) => `img ${total}（可用 ${usable}）`,
+  /** 原 `:32473` */
+  canvas: (n: number) => `canvas ${n}`,
+  /** 原 `:32475` —— 候选进过滤器 → 过滤后留下 */
+  candidates: (raw: number, kept: number) => `候选 ${raw}→${kept}`,
+  /**
+   * **空结果**（原 `:32652` 的第二档：`没扫到图片（${GT(N)}）`）
+   * ⚠️ 源同处的**第一档**（`diag.suggestCanvasFallback` 时提示「可点『诊断』→『导出画布』手动抓取」）
+   *   **不落** —— 那个按钮在源里**根本不存在**（`YT` 全仓仅 1 个调用点，见 `plan/05` BP-14）。
+   */
+  empty: (diag: string) => `没扫到图片（${diag}）`,
+} as const;
+
+/**
+ * 画布导出（原 `t$` → `YT` → 页内 `Ay`）—— 抓取链在 **canvas 渲染**页面上的兜底文案
+ *
+ * ⚠️ 源还有一档 `画布快照与已有图内容重复，已跳过`（`:32646` 的 `J` 分支）—— 本仓**不落**：
+ *    内容去重在本仓由**落库方** `addLovartImages`（按 `dataUrl` = `img://<hash>`）承担
+ *    （`usecases/scanGallery` 头注已说明这条边界）⇒ 那句话在本仓**没有生产者**，落了就是死文案。
+ */
+export const CANVAS_EXPORT_TEXT = {
+  /** 阶段：正在导（原 `:32616`）—— ⚠️ 本仓暂不发它，见 `usecases/scanGallery` 的说明 */
+  working: '页面为 canvas 渲染，正在导出画布…',
+  /** 成功（原 `:32646` 的 `!J` 分支，逐字） */
+  done: '已自动导出画布快照（可能包含界面元素）',
+  /** 快照名（原 `YT` 的 `画布快照 ${index + 1}`，`:33028`） */
+  name: (n: number) => `画布快照 ${n}`,
+} as const;
+
+/**
+ * Lovart 会话条（真实 Chrome 集成）
+ *
+ * 依据（**逐字回源**）：`_Component25.jsx:341-380`（提示行五档 + 三键 + 两处错误行）·
+ *   错误码表 `xD` `shared.js:38652-38662`。
+ *
+ * ⚠️ `openError` 的**键就是后端 `error` 字段的原值**（`electron/chrome-cdp.js` / `main.js`）——
+ *    改名 = 静默落到兜底文案（判据 B5 的反面：文案表成了死表）。
+ */
+export const LOVART_SESSION_TEXT = {
+  /** 提示行（源 `:366` 的五档三目） */
+  hint: {
+    alreadyOpen: '真实 Chrome 已开 · 登录后点「同步会话到画布」',
+    opened: '真实 Chrome 已打开 · 请在里面登录 Lovart',
+    opening: '正在打开真实 Chrome…',
+    openFailed: '打开真实 Chrome 失败',
+    idle: 'Lovart 未登录 · 请先在真实 Chrome 里登录',
+  },
+  open: '在真实 Chrome 登录',
+  sync: '同步会话到画布',
+  syncing: '同步中…',
+  close: '关闭 Chrome',
+  /** 同步失败行前缀（源 `:379`） */
+  syncFailedPrefix: '同步失败：',
+  /** 打开失败的**末档兜底**（源 `:380` 的 `|| '打开失败'`） */
+  openFailedFallback: '打开失败',
+  /** 后端错误码 → 文案（原 `xD`，`shared.js:38652-38662`）—— **逐字** */
+  openError: {
+    'no-chrome': '未检测到本机 Google Chrome。请安装 Google Chrome 后重试。',
+    'no-account': '缺少账号 ID，无法为该账号打开 Chrome。',
+    'spawn-failed': '启动 Chrome 进程失败。请检查 Chrome 是否可正常打开，或本机安全软件是否拦截了子进程。',
+    'chrome-no-port': 'Chrome 已启动但未暴露调试端口。若本机已有多个 Chrome 实例，可先完全退出 Chrome 再重试。',
+    'chrome-no-ws': '无法获取 Chrome 调试端点，可能是调试端口被占用。',
+    'cdp-connect-failed': '已启动 Chrome 但连接调试协议失败。请重试；若持续出现请重启应用。',
+    'no-api': '当前环境不支持真实 Chrome 集成（IPC 未就绪），请重启应用。',
+    'empty-result': '主进程未返回结果，请重启应用后重试。',
+    exception: '调用主进程时抛出异常，请重启应用后重试。',
+  },
+  /** 同步成功 toast（源 `:307`） */
+  syncedToast: (count: number, total: number) => `已同步 ${count}/${total} 个 cookie，画布内窗口已刷新`,
+} as const;
+
 /** 豆包后台视图 */
 export const BACKEND_VIEW_TEXT = {
   refresh: '刷新',

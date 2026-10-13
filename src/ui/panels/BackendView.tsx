@@ -36,6 +36,7 @@ import { NEW_IMAGES_SITES } from '@/core/rules/accountPick';
 import { defaultPartitionOf } from '@/core/rules/partition';
 import { NewImagesPanel } from './NewImagesPanel';
 import { WatermarkPanel } from './WatermarkPanel';
+import { LovartSessionBar } from './LovartSessionBar';
 import styles from './BackendView.module.css';
 
 /**
@@ -144,39 +145,49 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
   }, [accountOps, accountId]);
 
   return (
-    <webview
-      ref={(el) => {
-        // ⚠️ 自定义元素：React 的 ref 类型是 `HTMLElement`，这里跨一次断言到我们需要的最小面
-        wvRef.current = el as unknown as WebviewElementLike | null;
-      }}
-      /**
-       * ⚠️ **`key` 含 `fpSalt`**（与原版 355 行逐字一致）：换指纹必须**重挂元素**，
-       *    否则 guest 页面仍是旧身份（preload 只在导航时生效）。
-       */
-      key={`wv-${account.id}-${account.fpSalt ?? 0}`}
-      data-account-id={account.id}
-      /**
-       * ⚠️ **属性顺序有意义**：`partition` 必须在 `src` 之前生效，
-       *    否则会先在错误的 session 里起一次导航（Electron 的已知行为）。
-       */
-      partition={partition}
-      src={backendUrlOf(account, accountOps.chatUrlOf(account.type))}
-      // 原版：有指纹就用指纹的 UA；否则交给引擎默认（不编一个）
-      {...(account.fingerprint ? { useragent: account.fingerprint.userAgent } : {})}
-      // ⚠️ 渲染侧守卫（不是 effect 里重置状态）：`other` 类型永远不挂 preload，
-      //    这样即使类型从有指纹的站点改成 `other`，也不会把旧 preload 带过去
-      {...(account.type !== 'other' && preloadUrl ? { preload: preloadUrl } : {})}
-      /*
-       * ⚠️ **必须传字符串**（源版 `_Component25.jsx:355` 也是 `"true"`）：
-       *    React 不认 `allowpopups` 是布尔属性 ⇒ 裸布尔 `true` 会告警
-       *    （"Received `true` for a non-boolean attribute"）；Electron 只认「属性存在」⇒ 等价。
-       * ⚠️ 类型层要跨一次断言：`@types/react` 的 `WebViewHTMLAttributes` 把它声明成 `boolean`，
-       *    而运行时事实是**字符串**（第三方类型 ↔ 运行时事实的边界，**不是**本仓的类型双轨）。
-       */
-      allowpopups={'true' as unknown as boolean}
-      // 可见性（原 `I0` 的三态；本工程只用到「当前账号可见 / 其余隐藏」两态）
-      className={active ? styles.active : styles.hidden}
-    />
+    <>
+      {/*
+        ★ **Lovart 会话条**（原 `_Component25.jsx:359` 的条件 `p && t` = `type === 'lovart' && isActive`）
+        —— 顺序照源：条在 `<webview>` **之前**；`Fragment` 不产生 DOM 节点
+        ⇒ `adapters/site/shared/webview.ts` 的 `findWebview` 照旧找得到（`WEBVIEWS_HOST_CLASS` 容器内）。
+      */}
+      {account.type === 'lovart' && active ? (
+        <LovartSessionBar account={account} partition={partition} />
+      ) : null}
+      <webview
+        ref={(el) => {
+          // ⚠️ 自定义元素：React 的 ref 类型是 `HTMLElement`，这里跨一次断言到我们需要的最小面
+          wvRef.current = el as unknown as WebviewElementLike | null;
+        }}
+        /**
+         * ⚠️ **`key` 含 `fpSalt`**（与原版 355 行逐字一致）：换指纹必须**重挂元素**，
+         *    否则 guest 页面仍是旧身份（preload 只在导航时生效）。
+         */
+        key={`wv-${account.id}-${account.fpSalt ?? 0}`}
+        data-account-id={account.id}
+        /**
+         * ⚠️ **属性顺序有意义**：`partition` 必须在 `src` 之前生效，
+         *    否则会先在错误的 session 里起一次导航（Electron 的已知行为）。
+         */
+        partition={partition}
+        src={backendUrlOf(account, accountOps.chatUrlOf(account.type))}
+        // 原版：有指纹就用指纹的 UA；否则交给引擎默认（不编一个）
+        {...(account.fingerprint ? { useragent: account.fingerprint.userAgent } : {})}
+        // ⚠️ 渲染侧守卫（不是 effect 里重置状态）：`other` 类型永远不挂 preload，
+        //    这样即使类型从有指纹的站点改成 `other`，也不会把旧 preload 带过去
+        {...(account.type !== 'other' && preloadUrl ? { preload: preloadUrl } : {})}
+        /*
+         * ⚠️ **必须传字符串**（源版 `_Component25.jsx:355` 也是 `"true"`）：
+         *    React 不认 `allowpopups` 是布尔属性 ⇒ 裸布尔 `true` 会告警
+         *    （"Received `true` for a non-boolean attribute"）；Electron 只认「属性存在」⇒ 等价。
+         * ⚠️ 类型层要跨一次断言：`@types/react` 的 `WebViewHTMLAttributes` 把它声明成 `boolean`，
+         *    而运行时事实是**字符串**（第三方类型 ↔ 运行时事实的边界，**不是**本仓的类型双轨）。
+         */
+        allowpopups={'true' as unknown as boolean}
+        // 可见性（原 `I0` 的三态；本工程只用到「当前账号可见 / 其余隐藏」两态）
+        className={active ? styles.active : styles.hidden}
+      />
+    </>
   );
 }
 

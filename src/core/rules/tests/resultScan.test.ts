@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   countRecurringAsset,
+  createNearDupWindow,
   decideScanEnd,
   emptyRecurringTable,
+  filterValidScans,
   freshScannedItems,
   isRecurringTable,
+  isValidScan,
   pruneRecurringAssets,
   scanKeyOf,
   stripScanKeys,
@@ -202,5 +205,96 @@ describe('跨会话去重表（原 `TR`/`PR`/`p0`）', () => {
     pruneRecurringAssets(t);
     expect(Object.keys(t.urls)).toHaveLength(201);
     expect(t.hashes).toEqual({ h1: { n: 1, last: 5 } });
+  });
+});
+
+describe('有效性滤网（原 `RR`，`:36323-36334`）', () => {
+  const ok = (w: number, h: number) => ({ url: 'https://p3.doubao.com/gen/abc.png', w, h });
+
+  it('★ 非 `http(s)` 一律丢 —— **`data:` / `blob:` 也算不合格**', () => {
+    expect(isValidScan({ url: 'data:image/png;base64,AAA', w: 1024, h: 768 })).toBe(false);
+    expect(isValidScan({ url: 'blob:https://x/1', w: 1024, h: 768 })).toBe(false);
+    expect(isValidScan({ url: 'img://a1228ab1c4f684cf.png', w: 1024, h: 768 })).toBe(false);
+  });
+
+  it('★ `.svg` 丢（含带 query 的 `foo.svg?x=1`）', () => {
+    expect(isValidScan({ url: 'https://x.com/a.svg', w: 1024, h: 768 })).toBe(false);
+    expect(isValidScan({ url: 'https://x.com/a.svg?v=2', w: 1024, h: 768 })).toBe(false);
+  });
+
+  it('★ 装饰图（`MR`）丢：`avatar` / `icon` / `logo` / `placeholder` / `/flags/`', () => {
+    for (const name of ['avatar', 'emoji_1', 'expression', 'icon-set', 'logo', 'badge', 'sprite', 'placeholder', 'brand', 'fe-icon', 'flags/us']) {
+      expect(isValidScan({ url: `https://x.com/${name}.png`, w: 1024, h: 768 })).toBe(false);
+    }
+  });
+
+  it('★ 尺寸：`min(w,h) >= 220` **且** `max(w,h) > 512`', () => {
+    expect(isValidScan(ok(1024, 768))).toBe(true);
+    expect(isValidScan(ok(513, 800))).toBe(true);
+    expect(isValidScan(ok(300, 300))).toBe(false); // 长边 300 <= 512
+    expect(isValidScan(ok(100, 800))).toBe(false); // 短边 100 < 220
+  });
+
+  it('★ 边界**严格**：`max === 512` 丢、`max === 513` 留；`min === 220` 留、`min === 219` 丢', () => {
+    expect(isValidScan(ok(512, 300))).toBe(false); // max === 512
+    expect(isValidScan(ok(513, 300))).toBe(true); // max === 513
+    expect(isValidScan(ok(220, 800))).toBe(true); // min === 220
+    expect(isValidScan(ok(219, 800))).toBe(false); // min === 219
+  });
+
+  it('★ **量不到尺寸 ⇒ 放行**（源 `!n || !r || …` 两个子句都短路为真）', () => {
+    expect(isValidScan({ url: 'https://x.com/a.png' })).toBe(true);
+    expect(isValidScan(ok(0, 0))).toBe(true);
+  });
+
+  it('空 / 无 `url` ⇒ false', () => {
+    expect(isValidScan(null)).toBe(false);
+    expect(isValidScan({ url: '' })).toBe(false);
+  });
+
+  it('`filterValidScans` **保序**且只留合格项', () => {
+    const items = [
+      { url: 'https://x.com/a.png', w: 1024, h: 768 },
+      { url: 'https://x.com/icon.png', w: 1024, h: 768 },
+      { url: 'https://x.com/b.png', w: 1024, h: 768 },
+      { url: 'data:image/png;base64,AAA', w: 1024, h: 768 },
+    ];
+    expect(filterValidScans(items).map((o) => o.url)).toEqual(['https://x.com/a.png', 'https://x.com/b.png']);
+  });
+});
+
+describe('近重复窗口（原 `wl`，`:36288` + `k` 的判定 `:36390-36397`）', () => {
+  const A = '0000000000000000';
+  const B = '000000000000ffff'; // 与 A 距 16
+  const C = '00000000ffff0000'; // 与 A / B 各距 16 / 32
+
+  it('★ 空哈希 ⇒ `false` 且**不记入**（源 `if (E) {…}` 整段跳过）', () => {
+    const w = createNearDupWindow();
+    expect(w.check('')).toBe(false);
+    expect(w.check('')).toBe(false);
+  });
+
+  it('★ 首次见 ⇒ `false`；同一个再来 ⇒ `true`（记入后即命中）', () => {
+    const w = createNearDupWindow();
+    expect(w.check(A)).toBe(false);
+    expect(w.check(A)).toBe(true);
+  });
+
+  it('★ 阈值是**汉明距离 ≤ 8**：距 8 命中、距 9 不命中', () => {
+    const w = createNearDupWindow();
+    w.check('0000000000000000');
+    expect(w.check('00000000000000ff')).toBe(true); // 8 位
+    const w2 = createNearDupWindow();
+    w2.check('0000000000000000');
+    expect(w2.check('00000000000001ff')).toBe(false); // 9 位
+  });
+
+  it('★ 超出上限**挤掉最旧的**（源 `wl.length > 120` ⇒ `shift`）', () => {
+    const w = createNearDupWindow(2, 8);
+    expect(w.check(A)).toBe(false);
+    expect(w.check(B)).toBe(false);
+    expect(w.check(C)).toBe(false); // 塞入 C ⇒ A 被挤掉
+    // A 已不在窗口里 ⇒ 再查 A 不命中（若未被挤掉会是 true）
+    expect(w.check(A)).toBe(false);
   });
 });

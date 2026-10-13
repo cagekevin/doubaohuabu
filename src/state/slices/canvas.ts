@@ -41,7 +41,7 @@ import type {
   ImageGenKeyTargets,
 } from '@/core/rules/imageGenKey';
 import { screenshotNodePlacement } from '@/core/rules/capture';
-import { groupSelectedNodes, ungroupNodes as ungroupPure } from '@/core/rules/group';
+import { groupSelectedNodes, releaseDeletedGroupChildren, ungroupNodes as ungroupPure } from '@/core/rules/group';
 import { planArrange, planSelectedGrid, type ArrangeMode } from '@/core/rules/arrange';
 import { splitAuto, splitByKeywords, type SplitFailReason, type SplitPart } from '@/core/rules/splitText';
 import { planSplitWithPreset, type SplitPresetFailReason } from '@/core/rules/splitPreset';
@@ -573,7 +573,7 @@ export interface CanvasSlice extends ApiLandingActions {
     position: { x: number; y: number },
     stagger: { x: number; y: number },
   ) => string[];
-  /** ★ 删除节点（连带删除其相关边与 `referenceOrder` 引用） */
+  /** ★ 删除节点（连带删除其相关边与 `referenceOrder` 引用；删的是**组**时**释放成员**） */
   removeNodes: (ids: readonly string[]) => void;
   /**
    * ★ **删除单条边**（原 `removeEdge`，`shared.js:27046-27053`）
@@ -1358,7 +1358,7 @@ export function createCanvasSlice(
       // ① 删边（源或目标被删）
       const edges = s.edges.filter((e) => !kill.has(e.source) && !kill.has(e.target));
       // ② 清理幸存节点里对已删节点的 `referenceOrder` 引用
-      const nodes = s.nodes
+      const survivors = s.nodes
         .filter((n) => !kill.has(n.id))
         .map((n) => {
           if (n.type !== 'text') return n;
@@ -1366,6 +1366,10 @@ export function createCanvasSlice(
           const next = order.filter((rid) => !kill.has(rid));
           return next.length === order.length ? n : ({ ...n, data: { ...n.data, referenceOrder: next } } as CanvasNode);
         });
+      // ③ ★ 删掉的是**组** ⇒ **释放成员**（原 `onNodesChange` 的删组支，`shared.js:26848-26875`）——
+      //   否则孩子留着悬空 `parentId`：相对坐标被当成绝对坐标 ⇒ 跳位 + 拖动/裁切异常。
+      //   ⚠️ 判据用**变更前**的 `s.nodes`（被删的组已经不在 `survivors` 里了）。
+      const nodes = asCanvasNodes(releaseDeletedGroupChildren(survivors, s.nodes, kill));
 
       set({ nodes, edges });
     },

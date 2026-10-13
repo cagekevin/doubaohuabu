@@ -47,6 +47,10 @@
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* ★ **纵向 flex**：容器里除 `<webview>` 外还有**流内兄弟**（Lovart 会话条，源 `_Component25.jsx:359`）
+     ⇒ 会话条占自身高度、webview 走 `flex: 1` 填剩余（无会话条时行为不变）。 */
+  display: flex;
+  flex-direction: column;
   /* 真值 = `docs/mockup/assets/mockup.css:1844`（`.doubao-view-webviews`） */
   overflow: hidden;
   background: var(--color-surface-sunken);
@@ -139,12 +143,14 @@
   pointer-events: none;
 }
 
-/* 可见态：用户就在这个页面里登录 —— 铺满整个 webview 区（源里就是整块视图） */
+/* 可见态：用户就在这个页面里登录 —— 铺满 webview 区的**剩余**高度（源里就是整块视图） */
 .active {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
+  /* ⚠️ 不能用 `height: 100%`：容器是纵向 flex 且可能有会话条 ⇒ 会撑出容器（`overflow: hidden` 被切掉） */
+  flex: 1;
+  min-height: 0;
   background: var(--color-surface-raised);
 }
 
@@ -215,4 +221,59 @@
   transform: translateX(-50%);
   margin-top: var(--space-half);
   width: 52px;
+}
+
+/* ───────────────── Lovart 会话条（原 `.lsb-clip` / `.lovart-session-bar` / `.lsb-hint` / `.lsb-actions` / `.lsb-btn` / `.lsb-status` / `.lsb-err`）─────────────────
+   ⚠️ `mockup.css` **未收录**这套类（原版 CSS 没随参考进来）⇒ 按源语义 + token 自写。
+   ⚠️ 位置：它是 `<webview>` 的**流内兄弟**（源 `_Component25.jsx:358-383` 的 Fragment 顺序：条在前、webview 在后）
+     ⇒ 容器 `.webviews` 必须是纵向 flex，webview 走 `flex: 1`（见上）。
+   ⚠️ 折叠：高度**由 JS 量出后内联**（源 `:60-77` 的 ResizeObserver ＋ `:359-363`），本文件只管裁切与过渡。 */
+
+.sessionClip {
+  flex: 0 0 auto;
+  overflow: hidden;
+  transition: height 0.15s ease;
+}
+
+.sessionBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.sessionHint {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.sessionActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ★ 逐字对源：源里是 `lsb-btn` / `lsb-btn lsb-primary` ⇒ 走共享真源 `.btn`，不自造小按钮 */
+.sessionBtn {
+  composes: btn btnSm from '../common/shared.module.css';
+}
+
+.sessionBtnPrimary {
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+}
+
+/* 错误行（原 `.lsb-status` / `.lsb-err`）—— 占满一整行（`flex-wrap` 下自然换行） */
+.sessionStatus {
+  flex: 1 0 100%;
+  font-size: var(--font-size-sm);
+}
+
+.sessionErr {
+  color: var(--color-danger-text);
 }

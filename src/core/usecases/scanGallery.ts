@@ -39,9 +39,16 @@
  */
 
 import type { Account } from '@/stable/model/account';
-import type { ScanPhaseEvent, ScannedImage, SiteRegistry } from '@/core/ports/site.port';
+import type {
+  ScanPhaseEvent,
+  ScanResult,
+  ScannedImage,
+  SitePort,
+  SiteRegistry,
+} from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
-import { NEW_IMAGES_TEXT, SEND_TEXT } from '@/constants/text';
+import { CANVAS_EXPORT_TEXT, NEW_IMAGES_TEXT, SEND_TEXT } from '@/constants/text';
+import { log } from '@/lib/log';
 import {
   captureCanvasImageName,
   captureImageName,
@@ -145,8 +152,12 @@ export async function scanGallery(
     // 原 `wp`：`Yh` → url 过滤 → **`slice(0, limit)`**（`:32592`）—— 顺序即语义
     const limit = typeof opts.limit === 'number' ? opts.limit : SCAN_GALLERY_DEFAULT_LIMIT;
     const limited = cleaned.items.slice(0, limit);
+    const items = limited.map((it, i) => toGalleryInput(it, i));
+    // ★ **canvas 渲染页面的兜底**（原 `wp:32610-32651`）—— 见 `tryExportCanvas`
+    const snapshot = await tryExportCanvas(site, account, v, items.length, opts.onPhase);
+    if (snapshot) items.push(snapshot);
     return ok({
-      items: limited.map((it, i) => toGalleryInput(it, i)),
+      items,
       // 被清洗掉的计入 `skipped`（`ScanResult.skipped` 的语义就是"扫描阶段跳过"）；
       // ⚠️ 被 `limit` 截断的**不计入**（源也不计 —— 那不是"跳过"，是"这轮不处理"）
       skipped: v.skipped + cleaned.skipped,
@@ -173,6 +184,53 @@ function toGalleryInput(it: ScannedImage, index: number): LovartImageInput {
     scope: it.scope,
     ...(natW === undefined ? {} : { natW }),
     ...(natH === undefined ? {} : { natH }),
+  };
+}
+
+/**
+ * ★ **canvas 渲染页面的兜底**（原 `wp:32610-32651`）—— 一张新图都没扫到时，把画布导成一张图入库
+ *
+ * 三段门（**顺序即语义**）：
+ *   ① 站点声明了 `exportCanvas`（**能力位**：`lovart` 声明、`tapnow` 没有）
+ *   ② **本轮新图 = 0**（源 `k.length === 0`）
+ *   ③ 适配器判的那两档（页面类型 = 画布页 ∧ 诊断里有 ≥200px 的画布）—— **站点专属，不在这里写**
+ *
+ * ⚠️ 失败**不中止**抓取（源把它整段包在 `try{}catch{}` 里）—— 但**留痕不吞**（原则 6）：
+ *    开发者看 `log.warn`；用户已经看过适配器发的「没扫到图片（诊断）」。
+ * ⚠️ 成功的那张**不参与 `limit` 截断**（源是提前 return；本仓在截断之后追加 —— 同一结果）。
+ * ⚠️ **不发源的「正在导出画布…」**（`:32616`）：那句话在源里发在**门之后**，而本仓的门在适配器里
+ *    ⇒ 调用前不知道会不会真的导，发了就会在**非画布页上撒谎**。改为成功后再报（见下）。
+ * ⚠️ **不做内容去重**：源那句 `isDuplicate` 在本仓由落库方 `addLovartImages`（按 `dataUrl` 去重）承担
+ *    —— 在这里再做一次就是**第二份去重**（判据 C1）。
+ */
+async function tryExportCanvas(
+  site: SitePort,
+  account: Account,
+  scan: ScanResult,
+  found: number,
+  onPhase: ((event: ScanPhaseEvent) => void) | undefined,
+): Promise<LovartImageInput | null> {
+  const exportCanvas = site.exportCanvas;
+  if (!exportCanvas || found > 0) return null;
+  const r = await exportCanvas(account, 0, {
+    ...(scan.href ? { href: scan.href } : {}),
+    ...(scan.diag ? { diag: scan.diag } : {}),
+  });
+  if (!r.ok) {
+    log.warn('[scanGallery] 画布导出失败：', r.message);
+    return null;
+  }
+  // 门不过 ⇒ **正常**（不是失败）：静默返回，由适配器那句「没扫到图片（诊断）」交代
+  if (r.value.kind !== 'snapshot') return null;
+  onPhase?.({ phase: 'done', message: CANVAS_EXPORT_TEXT.done });
+  return {
+    dataUrl: r.value.ref,
+    name: CANVAS_EXPORT_TEXT.name(1),
+    sourceUrl: '',
+    source: 'canvas',
+    scope: 'canvas',
+    natW: r.value.natW,
+    natH: r.value.natH,
   };
 }
 

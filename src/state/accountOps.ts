@@ -18,6 +18,7 @@
 
 import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
+import type { LovartChromeOpen, LovartSessionSync } from '@/core/ports/host.port';
 import { err, ok, type Result } from '@/core/model/result';
 import type { HostOS } from '@/constants';
 import type { PostSendDetectController } from './postSendDetect';
@@ -295,6 +296,27 @@ export interface AccountOpsController {
    *    「静默中的账号不能刷新」（它的 `<webview>` 根本没挂）⇒ 由 `BackendView` 落 `disabled`。
    */
   reloadBackend(accountId: string): Result<void>;
+
+  // ── 真实 Chrome 集成（原 `_Component25` 的「Lovart 会话条」三键）──
+  //   ★ 三条都是**单端口调用、无编排** ⇒ 同 `reloadBackend`，不建 usecase。
+  /**
+   * 打开该账号的**真实 Chrome** 登录窗口（原 `_Component25.jsx:229-275` 的 `z`）
+   *
+   * ⚠️ `url` 由调用方给（`chatUrlOf('lovart')`）—— 本控制器**不写站点 URL**（站点细节住适配器）。
+   * ⚠️ 业务失败在**返回值的内层**（`{ok:false, error, message}`）：`error` 是后端错误码，
+   *    查文案表是 `core/rules/lovartSession` 的事（**不在这里拼文案** —— 呈现归 UI，原则 6）。
+   */
+  openLovartChrome(accountId: string, url: string, proxy: string): Promise<Result<LovartChromeOpen>>;
+  /**
+   * 关闭该账号的真实 Chrome（原 `:328-340` 的 `R`）
+   *
+   * ⚠️ **与源的一处有意差异**：源把失败包在 `try{}catch{}` 里**空吞**（`:331-335`）。
+   *    本仓**留痕不吞**（原则 6）—— 但**不改 UI 行为**：窗口没关掉会被下一次「打开」的
+   *    `alreadyOpen` 自证（报"已开"），不需要额外文案位。
+   */
+  closeLovartChrome(accountId: string): Promise<Result<void>>;
+  /** 把真实 Chrome 的会话同步进该账号的 webview 分区（原 `:276-327` 的 `O`） */
+  syncLovartSession(accountId: string, partition: string): Promise<Result<LovartSessionSync>>;
 }
 
 /** `prepareWebviewSession` 的入参（**窄接口**：只要这三个字段） */
@@ -995,6 +1017,21 @@ export function createAccountOps(
       const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
       if (!account) return err('unknown', BACKEND_VIEW_TEXT.accountGone);
       return ports.backendPage.reload(account);
+    },
+
+    openLovartChrome(accountId, url, proxy) {
+      return ports.host.account.ensureLovartChrome({ accountId, url, proxy });
+    },
+
+    async closeLovartChrome(accountId) {
+      const r = await ports.host.account.closeLovartChrome(accountId);
+      // ⚠️ 源 `R` 是空吞（`:331-335`）⇒ 本仓**留痕不吞**（原则 6）。见接口注释的差异说明。
+      if (!r.ok) log.warn('[accountOps] 关闭真实 Chrome 失败：', r.message);
+      return r;
+    },
+
+    syncLovartSession(accountId, partition) {
+      return ports.host.account.syncLovartSession(accountId, partition);
     },
   };
 }

@@ -89,6 +89,37 @@ export const GEN_TIMEOUT_MS = 600000;
  */
 export const GEN_SCAN_MIN_SIDE = 220;
 /**
+ * 结果扫描的**最大边长**（px，原 `RR` 里的字面量 `512`，`:36333`）
+ *
+ * ⚠️ 判据是 `Math.max(w, h) <= 512` ⇒ **恰好 512 也剔除**（源 `!(Math.max(n, r) <= 512)`）。
+ */
+export const GEN_SCAN_MAX_SIDE = 512;
+/**
+ * 画布导出的**最小边长**（px，原 `wp:32612` 的字面量 `200`）
+ *
+ * ⚠️ 判据是「像素 / 布局四个数里**最大的那个** `>= 200`」（源 `Math.max(_.w||0,_.h||0,_.dw||0,_.dh||0) >= 200`）
+ *    ⇒ **恰好 200 也算够大**（与 `RR` 的 `> 512` 严格性相反，逐字对源）。
+ * ⚠️ 页内 `Ay` 里还有**同一阈值**的第二道（`:23271`）—— 两处都在源里，**都保留**（第一道是"值不值得注入"，
+ *    第二道是"这个画布值不值得导"）。
+ */
+export const GEN_CANVAS_EXPORT_MIN_SIDE = 200;
+/**
+ * 结果扫描的**无效 URL 正则**（原 `MR` 36235）—— 头像 / 表情 / 图标 / logo / 占位图… 一律剔除
+ * ⚠️ 只测 **URL 字符串**（不测 DOM 属性）
+ */
+export const GEN_SCAN_DENY_URL_RE =
+  /(avatar|emoji|expression|icon|logo|badge|sprite|placeholder|brand|fe-icon|\/flags?\/)/i;
+/**
+ * 「查无水印原图直链」页内脚本的超时（ms，原 `DR` 内层 `gn(…, 5000, …)`，`:36474`）
+ * ⚠️ 超时 ⇒ 回落原 URL（**不**因此丢掉这张图）
+ */
+export const GEN_WM_DIRECT_TIMEOUT_MS = 5000;
+/**
+ * 「导出画布」页内脚本的超时（ms，原 `Vo`，`:23618`）
+ * ⚠️ 超时 ⇒ 当作**导出失败**（源 `gn(..., Vo, '画布导出')` 超时后 `a.__timeout` ⇒ `画布导出超时`）
+ */
+export const GEN_CANVAS_EXPORT_TIMEOUT_MS = 25000;
+/**
  * **发送后前 10 秒**内扫到的"新图"一律跳过（原 `IR` 36234）
  *
  * ⚠️ 源 `:36466` 的 `P - h < IR || p0(...) >= 2` 是**同一个 `if` 的两个子句**：

@@ -35,11 +35,17 @@ const COLLECT_ROOTS_SRC = `
     const roots = [];
     const unread = [];
     const seen = new Set();
+    // ★ 诊断计数（原 hp 的 p.iframeCount += P.length 22927 / p.shadowCount++ 22949）——
+    //   与「收集 roots」是**同一次遍历** ⇒ 在这里数，不在调用方重走一遍（判据 C1）
+    let iframeCount = 0;
+    let shadowCount = 0;
     function walk(node, d) {
       if (!node || seen.has(node) || d > ${SCAN_MAX_DEPTH}) return;
       seen.add(node); roots.push(node);
       let frames = [];
       try { frames = node.querySelectorAll('iframe'); } catch (e) { unread.push({ kind: 'iframe-query', why: String((e && e.message) || e) }); }
+      // ⚠️ 源数的是**查到的 iframe 数**（不是"成功进入的"）—— P.length 在进入循环之前就加
+      iframeCount += frames.length;
       for (const f of frames) {
         try {
           if (f.contentDocument) walk(f.contentDocument, d + 1);
@@ -51,11 +57,11 @@ const COLLECT_ROOTS_SRC = `
       let all = [];
       try { all = node.querySelectorAll('*'); } catch (e) { unread.push({ kind: 'all-query', why: String((e && e.message) || e) }); }
       for (const el of all) {
-        if (el.shadowRoot) walk(el.shadowRoot, d + 1);
+        if (el.shadowRoot) { shadowCount++; walk(el.shadowRoot, d + 1); }
       }
     }
     walk(document, startDepth || 0);
-    return { roots: roots, unread: unread };
+    return { roots: roots, unread: unread, iframeCount: iframeCount, shadowCount: shadowCount };
   }
 `;
 
@@ -147,13 +153,30 @@ ${COLLECT_ROOTS_SRC}
   const collected = collectRoots(0);
   const out = [];
   const seen = new Set();
+  // ★ **诊断**（原 hp 的 p，22663）—— 抓不到图时用来说清"为什么"（见 core/rules/scanDiag）
+  const diag = {
+    docCount: collected.roots.length,
+    iframeCount: collected.iframeCount,
+    shadowCount: collected.shadowCount,
+    imgTotal: 0,
+    imgUsable: 0,
+    canvasCount: 0,
+    canvases: [],
+    itemsRaw: 0,
+    itemsKept: 0
+  };
 
   function push(url, el, w, h) {
-    if (!url || seen.has(url)) return;
+    if (!url) return;
+    // ⚠️ 源 p.itemsRaw++ 在 b 的过滤之前（22856）；本仓把"没有 url"排除在候选之外
+    //    （数它会把"候选"算成比实际多）—— 这是**有意的一处口径收紧**，只影响摘要数字。
+    diag.itemsRaw++;
+    if (seen.has(url)) return;
     if (!/^https?:|^data:image\\//i.test(url)) return;
     if (/\\.svg(\\?|$)/i.test(url)) return;
     const scope = el ? scopeOf(el) : 'site';
     if (scope === 'canvas' && h > 0 && h < ICON_H) return;
+    diag.itemsKept++;
     seen.add(url);
     out.push({ url: url, scope: scope, natW: w || 0, natH: h || 0 });
   }
@@ -163,6 +186,9 @@ ${COLLECT_ROOTS_SRC}
     let imgs = [];
     try { imgs = root.querySelectorAll('img'); } catch (e) { collected.unread.push({ kind: 'img-query', why: String((e && e.message) || e) }); }
     for (const img of imgs) {
+      diag.imgTotal++;
+      // 原 22985 的 if (D || A)：**有自然尺寸或布局尺寸**才算"可用"
+      if (img.naturalWidth > 0 || img.naturalHeight > 0 || img.clientWidth > 0 || img.clientHeight > 0) diag.imgUsable++;
       push(img.currentSrc || img.src, img, img.naturalWidth, img.naturalHeight);
       const ss = img.getAttribute('srcset');
       if (ss) ss.split(',').forEach(function (part) { push(String(part).trim().split(/\\s+/)[0], img, img.naturalWidth, img.naturalHeight); });
@@ -183,8 +209,26 @@ ${COLLECT_ROOTS_SRC}
   }
 
   // 直接遍历已收集的根（iframe / shadowRoot 已在 collectRoots 里穿透）
-  for (const root of collected.roots) walk(root);
+  for (const root of collected.roots) {
+    walk(root);
+    // 原 23082-23097 的 p.canvasCount += j.length / p.canvases.push({w,h,dw,dh}) —— 与遍历同一轮
+    let cs = [];
+    try { cs = root.querySelectorAll('canvas'); } catch (e) { collected.unread.push({ kind: 'canvas-query', why: String((e && e.message) || e) }); }
+    diag.canvasCount += cs.length;
+    // 原 23083 的 p.canvases.length < 6 —— **最多收 6 个**（够门的判断，不把整页画布都搬回来）
+    for (let ci = 0; ci < cs.length && diag.canvases.length < 6; ci++) {
+      const cv = cs[ci];
+      let cw = 0;
+      let ch = 0;
+      try {
+        const cr = cv.getBoundingClientRect();
+        cw = Math.round(cr.width) || 0;
+        ch = Math.round(cr.height) || 0;
+      } catch (e) {}
+      diag.canvases.push({ w: cv.width || 0, h: cv.height || 0, dw: cw, dh: ch });
+    }
+  }
 
-  return { ok: true, images: out, href: location.href, skipped: 0, unread: collected.unread };
+  return { ok: true, images: out, href: location.href, skipped: 0, unread: collected.unread, diag: diag };
 })()`;
 }

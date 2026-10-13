@@ -85,6 +85,34 @@ export interface PeekCanvasResult {
  */
 export type ScanCanvasFn = (account: Account, opts: ScanOptions) => Promise<Result<ScanResult>>;
 
+/**
+ * 可选的「**画布导出**」能力（原 `t$` → `YT` → 页内 `Ay`）—— 抓取链在 **canvas 渲染**页面上的兜底
+ *
+ * ★ **它解决什么**：Lovart 画布页是 `canvas` 渲染的（DOM 里没有 `<img>`）⇒ 常规扫描**一张也扫不到**；
+ *   这时把画布本身导成一张 PNG，当一张图入库（源 `wp:32610-32651`）。
+ *
+ * ⚠️ **门是站点自己的**（原 `:32611-32613`：`pageKind === CANVAS` ∧ `diag.canvasCount > 0` ∧
+ *   至少一个画布 ≥200px）⇒ 由适配器判，**不写成通用规则**（页面类型判定是站点专属）。
+ * ⚠️ `kind: 'not-applicable'` **不是失败**：它表示"这一页不该导"（门不过）—— 与 `err` 严格区分。
+ */
+export type CanvasExportFn = (
+  account: Account,
+  /** 第几个画布（按**面积降序**；源 `YT(account, 0)` 恒传 0） */
+  index: number,
+  /**
+   * 门的输入 —— **必须是刚扫的那一页**（调用方从 `ScanResult` 取，不重新读 `location`：
+   * 页面若已跳走，重读会把门判在**另一页**上）
+   */
+  ctx: { href?: string; diag?: ScanDiag },
+) => Promise<Result<CanvasExportOutcome>>;
+
+/** 画布导出的结果（原 `Ay` 的返回 ＋ 适配器侧的落盘） */
+export type CanvasExportOutcome =
+  /** 门不过 / 这一页不是画布页 ⇒ **不导**（不是失败） */
+  | { kind: 'not-applicable' }
+  /** 导出来了，且**已落盘**（`img://` 引用）—— 与其余扫描项同形，能直接进 `LovartImageInput` */
+  | { kind: 'snapshot'; ref: string; natW: number; natH: number; sizeBytes: number };
+
 /** 抓取阶段机（原 `onStatus`）—— `ScanPhase` 的类型见文件头说明（已迁至 `core/rules/scanChain.ts`） */
 export interface ScanPhaseEvent {
   phase: ScanPhase;
@@ -118,6 +146,58 @@ export interface UnreadRoot {
   why: string;
 }
 
+/**
+ * **抓取诊断**（原 `hp` 的 `p` 对象，`shared.js:22663-23233`）
+ *
+ * ★ **它解决什么**：抓不到图时**说清为什么**（"页面上 0 个 img"与"32 个 img 但都量不到尺寸"
+ *   是两件事），而不是笼统一句"没扫到图片"。由 `core/rules/scanDiag.formatScanDiag`（原 `GT`
+ *   `:32453`）拼成一行摘要。
+ *
+ * ⚠️ **源里 19 个字段，本仓只落 8 个** —— 其余在本仓**零消费者**（它们服务源的诊断弹窗与后端
+ *   `lovartDiag`，本仓两者都没有）⇒ 按 M6「不为将来铺路」不落。逐条：
+ *   · `samples` / `csp` / `title` / `readyState` / `visibility` / `href`：源的诊断弹窗 + `gl()` 上报用；
+ *   · `svgImgCount` / `videoCount` / `perfTotal`：`GT` **不读**；
+ *   · `perfImg`：**本仓没有 perf 取图通道**（源在 `:23058-23078` 会把网络资源也当候选图）⇒
+ *     数了就是**撒谎**（"网络图 5" 而 5 张从未进候选）⇒ **不落**，缺口另登记；
+ *   · `canvases`：随 BP-14（画布导出的门）落。
+ * ⚠️ **源 `GT` 还读 `diag.frames`，那是个死分支**：`hp` **从不写** `p.frames`
+ *   （只有 frames 通道的 diag 才带它，见 `:23725`）⇒ 本仓不设该字段。
+ */
+export interface ScanDiag {
+  /** 读到的文档 / root 数（源 `p.docCount = k.length`，`:22958`） */
+  docCount: number;
+  /** 读到的 iframe 数（源 `p.iframeCount += P.length`，`:22927`） */
+  iframeCount: number;
+  /** 穿透的 shadowRoot 数（源 `p.shadowCount++`，`:22949`） */
+  shadowCount: number;
+  /** 页面上 `img` 总数（源 `p.imgTotal += j.length`，`:22969`） */
+  imgTotal: number;
+  /** 其中**量得到尺寸**的（源 `p.imgUsable++`：有自然尺寸或布局尺寸，`:22986`） */
+  imgUsable: number;
+  /** 页面上的 `canvas` 数（源 `p.canvasCount += j.length`，`:23082`） */
+  canvasCount: number;
+  /** 候选 url 总数（源 `p.itemsRaw++`，`:22856` —— 进过滤器**之前**） */
+  itemsRaw: number;
+  /** 过滤后留下的（源 `p.itemsKept++`，`:22860`） */
+  itemsKept: number;
+  /**
+   * 页面上的画布**逐个**（源 `p.canvases`，`:23083-23097` —— **最多 6 个**，按 DOM 顺序）
+   *
+   * ★ 用途：**画布导出的门**（原 `:32611-32613` —— 至少有一个 ≥200px 才值得导）。
+   */
+  canvases: readonly CanvasBox[];
+}
+
+/** 页面上一个画布的尺寸（原 `p.canvases` 的元素，`:23092-23096`） */
+export interface CanvasBox {
+  /** 画布**像素**尺寸（`canvas.width` / `canvas.height`） */
+  w: number;
+  h: number;
+  /** **布局**尺寸（`getBoundingClientRect` 四舍五入） */
+  dw: number;
+  dh: number;
+}
+
 /** 扫描结果 */
 export interface ScanResult {
   items: ScannedImage[];
@@ -127,6 +207,8 @@ export interface ScanResult {
   href?: string;
   /** ★ 读不到的 frame/root —— **如实上报**，不静默（原则 6） */
   unread?: UnreadRoot[];
+  /** ★ **抓取诊断**（原 `hp` 的 diag）—— 抓不到时用来说清原因，见 `ScanDiag` */
+  diag?: ScanDiag;
   /**
    * ★ **逐张落盘失败**的张数（原 `wp.failed` 32493-32941）
    *
@@ -261,6 +343,12 @@ export interface SitePort {
    *   画廊面板的「扫描 Tapnow 画布」用它（见 `ScanCanvasFn` 的说明）。
    */
   readonly scanCanvas?: ScanCanvasFn;
+
+  /**
+   * ★ 可选的「**画布导出**」能力（原 `t$` / `YT` / 页内 `Ay`）—— 抓取链在 canvas 页面上的**兜底**。
+   *    缺项 ⇒ 该站点没有这条兜底（见 `CanvasExportFn` 的说明）。
+   */
+  readonly exportCanvas?: CanvasExportFn;
 
   /**
    * 该站点的「会话页」地址 —— 后台页导航目标（原 `aS`/`iS` shared.js:38717-38718）

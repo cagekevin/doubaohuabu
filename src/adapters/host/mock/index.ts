@@ -110,6 +110,10 @@ const createAccount = (): AccountPort => ({
   clearSession: async () => ok(undefined),
   setProxy: async () => ok(undefined),
   fpNetDiag: async () => ok({}),
+  // ⚠️ mock 没有真实 Chrome、也没有 profile 目录 ⇒ **如实报错**（不假装成功、不编 profileDir）
+  ensureLovartChrome: async () => notImplemented('ensureLovartChrome'),
+  closeLovartChrome: async () => notImplemented('closeLovartChrome'),
+  syncLovartSession: async () => notImplemented('syncLovartSession'),
   // ⚠️ cookie 读写必须有**真实 session 分区**（mock 没有）⇒ 明确报错，**不假装成功**
   exportCookies: async () => notImplemented('exportCookies'),
   importCookies: async () => notImplemented('importCookies'),

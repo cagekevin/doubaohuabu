@@ -13,6 +13,12 @@ export const PHASH_DUPLICATE_DISTANCE = 8;
 /** 感知哈希判**占位图**：汉明距离 ≤ 此值（原 `G$`，25776） */
 export const PHASH_PLACEHOLDER_DISTANCE = 6;
 
+/**
+ * 出片近重复窗口长度（原 `wl`，36288）—— 只保留最近 N 个感知哈希（超出 `shift` 掉最旧）
+ * ⚠️ 与持久化的跨会话表（`RECURRING_TABLE_MAX` 400）**不是一件事**：这是**进程内**、跨 send 保留
+ */
+export const NEAR_DUP_WINDOW = 120;
+
 /** 感知哈希尺寸（原 `Bc(src, t = 8)` → 8×8 灰度） */
 export const PHASH_SIZE = 8;
 

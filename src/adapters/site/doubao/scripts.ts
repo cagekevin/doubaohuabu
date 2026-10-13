@@ -1018,6 +1018,75 @@ export const WATERMARK_FREE_BY_THREAD = `
 })
 `;
 
+/**
+ * 查「无水印**原图**直链」（原 `QM`，`shared.js:23344-23438`）—— 返回 `{ok,url}` / `{ok:false,error}`
+ *
+ * 做法（逐行对源）：按 src 在页面上找到那个 `img`（`currentSrc`/`src` 完全相等，或**去 query 后** path 相等），
+ * 从它起**向上爬最多 16 层**父节点；每层读 React 挂在元素上的 `__reactProps$*` / `__reactFiber$*`，
+ * 取 `memoizedProps` 后**递归（≤7 层）**找键名命中 `image_ori_raw|ori_raw|original_url|origin_url|download_url`
+ * 的 http(s) 值（字符串，或对象上的 `.url`）—— 第一个命中即返回。
+ *
+ * ⚠️ **纯读**（合「零注入」）—— 只读 DOM 与 React 内部属性，不改页面。
+ * ⚠️ 找不到 ⇒ `{ok:false,error}`（调用方**回落扫描 URL**，见 `DR` 的 `:36485-36491`）。
+ * ⚠️ 由 `adapters/site/doubao/index.ts` 的出片轮询执行（仅 `doubao`/`dola` 通道）。
+ */
+export const WATERMARK_FREE_DIRECT_SCRIPT = `
+(function(src){
+  var t = String(src || '');
+  if (!t) return { ok:false, error:'no-src' };
+  var n = t.split('?')[0];
+  var r = /image_ori_raw|ori_raw|original_url|origin_url|download_url/i;
+  var s = new WeakSet();
+  function o(h, m, w, v) {
+    if (!!h && typeof h == 'object' && !(w > 7) && !s.has(h)) {
+      s.add(h);
+      for (var y in h) {
+        if (Object.prototype.hasOwnProperty.call(h, y)) {
+          var b = h[y];
+          if (typeof b == 'string') {
+            if (/^https?:\\/\\//i.test(b) && r.test(y)) { v.push(b); return; }
+          } else if (b && typeof b == 'object') {
+            if (r.test(y) && typeof b.url == 'string' && /^https?:\\/\\//i.test(b.url)) { v.push(b.url); return; }
+            o(b, y, w + 1, v);
+            if (v.length) return;
+          }
+          if (v.length) return;
+        }
+      }
+    }
+  }
+  function a(h, m) {
+    try {
+      for (var w = Object.keys(h), v = 0; v < w.length; v++) {
+        var y = w[v];
+        if (y.indexOf('__reactProps$') === 0 || y.indexOf('__reactFiber$') === 0) {
+          var b = h[y];
+          var x = b && b.memoizedProps ? b.memoizedProps : b;
+          o(x, '', 0, m);
+          if (x && typeof x == 'object' && m.length) return;
+        }
+      }
+    } catch(e) {}
+  }
+  var l = [];
+  try { l = Array.prototype.slice.call(document.querySelectorAll('img')); }
+  catch(e) { return { ok:false, error:'no-dom' }; }
+  var c = l.filter(function(h){
+    var m = String(h.currentSrc || h.src || '');
+    return m === t || m.split('?')[0] === n;
+  });
+  if (!c.length) return { ok:false, error:'img-not-found' };
+  for (var u = [], d = 0; d < c.length && !u.length; d++) {
+    for (var f = c[d], p = 0; f && p < 16 && !u.length; p++) {
+      a(f, u);
+      try { f = f.parentElement; } catch(e) { break; }
+    }
+  }
+  if (u.length) return { ok:true, url:u[0] };
+  return { ok:false, error:'no-ori-in-props' };
+})
+`;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 发送后监测（原 `_Component43.jsx` 的 `watchSendReply` 用的 4 个页内脚本）
 //

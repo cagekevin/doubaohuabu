@@ -82,6 +82,12 @@ export interface HostApi {
   clearAccountSession(partition: string): Promise<unknown>;
   setAccountProxy(partition: string, proxy: string): Promise<unknown>;
   fpNetDiag(partition: string): Promise<unknown>;
+  /** 真实 Chrome 登录窗口（`preload.js:110`）—— 收 `{accountId, url?, proxy?}` */
+  ensureLovartChrome(args: unknown): Promise<unknown>;
+  /** 关闭真实 Chrome 登录窗口（`preload.js:111`）—— 收 `{accountId}` */
+  closeLovartChrome(args: unknown): Promise<unknown>;
+  /** 会话 cookie 同步进 webview 分区（`preload.js:112`）—— 收 `{accountId, partition}` */
+  syncLovartSession(args: unknown): Promise<unknown>;
   /** 导出某分区的 cookie（`preload.js:50`） */
   exportAccountCookies(partition: string | null): Promise<unknown>;
   /** 把 cookie 灌回某分区（`preload.js:51`） */

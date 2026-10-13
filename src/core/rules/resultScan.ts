@@ -18,8 +18,16 @@
 
 import { stripSignature } from '@/lib/url';
 import { isRecord } from '@/lib/object';
-import { RECURRING_TABLE_KINDS, RECURRING_TABLE_MAX } from '@/constants/dedupe';
-import { GEN_NO_REAL_IMAGE_MS, GEN_SILENT_MS, GEN_TIMEOUT_MS } from '@/constants';
+import { hammingDistance } from '@/lib/hash';
+import { NEAR_DUP_WINDOW, PHASH_DUPLICATE_DISTANCE, RECURRING_TABLE_KINDS, RECURRING_TABLE_MAX } from '@/constants/dedupe';
+import {
+  GEN_NO_REAL_IMAGE_MS,
+  GEN_SCAN_DENY_URL_RE,
+  GEN_SCAN_MAX_SIDE,
+  GEN_SCAN_MIN_SIDE,
+  GEN_SILENT_MS,
+  GEN_TIMEOUT_MS,
+} from '@/constants';
 import type { ImggenDedupEntry, ImggenDedupTable } from '@/stable/contracts/lsValues';
 
 /** 扫描项的最小形状（只要求有 `url` —— 真实项还带 `kind`/`w`/`h`，本模块原样透传） */
@@ -34,6 +42,51 @@ export interface ScannableScan {
  */
 export function scanKeyOf(url: string): string {
   return stripSignature(url);
+}
+
+/**
+ * 有效性滤网的入参形状（原 `RR` 的 `{url, w, h}`）
+ *
+ * ⚠️ `w`/`h` 可缺：源对**量不到尺寸**的项放行（`!n || !r || …` 两个子句都短路为真）。
+ */
+export interface ValidityScan {
+  url: string;
+  w?: number;
+  h?: number;
+}
+
+/**
+ * **有效性滤网**（原 `RR`，`:36323-36334`）
+ *
+ * 逐行对源的四道判据（任一不过 ⇒ 丢）：
+ *   ① 必须 `http(s):`（**`data:` / `blob:` 也丢** —— 与 `scanKeyOf` 的"原样返回"不是一回事）
+ *   ② 不能是 `.svg`
+ *   ③ URL 不命中 `MR`（头像 / 表情 / 图标 / logo / 占位图…）
+ *   ④ 尺寸：`min(w,h) >= Jk(220)` **且** `max(w,h) > 512`（量不到尺寸则跳过这条）
+ *
+ * ⚠️ ④ 的两个子句在源里都是 `!(…)`：`!(min < 220)` = `min >= 220`；`!(max <= 512)` = `max > 512`
+ *    ⇒ **恰好 512 也算不合格**。
+ */
+export function isValidScan(item: ValidityScan | null | undefined): boolean {
+  if (!item || !item.url) return false;
+  const url = String(item.url);
+  if (!/^https?:/i.test(url) || /\.svg(\?|$)/i.test(url) || GEN_SCAN_DENY_URL_RE.test(url)) return false;
+  const w = Number(item.w) || 0;
+  const h = Number(item.h) || 0;
+  return (
+    (!w || !h || !(Math.min(w, h) < GEN_SCAN_MIN_SIDE)) &&
+    (!w || !h || !(Math.max(w, h) <= GEN_SCAN_MAX_SIDE))
+  );
+}
+
+/**
+ * 一批扫描项过有效性滤网（原 `DR` 的 `E.filter(RR)`，`:36441`）
+ *
+ * ★ **必须在记基线之前**：源先 `filter(RR)` 再 `map(O => O.url)` 记基线 ——
+ *   否则被滤掉的项会**占住基线键**，同一张图以后出现也不会被当新图。
+ */
+export function filterValidScans<T extends ValidityScan>(items: readonly T[]): T[] {
+  return items.filter(isValidScan);
 }
 
 /** 一批扫描项的去重键（**首轮基线**用它 —— 源 `j.forEach(O => c.add(Od(O)))`） */
@@ -102,6 +155,42 @@ export function decideScanEnd(input: ScanEndInput): ScanEndReason | null {
   }
   if (input.sinceStartMs > GEN_TIMEOUT_MS) return 'timeout';
   return null;
+}
+
+// ─────────────────────── 出片近重复窗口（原 `wl`）───────────────────────
+
+/**
+ * 近重复窗口（原 `wl`，`:36288` + `DR` 的 `k` 里的判定 `:36390-36397`）
+ *
+ * 语义：**进程内**记住最近 `NEAR_DUP_WINDOW`(120) 个感知哈希；新哈希与其中任一个的
+ * 汉明距离 `<= PHASH_DUPLICATE_DISTANCE`(8) ⇒ 判近重复。
+ *
+ * ★ **为什么它不是 `createDedupe`**：`createDedupe`（原 `sm`）是**素材抓取链**的去重器
+ *   （入参带 `allowedScopes`/`haveHashes`，见 `core/rules/dedupe.ts` 头注）；本窗口是
+ *   **出片链**的、跨 send 保留、只存感知哈希的那一份（源 `wl` 就是独立一个数组）。
+ *   ⇒ 两件事，别合并。
+ *
+ * ⚠️ 状态**住调用方**（适配器模块级）—— 源 `wl` 也是模块级常量，只 `shift` 不重置。
+ */
+export interface NearDupWindow {
+  /** 命中近重复 ⇒ `true`（**不记入窗口**）；否则记入并返回 `false`（原 `k` 的 `wl` 半） */
+  check(phash: string): boolean;
+}
+
+export function createNearDupWindow(
+  limit: number = NEAR_DUP_WINDOW,
+  distance: number = PHASH_DUPLICATE_DISTANCE,
+): NearDupWindow {
+  const hashes: string[] = [];
+  return {
+    check(phash: string): boolean {
+      if (!phash) return false;
+      if (hashes.some((h) => hammingDistance(phash, h) <= distance)) return true;
+      hashes.push(phash);
+      if (hashes.length > limit) hashes.shift();
+      return false;
+    },
+  };
 }
 
 // ─────────────────────── 跨会话去重表（原 `TR`/`PR`/`p0`）───────────────────────

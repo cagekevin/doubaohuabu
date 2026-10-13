@@ -36,12 +36,14 @@ import { hash32 } from '@/lib/hash';
 import { stripHtml } from '@/lib/text';
 // ★ 原图尺寸（原 `Lc` 的 `<img>` 半）—— 量不到 ⇒ `0`（与 `Pu` 的 `200×160` 兜底不是一回事）
 import { measureNaturalSize } from '@/lib/readDroppedFile';
-import { GEN_POLL_MS, GEN_SCAN_MIN_SIDE, GEN_SEND_GRACE_MS } from '@/constants';
-// ★ 出片轮询的**纯判定**（去重键 / 基线 / 结束三档 / 跨会话去重表 —— 原 `DR` 的四段）
+import { GEN_POLL_MS, GEN_SCAN_MIN_SIDE, GEN_SEND_GRACE_MS, GEN_WM_DIRECT_TIMEOUT_MS } from '@/constants';
+// ★ 出片轮询的**纯判定**（有效性滤网 / 去重键 / 基线 / 结束三档 / 近重复窗口 / 跨会话去重表 —— 原 `DR` 的各段）
 import {
   countRecurringAsset,
+  createNearDupWindow,
   decideScanEnd,
   emptyRecurringTable,
+  filterValidScans,
   freshScannedItems,
   isRecurringTable,
   pruneRecurringAssets,
@@ -56,7 +58,12 @@ import type { ImggenDedupTable } from '@/stable/contracts/lsValues';
 import { fillText } from './fillText';
 // ★ 发送管线的 **Phase 2 · 附图**（原 `Be` 的 `:888-1051` 全段：CDP 主通路 + 剪贴板回退 + 按键补充 + 2b）
 import { attachImagesPhase2 } from './attachPhase2';
-import { ATTACH_FINGERPRINT_SCRIPT, buildClickSendScript, READ_INPUT_STATE_SCRIPT } from './scripts';
+import {
+  ATTACH_FINGERPRINT_SCRIPT,
+  buildClickSendScript,
+  READ_INPUT_STATE_SCRIPT,
+  WATERMARK_FREE_DIRECT_SCRIPT,
+} from './scripts';
 // ★ **Phase 3a · 发送前完整性校验**（图数 / 图序）—— 纯判据住 `core/rules/precheckAttach`
 import {
   attachPrecheck,
@@ -90,6 +97,7 @@ import {
   createDoubaoProbeWaitTime,
 } from './watch';
 import { requireWebview, webviewEval, webviewEvalSafe } from '../shared/webview';
+import { runProbe } from '../shared/waits';
 import { buildResultScanScript } from '../shared/scanScripts';
 
 /** 点击发送的结果（原 `Zl` 返回 `{ok, clicked, tag, strategy}`） */
@@ -123,6 +131,14 @@ const RESULT_SCAN = buildResultScanScript(GEN_SCAN_MIN_SIDE);
  * （`core` 不得碰 DOM ⇒ 浏览器侧实现 `lib/phash` 只能由适配器接上）
  */
 const placeholderDetector = createDedupe(emptyDedupeState(), { phash: perceptualHash });
+
+/**
+ * 出片**近重复窗口**（原 `wl`，`shared.js:36288`）
+ *
+ * ⚠️ **模块级**（源同法）：跨 send 保留，只 `shift` 不重置 —— 同一批生成里换了个 URL 的
+ *    近似图（重新编码 / 不同尺寸）也挡得住。判据住 `core/rules/resultScan.createNearDupWindow`。
+ */
+const nearDupWindow = createNearDupWindow();
 
 /**
  * 采样一次生成结果（原 `DR` 内层：`webview.executeJavaScript(Xk)`）
@@ -533,22 +549,6 @@ export function createDoubaoSite(
 }
 
 /**
- * 等结果（原 `DR` 的循环骨架，`shared.js:36335-36553`）
- *
- * 顺序**逐行对源**：
- *   ① **首轮扫描只记基线**（`:36444-36451`）—— 页面上已有的图不是本轮结果
- *   ② 之后每轮只处理**新项**（基线外 + 未处理过；键 = `Od` 去签名，`:36452-36455`）
- *   ③ 取回 → 占位图跳过（`Nk`）→ 落盘出图
- *   ④ 结束三档由纯层 `decideScanEnd` 判（`:36532-36541`）
- *
- * ⚠️ **首轮立即扫**（源 `Promise.resolve().then(N)`）—— 基线取的正是"发送后那一刻"的页面；
- *   若先 sleep 再扫，这 3 秒内出现的图会被**当基线吞掉**（少收结果）。
- * ⚠️ **结束即停**：不留下常驻定时器。
- * ⚠️ 逐次失败**收集**（不吞）—— 全部失败时由调用方如实报错。
- * ⚠️ 阈值全住 `constants`（SSOT）：轮询 `CR` 3000 · 静默 `ER` 9000 · 仅占位图 `jR` 180000 ·
- *   总超时 `_R` 600000。
- */
-/**
  * 读跨会话去重表（原 `TR`，`:36238`）
  *
  * ⚠️ 与 `state/persistKeys` 的 `PERSIST[LS_IMGGEN_DEDUP]` 是**同一个调用**（那里就是 `rw(key)`）
@@ -578,6 +578,40 @@ function writeDedupTable(storage: StoragePort, table: ImggenDedupTable): void {
 }
 
 /**
+ * 查「无水印原图直链」（原 `DR` 内层对 `QM` 的调用，`:36471-36479`）
+ *
+ * ⚠️ 源只在 `source === 'doubao' || source === 'dola'` 时查 —— 本仓 `pollResults` 只服务这两个
+ *    通道的图像支 ⇒ 该闸**恒成立**，不重复判。
+ * ⚠️ 只在**拿到合法、且与扫描 URL 不同**的 http(s) 直链时采用；否则 `null`（调用方回落原 URL）。
+ * ⚠️ 失败 / 超时**不抛、不上报**（源把整段包在 `try/catch {}` 里）—— 它只是"尽量换到更清晰的图"。
+ * ⚠️ 每张图各自解析一次 webview（源在轮询体内解析一次后复用）—— 差异只在 **DOM 查询次数**，
+ *    定位到的仍是同一个视图 ⇒ 行为等价。
+ */
+async function lookupWatermarkFreeDirect(partition: string, url: string): Promise<string | null> {
+  let view;
+  try {
+    view = requireWebview(partition);
+  } catch (e) {
+    // 视图未挂载 ⇒ 拿不到直链（**降级**：回落扫描 URL，不因此丢图）—— 降级必须留痕（原则 6）
+    log.warn('[pollResults] 无水印直链：定位 webview 失败，回落扫描 URL：', e);
+    return null;
+  }
+  const r = await runProbe<{ ok?: boolean; url?: string }>(
+    view,
+    `(${WATERMARK_FREE_DIRECT_SCRIPT})(${JSON.stringify(String(url))})`,
+    GEN_WM_DIRECT_TIMEOUT_MS,
+  );
+  const direct = r.ok ? r.value?.url : undefined;
+  return r.ok &&
+    r.value?.ok === true &&
+    typeof direct === 'string' &&
+    /^https?:\/\//i.test(direct) &&
+    direct !== url
+    ? direct
+    : null;
+}
+
+/**
  * 等结果（原 `DR` 的循环骨架，`shared.js:36335-36553`）
  *
  * 顺序**逐行对源**：
@@ -585,16 +619,21 @@ function writeDedupTable(storage: StoragePort, table: ImggenDedupTable): void {
  *   ② 之后每轮只处理**新项**（基线外 + 未处理过；键 = `Od` 去签名，`:36452-36455`）
  *   ③ 每个新项过**两道闸**（`:36466` 那**同一个 `if`**）：发送后前 10 秒内的新图 ·
  *      **跨会话**已见 ≥ 2 次的固有素材（URL 桶）
- *   ④ 取回 → 感知哈希也过跨会话表（`hashes` 桶）→ 占位图跳过（`Nk`）→ 落盘出图
+ *   ④ 取回（先问页内 `QM` 换无水印原图，失败回落扫描 URL）→ 感知哈希也过跨会话表（`hashes` 桶）
+ *      → 占位图跳过（`Nk`）→ 近重复窗口（`wl`）→ 落盘出图
  *   ⑤ 结束三档由纯层 `decideScanEnd` 判（`:36532-36541`）
  *
+ * ⚠️ **扫描项先过 RR 有效性滤网**（`:36441`，`filterValidScans`）—— 在记基线之前滤，
+ *    `data:`/`blob:` / `.svg` / 装饰图 / 过小过大都不算结果。
  * ⚠️ **首轮立即扫**（源 `Promise.resolve().then(N)`）—— 基线取的正是"发送后那一刻"的页面；
  *   若先 sleep 再扫，这 3 秒内出现的图会被**当基线吞掉**（少收结果）。
  * ⚠️ **去重表整场只读一次、只写一次**（源 `TR()` `:36353` / `PR(p)` `:36367`）。
+ * ⚠️ **近重复窗口跨 send 保留**（`nearDupWindow` 是模块级，源 `wl` 同法）。
  * ⚠️ **结束即停**：不留下常驻定时器。
  * ⚠️ 逐次失败**收集**（不吞）—— 全部失败时由调用方如实报错。
  * ⚠️ 阈值全住 `constants`（SSOT）：轮询 `CR` 3000 · 静默 `ER` 9000 · 仅占位图 `jR` 180000 ·
- *   总超时 `_R` 600000 · 扫描最小边 `Jk` 220 · 发送后宽限 `IR` 10000。
+ *   总超时 `_R` 600000 · 扫描最小边 `Jk` 220 · 扫描最大边 `512` · 发送后宽限 `IR` 10000 ·
+ *   无水印直链超时 `5000`。
  */
 async function pollResults(
   host: HostPort,
@@ -631,14 +670,18 @@ async function pollResults(
       failures.push(sampled.message);
     } else if (baseline === null) {
       // ① 首轮：只记基线，**不产出**（源 `if (!h) { …c.add(Od(O)); return }`）
-      baseline = stripScanKeys(sampled.value);
+      //   ⚠️ 基线用**过完 RR 的**项（源先 `E.filter(RR)` 再记键）—— 否则被滤掉的项会占住基线键
+      baseline = stripScanKeys(filterValidScans(sampled.value));
       baselineAt = Date.now();
       lastProgress = baselineAt;
     } else {
       /** 发送后宽限窗口（源 `P - h < IR`；`P` 每轮取一次） */
       const inGrace = Date.now() - baselineAt < GEN_SEND_GRACE_MS;
+      // ★ RR 有效性滤网（原 `E.filter(RR)`，`:36441`）—— `data:`/`blob:`、`.svg`、装饰图、
+      //   过小/过大**都在这里剔除**（源在记基线之前、`Od` 之前就滤）
+      const valid = filterValidScans(sampled.value);
       // ② 新项（保序）
-      for (const { item, key } of freshScannedItems(sampled.value, baseline, [...processed])) {
+      for (const { item, key } of freshScannedItems(valid, baseline, [...processed])) {
         processed.add(key);
         // 源在过滤之后、取图之前就更新 `m` ⇒ 被跳过 / 失败的项也算"有进展"
         const at = Date.now();
@@ -646,24 +689,32 @@ async function pollResults(
         // ③ 源 `:36466` 的**同一个 `if`**：前 10 秒的新图 ‖ 跨会话已见 ≥2 次的 URL ⇒ 跳过
         if (inGrace || countRecurringAsset(table, 'urls', key, counted, at) >= 2) continue;
 
-        const fetched = await fetchScanImage(host, item);
+        // ④ 无水印直链（原 `:36471-36491`）：先问页内 `QM` 换更清晰的**原图**；拿不到 / 取回失败 ⇒ 回落扫描 URL
+        const direct = await lookupWatermarkFreeDirect(partition, item.url);
+        const target = direct ? { ...item, url: direct } : item;
+        let fetched = await fetchScanImage(host, target);
+        if (!fetched.ok && target.url !== item.url) fetched = await fetchScanImage(host, item);
         if (!fetched.ok) {
           failures.push(fetched.message);
           continue;
         }
         const dataUrl = fetched.value;
 
-        // ④ 源 `:36502-36510`：先算感知哈希，再看 `hashes` 桶
+        // ⑤ 源 `:36502-36510`：先算感知哈希，再看 `hashes` 桶
         const phash = await perceptualHash(dataUrl);
         if (phash && countRecurringAsset(table, 'hashes', phash, counted, at) >= 2) continue;
 
-        // 源 `:36511-36520`：占位图 ⇒ 记一笔、跳过（**不是失败、也不是结果**）
+        // ⑥ 源 `:36511-36520`：占位图 ⇒ 记一笔、跳过（**不是失败、也不是结果**）
         if (await placeholderDetector.isPlaceholder(dataUrl)) {
           sawPlaceholder = true;
           continue;
         }
 
-        // ④b 量原始尺寸（原 `Lc` 的 `<img>` 半，`shared.js:23812-23820`）—— 量不到 ⇒ `0`
+        // ⑦ 近重复（原 `DR` 的 `k` 的 `wl` 半，`:36390-36397`）—— 与近 120 张里任一张汉明距离 ≤ 8 ⇒ 丢
+        //   （源 `k` 返回 `false` ⇒ **不产出、也不计入已产出数 `w`**）
+        if (phash && nearDupWindow.check(phash)) continue;
+
+        // ⑧ 量原始尺寸（原 `Lc` 的 `<img>` 半，`shared.js:23812-23820`）—— 量不到 ⇒ `0`
         const size = await measureNaturalSize(dataUrl);
 
         const saved = saveGenResult(host, dataUrl, { ...ctx, natW: size.natW, natH: size.natH });
@@ -675,7 +726,7 @@ async function pollResults(
       }
     }
 
-    // ⑤ 结束三档（纯层判定）
+    // ⑨ 结束三档（纯层判定）
     const end = decideScanEnd({
       sinceLastProgressMs: Date.now() - lastProgress,
       emitted: results.length,

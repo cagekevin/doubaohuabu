@@ -72,6 +72,26 @@ export function absolutePositionOf(
 }
 
 /**
+ * 把成员从组里**摘出来**（原两处同一变换：`ungroupNodes` `31630-31638` ＋
+ * `onNodesChange` 的删组支 `26861-26872`）
+ *
+ * 去掉 `parentId` 与 `extent`，并把**相对坐标**换回**绝对坐标**（加一层父偏移）。
+ *
+ * ⚠️ **不带 `selected`** —— 是否选中是**调用方各自的判据**：显式取消组 ⇒ `true`（源同）；
+ *    删组释放 ⇒ **不动**（源在删除路径不设）。
+ */
+export function detachFromGroup(node: GroupNodeLike, group: GroupNodeLike): GroupNodeLike {
+  const { parentId: _parentId, extent: _extent, ...rest } = node as GroupNodeLike & { extent?: string };
+  return {
+    ...rest,
+    position: {
+      x: (node.position.x || 0) + (group.position.x || 0),
+      y: (node.position.y || 0) + (group.position.y || 0),
+    },
+  } as GroupNodeLike;
+}
+
+/**
  * 「选中的那个组」—— 供选择工具条决定是否显示「取消组」（原 `_Component42.jsx:112-129` 的 `H`）
  *
  * 规则（**逐字回源**）：取**所有选中节点**的 `parentId`；
@@ -181,20 +201,41 @@ export function ungroupNodes(nodes: readonly GroupNodeLike[], groupId: string): 
   const target = nodes.find((n) => n.id === groupId && n.type === 'group');
   if (!target) return { ok: false, reason: 'no-group' };
 
-  const ox = target.position.x || 0;
-  const oy = target.position.y || 0;
-
   const next = nodes
     .filter((n) => n.id !== groupId)
-    .map((n) => {
-      if (n.parentId !== groupId) return n;
-      const { parentId: _p, extent: _e, ...rest } = n as GroupNodeLike & { extent?: string };
-      return {
-        ...rest,
-        selected: true,
-        position: { x: (n.position.x || 0) + ox, y: (n.position.y || 0) + oy },
-      } as GroupNodeLike;
-    });
+    .map((n) => (n.parentId === groupId ? { ...detachFromGroup(n, target), selected: true } : n));
 
   return { ok: true, nodes: next };
+}
+
+/**
+ * 删掉组节点时**释放它的成员**（原 `onNodesChange` 的删组支，`shared.js:26848-26875`）
+ *
+ * ★ **为什么必须有**：删除只把被删节点从数组里丢掉 ⇒ 成员会留着**悬空的 `parentId`**（父已不在）
+ *   ＋ `extent: 'parent'` ⇒ ① 相对坐标被当成绝对坐标 ⇒ **视觉跳位**；
+ *   ② ReactFlow 找不到父容器 ⇒ 拖动 / 裁切行为异常。
+ *   源在删除之后把成员**摘出来并换回绝对坐标**（复用 `detachFromGroup`）。
+ *
+ * ⚠️ **只释放、不删孩子**（源同）· **不动 `selected`**（源在删除路径不设）。
+ * ⚠️ 判据用**变更前**的节点表（`before`）—— 被删的组已经从 `nodes` 里没了。
+ * ⚠️ 被删的**非组**节点不触发任何释放（源判据是 `type === 'group'`）。
+ *
+ * @param nodes       **已删掉被删节点之后**的节点表（源里的 `o`）
+ * @param before      变更前的节点表（源里的 `s`：用来判"被删的哪些是组" ＋ 取组坐标）
+ * @param removedIds  被删的节点 id
+ */
+export function releaseDeletedGroupChildren(
+  nodes: readonly GroupNodeLike[],
+  before: readonly GroupNodeLike[],
+  removedIds: ReadonlySet<string>,
+): GroupNodeLike[] {
+  const gone = new Map<string, GroupNodeLike>();
+  for (const n of before) {
+    if (removedIds.has(n.id) && n.type === 'group') gone.set(n.id, n);
+  }
+  if (gone.size === 0) return [...nodes];
+  return nodes.map((n) => {
+    const group = n.parentId ? gone.get(n.parentId) : undefined;
+    return group ? detachFromGroup(n, group) : n;
+  });
 }

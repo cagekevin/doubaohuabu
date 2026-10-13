@@ -114,6 +114,7 @@ ui/canvas/CanvasHost.tsx        【ReactFlow 宿主；8 类节点经 ui/nodes �
   → state/store 的 setPartial     【画布 → 工程的镜像：唯一同步点】
 
 复制 / 粘贴：CanvasHost（Ctrl/⌘+C/V）→ canvas: copyNodes / pasteNodes + clipboard   【{nodes,edges} 内存态，源亦不落盘】
+删除：CanvasHost.onNodesChange（Delete/Backspace 或 ReactFlow 的 remove 变更）→ canvas.removeNodes   【commit 快照 + 清相关边 + 清幸存节点的 referenceOrder 引用 + 删的是**组**时释放成员（core/rules/group.releaseDeletedGroupChildren：剥 parentId/extent + 叠加父坐标）】
 剪贴板图片回落：CanvasHost.pasteClipboardImage → hostOps.readClipboardImage → addMaterialFromDrop   【图仍落 img://】
 拖放：CanvasHost → lib/readDroppedFile → addMaterialFromDrop
 右键菜单：ui/canvas/NodeContextMenu → canvas.arrangeSelectedNodes / pasteNodes · hostOps.revealPath
@@ -207,7 +208,7 @@ bootstrap/container.ts 的 hasElectronHost()   【真实宿主优先】
             → adapters/media/facemask.ts + core/rules/facemask.ts
 人脸检测：ui/nodes/FaceMarksLayer → state/hostOps → MediaPort.detectFaces
             → adapters/media/faceDetect.ts + core/rules/faceDetect.ts
-去重：core/rules/dedupe.createDedupe（上游 lib/phash.ts）→ adapters/site/doubao/index.ts 的**占位图判定**（`placeholderDetector.isPlaceholder`，出片轮询取回后先过它）；另 `core/rules/resultScan` 承担「同一 URL/hash 反复出现 ⇒ 固有素材」计数
+出片去重（adapters/site/doubao/index.ts 的 pollResults，原 DR）：扫描项先过 **RR 有效性滤网**（core/rules/resultScan.isValidScan / filterValidScans —— data:/blob:/.svg/装饰图/过小过大全丢）→ 宽限与跨会话 URL 桶 → **QM 换无水印原图直链**（doubao/scripts.ts 的 WATERMARK_FREE_DIRECT_SCRIPT，失败回落扫描 URL）→ 取回 → 感知哈希与跨会话 hashes 桶 → **占位图判定**（core/rules/dedupe.createDedupe 的 placeholderDetector.isPlaceholder，上游 lib/phash.ts）→ **近重复窗口**（core/rules/resultScan.createNearDupWindow，模块级、最近 120 个感知哈希、汉明距离 ≤ 8）→ 落盘
 视频本地化：state/generate（写完 `resultUrl` 后）＋ bootstrap/container 的 startVideoBackfill（启动 5s 全量回填）
             → state/localizeOps（★ usecases/localizeVideos 的唯一调用方）→ MediaPort.saveVideoFromUrl → 回写 `vid://`
             （stable/protocols/vid.ts 只放契约派生的形状/判定，前端**零解析** —— 解析在主进程）
@@ -289,8 +290,14 @@ ui/panels/NewImagesPanel.tsx        【「立即抓取」】
   → state/accountOps.scanGallery      【逐账号扫描；失败原样上报；写库走 addLovartImages】
   → core/usecases/scanGallery         【编排：查站点适配器 → SitePort.scan → 映射成 LovartImageInput】
   → ports.sites[type].scan            【volatile：适配器内部 frames→webview 降级链】
+       → adapters/site/shared/scanScripts.buildLibraryScanScript（页内脚本，原 `hp`）
+                                     【产出 images + unread + **diag**（原 `hp` 的 `p`：文档/iframe/shadowRoot/img/可用/canvas/候选）】
        → adapters/site/shared/materializeScan（scanAttemptFromRaw；内部 materializeScannedImages 逐张落盘）
-                                     【落盘成 `img://`（ref）；落不出 ⇒ failed++，不编造引用】
+                                     【落盘成 `img://`（ref）；落不出 ⇒ failed++，不编造引用；diag 经 normalizeScanDiag 收窄】
+  一张都没扫到时 → core/rules/scanDiag.formatScanDiag（原 `GT`）→ 阶段文案「没扫到图片（文档 1 · img 32（可用 0） · 候选 32→0）」
+  一张都没扫到时（**且站点声明了 `exportCanvas`**）→ **canvas 兜底**（原 `wp:32610-32651`）
+       → ports.sites[type].exportCanvas（门：`lovartPageKind(href) === CANVAS` ∧ `shouldExportCanvas(diag)`）
+       → 页内 lovart/scripts.ts 的 CANVAS_EXPORT_SCRIPT（原 `Ay`，超时 25s）→ 落盘 `img://` → 追加进 items（**不参与 limit**）
   → state/slices/gallery.addLovartImages        【唯一写入点：去重由纯层兜底】
   → state/persist → usecases/persistLsKey(LS_LOVART_GALLERIES)   【落盘（见 §二）】
 
@@ -425,6 +432,9 @@ bootstrap/container.ts              【唯一装配：端口只在此注入】
 ui/shell/AppShell.tsx（centerStage · doubaoViewVisible 默认 false · openDoubaoView 来自顶栏）
   → ui/panels/BackendView.tsx                【域主视图；源 _Component43 挂载点 _Component48.jsx:171-178】
        ├─ 每账号一个 <webview>                （源 _Component25.jsx）
+       ├─ Lovart 会话条 → ui/panels/LovartSessionBar.tsx   （源 _Component25.jsx:358-382；仅 type=lovart ∧ active）
+       │      → accountOps.openLovartChrome / closeLovartChrome / syncLovartSession → AccountPort → electron/chrome-cdp.js
+       │      【真实 Chrome 人工登录 → cookie 同步进 webview 分区；提示行/禁用/错误码表 = core/rules/lovartSession】
        ├─ 无水印面板 → ui/panels/WatermarkPanel.tsx      （源 SD.jsx）
        ├─ 出新图条   → ui/panels/NewImagesPanel.tsx      （源 _Component26.jsx）
        └─ 静默开关   → ui/panels/AccountPanel.tsx 的 .autostartSwitch

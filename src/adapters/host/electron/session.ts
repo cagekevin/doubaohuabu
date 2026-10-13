@@ -14,7 +14,10 @@ import type {
   FingerprintSessionPayload,
   LicensePort,
   LicenseStatus,
+  LovartChromeOpen,
+  LovartChromePayload,
   LovartContainerPayload,
+  LovartSessionSync,
   PlainSessionPayload,
 } from '@/core/ports/host.port';
 import { isLicenseStatusKind } from '@/core/model/license';
@@ -176,6 +179,77 @@ export function createElectronAccount(): AccountPort {
     fpNetDiag: async (partition: string) => {
       const r = await call<unknown>((api) => api.fpNetDiag(partition));
       return r;
+    },
+
+    // ── 真实 Chrome 集成（原 `_Component25` 的「Lovart 会话条」三键）──
+    /**
+     * ⚠️ 后端把「业务失败」放在**一次成功的 IPC 调用**里（`{ok:false, error, message}`，
+     *    `main.js:2887-2893`）⇒ 归一成**内层判别联合**：`error` 是**错误码**（查文案表用），
+     *    `message` 是后端原文。外层 `Result` 只表达「IPC 通没通」。
+     * ⚠️ 只判 `ok !== true`（fail-closed：漏 `ok` 不能当成功 —— `TD-04-5`）。
+     */
+    ensureLovartChrome: async (payload: LovartChromePayload) => {
+      const api = getHostApi();
+      if (!api) return err('unknown', HOST_MISSING);
+      try {
+        const r = asRecord(await api.ensureLovartChrome(payload));
+        if (r.ok !== true) {
+          const failed: LovartChromeOpen = {
+            ok: false,
+            error: typeof r.error === 'string' ? r.error : COMMON_TEXT.unknownReason,
+            ...(typeof r.message === 'string' ? { message: r.message } : {}),
+          };
+          return ok(failed);
+        }
+        const opened: LovartChromeOpen = {
+          ok: true,
+          alreadyOpen: r.alreadyOpen === true,
+          ...(typeof r.profileDir === 'string' ? { profileDir: r.profileDir } : {}),
+        };
+        return ok(opened);
+      } catch (e) {
+        return err('unknown', toMessage(e), e);
+      }
+    },
+    closeLovartChrome: async (accountId: string) => {
+      const api = getHostApi();
+      if (!api) return err('unknown', HOST_MISSING);
+      try {
+        // ★ fail-closed：后端 `close-lovart-chrome` 两条 return 都带 `ok`（`main.js:2907-2913`）
+        const r = asRecord(await api.closeLovartChrome({ accountId }));
+        if (r.ok !== true) {
+          return err('unknown', typeof r.error === 'string' ? r.error : COMMON_TEXT.unknownReason);
+        }
+        return ok(undefined);
+      } catch (e) {
+        return err('unknown', toMessage(e), e);
+      }
+    },
+    syncLovartSession: async (accountId: string, partition: string) => {
+      const api = getHostApi();
+      if (!api) return err('unknown', HOST_MISSING);
+      try {
+        const r = asRecord(await api.syncLovartSession({ accountId, partition }));
+        if (r.ok !== true) {
+          // 后端给 `error`（原文）+ 可选 `message`（`main.js:2933`）⇒ 优先更具体的那个
+          const failed: LovartSessionSync = {
+            ok: false,
+            message:
+              (typeof r.message === 'string' && r.message) ||
+              (typeof r.error === 'string' && r.error) ||
+              COMMON_TEXT.unknownReason,
+          };
+          return ok(failed);
+        }
+        const synced: LovartSessionSync = {
+          ok: true,
+          count: typeof r.count === 'number' ? r.count : 0,
+          total: typeof r.total === 'number' ? r.total : 0,
+        };
+        return ok(synced);
+      } catch (e) {
+        return err('unknown', toMessage(e), e);
+      }
     },
 
     // ── 账号数据导入 / 导出（原 `OP.jsx` / `PP.jsx`）──

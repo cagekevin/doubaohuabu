@@ -15,6 +15,7 @@ import {
   absolutePositionOf,
   groupBoxOf,
   groupSelectedNodes,
+  releaseDeletedGroupChildren,
   selectedGroupIdOf,
   ungroupNodes,
   type GroupNodeLike,
@@ -189,6 +190,113 @@ describe('ungroupNodes（原 31610）', () => {
     const r = ungroupNodes([...grouped(), node('grp_other', 0, 0, { type: 'group' }), otherChild], 'grp_1');
     if (!r.ok) throw new Error('应当成功');
     expect(r.nodes.find((n) => n.id === 'oc')?.parentId).toBe('grp_other');
+  });
+});
+
+describe('releaseDeletedGroupChildren（原 `onNodesChange` 删组支 26848-26875）', () => {
+  const grouped = () => {
+    const A = node('a', 100, 100, { width: 200, height: 180, selected: true });
+    const B = node('b', 400, 300, { width: 200, height: 180, selected: true });
+    const r = groupSelectedNodes([A, B], () => 'grp_1', 1);
+    if (!r.ok) throw new Error('应当成功');
+    return r.nodes;
+  };
+  /** 模拟 `removeNodes` 的调用口径：`nodes` 已过滤、`before` 是变更前、`removedIds` 是被删 id */
+  const kill = (list: GroupNodeLike[], ...ids: string[]) => {
+    const removed = new Set(ids);
+    return { before: list, survivors: list.filter((n) => !removed.has(n.id)), removed };
+  };
+
+  it('★ 删组 ⇒ 成员摘掉 `parentId`/`extent`、位置**换回绝对坐标**、`selected` **不动**', () => {
+    const { before, survivors, removed } = kill(grouped(), 'grp_1');
+    const out = releaseDeletedGroupChildren(survivors, before, removed);
+    const a = out.find((n) => n.id === 'a') as GroupNodeLike & { extent?: string };
+    expect(a.parentId).toBeUndefined();
+    expect(a.extent).toBeUndefined();
+    expect(a.position).toEqual({ x: 100, y: 100 });
+    // ⚠️ 源在删除路径**不设** `selected`（成组时成员是 `false`）—— 与「取消组」不同
+    expect(a.selected).toBe(false);
+  });
+
+  it('★ **只释放、不删孩子**（成员仍在表里）', () => {
+    const { before, survivors, removed } = kill(grouped(), 'grp_1');
+    const out = releaseDeletedGroupChildren(survivors, before, removed);
+    expect(out.map((n) => n.id)).toEqual(['a', 'b']);
+  });
+
+  it('★ 删**非组**节点 ⇒ 成员**不受影响**（仍是相对坐标 + `parentId`）', () => {
+    const list = [...grouped(), node('x', 9, 9)];
+    const { before, survivors, removed } = kill(list, 'x');
+    const out = releaseDeletedGroupChildren(survivors, before, removed);
+    const a = out.find((n) => n.id === 'a') as GroupNodeLike & { extent?: string };
+    expect(a.parentId).toBe('grp_1');
+    expect(a.extent).toBe('parent');
+  });
+
+  it('★ 被删的**非组**节点即便是某节点的 `parentId` 也**不释放**（源判据 `type === "group"`）', () => {
+    const pseudo = node('p', 500, 500); // 非组节点
+    const child = node('c', 10, 20, { parentId: 'p' });
+    const list = [pseudo, child];
+    const { before, survivors, removed } = kill(list, 'p');
+    const out = releaseDeletedGroupChildren(survivors, before, removed);
+    expect(out.find((n) => n.id === 'c')?.parentId).toBe('p');
+  });
+
+  it('★ **别的组**的成员不受影响', () => {
+    const otherChild = node('oc', 1, 2, { parentId: 'grp_other' });
+    const list = [...grouped(), node('grp_other', 0, 0, { type: 'group' }), otherChild];
+    const { before, survivors, removed } = kill(list, 'grp_1');
+    const out = releaseDeletedGroupChildren(survivors, before, removed);
+    expect(out.find((n) => n.id === 'oc')?.parentId).toBe('grp_other');
+  });
+
+  it('★ 一次删**两个组** ⇒ 两组的孩子各自释放', () => {
+    const g1 = groupSelectedNodes(
+      [
+        node('a', 100, 100, { width: 200, height: 180, selected: true }),
+        node('b', 400, 300, { width: 200, height: 180, selected: true }),
+      ],
+      () => 'grp_1',
+      1,
+    );
+    if (!g1.ok) throw new Error('应当成功');
+    const g2 = groupSelectedNodes(
+      [
+        node('c', 900, 900, { width: 200, height: 180, selected: true }),
+        node('d', 1200, 1200, { width: 200, height: 180, selected: true }),
+      ],
+      () => 'grp_2',
+      2,
+    );
+    if (!g2.ok) throw new Error('应当成功');
+    const list = [...g1.nodes, ...g2.nodes];
+    const { before, survivors, removed } = kill(list, 'grp_1', 'grp_2');
+    const out = releaseDeletedGroupChildren(survivors, before, removed);
+    expect(out.find((n) => n.id === 'a')?.position).toEqual({ x: 100, y: 100 });
+    expect(out.find((n) => n.id === 'c')?.position).toEqual({ x: 900, y: 900 });
+  });
+
+  it('★★ **往返不变**：成组 → 删组释放 ⇒ 成员坐标与最初完全一致', () => {
+    const before = [
+      node('a', 100, 100, { width: 200, height: 180, selected: true }),
+      node('b', 400, 300, { width: 200, height: 180, selected: true }),
+    ];
+    const g = groupSelectedNodes(before, () => 'grp_1', 1);
+    if (!g.ok) throw new Error('应当成功');
+    const { before: pre, survivors, removed } = kill(g.nodes, 'grp_1');
+    const out = releaseDeletedGroupChildren(survivors, pre, removed);
+    for (const orig of before) {
+      const back = out.find((n) => n.id === orig.id)!;
+      expect(back.position).toEqual(orig.position);
+      expect(back.width).toBe(orig.width);
+      expect(back.height).toBe(orig.height);
+    }
+  });
+
+  it('没有任何**组**被删 ⇒ 内容不变', () => {
+    const list = grouped();
+    const out = releaseDeletedGroupChildren(list, list, new Set(['nope']));
+    expect(out.map((n) => n.id)).toEqual(list.map((n) => n.id));
   });
 });
 

@@ -152,6 +152,33 @@ export interface LovartContainerPayload extends PlainSessionPayload {
   proxy?: string;
 }
 
+/** 打开真实 Chrome 的载荷（原 `_Component25.jsx:215-219`） */
+export interface LovartChromePayload {
+  accountId: string;
+  /** 初始打开的网址（原 `_p` = Lovart 站点地址）；不给 ⇒ 保持当前页 */
+  url?: string;
+  /** 空串 = 直连（与 `setProxy` 同语义） */
+  proxy?: string;
+}
+
+/**
+ * 打开真实 Chrome 的**业务结果**（原 `chrome-cdp.ensureLovartChrome`）
+ *
+ * ★ **为什么是嵌套判别联合**（`Result<LovartChromeOpen>` 而不是 `Result<{…}>`）：
+ *   后端把「业务失败」放在**一次成功的 IPC 调用**里（`{ok:false, error, message}`，`main.js:2887-2893`），
+ *   而外层 `Result` 表达的是「IPC 通没通」。**两层都要保留** —— 外层 `err` 是通道故障（重试/重启），
+ *   内层 `ok:false` 是业务失败（带**错误码**，用户可据此看到具体指引）。
+ *   ⚠️ 错误码**不能丢**：它查 `LOVART_SESSION_TEXT.openError` 的文案表（原 `xD`，`shared.js:38652-38662`）。
+ */
+export type LovartChromeOpen =
+  | { ok: true; alreadyOpen: boolean; profileDir?: string }
+  | { ok: false; error: string; message?: string };
+
+/** 同步会话的业务结果（原 `sync-lovart-session`，`main.js:2974`） */
+export type LovartSessionSync =
+  | { ok: true; count: number; total: number }
+  | { ok: false; message: string };
+
 /** 媒体（图片 / 视频外置存储） */
 /**
  * 站点页里**检测到的一条视频**（原 `detect-videos` handler 的 `entry`，`electron/main.js:2350`）
@@ -385,6 +412,30 @@ export interface AccountPort {
   /** 空串 = 直连 */
   setProxy(partition: string, proxy: string): Promise<Result<void>>;
   fpNetDiag(partition: string): Promise<Result<unknown>>;
+
+  // ── 真实 Chrome 集成（原 `_Component25` 的「Lovart 会话条」三键）──
+  //   ★ 后端早已实现（`electron/chrome-cdp.js` + `main.js:2887/2907/2924` + `preload.js:110-112`），
+  //     前端此前**没有调用面** ⇒ 这三条是**唯一消费者**（`ui/panels/BackendView` 的会话条）。
+  //   ⚠️ **只这三条**：`lovartChromeIsOpen` 后端**明写恒返 `{ok:true, open:false}`**（`main.js:2982`
+  //      的注释：「故意恒返 false：采集统一走内嵌 webview」）⇒ 落它 = 落了没人用（判据 B5）。
+  //      `ensureLovartFirefoxProfile` / `openLovartFirefox` / `removeLovartFirefoxProfile` /
+  //      `getFirefoxStatus` 四个 **源前端 0 调用** ⇒ 不落。
+  /**
+   * 用**本机真实 Chrome**打开该账号的登录窗口（原 `window.api.ensureLovartChrome`）
+   *
+   * 目的（源注释）：根治内嵌 webview 被设备信任识别 —— 每个账号一个独立 Chrome profile、
+   * 零 CDP / 零自动化标记，**仅用于人工登录**；登录后由 `syncLovartSession` 把 cookie 同步进 webview。
+   */
+  ensureLovartChrome(payload: LovartChromePayload): Promise<Result<LovartChromeOpen>>;
+  /** 关闭该账号的真实 Chrome 登录窗口（原 `window.api.closeLovartChrome`） */
+  closeLovartChrome(accountId: string): Promise<Result<void>>;
+  /**
+   * 把真实 Chrome 里的会话 cookie 同步进该账号的 webview 分区（原 `window.api.syncLovartSession`）
+   *
+   * ⚠️ 后端会先**关窗**（释放 profile 锁）→ 临时 headless 导出 cookie → **清空分区旧 cookie**
+   *    → **剔除 Cloudflare 指纹绑定 cookie** → 注入（`main.js:2927-2974`）。
+   */
+  syncLovartSession(accountId: string, partition: string): Promise<Result<LovartSessionSync>>;
 
   // ── 账号数据导入 / 导出（原 `OP.jsx` / `PP.jsx`）──
   /**
