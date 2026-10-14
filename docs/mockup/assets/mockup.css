@@ -810,6 +810,14 @@
   max-height: 320px;
   line-height: var(--line-height-relaxed);
 }
+/* 生成面板的下拉**也统一到控件族**（真机它 `composes: btn` ⇒ 与弹窗里的下拉两种形态；
+   设计层改用 field 视觉，全库下拉一致）*/
+.mk-genpanel .GenPanel-select {
+  height: var(--field-height);
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: var(--field-fg);
+}
 .mk-param {
   display: inline-flex;
   align-items: center;
