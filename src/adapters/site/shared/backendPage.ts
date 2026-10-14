@@ -26,7 +26,7 @@ import type {
   FingerprintPageProbe,
 } from '@/core/ports/backendPage.port';
 import { err, ok, type Result } from '@/core/model/result';
-import { sleep } from '@/lib/async';
+import { sleep, withTimeout } from '@/lib/async';
 import { log } from '@/lib/log';
 import { FILE_INPUT_TIMEOUT_MS } from './waits';
 import { FP_DIAG_PROBE } from './fpProbe';
@@ -64,15 +64,6 @@ const SNAPSHOT_WIDTH = 960;
 /** dataURL 最短长度（原 `je` 的 `qe.length < 64` 判定） */
 const SNAPSHOT_MIN_LEN = 64;
 
-/** `Promise.race` 超时（原 `je` 里那段 race 的实现） */
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_res, rej) => {
-      setTimeout(() => rej(new Error('capture-timeout')), ms);
-    }),
-  ]);
-}
 /** 账号 → 已被标记为「曾经就绪」（原 `m.ready`，省掉重复探测） */
 const readyAccounts = new Set<string>();
 /** 账号 → 最近一次后端报错（原 `m.error`，驱动「自动重载一次」） */
@@ -251,7 +242,18 @@ export function createBackendPage(): BackendPagePort {
       if (typeof view.capturePage !== 'function') return ok(false);
       try {
         await sleep(SNAPSHOT_SETTLE_MS);
-        const img = await withTimeout(view.capturePage(), SNAPSHOT_TIMEOUT_MS);
+        // ★ 唯一实现 = `@/lib/async` 的 `withTimeout`（回源 `gn` `shared.js:23587`）：超时/抓图抛错
+        //   都由它转成判别联合（**不抛**）⇒ 下面照旧当"截不到"，但**留痕**（原则 6）。
+        const shot = await withTimeout(
+          view.capturePage(),
+          SNAPSHOT_TIMEOUT_MS,
+          BACKEND_PAGE_TEXT.snapshotTimeoutLabel,
+        );
+        if (!shot.ok) {
+          log.warn('[backendPage] 静默快照失败（遮罩将退化为纯色底）：', shot.error);
+          return ok(false);
+        }
+        const img = shot.value;
         if (!img || (typeof img.isEmpty === 'function' && img.isEmpty())) return ok(false);
         let dataUrl = '';
         try {

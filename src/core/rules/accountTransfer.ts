@@ -14,8 +14,11 @@
 
 import type { Account } from '@/stable/model/account';
 import { ACCOUNT_STATUS, normalizeAccountType } from '@/stable/model/account';
-import { ACCOUNT_ID_PREFIX, ACCOUNTS_EXPORT_VERSION, IMPORTED_PARTITION_PREFIX } from '@/stable/contracts/schemas';
+import { ACCOUNT_ID_PREFIX, ACCOUNTS_EXPORT_VERSION } from '@/stable/contracts/schemas';
 import { ACCOUNT_TRANSFER_TEXT } from '@/constants/text';
+// ⚠️ 2026-10-14：分区键的形状**收口到** `core/rules/partition.ts`（本文件原先也各写一种形状）
+import { makeImportedPartition } from './partition';
+import { capsOf } from './siteCaps';
 
 /**
  * 导入时的状态别名（原 `OP.jsx:624-628` 的 `Pe`）
@@ -41,11 +44,6 @@ export function normalizeImportedStatus(raw: unknown): string {
 /** 导入时补的账号 id（原 `OP.jsx:635` 的 `` `acc_${bt}_${mt}` ``，`bt` = 当前时间的 base36） */
 export function makeImportedAccountId(nowBase36: string, index: number): string {
   return `${ACCOUNT_ID_PREFIX}${nowBase36}_${index}`;
-}
-
-/** 导入时补的会话分区（原 `OP.jsx:636` 的 `` `persist:import_${id}` ``） */
-export function makeImportedPartition(accountId: string): string {
-  return `${IMPORTED_PARTITION_PREFIX}${accountId}`;
 }
 
 /** 待建账号的完整形状（= `addAccount` 归一后的结果） */
@@ -99,7 +97,8 @@ export function toImportedAccount(
     fpSalt,
     ...(entry.fingerprint ? { fingerprint: entry.fingerprint as Account['fingerprint'] } : {}),
     // ★ 与源一致：`url` 恒存在；非 `other` 为空串
-    url: type === 'other' && typeof entry.url === 'string' ? entry.url : '',
+    // 只有**没有站点固定地址**的类型（自定义网站）才保留导入的网址（判据 = 能力表）
+    url: !capsOf(type).hasFixedUrl && typeof entry.url === 'string' ? entry.url : '',
   };
 
   return { account, cookies: Array.isArray(entry.cookies) ? entry.cookies : [] };
@@ -118,7 +117,7 @@ function collectUsed(existing: readonly Account[]): UsedKeys {
   const names = new Set<string>();
   for (const a of existing) {
     ids.add(a.id);
-    if (a.partition) partitions.add(a.partition);
+    partitions.add(a.partition);
     names.add(a.name);
   }
   return { ids, partitions, names };
@@ -148,14 +147,14 @@ export function selectImportableAccounts(
     const draft = toImportedAccount(raw as Record<string, unknown>, { ...opts, index: i });
     const { account } = draft;
 
-    if (used.ids.has(account.id) || used.names.has(account.name) || used.partitions.has(account.partition ?? '')) {
+    if (used.ids.has(account.id) || used.names.has(account.name) || used.partitions.has(account.partition)) {
       skipped++;
       continue;
     }
 
     used.ids.add(account.id);
     used.names.add(account.name);
-    if (account.partition) used.partitions.add(account.partition);
+    used.partitions.add(account.partition);
     drafts.push(draft);
   }
 
@@ -168,7 +167,8 @@ export interface ExportedAccountEntry {
   name: string;
   type: string;
   status: string;
-  partition: string | null;
+  /** ★ 恒有值（`Account.partition` 的同一条不变量） */
+  partition: string;
   addedAt: number;
   fpSalt: number;
   fingerprint: Account['fingerprint'] | null;
@@ -180,7 +180,7 @@ export function toExportedAccountEntry(account: Account, cookies: readonly unkno
   return {
     id: account.id,
     name: account.name,
-    type: account.type || 'doubao',
+    type: normalizeAccountType(account.type),
     status: account.status,
     partition: account.partition,
     addedAt: account.addedAt,

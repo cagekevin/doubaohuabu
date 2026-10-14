@@ -29,6 +29,19 @@ const COMPOSER_SELECTORS = [
   'textarea[data-id="root"]',
 ] as const;
 
+/** 输入框候选的页内「命中即停」链（唯一拼法）—— 发送脚本与探针**共用同一份候选** */
+const COMPOSER_LOOKUP_SRC = COMPOSER_SELECTORS.map(
+  (s) => `document.querySelector(${JSON.stringify(s)})`,
+).join(' || ');
+
+/**
+ * 「页面有没有输入框」探针（`SitePort.probe` 用）
+ *
+ * ⚠️ 它**不是第二份判据**：与 `gptSendScript` 的 `findComposer` 问的是同一件事（哪些元素算
+ *    GPT 的输入框）⇒ 单写一份就会出现"页面只有第三个候选时，脚本发得出、探针报不可用"。
+ */
+export const GPT_COMPOSER_PROBE_SCRIPT = `({ href: location.href, hasComposer: !!(${COMPOSER_LOOKUP_SRC}) })`;
+
 /** 发送按钮候选（原 `sO` 的 `l()`） */
 const SEND_BUTTON_SELECTOR =
   'button[data-testid="send-button"], button[aria-label*="Send" i], button[aria-label*="发送" i]';
@@ -49,9 +62,7 @@ export function gptSendScript(text: string): string {
     "    var text = String(raw == null ? '' : raw);",
     '',
     '    var findComposer = function () {',
-    `      var el = document.querySelector(${JSON.stringify(COMPOSER_SELECTORS[0])}) ||`,
-    `               document.querySelector(${JSON.stringify(COMPOSER_SELECTORS[1])}) ||`,
-    `               document.querySelector(${JSON.stringify(COMPOSER_SELECTORS[2])});`,
+    `      var el = ${COMPOSER_LOOKUP_SRC};`,
     '      if (!el) return null;',
     "      return { el: el, kind: el.tagName === 'TEXTAREA' ? 'textarea' : 'ce' };",
     '    };',

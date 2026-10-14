@@ -20,10 +20,13 @@
  *   改动面 = 本次发送的那一次请求 ＋ 页面自身的控件。仍**只在目标账号／目标参数**上启用（见 `isDolaForceTarget`）。
  * ⚠️ **失败一律不抛**（照源）：注入失败 ⇒ `enableDolaForce30s` 返 `false`（走常规链路发送）。
  * ⚠️ **版本兼容风险高**：`JP`/`QP` 逐字对齐 Dola 的报文形状与面板 DOM ⇒ **别改它们**（改就是重新发明）。
+ *    —— 唯一可改的是 `JP` 里**判站点域名**那一处：值随调用载荷喂入（见 `JP` 头注），脚本里不许再写域名。
  */
 import { isDolaForceTarget } from '@/core/rules/dolaForce';
 import type { SiteType } from '@/stable/model/account';
 import { log } from '@/lib/log';
+// ★ 站点域名的**值**（层 1 真源）—— 只用于**喂给页内脚本**，脚本里没有域名字面量（`TD-05-12`）
+import { SITE_HOSTS } from '@/constants/siteHosts';
 import { webviewEval, type WebviewElement } from '../shared/webview';
 
 /** 配置写进页面的键名（原 `Yc`，`shared.js:34754`） */
@@ -111,7 +114,8 @@ export async function enableDolaForce30s(
   if (!view || !isDolaForceTarget(kind, params)) return false;
   const dur = Number((params ?? {}).duration) || 0;
   try {
-    await execJs(view, DOLA_FORCE_SCRIPT, 'dola-force-patch');
+    // ★ **域名的值随调用载荷喂入**（脚本是函数表达式、自己跑不动）—— 值住层 1 `constants/siteHosts`
+    await execJs(view, `(${DOLA_FORCE_SCRIPT})(${JSON.stringify(SITE_HOSTS)})`, 'dola-force-patch');
     await execJs(view, buildDolaForceCfgScript(dur), 'dola-force-cfg');
     return true;
   } catch (e: unknown) {
@@ -158,12 +162,34 @@ export async function runDolaForcePanelUi(view: WebviewElement | null): Promise<
  * 网络层强开补丁（原 `JP`，`shared.js:34763-34905`）—— **逐字搬入**（只把 `${Yc}` 换成 `DOLA_FORCE_KEY`）
  *
  * ⚠️ **别改**：它逐字段对齐 Dola 的 `/chat/completion` 报文（`chat_ability[ability_type=17]` 等）。
+ *
+ * ★ **本件是函数表达式，不是自执行脚本**：域名的**值**不在这里 —— 注入时由调用方把层 1 真源
+ *   （`constants/siteHosts`）当参数喂进来（同 `electron/dola-duration-main.js` 的**宿主传参**先例）。
+ *   ⇒ 本字符串里**不许写域名**；`slice(-9)` 式**手写后缀长度**在这里**没有位置**
+ *   （换域／加子域会静默失效，判定恒假无痕 —— `TD-05-12`）。
+ *   ⚠️ 为什么不能 import：注入脚本跑在 guest 主世界，够不着渲染侧的模块系统。
+ *   ⚠️ 留的这份是**判定形状**（与 `core/rules/siteHost`、主进程 `site-hosts.js` 同口径）——
+ *      跨世界消不掉，登记为残留（见 `docs/判据登记表.md` §3「渲染侧站点域名」行）。
  */
-const DOLA_FORCE_SCRIPT = `(function(){
+const DOLA_FORCE_SCRIPT = `(function (SITE_HOSTS) {
   if (typeof window === 'undefined') return false;
   if (window.__dolaCanvasForceInstalled) return true;
   window.__dolaCanvasForceInstalled = true;
   var KEY = '${DOLA_FORCE_KEY}';
+  // host 归一化（去 www. 前缀 + 去尾点 + 小写）—— 与 core/rules/siteHost 同口径
+  function normalizeHost(raw) {
+    return String(raw || '').replace(/^www\\./i, '').replace(/\\.$/, '').toLowerCase();
+  }
+  // 某个 host 是不是某个源（含子域）—— 域名的**值**全部来自注入的 SITE_HOSTS
+  function isHostOf(host, source) {
+    var bases = SITE_HOSTS[source];
+    if (!bases) return false;
+    for (var i = 0; i < bases.length; i++) {
+      var base = bases[i];
+      if (host === base || host.endsWith('.' + base)) return true;
+    }
+    return false;
+  }
   function cfg() {
     var c = null;
     try { c = window[KEY]; } catch (e) { return null; }
@@ -180,8 +206,9 @@ const DOLA_FORCE_SCRIPT = `(function(){
   function isTargetUrl(u) {
     try {
       var x = new URL(String(u), location.href);
-      var h = x.hostname.replace(/^www\\./i, '').toLowerCase();
-      if (!(h === 'dola.com' || h.slice(-9) === '.dola.com' || h === 'doubao.com' || h.slice(-11) === '.doubao.com')) return false;
+      var h = normalizeHost(x.hostname);
+      // 两个源都判：闸（isDolaForceTarget）只放行 dola 账号，但 dola 页面的请求也落在**豆包系域**上（源如此）
+      if (!isHostOf(h, 'dola') && !isHostOf(h, 'doubao')) return false;
       // 路径以 /chat/completion 结尾即命中（兼容 /api/chat/completion 等前缀变体）；
       // 误伤面为零 —— 后续还要求 body 是 JSON 且含 chat_ability[ability_type=17]
       return /\\/chat\\/completion$/.test(x.pathname.replace(/\\/+$/, ''));
@@ -301,7 +328,7 @@ const DOLA_FORCE_SCRIPT = `(function(){
     }
   } catch (e2) {}
   return true;
-})()`;
+})`;
 
 /**
  * 面板 UI 自动化（原 `QP`，`shared.js:34906-35352`）—— **逐字搬入**（只把 `${Yc}` 换成 `DOLA_FORCE_KEY`）

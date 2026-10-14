@@ -9,6 +9,8 @@
  */
 
 import type { Ports } from '@/core/ports';
+// ★ 默认通道的唯一真源（数据层：`core/model/defaults`）—— 本层不写通道字面量
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 import type { AppStore } from './store';
 import { sendToSiteDeps } from './sendDeps';
 import { generateImage, generateVideo, type GenDeps } from '@/core/usecases/generate';
@@ -206,7 +208,7 @@ export function createGenController(
           // 这里脱离了 `node.type === 'genvideo'` 的收窄 ⇒ 显式取一次（它只在这个分支被调）
           model: videoData?.model,
           duration: videoData?.duration,
-          channel: isApi ? 'api' : 'doubao',
+          channel: isApi ? 'api' : DEFAULT_CHANNEL,
           sourceNodeId,
           providerId: apiProviderId,
           providerName: apiProviderName,
@@ -226,7 +228,7 @@ export function createGenController(
               count: clampImageCount(node.data.imageCount),
               model: node.data.igModel,
               resolution: node.data.igResolution ?? DEFAULT_IMAGE_RESOLUTION,
-              channel: isApi ? 'api' : 'doubao',
+              channel: isApi ? 'api' : DEFAULT_CHANNEL,
               sourceNodeId,
               providerId: apiProviderId,
             })
@@ -245,7 +247,7 @@ export function createGenController(
         /** 提交参数（原 `_Component45.jsx:900-909` 的 `fe`）—— 网页/API 两通道共用 */
         const genParams: ImageGenParams = {
           text: apiText,
-          channel: isApi ? 'api' : 'doubao',
+          channel: isApi ? 'api' : DEFAULT_CHANNEL,
           aspectRatio: ratio ?? '',
           styleIds,
           imageCount: count,
@@ -299,7 +301,8 @@ export function createGenController(
             ? store.useStore.getState().accounts.find((a) => a.id === res.value.accountId)
             : undefined;
           store.useStore.getState().pushToast(
-            GEN_PANEL_TEXT.genTimeout(acc?.type === 'dola' ? 'Dola' : '豆包'),
+            // ★ 只给**站点类型**，站点名与文案由 `constants` 决定（本层零站点名、零文案）
+            GEN_PANEL_TEXT.genTimeout(acc?.type ?? ''),
             5000,
             'warn',
           );

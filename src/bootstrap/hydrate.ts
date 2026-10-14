@@ -23,6 +23,7 @@ import type { Ports } from '@/core/ports';
 import type { StorageRead } from '@/core/ports/storage.port';
 import { PERSIST, type AppStore } from '@/state';
 import { resetStaleJobs } from '@/stable/migrations';
+import { ensureAccountPartitions } from '@/core/rules/accountRoster';
 import { validateNodes } from '@/core/rules/node';
 import { ensureLovartGalleries } from '@/core/rules/lovartGallery';
 import { normalizePoolStrategy, pickInitialActiveAccount } from '@/core/rules/accountPick';
@@ -141,6 +142,18 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   const reset = resetStaleJobs<Project>(projects);
   notes.push(...reset.notes);
 
+  // ── 2.1 启动归位：给缺分区的账号补一个账号专属分区（见 `ensureAccountPartitions` 头注）──
+  //   ⚠️ 必须在**写回之前**：补出来的值要落盘，**数据本身**才满足 `Account.partition: string`
+  //      这条不变量 ⇒ 消费侧（发送入口 / `<webview partition>`）因此**一行兜底都不需要**。
+  //   ⚠️ 不这么做 ⇒ 盘上那些 `partition: null` 的账号**永久不可用**（发送入口第一句就拒），
+  //      用户唯一出路是删号重建 —— 那是把本仓缺陷的代价转嫁给用户。
+  const accFix = ensureAccountPartitions(accounts, {
+    now: ports.clock.now(),
+    // ⚠️ 随机源在**接线层**取：原则 4 只禁 `core` / `stable` 自取（与 `container` 的 `roster()` 同法）
+    rand: () => Math.random(),
+  });
+  notes.push(...accFix.notes);
+
   // ── 2.5 ★ **节点体检**（接线 `TD-02-13`）──
   //   ⚠️ 此前 `core/rules/node.ts` 的 `validateNode` / `validateNodes` 已实现且**有单测**，
   //      但**零生产消费** ⇒ `stable/model/node.ts` 里「字段级不变量由 … 在**运行时**校验」
@@ -169,13 +182,24 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
     }
   }
 
+  // ★ 账号归位**同理**：`doubao-accounts` 读不出来时**绝不写回**（否则覆盖可恢复的坏数据）
+  if (accFix.changed && !corruptKeys.includes(LS_ACCOUNTS)) {
+    try {
+      storage.writeRaw(LS_ACCOUNTS, JSON.stringify(accFix.value));
+    } catch (e) {
+      // ★ 原样透传（原则 6）
+      notes.push(`[hydrate] 账号归位结果写回失败 → ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   // ── 4. 灌入 store（**经 state 的具名 action** —— 本文件在 bootstrap，不得写 store）──
   //   ⚠️ 这里**没有** `setState` 可用：`AppStoreHook` 的对外类型已摘掉它
   //      ⇒ 直写是**编译错误**（原则 1 的**结构承载**，不是靠闸拦）。
   const first = reset.value[0];
   store.useStore.getState().loadHydrated({
     projects: reset.value,
-    accounts,
+    // ⚠️ 用**归位后**的数组（消费侧直读 `partition` ⇒ store 里必须是补齐过的）
+    accounts: accFix.value,
     groups,
     proxyPool,
     poolStrategy,
@@ -194,7 +218,7 @@ export function hydrate(store: AppStore, ports: Ports): HydrateResult {
   //      `ui` 切片那一写入 `activeAccountId: null` 只是**兜底**，真正的初值语义在
   //      `core/rules/accountPick.pickInitialActiveAccount`（三级回退：已登录+autoStart → 已登录 → 首个）。
   //   ⚠️ 不另写第二份判定（"已登录"复用 `isAccountUsable`）；也不新增第二个读盘点。
-  store.useStore.getState().setActiveAccountId(pickInitialActiveAccount(accounts));
+  store.useStore.getState().setActiveAccountId(pickInitialActiveAccount(accFix.value));
 
-  return { notes, changed: reset.changed, corruptKeys };
+  return { notes, changed: reset.changed || accFix.changed, corruptKeys };
 }

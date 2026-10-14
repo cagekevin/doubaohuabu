@@ -15,16 +15,20 @@
 
 const fs = require('fs');
 const path = require('path');
+const { handle } = require('./ipc');
 
 // 各源（account type）对应的 host 与三类目标 URL
 // dola / doubao 共用同一套路径前缀，仅 host 不同（移植自插件 service-worker.js 的双源定义）
-const SOURCE_HOSTS = Object.freeze({
-  dola: 'dola.com',
-  doubao: 'doubao.com'
-});
+// ★ **域名表不在本文件**（2026-10-14 收口）：收口到 `electron/site-hosts.js`
+//   （层 1 域名 = `SITE_HOSTS`；层 2 归属判定 = `isHostOf` / `sourceOfHost` / `hostOfUrl`）。
+//   ⚠️ 原先这里并排放着 `SOURCE_HOSTS` **和** `ATTACH_HOSTS`（同一串字面量抄两遍）、
+//      外加两处各自的 `endsWith('.' + h)` 子域规则 ⇒ 5 个中心（另有 `main.js` 3 处内联）。
+const { SITE_HOSTS: SOURCE_HOSTS, normalizeHost, hostOfUrl, isHostOf, isKnownHost } = require('./site-hosts');
 // 无水印媒体抽取时允许回源的 fallback_api 主机（防止抽错域）：
 //   dola  → dola.com / byteintlapi.com
 //   doubao → doubao.com / byteintlapi.com / snssdk.com（移植自插件 FALLBACK_API_ROOT_HOSTS）
+// ⚠️ 这是**额外的 CDN／接口域**（语义独立于"源主域"）⇒ 本表保留；
+//    但源主域**引用层 1**，不重抄字面量（改主域只改 `site-hosts.js`）。
 const FALLBACK_API_ROOT_HOSTS = Object.freeze({
   dola: Object.freeze([SOURCE_HOSTS.dola, 'byteintlapi.com']),
   doubao: Object.freeze([SOURCE_HOSTS.doubao, 'byteintlapi.com', 'snssdk.com'])
@@ -1043,11 +1047,18 @@ const attachedGuests = new WeakSet();
 
 function safeGetHost(wc) {
   try {
-    return new URL(wc.getURL() || '').hostname.toLowerCase().replace(/\.$/, '');
+    // ★ 归一化收口到层 2（`normalizeHost`）—— 原先这里自带一套（小写 + 去尾点、**不去 `www.`**），
+    //   是「host 归一化」在 electron 侧的第二个中心。
+    return normalizeHost(hostOfUrl(wc.getURL() || ''));
   } catch {
     return '';
   }
 }
+
+/** 媒体来源推断的默认源（原实现写死 `'doubao'`）—— 具名以免散落 */
+const DEFAULT_MEDIA_SOURCE = 'doubao';
+/** 「byteintl」系域名归 dola（原实现在 `main.js` 内联的提示词）—— 具名以免散落 */
+const BYTEINTL_HINT = 'byteintl';
 
 // 取该 webview 的会话：第二跳取直链时用 net.fetch + 该 session，保证与页面同一条网络路径
 // （同代理、同 DNS、同证书校验），并复用其 cookie jar。
@@ -1059,12 +1070,36 @@ function safeGetSession(wc) {
   }
 }
 
+/**
+ * 层 3 · **媒体 URL → 来源推断**（原先内联在 `main.js` 的 `findWebviewSessionForUrl` 里，3 遍）
+ *
+ * 判据（**保留原语义**）：目标 URL 自身是 dola ⇒ `dola`；是豆包 ⇒ `doubao`；
+ *   否则（多为 CDN 域名，如 `tosvbytedou.com` / `douyinpic.com`）看 host 是否含 `byteintl`
+ *   ⇒ `dola`；其余 ⇒ `doubao`（默认源）。
+ * ⚠️ 原实现是 `hostname.includes('dola') || hostname.includes('byteintl')` 的**子串**判定
+ *   （`notdola.com` 会被误判成 dola）⇒ 本实现改为**按层 1 主域的子域规则**判定，只保留
+ *   `byteintl` 这一条明确提示 —— **同一策略的更严实现**，不是新策略。
+ * ⚠️ 为什么它不是"通用工具"而必须住这里：它答的是**媒体**的来源（CDN 域名归谁下载），
+ *   属 dola-media 这个领域的策略；`main.js` 只是它的**消费者**。
+ */
+function mediaSourceOfUrl(rawUrl) {
+  const host = normalizeHost(hostOfUrl(rawUrl));
+  if (!host) return DEFAULT_MEDIA_SOURCE;
+  if (isHostOf(host, 'dola')) return 'dola';
+  if (isHostOf(host, 'doubao')) return 'doubao';
+  return host.includes(BYTEINTL_HINT) ? 'dola' : DEFAULT_MEDIA_SOURCE;
+}
+
 // 是否值得对该 guest 挂 CDP 拦截：只认豆包 / dola 域名。
 // ⚠️ 这条过滤是必要的：早期实现在 did-attach-webview 时「无差别」给每个 webview
 //   （含 Lovart、Tapnow 以及登录弹窗的临时 webview）挂 debugger，而这些 guest 会在
 //   弹窗关闭时被销毁 —— 带 debugger 的 guest 被销毁会让浏览器进程 CHECK 失败
 //   （表现为 EXC_BREAKPOINT / SIGTRAP 闪退，崩溃前日志可见 "detached: target closed"）。
-const ATTACH_HOSTS = ['doubao.com', 'dola.com'];
+// ★ **按"源"声明，不再抄域名**（2026-10-14 收口）：原先这里是与 `SOURCE_HOSTS` 并排的
+//   `['doubao.com','dola.com']`（**同一串字面量第二遍**），且自带一套 `=== h || endsWith('.'+h)`
+//   子域规则（第三份）。现在只声明**哪些源要挂**；域名与子域规则都取自层 1／2。
+//   ⇒ 要改"挂谁"，改这一行；要改"域名是什么"，改 `site-hosts.js`。
+const ATTACH_SOURCES = ['dola', 'doubao'];
 function shouldAttach(guest) {
   try {
     // ⚠️ 曾经的坑：`if (!guest || guest.isDestroyed || guest.isDestroyed())` 里
@@ -1077,13 +1112,37 @@ function shouldAttach(guest) {
     const u = guest.getURL() || '';
     if (!u || u === 'about:blank') return false; // 尚未导航：等 did-navigate 再判
     const host = safeGetHost(guest);
-    return ATTACH_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+    // 子域规则（`host === base || host.endsWith('.' + base)`）的唯一实现在层 2
+    return ATTACH_SOURCES.some((source) => isHostOf(host, source));
   } catch {
     return false;
   }
 }
 
-// 对单个 webview（guest WebContents）挂载 CDP Fetch 拦截（幂等）
+/**
+ * 层 3 · **跨文件契约的门面**（2026-10-14 收口）：某个 guest 就绪 ⇒ 该挂就挂
+ *
+ * ★ **为什么要门面**：跨文件调用的名字此前是**内部实现名**（`attachGuestDebugger`）
+ *   ⇒ 内部**改名 / 拆分 / 重组**会牵动 `main.js`；漏改一处就断（表现为 IPC 每次都抛、
+ *   被 handler 的 catch 收成一条 warn —— 真发生过）。收成门面后，跨文件只认**这一个意图**
+ *   （"这个 guest 就绪了"）⇒ 内部实现怎么改都不牵动 `main.js`。
+ * ⚠️ **收益的边界（别读大了）**：它只覆盖「内部改名 / 重组」；**新增对外能力仍要动 `module.exports`**
+ *   —— CJS 的静态导出面就是一份手写列表，无法更小。（另一条路是让 `init` **返回 api 对象**，
+ *   但那会让每个调用点都得 `dolaMedia?.xxx` ⇒ **引入 null 兜底**，不采用。）
+ * ⚠️ 「什么时候该挂」的判据**不在调用方**：由内部 `shouldAttach`（按 `ATTACH_SOURCES` 的源声明）决定。
+ *   本门面与 `initDolaMediaCapture` 里 `did-attach-webview` 那条入口，调的是**同一个幂等实现**。
+ */
+function onGuestReady(guest) {
+  attachGuestDebugger(guest);
+}
+
+/**
+ * 对单个 webview（guest WebContents）挂载 CDP Fetch 拦截（**内部实现** · 幂等：`attachedGuests` 去重）
+ *
+ * ⚠️ 跨文件契约是上面的 `onGuestReady`（意图级门面）—— **本函数故意不进 `module.exports`**：
+ *   它的名字只属于本文件，改它不必动 `main.js`。
+ * ⚠️ 过滤（`shouldAttach`）与幂等都在本函数内完成 ⇒ 调用方**不判、不兜**。
+ */
 function attachGuestDebugger(guest) {
   if (!guest || typeof guest.debugger === 'undefined') {
     console.warn('[dola-media] attachGuestDebugger 跳过：guest 无效或无 debugger 属性');
@@ -1189,25 +1248,280 @@ function initDolaMediaCapture({ getMainWindow }) {
       guest.once('did-navigate-in-page', tryLater);
     } catch (e) { console.warn('[dola-media] 注册导航重试监听失败（时序竞态下可能漏挂 debugger）:', (e && e.message) || e); }
   });
-  // 兜底：延迟扫描当前已存在的 webview（防 init 时序竞态漏挂）
-  setTimeout(() => {
-    try {
-      for (const wc of win.webContents.getAllWebContents()) {
-        if (wc === win.webContents) continue; // 跳过主窗口自身
-        const host = safeGetHost(wc);
-        if (host === 'doubao.com' || host === 'dola.com') attachGuestDebugger(wc);
-      }
-    } catch (_) {
-      /* 诊断增强：挂调试器失败不影响主流程 */
-    }
-  }, 1500);
+  /*
+   * ⚠️ 原处有一条「延迟 1.5s 遍历 `getAllWebContents()` 补挂」的兜底 —— **已删（2026-10-14，弯路留痕）**：
+   *
+   *   ① **它从来没生效**：原文写的是 `win.webContents.getAllWebContents()`，而它是 `webContents`
+   *      **模块的 static 方法**（`electron.d.ts:16276` 的 `static getAllWebContents(): WebContents[]`）
+   *      ⇒ 挂到**实例**上调用必抛 `TypeError`。本仓别处的正确写法：`main.js:1996` / `:2007`
+   *      （`webContents.getAllWebContents()`）—— 同一用法两份、一对一错，未收口。
+   *   ② **它抛错后静默**：外面那层 `catch (_)` 的体内**只有一句注释**（「诊断增强：挂调试器失败不影响主流程」）、
+   *      **零日志** ⇒ 这个 TypeError 连一行痕迹都没留下（「禁静默吞」形态①）。
+   *   ③ **它要补的"竞态"不成立**：`initDolaMediaCapture` 紧跟 `createWindow()` 调用
+   *      （`main.js:1128` / `:1130`），而 `<webview>` 要等渲染层加载后才 attach
+   *      ⇒ 必然晚于本监听器注册，`did-attach-webview` 不会漏。
+   *   ⇒ 结论：**不是修它，是删它** —— 修好只会让一个**不必要的**步骤开始运行（复杂度净增）。
+   *     「谁该挂」的判据在 `shouldAttach`（按 host 白名单，本文件内），入口有两条且调的是
+   *     **同一个幂等函数**（`attachedGuests` 去重）：这里的 `did-attach-webview`（**早**、
+   *     URL 还是 about:blank ⇒ 下面 `did-navigate` 再试）与渲染层 `dom-ready` 那条 IPC
+   *     （**本文件** `handle('attach-dola-debugger')` **自注册**，**准**）—— 两条互补，都留。
+   */
   console.log(
     '[dola-media] 已注册 did-attach-webview，将按 webview 动态挂载 CDP 拦截（修复分区名不匹配 + session.debugger 不触发问题）'
   );
 }
 
-function getDolaMediaItems() {
-  return latestItems.slice();
+// ───────────────────── 无水印资源：下载 / 设置（域内自注册 IPC） ─────────────────────
+// ★ 为什么这些 handler 住这里（TD-13-27）：它们的每条判据都是**媒体域策略** ——
+//   源推断（本文件的 `mediaSourceOfUrl`）· 会话挑选（豆包／dola 的 webview）·
+//   下载落点与自动命名 · 下载目录设置（`<userData>/settings.json`）。
+//   ⇒ 宿主壳只说「初始化这个域」（`initDolaMedia`），不再知情域内细节。
+
+let settingsJsonPath = '';
+
+function readSettings() {
+  try {
+    if (fs.existsSync(settingsJsonPath)) {
+      const obj = JSON.parse(fs.readFileSync(settingsJsonPath, 'utf8'));
+      if (obj && typeof obj === 'object') return obj;
+    }
+  } catch (e) {
+    console.warn('[dola-media] 读取 settings.json 失败，使用默认：', e.message || e);
+  }
+  return {};
+}
+
+function writeSettings(obj) {
+  try {
+    const dir = path.dirname(settingsJsonPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(settingsJsonPath, JSON.stringify(obj, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    console.warn('[dola-media] 写入 settings.json 失败：', e.message || e);
+    return false;
+  }
+}
+
+/** 默认下载目录：系统 Downloads；用户设置过则用 settings.json 里的 downloadPath */
+function getEffectiveDownloadDir() {
+  const { app } = require('electron');
+  const s = readSettings();
+  if (s && typeof s.downloadPath === 'string' && s.downloadPath.trim()) {
+    const trimmed = s.downloadPath.trim();
+    try {
+      if (!fs.existsSync(trimmed)) fs.mkdirSync(trimmed, { recursive: true });
+      if (fs.statSync(trimmed).isDirectory()) return trimmed;
+    } catch (_) { /* 落到默认 */ }
+  }
+  const def = app.getPath('downloads');
+  // ★ TD-16-37：默认下载目录建不出来**留痕**（否则后续下载失败时无从判断是"目录不存在"）
+  try { if (!fs.existsSync(def)) fs.mkdirSync(def, { recursive: true }); } catch (e) { console.warn('[download] 默认下载目录创建失败:', (e && e.message) || e); }
+  return def;
+}
+
+/**
+ * 自动编号命名：序号在 session 内单调递增；目标名已被旧文件占用就继续往后找。
+ * @returns {{ name: string, fullPath: string, nextCounter: number }}
+ */
+function nextAutoFilePath(dir, typePrefix, ext, sessionCounter) {
+  let n = (sessionCounter || 0) + 1;
+  // 防止极端情况下无限循环（>1 万）
+  for (let i = 0; i < 100000; i++) {
+    const name = `${typePrefix}_${String(n).padStart(2, '0')}${ext}`;
+    const full = path.join(dir, name);
+    if (!fs.existsSync(full)) return { name, fullPath: full, nextCounter: n };
+    n++;
+  }
+  throw new Error('自动命名空间已用尽（>100000），请清理下载目录');
+}
+
+// 会话级计数器落盘到 settings.json ⇒ 跨重启延续序号（否则重启后又从 01 开始、覆盖旧文件）
+function getSessionCounter() {
+  const s = readSettings();
+  return Number.isInteger(s.dolaMediaCounter) && s.dolaMediaCounter >= 0 ? s.dolaMediaCounter : 0;
+}
+function bumpSessionCounter(n) {
+  const s = readSettings();
+  s.dolaMediaCounter = n;
+  writeSettings(s);
+}
+
+/**
+ * 找豆包／dola 的 guest webview 的 session（找不到 ⇒ `null`，**不编一个**）。
+ *
+ * 媒体 URL 是 CDN 域名（`tosvbytedou.com` / `douyinpic.com` 等）⇒ 不能按 hostname 匹配；
+ * 改为找豆包／dola 的 webview，用其 session 下载即可继承 cookie / 认证。
+ */
+function findWebviewSessionForUrl(targetUrl) {
+  const { webContents } = require('electron');
+  try {
+    const win = mainWindowGetter && mainWindowGetter();
+    if (!win || win.isDestroyed()) return null;
+    // ★ 来源推断**不在本函数**：`mediaSourceOfUrl`（层 3 —— 媒体 URL 归哪个源，是媒体域策略）
+    const preferSource = mediaSourceOfUrl(targetUrl);
+    const findSession = (match, label) => {
+      for (const wc of webContents.getAllWebContents()) {
+        if (wc === win.webContents) continue;
+        try {
+          const url = wc.getURL() || '';
+          if (match(url)) {
+            console.log(`[dola-media] ${label}找到 webview：host=${hostOfUrl(url)} id=${wc.id} partition=${wc.session?.partition}`);
+            return wc.session;
+          }
+        } catch (_) { /* skip */ }
+      }
+      return null;
+    };
+    // ★ 判定取自层 1／2 —— 先把 URL 取成 host 再判（原先在**整条 URL**上做子串匹配，
+    //   `https://evil.test/?u=doubao.com` 会被当成豆包页）
+    const exact = findSession((url) => isHostOf(hostOfUrl(url), preferSource), '精确');
+    if (exact) return exact;
+    // 兜底：找不到精确来源时，尝试任意 doubao/dola webview
+    const anyKnown = findSession((url) => isKnownHost(hostOfUrl(url)), '兜底');
+    if (anyKnown) return anyKnown;
+    console.warn(`[dola-media] 未找到任何 doubao/dola webview（preferSource=${preferSource}）`);
+  } catch (err) {
+    console.warn('[dola-media] findWebviewSessionForUrl 异常:', err.message || err);
+  }
+  return null;
+}
+
+/** 用指定 session 下载文件（支持重定向跟随；`net.request({ session })` 继承 cookie） */
+function downloadUrlWithSession(url, filePath, dlSession) {
+  const { net, session: sessMod } = require('electron');
+  const ses = dlSession || sessMod.defaultSession;
+  console.log(`[dola-media] downloadUrlWithSession ses=${ses ? (ses.partition || '(defaultSession)') : 'UNDEFINED'}`);
+  return new Promise((resolve) => {
+    try {
+      if (!ses) {
+        resolve({ ok: false, error: 'session 不可用（null）' });
+        return;
+      }
+      const request = net.request({ url, method: 'GET', session: ses });
+      const chunks = [];
+      request.on('response', (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          resolve(downloadUrlWithSession(response.headers.location, filePath, ses));
+          return;
+        }
+        if (response.statusCode !== 200) {
+          resolve({ ok: false, error: 'http_' + response.statusCode });
+          return;
+        }
+        response.on('data', (d) => chunks.push(d));
+        response.on('end', () => {
+          try {
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(filePath, Buffer.concat(chunks));
+            resolve({ ok: true, path: filePath, size: Buffer.concat(chunks).length });
+          } catch (writeErr) {
+            resolve({ ok: false, error: writeErr.message || String(writeErr) });
+          }
+        });
+        response.on('error', (err) => resolve({ ok: false, error: err.message || String(err) }));
+      });
+      request.on('error', (err) => resolve({ ok: false, error: err.message || String(err) }));
+      request.end();
+    } catch (ex) {
+      resolve({ ok: false, error: ex.message || String(ex) });
+    }
+  });
+}
+
+/** 注册本域 IPC（守卫在 `handle` 内统一施加） */
+function registerDolaMediaIpc() {
+  const { app, dialog, webContents } = require('electron');
+  settingsJsonPath = path.join(app.getPath('userData'), 'settings.json');
+
+  handle('dola-media-clear', async () => {
+    clearDolaMediaItems();
+    return { ok: true };
+  });
+
+  handle('get-download-settings', async () => {
+    const s = readSettings();
+    const eff = getEffectiveDownloadDir();
+    return {
+      ok: true,
+      path: eff,
+      configured: !!(s && typeof s.downloadPath === 'string' && s.downloadPath.trim()),
+      configuredPath: (s && s.downloadPath) || ''
+    };
+  });
+
+  handle('pick-download-path', async () => {
+    const win = mainWindowGetter && mainWindowGetter();
+    if (!win || win.isDestroyed()) return { ok: false, error: 'no_window' };
+    const cur = getEffectiveDownloadDir();
+    const res = await dialog.showOpenDialog(win, {
+      title: '选择无水印资源下载目录',
+      defaultPath: cur,
+      buttonLabel: '设为下载目录',
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (res.canceled || !res.filePaths || res.filePaths.length === 0) {
+      return { ok: false, canceled: true };
+    }
+    const picked = res.filePaths[0];
+    const s = readSettings();
+    s.downloadPath = picked;
+    writeSettings(s);
+    console.log(`[dola-media] 已设置下载目录：${picked}`);
+    return { ok: true, path: picked, configured: true };
+  });
+
+  // 下载走设置路径 + 自动命名（外部签名不变：url / mediaType）
+  handle('dola-media-download', async (_e, url, mediaType) => {
+    console.log(`[dola-media] 下载请求：type=${mediaType} url=${url ? url.substring(0, 120) : '(空)'}`);
+    if (!url) return { ok: false, error: 'missing_url' };
+    const isImage = mediaType === 'image';
+    const ext = isImage ? '.png' : '.mp4';
+    const typePrefix = isImage ? 'image' : 'video';
+    const dir = getEffectiveDownloadDir();
+    const curCounter = getSessionCounter();
+    let filePath, name, nextC;
+    try {
+      const r = nextAutoFilePath(dir, typePrefix, ext, curCounter);
+      filePath = r.fullPath; name = r.name; nextC = r.nextCounter;
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    bumpSessionCounter(nextC);
+    console.log(`[dola-media] 下载目标路径：${filePath}（已用编号=${nextC}）`);
+    const wvSession = findWebviewSessionForUrl(url);
+    console.log(`[dola-media] 下载使用 session：${wvSession ? wvSession.partition : '(defaultSession - 无匹配 webview!)'}`);
+    const result = await downloadUrlWithSession(url, filePath, wvSession);
+    console.log(`[dola-media] 下载结果：${JSON.stringify(result)}`);
+    if (result && result.ok) {
+      return { ...result, path: filePath, name, dir, configured: !dir.endsWith('Downloads') };
+    }
+    return result;
+  });
+
+  // 渲染进程 dom-ready 时按 webContentsId 挂 CDP Fetch 拦截（比 did-attach-webview 更准）
+  handle('attach-dola-debugger', async (_e, webContentsId) => {
+    const wc = webContents.fromId(webContentsId);
+    if (!wc || wc.isDestroyed()) return { ok: false, error: 'webview 已销毁或不存在' };
+    const url = wc.getURL() || '';
+    console.log(`[dola-media] attach-dola-debugger IPC 触发：wcId=${webContentsId} url=${url}`);
+    // ★ 只表达**意图**（"这个 guest 就绪了"）—— 挂不挂、怎么挂由本文件内部判
+    onGuestReady(wc);
+    return { ok: true, url };
+  });
+}
+
+/**
+ * ★ **域唯一门面**：宿主壳只说「初始化无水印媒体域」。
+ *
+ * 内部两件事：① 挂 CDP 拦截（`did-attach-webview` 早入口 + 导航后重试）；
+ * ② 自注册本域 IPC（下载 / 清空 / 下载路径设置 / guest 就绪）。
+ * ⚠️ 宿主壳**不再需要**域内任何别的名字 —— 会话查找 · 设置读写 · 下载策略全在本文件。
+ */
+function initDolaMedia({ getMainWindow }) {
+  initDolaMediaCapture({ getMainWindow });
+  registerDolaMediaIpc();
 }
 
 function clearDolaMediaItems() {
@@ -1216,8 +1530,9 @@ function clearDolaMediaItems() {
   emit();
 }
 
-module.exports = {
-  initDolaMediaCapture,
-  getDolaMediaItems,
-  clearDolaMediaItems
-};
+// ★ 导出面**只列名字**（不放注释：注释会把"改 `module.exports` 前先 grep 调用点"这类朴素解析搞成假阳）。
+//   规则：**导出面 = `main.js` 的可用面** —— 改这里之前先 `grep -n "dolaMedia\\." electron/main.js`。
+//   ★ `initDolaMedia` = 本仓新增的**域门面**：宿主壳只调它，不再知情域内细节。
+//   ⚠️ **有意偏离源名** `initDolaMediaCapture`：它除挂 CDP 拦截外还自注册本域 IPC，
+//      "Capture" 已不表意；`main.js` 的调用点同批改名。
+module.exports = { initDolaMedia };

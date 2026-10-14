@@ -220,7 +220,7 @@ export interface AccountOpsController {
    * ★ **自动值守开 / 关**（原 `_Component26` 的 `he` 开关 + `Ee` 循环）
    *
    * ★ **谁能值守、什么节奏**：由**适配器**声明（`SitePort.autoWatch`）—— 本控制器**不认站点名**。
-   *    ⛔ `lovart` **不声明**该能力（风控，`docs/过程.md` #11 / `electron/main.js:2749`）⇒ 它**不会**被值守；
+   *    ⛔ `lovart` **不声明**该能力（风控，`docs/过程.md` #11 / `electron/main.js`）⇒ 它**不会**被值守；
    *    ✅ `tapnow` 等声明了的站点会被值守（源版 `Ee` 本就覆盖两者）。
    * ★ **参与条件**（与源一致，`Ee:434`）：账号的 `autoStart === true` **且** 其站点声明了 `autoWatch`。
    *
@@ -230,12 +230,14 @@ export interface AccountOpsController {
    */
   setAutoWatch(on: boolean): void;
   /**
-   * ★ **准备 `<webview>` 的会话**（原 `_Component25.jsx:56-76` —— `usecases/prepareSession` 文件头
-   *   点名的那个场景）；只走 `fingerprint` 模式。
+   * ★ **准备 `<webview>` 的会话**（原 `_Component25.jsx:56-76` / `$P.jsx:49-90`）
    *
-   * ⚠️ 入参是**窄接口**（三个字段，**不收整个 `Account`**）：调用方在 effect 里按字段做依赖，
+   * 两种模式（指纹 / Lovart 容器）由**调用方按站点能力位**选（`capsOf(type).usesLovartContainer`）
+   *   —— 与源同址（源两处都是 `type === 'lovart'` 单查）；本控制器**只转发**。
+   * ⚠️ 入参是**窄接口**（**不收整个 `Account`**）：调用方在 effect 里按字段做依赖，
    *    传整个对象会让 effect 因**对象标识变化**而重跑 ⇒ 重复打 IPC。
-   * @returns 就绪后的 `preloadUrl`（`null` = 该模式没有 preload）；失败**原样转发**（原则 6）
+   * @returns 就绪后的 `preloadUrl`（`null` = 该模式没有 preload）与 `userAgent`（容器模式给）
+   *    —— 失败**原样转发**（原则 6）
    */
   prepareWebviewSession(input: WebviewSessionInput): Promise<Result<SessionReady>>;
   /**
@@ -315,11 +317,25 @@ export interface AccountOpsController {
   syncLovartSession(accountId: string, partition: string): Promise<Result<LovartSessionSync>>;
 }
 
-/** `prepareWebviewSession` 的入参（**窄接口**：只要这三个字段） */
+/** `prepareWebviewSession` 的入参（**窄接口**：只列用到的那几个字段） */
 export interface WebviewSessionInput {
   accountId: string;
-  /** 允许 `null`（真实样本里有未设分区的账号）—— **如实传**，后端自己回落 */
-  partition: string | null;
+  /**
+   * 账号自己的会话分区 —— **恒有值**（产生方 `accountRoster.buildNewAccount`），
+   * 调用方**如实传**，不再有「缺省 ⇒ 某默认会话」这一档（那正是多账号串味的来源）。
+   */
+  partition: string;
+  /**
+   * 该账号走 **Lovart 容器**模式（源 `$P.jsx:56` / `_Component25.jsx:55` 的那个 `p`）——
+   * 由调用方按站点能力位 `capsOf(type).usesLovartContainer` 给出（与源同址）。
+   */
+  lovart: boolean;
+  /**
+   * `lovart` 模式用：出口代理（源 `$P.jsx:63` / `_Component25.jsx:59` 的 `proxy`）。
+   * ⚠️ 源还传 `containerId`，本仓**不收** —— 后端 `ensure-lovart-container` 只读 `partition`/`proxy`。
+   */
+  proxy?: string;
+  /** 指纹模式用：要注入的环境指纹（没有 ⇒ 不传，后端按 `{}` 处理） */
   fingerprint?: unknown;
 }
 
@@ -906,19 +922,20 @@ export function createAccountOps(
     },
 
     /**
-     * ★ **准备 `<webview>` 的会话**（原 `_Component25.jsx:56-76`）
+     * ★ **准备 `<webview>` 的会话**（原 `_Component25.jsx:56-76` / `$P.jsx:49-90`）
      *
-     * ⚠️ 只走 `fingerprint` 模式：调用方（`BackendView`）**仍自行**守卫 `type !== 'other'`
-     *    —— 本方法**不接管**那个判据（保持行为等价；`other` 类型本来就没有指纹）。
+     * 模式由**调用方**按站点能力位给出（`lovart: capsOf(type).usesLovartContainer`）——
+     * 与源同址；本控制器**只转发**（不接管那个判据）。
      * ⚠️ 失败**原样转发**（原则 6）—— 由调用方决定"要不要挂 preload"。
      */
     async prepareWebviewSession(input) {
       return prepareSession(
         { account: ports.host.account },
         {
-          mode: 'fingerprint',
+          mode: input.lovart ? 'lovart' : 'fingerprint',
           accountId: input.accountId,
           partition: input.partition,
+          ...(input.proxy === undefined ? {} : { proxy: input.proxy }),
           ...(input.fingerprint === undefined ? {} : { fingerprint: input.fingerprint }),
         },
       );
@@ -966,8 +983,9 @@ export function createAccountOps(
     onWebviewDomReady(accountId) {
       const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
       if (!account) return;
-      // ⚠️ 只有豆包 / Dola 要挂（源同判：`type` 或 URL —— `_Component25.jsx:135`）
-      if (account.type !== 'dola' && account.type !== 'doubao') return;
+      // ★ 只对**豆包系**站点挂（源同判：`type` 或 URL —— `_Component25.jsx:135`）
+      //   判据取自**站点能力位** `SitePort.mediaSource`（由豆包系工厂声明）⇒ 本处零站点字面量
+      if (!ports.sites[account.type]?.mediaSource) return;
       const idRes = ports.backendPage.webContentsIdOf(account);
       if (!idRes.ok) return;
       const wcId = idRes.value;
@@ -988,7 +1006,8 @@ export function createAccountOps(
     onWebviewNavigated(accountId) {
       const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
       if (!account) return;
-      if (account.type !== 'dola' && account.type !== 'doubao') return;
+      // ★ 同 `onWebviewDomReady`：只对豆包系站点（判据 = 站点能力位，零站点字面量）
+      if (!ports.sites[account.type]?.mediaSource) return;
       const idRes = ports.backendPage.webContentsIdOf(account);
       if (!idRes.ok) return;
       void ports.host.media.injectDolaDurationMain(idRes.value).then((r) => {

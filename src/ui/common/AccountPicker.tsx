@@ -28,9 +28,13 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+// ★ 站点能力表（"某站点提交到哪个通道"的唯一真源）—— 本文件不再写站点名
+import { capsOf } from '@/core/rules/siteCaps';
+// ★ 默认通道的唯一真源（数据层）
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 import { createPortal } from 'react-dom';
 import type { Account } from '@/stable/model/account';
-import { isAccountUsable, SITE_TYPES } from '@/stable/model/account';
+import { isAccountUsable } from '@/stable/model/account';
 import type { AccountGroup } from '@/stable/model/account';
 import {
   accountPickerLabel,
@@ -194,7 +198,7 @@ export function AccountPicker({
             <button
               type="button"
               className={`${styles.item} ${channel !== 'api' && value === 'auto' ? styles.itemOn : ''}`}
-              onClick={() => commit('auto', 'doubao')}
+              onClick={() => commit('auto', DEFAULT_CHANNEL)}
             >
               <span className={styles.name}>{ACCOUNT_PICKER_TEXT.allAccounts}</span>
             </button>
@@ -270,7 +274,7 @@ export function AccountPicker({
                     title={ACCOUNT_PICKER_TEXT.accountTitle(a.name, usable, a.status)}
                     disabled={!usable}
                     key={a.id}
-                    onClick={() => commit(a.id, { doubao: 'doubao', dola: 'dola', gpt: 'gpt' }[a.type as string] ?? 'doubao')}
+                    onClick={() => commit(a.id, capsOf(a.type).channel)}
                   >
                     <span className={`${styles.dot} ${usable ? '' : styles.dotGray}`} />
                     <span className={styles.name}>{a.name}</span>
@@ -302,5 +306,7 @@ export function AccountPicker({
   );
 }
 
-/** 站点类型白名单（供调用方做 `sendAccount` 的合法性提示） */
-export const PICKABLE_TYPES = SITE_TYPES;
+/* 原 `export const PICKABLE_TYPES = SITE_TYPES;` **已删**（2026-10-14）：
+ * 它与 `SITE_TYPES` 是同一个值（"两名指一物"），且自称"白名单"而值等于**全集**
+ * ⇒ 没有任何筛选语义、全仓零消费者（knip 早已标为"导出无人用"，见 `docs/plan/05` 的裁定）。
+ * 要站点清单 ⇒ 直接 import `@/stable/model/account` 的 `SITE_TYPES`（真源，唯一名字）。 */

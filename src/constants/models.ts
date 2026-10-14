@@ -160,3 +160,11 @@ export const SITE_LOGIN_URL: Record<string, string> = {
   tapnow: 'https://app.tapnow.media/home',
   gpt: 'https://chatgpt.com',
 };
+
+/**
+ * Lovart 容器的 `<webview>` 页面设置（原 `$P.jsx:285` 与 `_Component25.jsx:355` 的**同一串**，逐字）
+ *
+ * ⚠️ **只在 lovart 上挂**（源两处都是"lovart 三目"；其余站点传 `undefined`）。
+ */
+export const LOVART_WEBPREFERENCES =
+  'nodeIntegration=0,contextIsolation=1,enableRemoteModule=0,allowRunningInsecureContent=0,webSecurity=1';

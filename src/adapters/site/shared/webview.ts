@@ -14,6 +14,7 @@
 import type { ImageQuestionContext } from '@/core/ports/site.port';
 // ★ 容器 DOM 钩子类名必须走 SSOT（写字面量对不上 BackendView 的 CSS-module 类 ⇒ 定位恒失效）
 import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
+import { SITE_SCAN_TEXT } from '@/constants/text';
 
 /**
  * `<webview>.capturePage()` 的返回（Electron `NativeImage` 的**最小面** —— 我们只用这三个）
@@ -62,11 +63,16 @@ const PARTITION_ATTR = 'partition';
 export const viewOfContext = (ctx: ImageQuestionContext): WebviewElement | null =>
   findWebview({ id: ctx.account.id, partition: ctx.account.partition });
 
-/** 取某个 partition 对应的 `<webview>`；找不到则抛（**原文明确**，不静默返回 null） */
-export function requireWebview(partition: string | null | undefined): WebviewElement {
-  if (!partition) throw new Error('账号缺少 partition，无法定位 webview');
+/**
+ * 取某个 partition 对应的 `<webview>`；找不到则抛（**原文明确**，不静默返回 null）
+ *
+ * ⚠️ 入参**不带 `null`**：分区由产生方保证恒有值（`accountRoster.buildNewAccount`）——
+ *   原先那条「账号缺少 partition」的判空已随类型收窄删除（空串不可能出现，
+ *   真找不到时下面那条「未找到 partition=… 的 webview」照样会如实抛出）。
+ */
+export function requireWebview(partition: string): WebviewElement {
   const el = document.querySelector<WebviewElement>(`webview[${PARTITION_ATTR}="${partition}"]`);
-  if (!el) throw new Error(`未找到 partition=${partition} 的 webview（后台视图可能未挂载）`);
+  if (!el) throw new Error(SITE_SCAN_TEXT.webviewPartitionMissing(partition));
   return el;
 }
 
@@ -77,7 +83,7 @@ export function requireWebview(partition: string | null | undefined): WebviewEle
  */
 export interface WebviewAccountRef {
   id?: string | null;
-  partition?: string | null;
+  partition?: string;
 }
 
 /**

@@ -7,7 +7,7 @@
  */
 
 import type { ApiPort } from '@/core/ports/host.port';
-import type { ApiProviderMeta, ApiSetup } from '@/stable/model/gen';
+import type { ApiJobPayload, ApiJobVariant, ApiProviderMeta, ApiSetup } from '@/stable/model/gen';
 import { DEFAULT_API_CONCURRENCY } from '@/constants';
 import { err, ok } from '@/core/model/result';
 
@@ -59,8 +59,8 @@ export function createMockApi(): ApiPort {
     jobSubmit: async () => ok({ jobId: nextJobId() }),
 
     /** 批量：与真实后端同形（逐位 `jobIds` / `errors`），同样只表示「已受理」 */
-    jobBatch: async (_basePayload: unknown, matrix: unknown) => {
-      const n = Array.isArray(matrix) ? matrix.length : 0;
+    jobBatch: async (_basePayload: ApiJobPayload, matrix: readonly ApiJobVariant[]) => {
+      const n = matrix.length;
       return ok({
         jobIds: Array.from({ length: n }, () => nextJobId() as string | null),
         errors: Array.from({ length: n }, () => null as string | null),

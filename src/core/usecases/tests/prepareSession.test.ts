@@ -69,19 +69,19 @@ describe('prepareSession · fingerprint（原 $P.jsx:77-85）', () => {
 
   it('没给指纹 ⇒ 载荷里**不带该键**（不是 `fingerprint: undefined`）', async () => {
     const { deps, calls } = makeDeps();
-    await prepareSession(deps, { mode: 'fingerprint', accountId: 'acc_1', partition: null });
-    expect(calls[0]![1]).toEqual({ id: 'acc_1', partition: null });
+    await prepareSession(deps, { mode: 'fingerprint', accountId: 'acc_1', partition: 'persist:acc_1' });
+    expect(calls[0]![1]).toEqual({ id: 'acc_1', partition: 'persist:acc_1' });
   });
 
-  it('★ `partition: null` 如实传（**不替后端编一个**）', async () => {
-    const { deps, calls } = makeDeps();
-    await prepareSession(deps, { mode: 'fingerprint', accountId: 'acc_1', partition: null });
-    expect((calls[0]![1] as { partition: unknown }).partition).toBeNull();
-  });
+  /*
+   * ⚠️ 原有一条「`partition: null` 如实传（不替后端编一个）」**已删**：
+   *    那锁的是「分区可以为空」这条已撤销的设计（后端现已**不猜、缺了就抛**，
+   *    `main.js`）。现在入参类型就是 `string` ⇒ 该场景**不存在**。
+   */
 
   it('后端失败 ⇒ **原样转发**（源版 `.catch(() => {})` 吞错）', async () => {
     const { deps } = makeDeps({ ensureFingerprint: async () => err('unknown', '指纹目录写失败') });
-    expect(await prepareSession(deps, { mode: 'fingerprint', accountId: 'a', partition: null })).toEqual(
+    expect(await prepareSession(deps, { mode: 'fingerprint', accountId: 'a', partition: 'persist:a' })).toEqual(
       err('unknown', '指纹目录写失败'),
     );
   });
@@ -133,12 +133,11 @@ describe('prepareSession · plain / lovart', () => {
 });
 
 describe('releaseSession（原 removeAccount 30224）', () => {
-  it('★ 空 / `null` 分区 ⇒ 直接成功且**不调宿主**（源版 `if (s.partition)`）', async () => {
-    const { deps, calls } = makeDeps();
-    expect(await releaseSession(deps, null)).toEqual(ok(undefined));
-    expect(await releaseSession(deps, '')).toEqual(ok(undefined));
-    expect(calls).toEqual([]);
-  });
+  /*
+   * ⚠️ 原有一条「空 / `null` 分区 ⇒ 直接成功且不调宿主（源版 `if (s.partition)`）」**已删**：
+   *    该守卫随类型收窄一起删除（分区恒有值，`releaseSession(deps, partition: string)`）。
+   *    分区为空这一档不存在 ⇒ 没有可断言的行为（留着就是锁一条已撤销的设计）。
+   */
 
   it('有分区 ⇒ 清该分区；失败原样转发', async () => {
     const { deps, calls } = makeDeps();

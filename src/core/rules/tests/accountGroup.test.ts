@@ -22,7 +22,7 @@ const acc = (id: string, extra: Partial<Account> = {}): Account => ({
   name: id,
   type: 'doubao' as SiteType,
   status: '已登录',
-  partition: null,
+  partition: `persist:${id}`,
   addedAt: 0,
   groupId: null,
   autoStart: false,

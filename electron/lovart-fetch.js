@@ -18,6 +18,7 @@
 
 const { session, nativeImage } = require('electron');
 const { URL } = require('url');
+const { handle } = require('./ipc');
 // 诊断日志（同一个文件，便于一起取证）
 const { writeDiag } = require('./lovart-scan');
 
@@ -232,9 +233,7 @@ async function fetchBest(ses, rawUrl, referer) {
  * 之后通过 'lovart-fetch-item'（每张完成）与 'lovart-fetch-done'（整批结束）接收结果。
  */
 function initLovartFetch({ getMainWindow }) {
-  const { ipcMain } = require('electron');
-
-  ipcMain.handle('lovart-fetch-images', async (event, args) => {
+  handle('lovart-fetch-images', async (event, args) => {
     const payload = args || {};
     const accountId = payload.accountId || '';
     const partition = payload.partition || '';
@@ -375,14 +374,5 @@ function initLovartFetch({ getMainWindow }) {
   console.log('[lovart-fetch] 已注册 lovart-fetch-images（主动扫描后的原图下载，带账号 cookie）');
 }
 
-module.exports = {
-  initLovartFetch,
-  // 内部工具（导出仅为单测/排查用，生产链路只用 initLovartFetch）
-  _stripProcessParams: stripProcessParams,
-  _sniffMime: sniffMime,
-  _safeNameFromUrl: safeNameFromUrl,
-  _headerProfiles: headerProfiles,
-  _isPlaceholderImage: isPlaceholderImage,
-  _fetchBest: fetchBest,
-  _fetchOne: fetchOne
-};
+// 导出面 = **宿主可用面**：只有 `initLovartFetch` 出本文件（下划线工具都是本文件内部实现）
+module.exports = { initLovartFetch };

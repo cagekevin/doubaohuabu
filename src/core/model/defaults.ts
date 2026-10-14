@@ -6,6 +6,8 @@
  */
 
 import type { NodeDataOf, NodeType } from '@/stable/model/node';
+// ★ 节点默认标签的真源（`TD-16-150`：原先这里与 `stable/model/node` 各写一份 `'文生视频'`/`'文生图'`）
+import { GEN_IMAGE_LABEL, GEN_VIDEO_LABEL } from '@/stable/model/node';
 import {
   DEFAULT_IMAGE_COUNT,
   DEFAULT_IMAGE_RESOLUTION,
@@ -18,6 +20,16 @@ import { GROUP_Z_INDEX } from '@/constants';
  * ★ 三类带比例的节点，默认比例一律 `NODE_DEFAULT_RATIO_LABEL`（= `'4:3'`）
  * ⚠️ 与源不同（源是 `16:9` / `16:9` / `1:1`）—— 见 `constants/models.ts` 的 `NODE_DEFAULT_RATIO` 注。
  */
+/**
+ * **默认网页通道**（节点 / 回流未指定通道时走它）—— ★ **唯一真源**（2026-10-14）
+ *
+ * ⚠️ **为什么住这里（`core/model`，数据层）**：`core/rules` · `state` · `ui` 都**引用**它；
+ *    若定义在规则层再由数据层引用，就**倒置了依赖方向**（数据层不该依赖规则层）。
+ * ⚠️ 与站点能力表里的 `channel` **不是同一值域**：那是「站点 → 通道」的三值映射，
+ *    本常量是**单值默认**（节点数据里 `channel` 的值域是 `'doubao' | 'api'`）。
+ */
+export const DEFAULT_CHANNEL = 'doubao';
+
 export const NODE_DEFAULTS = {
   text: {
     text: '',
@@ -37,7 +49,7 @@ export const NODE_DEFAULTS = {
     url: '',
   },
   genvideo: {
-    label: '文生视频',
+    label: GEN_VIDEO_LABEL,
     text: '',
     aspectRatio: NODE_DEFAULT_RATIO_LABEL,
     duration: 5,
@@ -46,10 +58,10 @@ export const NODE_DEFAULTS = {
     linkOrder: [],
   },
   imggen: {
-    label: '文生图',
+    label: GEN_IMAGE_LABEL,
     text: '',
     aspectRatio: NODE_DEFAULT_RATIO_LABEL,
-    channel: 'doubao',
+    channel: DEFAULT_CHANNEL,
     sendAccount: 'auto',
     imageCount: DEFAULT_IMAGE_COUNT,
     igResolution: DEFAULT_IMAGE_RESOLUTION,

@@ -20,9 +20,16 @@ import { makeGenAttempt, type GenAttemptInput } from './genHistory';
 /** 提示词入库前的截断（原 `:2899` / `:2928` 的 `.slice(0, 2000)`） */
 export const ATTEMPT_PROMPT_MAX = 2000;
 
-/** 账号名兜底（原 `:2869` 的 `tt ? 'dola' : '豆包'` —— `tt` = 账号类型是 dola） */
-export function accountNameFallback(isDola: boolean): string {
-  return isDola ? 'dola' : '豆包';
+/**
+ * 账号名兜底（原 `:2869` 的 `tt ? 'dola' : '豆包'`；`tt` = 账号类型是 dola）
+ *
+ * ⚠️ **入参是站点类型，不是调用方算好的布尔**（2026-10-14 收口）：原签名收 `isDola: boolean`
+ *    ⇒ `state` 那侧得写 `account?.type === 'dola'` —— **站点名判断跑到了 `state`**（不该在那里）。
+ *    「账号类型的领域判断」本来就住 `core/rules`（红线边界见 `SitePort.autoWatch?` 的说明）
+ *    ⇒ 判断收回本函数，调用方只**如实传类型**。
+ */
+export function accountNameFallback(type: string | undefined): string {
+  return type === 'dola' ? 'dola' : '豆包';
 }
 
 /**

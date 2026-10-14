@@ -1,7 +1,7 @@
 /**
  * 浏览器指纹**生成器**（★ 纯函数，必测）—— 原 `zc` shared.js:25397-25462
  *
- * ★ **它为什么必须存在（本轮查实）**：`electron/main.js:2575-2597` 的 `ensure-fingerprint`
+ * ★ **它为什么必须存在（本轮查实）**：`electron/main.js` 的 `ensure-fingerprint`
  *   **不生成指纹** —— 它只有 `const fp = (acc && acc.fingerprint) || {}`，然后写
  *   `${id}.json` + `buildFingerprintPreload(fp)`。**没给就是空指纹**（账号全程用**原生**
  *   Chromium 身份、零伪装，且各账号身份完全相同）⇒ **前端必须自己产出**。

@@ -166,11 +166,18 @@ export interface VideoNodeData extends NodeDataBase {
 export type VideoNode = NodeBase & { type: 'video'; data: VideoNodeData };
 
 /**
- * 两个**节点默认标签**（既是数据默认值，也是批量列表里的兜底显示名）
+ * **节点默认标签**（既是数据默认值，也是批量列表里的兜底显示名）
  * ⚠️ 原版 `v3` 41551 直接内联这两个字符串 —— 提为具名常量（原则 5），
  *    与下面两个节点的 `label` 字段**同源**。
  */
 export const GEN_VIDEO_LABEL = '文生视频';
+/**
+ * 文生图节点的默认标签 —— ★ **2026-10-14 补齐（`TD-16-150`）**：
+ * 它与 `GEN_VIDEO_LABEL` 本是**一对**（两个节点的 `label` 字段各用一个），
+ * 但原先只有 video 这半提成了常量，image 那半留在 `GenImageNodeData.label` 的**类型字面量**里
+ * ⇒ `core/model/defaults` / `core/rules/prompt` / `state/slices/canvas` 三处又各内联一遍 `'文生图'`。
+ */
+export const GEN_IMAGE_LABEL = '文生图';
 /** 文本节点兜底显示名（原 `v3` 的 `'文本框'`） */
 export const TEXT_NODE_LABEL = '文本框';
 
@@ -205,7 +212,7 @@ export type GenVideoNode = NodeBase & { type: 'genvideo'; data: GenVideoNodeData
 
 /** 文生图节点（原 29559-29575） */
 export interface GenImageNodeData extends NodeDataBase {
-  label: '文生图';
+  label: typeof GEN_IMAGE_LABEL;
   text: string;
   /** 默认 `NODE_DEFAULT_RATIO_LABEL`（`'4:3'`）—— 见 `NODE_DEFAULTS.imggen` */
   aspectRatio: string;

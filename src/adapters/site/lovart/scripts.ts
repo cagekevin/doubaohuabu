@@ -13,6 +13,7 @@
  */
 
 import { buildLibraryScanScript } from '../shared/scanScripts';
+import { CANVAS_EXPORT_TEXT } from '@/constants/text';
 
 /** 采集脚本（常量形式，供 `lovartScanFrames` 与 `executeJavaScript` 共用） */
 export const SCAN_SCRIPT = buildLibraryScanScript();
@@ -40,7 +41,7 @@ export const CANVAS_EXPORT_SCRIPT = `
 function(index) {
   try {
     var list = Array.prototype.slice.call(document.querySelectorAll('canvas'));
-    if (!list.length) return { ok: false, error: '没有找到画布' };
+    if (!list.length) return { ok: false, error: ${JSON.stringify(CANVAS_EXPORT_TEXT.noCanvas)} };
     var items = list.map(function (c) {
       var dw = 0;
       var dh = 0;
@@ -63,9 +64,9 @@ function(index) {
       var bytes = Math.round((url.length - comma - 1) * 3 / 4);
       return { ok: true, dataUrl: url, sizeBytes: bytes, mime: 'image/png', via: 'canvas', natW: el.width, natH: el.height };
     }
-    return { ok: false, error: '没有找到有效画布' };
+    return { ok: false, error: ${JSON.stringify(CANVAS_EXPORT_TEXT.noValidCanvas)} };
   } catch (e) {
-    return { ok: false, error: (e && e.message) || '导出画布失败' };
+    return { ok: false, error: (e && e.message) || ${JSON.stringify(CANVAS_EXPORT_TEXT.failed)} };
   }
 }
 `;

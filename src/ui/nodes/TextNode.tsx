@@ -38,7 +38,7 @@ import {
 import { useStore } from '@/state';
 import { TEXT_NODE_LABEL } from '@/stable/model/node';
 import { AUTO_MATCH_TEXT, MATERIAL_NODE_TEXT, NODE_EDIT_TEXT, NODE_STATUS_TEXT, PRESET_TEXT, REF_TEXT, SPLIT_TEXT } from '@/constants/text';
-import { parseRefChips } from '@/core/rules/refs';
+import { formatReferenceLabel, parseRefChips } from '@/core/rules/refs';
 import { autoMatchText } from '@/core/rules/autoMatch';
 import { FuzzyConfirmPanel } from './FuzzyConfirmPanel';
 import { sendStatusView } from '@/core/rules/sendStatus';
@@ -582,7 +582,8 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
         <div className={styles.refPreview}>
           {refPreview.map((r) => (
             <span key={r.id} className={r.dataUrl ? styles.refOk : styles.refMissing}>
-              {`参考图${r.n}`}
+              {/* ⚠️ 不内联拼 `参考图${n}`：格式化器唯一（`core/rules/refs`）—— 预览行要与**发出去的** token 逐字一致 */}
+              {formatReferenceLabel(r.n)}
               {REF_TEXT.previewSep}
               {r.dataUrl ? r.label : REF_TEXT.previewMissing}
             </span>

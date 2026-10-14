@@ -26,6 +26,7 @@
 
 // ⚠️ 持久化形状的**真源**在 `stable/contracts`（本文件只做转发，不再自己定义一份）
 import type { LovartGalleryImage, LovartGalleriesMap } from '@/stable/contracts/lsValues';
+import { capsOf, siteTypesWhere } from './siteCaps';
 
 /**
  * 画廊里的一张图 —— ⚠️ **形状真源在 `stable/contracts/lsValues.ts`**（持久化契约那个层），
@@ -65,6 +66,35 @@ const DEFAULT_NAME = LOVART_ITEM_DEFAULT_NAME;
  */
 export const LOVART_SOURCE_IMPORT = 'import';
 const DEFAULT_SOURCE = LOVART_SOURCE_IMPORT;
+
+// ─────────────── 站点能力（原 `OP.jsx:710-711`）───────────────
+
+/**
+ * **支持画廊的站点类型**（原 `OP.jsx:710` 的 `fe`）
+ *
+ * 它决定的是「账号行上那颗 📷 **出不出现**」—— 是**有/无**的判断，不是样式差异。
+ *
+ * ⚠️ **本仓此前丢了这条判据**（对所有账号都出 📷）⇒ 豆包账号也能打开那个面板，
+ *   用户看到的就是「🎨 Tapnow 画廊 · 豆包01」。
+ * ⚠️ 面板标题**不动**：源 `_Component23.jsx:417` 就是写死的 `🎨 Tapnow 画廊 · {名}`
+ *    （本仓抄对了）—— 看着不合理的根因在**入口**，不在文案。
+ */
+export const GALLERY_SITES: readonly string[] = siteTypesWhere((c) => c.gallerySource !== null);
+
+/** 该站点类型有没有画廊（原 `fe`） */
+export function isGallerySite(type: string): boolean {
+  return GALLERY_SITES.includes(type);
+}
+
+/**
+ * 画廊的站点名（原 `OP.jsx:711` 的 `Te = type === 'tapnow' ? 'Tapnow' : 'Lovart'`）
+ *
+ * ⚠️ 只在 `isGallerySite` 为真时有意义 —— 调用方先过判据再用它（否则会得到「Lovart」这个默认档）。
+ */
+export function gallerySiteLabelOf(type: string): string {
+  // ★ 判据看**画廊来源键**（能力表），不看账号类型字面量
+  return capsOf(type).gallerySource === 'tapnow' ? 'Tapnow' : 'Lovart';
+}
 
 /** 抓来的图**命名**（原 `XT` 33039-33057）—— `wp` 32493-32941 逐张抓到时用它取名 */
 export function captureImageName(url: string, index = 0): string {
@@ -237,7 +267,7 @@ export function clearLovartGallery(
  *   `fp` = 「是内联 base64 图片」⇒ 真判据是「**内联 base64 才落盘**」。
  *   正确实现已提为协议真源 `stable/protocols/img.ts` 的 **`isInlineImage`**（原 `fp`），
  *   由 `state/store.ts` 的 `normalizeImage` / `persistImage` 直接使用。
- *   （这也与宿主一致：`img-save-sync` 收的就是 dataUrl —— `electron/main.js:679`。）
+ *   （这也与宿主一致：`img-save-sync` 收的就是 dataUrl —— `electron/main.js`。）
  */
 
 // ─────────────── 清理族（原 `purgeLovartGallery`/`purgeLovartJunk`/`purgeLovartByScope`）───────────────

@@ -19,6 +19,8 @@
 
 import { RECIPE_TEXT } from '@/constants/text';
 import { NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
+// ★ 文本节点默认标签的真源（`TD-16-149`：本文件原两处内联 `'文本框'`，与 `TEXT_NODE_LABEL` 同命题）
+import { TEXT_NODE_LABEL } from '@/stable/model/node';
 import { pad2 } from '@/lib/time';
 import { normalizeModelLabel } from './prompt';
 
@@ -184,7 +186,7 @@ export function provenanceLabel(
       .replace(/\s+/g, ' ')
       .trim();
     if (stripped) return truncateText(stripped, 12);
-    return label || '文本框';
+    return label || TEXT_NODE_LABEL;
   }
 
   return label || src.type || '';
@@ -396,7 +398,7 @@ export function deriveNodeRecipe(
       .replace(/<[^>]*>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    label = raw ? truncateText(raw, 12) : String(d.label || '文本框');
+    label = raw ? truncateText(raw, 12) : String(d.label || TEXT_NODE_LABEL);
   } else {
     label = String(d.label || d.name || '');
   }

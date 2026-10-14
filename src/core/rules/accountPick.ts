@@ -23,9 +23,12 @@
  */
 
 import type { Account, PoolStrategy, SiteType } from '@/stable/model/account';
-import { POOL_STRATEGIES, isAccountUsable } from '@/stable/model/account';
+import { POOL_STRATEGIES, isAccountUsable, normalizeAccountType } from '@/stable/model/account';
 import { ACCOUNT_PICK_TEXT, siteDisplayName } from '@/constants/text';
 import { pickAccount } from './accountPool';
+import { DEFAULT_GROUP_NAME } from './accountGroup';
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
+import { siteTypesWhere } from './siteCaps';
 
 /** 「未分组」的哨兵值（原 `FS` 的 `r.slice(11) || 'ungrouped'`） */
 export const UNGROUPED = 'ungrouped';
@@ -149,7 +152,7 @@ export function resolveSendAccount(input: SendAccountPickInput): SendAccountPick
   if (raw && raw !== 'auto' && !raw.startsWith('auto:')) {
     const hit = accounts.find((a) => a.id === raw);
     if (!hit || !isAccountUsable(hit)) return fail('account-missing', ACCOUNT_PICK_TEXT.missing);
-    if ((hit.type || 'doubao') !== type) {
+    if (normalizeAccountType(hit.type) !== type) {
       return fail('account-type-mismatch', ACCOUNT_PICK_TEXT.typeMismatch);
     }
     if (busy.has(hit.id)) return fail('account-busy', ACCOUNT_PICK_TEXT.busy);
@@ -192,9 +195,10 @@ export interface AccountPickerGroup {
   list: Account[];
 }
 
-/** 分组名缺失时的兜底（原 `_Component45.jsx:607` 的 `ye.name || '未命名分组'`） */
-const UNNAMED_GROUP = '未命名分组';
-/** 未分组的显示名（原 `616` 的 `label: '未分组'`） */
+// ⚠️ 分组名缺省兜底**不再**在此自写（`TD-16-149`）：它与 `accountGroup` 的 `DEFAULT_GROUP_NAME`
+//   是同一命题 ⇒ 引那边的唯一声明。未分组的显示名（原 `616` 的 `label: '未分组'`）**留在本处** ——
+//   它与 `sendPanelText` 的 `ungrouped` / `text` 的 `ungroupedName` 同值但**源里就是三处不同组件**
+//   （`_Component45.jsx:616` · `OP.jsx:899` · `OP.jsx:449`）⇒ 照源，不合并（裁定见轮次文件）。
 const UNGROUPED_LABEL = '未分组';
 
 /**
@@ -223,7 +227,7 @@ export function buildAccountGroups(
   const out: AccountPickerGroup[] = [];
   for (const g of groups || []) {
     const list = byGroup.get(g.id) ?? [];
-    if (list.length) out.push({ gid: g.id, label: g.name || UNNAMED_GROUP, list });
+    if (list.length) out.push({ gid: g.id, label: g.name || DEFAULT_GROUP_NAME, list });
   }
   const ungrouped = byGroup.get(null) ?? [];
   if (ungrouped.length) out.push({ gid: null, label: UNGROUPED_LABEL, list: ungrouped });
@@ -231,7 +235,7 @@ export function buildAccountGroups(
 }
 
 /** 可走网页后台的站点类型（原 `nf`）—— 分组内**一个都没有**时「自动选择」按钮要禁用 */
-const WEB_EXECUTABLE_TYPES: readonly string[] = ['doubao', 'dola', 'gpt'];
+const WEB_EXECUTABLE_TYPES: readonly string[] = siteTypesWhere((c) => c.webExecutable);
 
 /**
  * 「**画廊型**」站点 —— 后台视图里显示「**出新图**」条（原 `_Component26`）的那三站
@@ -246,7 +250,7 @@ const WEB_EXECUTABLE_TYPES: readonly string[] = ['doubao', 'dola', 'gpt'];
  * ⚠️ 类型放宽为 `readonly string[]`（与 `WEB_EXECUTABLE_TYPES` 同法）：本仓 `Account.type` 是
  *   `string`，用 `SiteType` 收窄会在调用处逼出一个 `as`（那就是类型层兜底）。
  */
-export const NEW_IMAGES_SITES: readonly string[] = ['lovart', 'tapnow', 'other'];
+export const NEW_IMAGES_SITES: readonly string[] = siteTypesWhere((c) => c.hasNewImagesPanel);
 
 /**
  * 从一组账号**推出该走哪个通道**（原 `K` `_Component45.jsx:622-634`）
@@ -256,14 +260,14 @@ export const NEW_IMAGES_SITES: readonly string[] = ['lovart', 'tapnow', 'other']
  */
 export function deriveChannelFromGroup(list: readonly Account[]): SiteType {
   // ⚠️ 显式 `Set<string>`：`SiteType` 的 Set 不接受 string 查表
-  const types = new Set<string>((list || []).map((a) => a.type || 'doubao'));
+  const types = new Set<string>((list || []).map((a) => normalizeAccountType(a.type)));
   const hit = WEB_EXECUTABLE_TYPES.filter((t) => types.has(t));
-  return (hit.length === 1 ? hit[0] : 'doubao') as SiteType;
+  return (hit.length === 1 ? hit[0] : DEFAULT_CHANNEL) as SiteType;
 }
 
 /** 该分组内是否**有可用**（已登录）+ **可执行**（豆包/Dola/GPT）的账号（原 `_Component45.jsx:1347-1349` 的 `be`） */
 export function hasExecutableAccount(list: readonly Account[]): boolean {
-  return (list || []).some((a) => isAccountUsable(a) && WEB_EXECUTABLE_TYPES.includes(a.type || 'doubao'));
+  return (list || []).some((a) => isAccountUsable(a) && WEB_EXECUTABLE_TYPES.includes(normalizeAccountType(a.type)));
 }
 
 /**

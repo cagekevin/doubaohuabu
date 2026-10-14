@@ -19,7 +19,9 @@ import type {
   ApiBatchResult,
   ApiConfigMap,
   ApiJobEvent,
+  ApiJobPayload,
   ApiJobStatus,
+  ApiJobVariant,
   ApiProviderMeta,
   ApiSetup,
   ApiUsage,
@@ -42,7 +44,7 @@ export interface FilePort {
    * 下载到**指定路径**（原 `window.api.downloadFile`）
    *
    * ⚠️ 2026-10-10 补 `size`：主进程的 `download-file` **本来就返回它**
-   *   （`electron/main.js:1786/1798/1810` 三条成功分支都带 `size`），
+   *   （`electron/main.js` 三条成功分支都带 `size`），
    *   而这里原先只声明了 `path?` ⇒ 下载节点**算不出"已下载多少"**。
    *   口径与同文件的 `downloadFileAs` 一致。
    */
@@ -53,6 +55,12 @@ export interface FilePort {
     filters?: Array<{ name: string; extensions: string[] }>,
   ): Promise<Result<{ path?: string; size?: number; canceled?: boolean }>>;
   openExternal(url: string): Promise<Result<void>>;
+  /**
+   * 在系统文件管理器里定位一个文件 —— **收真实路径，或 `img://` 引用**（宿主自己判别并解析）
+   *
+   * ★ **一个入口收两种输入**：调用方**不必**先判断手上是哪种东西（判别只有宿主一处）——
+   *   否则「拿 `img://` 去调只认真实路径的方法」就是"功能打不开"。
+   */
   revealPath(p: string): Promise<Result<void>>;
 }
 
@@ -63,18 +71,18 @@ export interface ClipboardPort {
    * 把图片写进系统剪贴板（原 `window.api.copyImageToClipboard`）
    *
    * ★ **2026-10-10 修（三个 bug 一处）**：后端契约是 `copy-image-to-clipboard(img, webContentsId)`
-   *   （`main.js:1382`），其中
-   *     ① `img` 必须是 **`{dataUrl, label}` 对象**（`label` 还用来拼临时文件名，`main.js:1412`）
+   *   （`main.js`），其中
+   *     ① `img` 必须是 **`{dataUrl, label}` 对象**（`label` 还用来拼临时文件名，`main.js`）
    *        —— 原实现传的是**裸字符串** ⇒ `img.dataUrl` 为 `undefined` ⇒ 必然失败；
    *     ② `webContentsId` 是**分层写剪贴板**的回落入口（`writeImageToPasteboard(ni, webContentsId)`，
-   *        `main.js:1424`：主进程原生 → **目标页面内 Async Clipboard API**）—— 原实现**没传**；
+   *        `main.js`：主进程原生 → **目标页面内 Async Clipboard API**）—— 原实现**没传**；
    *     ③ 返回值 `{ok:false, error}`（如 `图片数据为空或格式不支持`）被**无视** ⇒ 吞错（原则 6）。
    *
    * @param img 图片（`dataUrl` 支持 `data:` 与 `img://` 两种引用）
    * @param webContentsId 目标页面（用于页内剪贴板回落层；不给就只能走主进程那层）
    */
   writeImage(img: { dataUrl: string; label?: string }, webContentsId?: number): Promise<Result<void>>;
-  /** 实现内部必须：clear() → writeText() → await（原 main.js:1591/1626-1627 的坑） */
+  /** 实现内部必须：clear() → writeText() → await（原 main.js 的坑） */
   writeText(text: string): Promise<Result<void>>;
   pasteToWebview(webContentsId: number): Promise<Result<void>>;
   /** 把参考图作为真实文件经 CDP 直喂上传 input */
@@ -90,7 +98,7 @@ export interface ProjectPort {
   /**
    * 选择保存路径（原 `window.api.pickProjectStorage`）
    *
-   * ⚠️ 后端契约（`main.js:368-394`）：
+   * ⚠️ 后端契约（`main.js`）：
    *    成功 `{ok:true, path, migrated}` · 用户取消 `{ok:false, canceled:true}` · 失败 `{ok:false, error}`
    *    ★ 2026-10-10 修：原实现**只读 `path/canceled`、丢掉 `ok:false`**（吞错，原则 6）
    *      且**从不传 payload**（后端要靠 `payload.project` 做资源迁移与快照 ⇒ 迁移永不发生）。
@@ -106,21 +114,29 @@ export interface ProjectPort {
    *    契约声明"会失败"，调用方才被编译器逼着处理。
    */
   saveBackup(json: string): Result<void>;
-  /** 快照（同 `saveBackup`，同步 + 返 `Result`） */
-  saveSnapshot(project: unknown): Result<void>;
+  /**
+   * 快照（同 `saveBackup`，同步 + 返 `Result`）
+   *
+   * ⚠️ 入参是**整个工程对象**（后端 `main.js` 的 `writeProjectSnapshot` 读 `project.data` /
+   *    `project.updatedAt` 并整份序列化进 `项目工程.json`）—— **不是** id、不是数组。
+   *    ★ 2026-10-14 收窄（`TD-04-21`）：此前声明 `unknown` ⇒ 传数组/传 id 字符串**都编译通过**；
+   *    而后端的形状守卫只判 `typeof project !== 'object'` ⇒ **数组能过**（`typeof [] === 'object'`）
+   *    ⇒ 快照文件被**静默写坏**（调用方是 fire-and-forget 的 `send`，拿不到结果）。
+   */
+  saveSnapshot(project: Project): Result<void>;
   /** 操作日志（同 `saveBackup`，同步 + 返 `Result`） */
   logOperation(event: OperationLogEvent): Result<void>;
   /**
    * 在系统文件管理器里打开项目保存目录（原 `window.api.revealProjectStorage`）
    *
-   * ⚠️ 后端契约（`main.js:408-428`）：成功 `{ok:true, path}` · 失败 `{ok:false, error}`
+   * ⚠️ 后端契约（`main.js`）：成功 `{ok:true, path}` · 失败 `{ok:false, error}`
    *    （`项目尚未设置保存路径` / `项目保存路径不存在` / shell 的 `openPath` 错误串）
    */
   revealStorage(storagePath: string): Promise<Result<{ path?: string }>>;
   /**
    * 统计项目保存目录占用（原 `window.api.getProjectStorageSize`）
    *
-   * ⚠️ 后端契约（`main.js:435-503`）：成功 `{ok:true, bytes, files, partial, elapsedMs}` · 失败 `{ok:false, error}`
+   * ⚠️ 后端契约（`main.js`）：成功 `{ok:true, bytes, files, partial, elapsedMs}` · 失败 `{ok:false, error}`
    *    ★ 2026-10-10 修：原实现把返回当 `{size}` 读 ⇒ **恒为 0**（`bytes` 字段名对不上）。
    */
   getStorageSize(storagePath: string): Promise<Result<StorageUsage>>;
@@ -129,19 +145,20 @@ export interface ProjectPort {
 /**
  * 会话准备载荷（原 `$P.jsx:77-80` / `_Component25.jsx:76-79`）
  *
- * ⚠️ `partition` 可为 `null`（真实样本里就有未设分区的账号）——
- *    后端会回落到 `persist:lovart`，前端**如实传**、不替它编一个。
+ * ⚠️ `partition` **必填且非空**：账号的分区由产生方保证恒有值（`accountRoster.buildNewAccount`）。
+ *    ⚠️ 原注写「可为 `null`，后端会回落到 `persist:lovart`」——那**已不成立**：后端早已改成
+ *    **不猜、缺了就抛**（`main.js`）。留着 `null` 只会把「产生方缺位」传到后端去炸。
  */
 export interface FingerprintSessionPayload {
   id: string;
-  partition: string | null;
+  partition: string;
   fingerprint?: unknown;
 }
 
 /** 普通会话载荷（同形，不带指纹） */
 export interface PlainSessionPayload {
   id: string;
-  partition: string | null;
+  partition: string;
 }
 
 /** Lovart 容器载荷（多一个 `containerId` + 出口 `proxy`） */
@@ -164,7 +181,7 @@ export interface LovartChromePayload {
  * 打开真实 Chrome 的**业务结果**（原 `chrome-cdp.ensureLovartChrome`）
  *
  * ★ **为什么是嵌套判别联合**（`Result<LovartChromeOpen>` 而不是 `Result<{…}>`）：
- *   后端把「业务失败」放在**一次成功的 IPC 调用**里（`{ok:false, error, message}`，`main.js:2887-2893`），
+ *   后端把「业务失败」放在**一次成功的 IPC 调用**里（`{ok:false, error, message}`，`main.js`），
  *   而外层 `Result` 表达的是「IPC 通没通」。**两层都要保留** —— 外层 `err` 是通道故障（重试/重启），
  *   内层 `ok:false` 是业务失败（带**错误码**，用户可据此看到具体指引）。
  *   ⚠️ 错误码**不能丢**：它查 `LOVART_SESSION_TEXT.openError` 的文案表（原 `xD`，`shared.js:38652-38662`）。
@@ -173,14 +190,14 @@ export type LovartChromeOpen =
   | { ok: true; alreadyOpen: boolean; profileDir?: string }
   | { ok: false; error: string; message?: string };
 
-/** 同步会话的业务结果（原 `sync-lovart-session`，`main.js:2974`） */
+/** 同步会话的业务结果（原 `sync-lovart-session`，`main.js`） */
 export type LovartSessionSync =
   | { ok: true; count: number; total: number }
   | { ok: false; message: string };
 
 /** 媒体（图片 / 视频外置存储） */
 /**
- * 站点页里**检测到的一条视频**（原 `detect-videos` handler 的 `entry`，`electron/main.js:2350`）
+ * 站点页里**检测到的一条视频**（原 `detect-videos` handler 的 `entry`，`electron/main.js`）
  *
  * ⚠️ 字段**逐字对后端**（它是契约真源）：
  *   `key/id/name/created_at/ready/url/width/height/duration/poster`。
@@ -283,8 +300,8 @@ export interface MediaPort {
   /**
    * ⚠️ **2026-10-11 已删 `resolveImageRef(ref)`** —— **源前端 0 消费者**：
    *   回源检索 `resolveImageRef` / `img-resolve` 在 `expanded_components/**` 的 `.jsx` 与 `shared.js`
-   *   **一处都没有**；`img://` → 真实路径的解析是**主进程内部**的事（`main.js:739` 的 `resolveImageRef`
-   *   被 `main.js:1005/1244/1275/1402/1536/1807/1879/3047` 内部调用），前端拿到的**是路径或文案**，不需要自己解析。
+   *   **一处都没有**；`img://` → 真实路径的解析是**主进程内部**的事（`main.js` 的 `resolveImageRef`
+   *   被 `main.js` 内部调用），前端拿到的**是路径或文案**，不需要自己解析。
    *   ⇒ 与 `setMuted` / `StoragePort` 的 3 个幽灵方法同判据（判据 B5：不留"声明了但没人调"的契约面）。
    *   ⚠️ **不是**"暂时没接" —— 是**源里就没有这个前端入口**。
    */
@@ -294,7 +311,7 @@ export interface MediaPort {
    * ★ **批量取图**（原 `vP`，`shared.js:33677`；后端 `electron/lovart-fetch.js`）
    *
    * 【为什么必须有它 —— 而不是用 `imageFetchDataUrl`】两者都是主进程下载，但取到的**不是同一批图**：
-   *   · `imageFetchDataUrl`（`main.js:1165`）是**裸 `fetch`**（假 UA、**无 cookie**）——
+   *   · `imageFetchDataUrl`（`main.js`）是**裸 `fetch`**（假 UA、**无 cookie**）——
    *     它服务的是**文生图后台通道 CDP 抓的临时签名直链**（那些直链公开、不需要会话）。
    *   · `fetchImages` 走 `session.fromPartition(partition).fetch` ⇒ **带上账号 webview 的 cookie**——
    *     站点 CDN 的图（Lovart / Tapnow）**必须**靠它才取得到。
@@ -311,16 +328,15 @@ export interface MediaPort {
     onProgress?: (p: FetchImagesProgress) => void,
   ): Promise<Result<FetchImagesResult>>;
   captureRect(rect: CaptureRect): Promise<Result<string | null>>;
-  showInFolder(ref: string): Promise<Result<void>>;
   /**
-   * 拖出文件到系统（`webContents.startDrag`，`main.js:1223`）
+   * 拖出文件到系统（`webContents.startDrag`，`main.js`）
    *
    * ⚠️ **本方法的 `Result` 只能表达两件事**：宿主缺失（`window.api` 不在）/ 调用本身抛出。
    *    **「拖拽有没有真的成功」本仓无从判定** —— 后端走的是 `ipcRenderer.send`（**无回执**），
-   *    失败只 `console.warn`（`main.js:1232,1246,1254`）。
+   *    失败只 `console.warn`（`main.js`）。
    *    ⇒ **调用方不得据此报「已拖出」**（如实登记：`docs/过程.md` · 母体 M5「失败不可见」的新实例）。
    * ⚠️ **payload 只有 `dataUrl` + `name`**：**不传缩略图** —— icon 由**后端**从原图 resize 到 64px
-   *    （`docs/过程.md` #53「拖拽预览 icon 必须是 64px」；`main.js:1239-1244`）。
+   *    （`docs/过程.md` #53「拖拽预览 icon 必须是 64px」；`main.js`）。
    *    ⛔ **不要声明 `thumbDataUrl?`** —— **后端从不读它**（它在那边的注释里被写成"会额外落盘
    *    缩略图"，属**假承诺**）⇒ 2026-10-11 **删除**（幽灵字段，母体 M6）。
    * ⚠️ 后端另支持 `path`（`docs/过程.md` #64「传 path 优先」）—— 本仓**不暴露**：我们手上的引用是
@@ -329,7 +345,7 @@ export interface MediaPort {
    */
   startFileDrag(payload: { dataUrl: string; name: string }): Result<void>;
   /**
-   * 清理各账号分区的**纯缓存**（Cache / Code Cache 等，原 `clear-browser-cache`，`preload.js:81`）
+   * 清理各账号分区的**纯缓存**（Cache / Code Cache 等，原 `clear-browser-cache`，`preload.js`）
    *
    * ⚠️ **保留登录态**（与 `clearSession` 不是一回事）；返回**清理计数** ——
    *    源版 UI 要显示「已清理 N 个缓存目录（M 个被占用，下次启动会自动清理）」。
@@ -337,7 +353,7 @@ export interface MediaPort {
    */
   clearBrowserCache(): Promise<Result<{ cleared: number; failed?: number }>>;
   /**
-   * **多帧扫描**：主进程遍历页面的全部 frame（含嵌套 / 跨域）执行同一脚本（原 `lovart-scan-frames`，`lovart-scan.js:83`）
+   * **多帧扫描**：主进程遍历页面的全部 frame（含嵌套 / 跨域）执行同一脚本（原 `lovart-scan-frames`，`lovart-scan.js`）
    *
    * ⚠️ **必须显式调用** —— 不得自启定时器（docs/过程.md #4：自动轮询会被判机器人）
    * ⚠️ `script` 必须是**纯读取**脚本（零注入，docs/过程.md #2）
@@ -352,12 +368,12 @@ export interface MediaPort {
   }): Promise<Result<{ items: unknown[]; href?: string }>>;
 
   /**
-   * **检测站点页里的视频**（原 `detect-videos` handler，`electron/main.js:2224`）
+   * **检测站点页里的视频**（原 `detect-videos` handler，`electron/main.js`）
    *
    * ⚠️ **必须显式调用**（同 `scanFrames`：不得自启定时器 —— `docs/过程.md` #4）
    * ⚠️ **零注入**：后端只在 webview 里跑只读取数脚本
    * ⚠️ 后端要求 `webContentsId`（**不是** partition）⇒ 调用方先取 `<webview>.getWebContentsId()`
-   * ⚠️ `seenKeys` 是**已见集合**（后端据此跳过已见视频 —— `main.js:2348`）
+   * ⚠️ `seenKeys` 是**已见集合**（后端据此跳过已见视频 —— `main.js`）
    * ⚠️ 后端**每条 return 都带 `ok`** ⇒ 适配器判**内层** `ok`（fail-closed，TD-04-5）
    */
   detectVideos(
@@ -388,7 +404,7 @@ export interface MediaPort {
   /**
    * ★ **Dola「30s 时长」诊断回传**（原 `ct` / `window.api.dolaDurationDiag`，`_Component43.jsx:628-636`）
    *
-   * 后端把它**落盘**到 `~/dola-duration-debug.log`（`main.js:2549-2559`，注释原文：
+   * 后端把它**落盘**到 `~/dola-duration-debug.log`（`main.js`，注释原文：
    *   「便于排查『30s 失效』时真实的生成接口路径与 model 取值」）
    *   —— 它是 `docs/过程.md（原 plan/03）` 批 7（Dola 30s 强开）那条链**唯一**的可观测面。
    * ⚠️ **fire-and-forget**（源 `ct` 就是 `try{ void … }catch{}`）—— 诊断写不进去没有可做的补救，
@@ -400,7 +416,7 @@ export interface MediaPort {
    * ★ **往某个 guest 里注入 Dola「30s 主世界钩子」**（原 `window.api.injectDolaDurationMain`，
    *   `_Component25.jsx:144/169`）
    *
-   * 后端做三件事（`main.js:2501-2540`）：① 打开页内 30s 开关（`localStorage['intl_doubao_enable_30s_v1']='1'`）
+   * 后端做三件事（`main.js`）：① 打开页内 30s 开关（`localStorage['intl_doubao_enable_30s_v1']='1'`）
    *   ② 注入 `dola-duration-main.js`（官方 30s 钩子）③ 主进程每 3s dump 一次时长 DOM。
    * ⚠️ **不是** `SitePort.genConfirm`/`dolaForce` 那条补丁式路径的第二份 —— 那条是**改请求体**；
    *   这条走**页面自己的 30s 开关 + 主世界钩子**（源两条都在，互不替代）。
@@ -412,14 +428,14 @@ export interface MediaPort {
   /**
    * ★ **读「无水印资源」下载设置**（原 `window.api.getDownloadSettings`，`SD.jsx:22`）
    *
-   * ⚠️ 后端 `get-download-settings`（`main.js:2104`）恒返
+   * ⚠️ 后端 `get-download-settings`（`main.js`）恒返
    *   `{ok:true, path, configured, configuredPath}` —— `path` = **生效目录**（未配置时 = 系统默认下载目录）。
    */
   getDolaMediaDownloadSettings(): Promise<Result<{ path?: string; configured?: boolean }>>;
   /**
    * ★ **选「无水印资源」下载目录**（原 `window.api.pickDownloadPath`，`SD.jsx:48/73`）
    *
-   * ⚠️ 后端 `pick-download-path`（`main.js:2115`）：成功 `{ok:true, path, configured}` ·
+   * ⚠️ 后端 `pick-download-path`（`main.js`）：成功 `{ok:true, path, configured}` ·
    *   用户取消 `{ok:false, canceled:true}` · 无窗 `{ok:false, error:'no_window'}`。
    *   **取消是如实结果**（与 `ProjectPort.pickStorage` 同形）⇒ 调用方**不得**据此报错。
    */
@@ -430,7 +446,7 @@ export interface MediaPort {
    * ★ **下载一条「无水印资源」**（原 `window.api.downloadDolaMedia`，`SD.jsx:136`）
    *
    * ⚠️ **与 `FilePort.downloadFile` 不是一件事**（不是重复、不得合并）：后端 `dola-media-download`
-   *   （`main.js:2137`）走**用户设置目录**（`getEffectiveDownloadDir`）＋ **自动编号命名**
+   *   （`main.js`）走**用户设置目录**（`getEffectiveDownloadDir`）＋ **自动编号命名**
    *   （`nextAutoFilePath` ⇒ `video_01.mp4` / `image_01.png`），并**按来源 webview 的 session 下载**
    *   （带 cookie 过防盗链）；`download-file` 是通用「指定路径 / 另存为」下载。源面板走的是前者。
    */
@@ -441,7 +457,7 @@ export interface MediaPort {
   /**
    * ★ **清空 CDP 捕获列表**（原 `window.api.clearDolaMedia`，`SD.jsx:78-88`）
    *
-   * ⚠️ 后端 `dola-media-clear`（`main.js:2027`）→ `clearDolaMediaItems()`（`dola-media.js:1213`）
+   * ⚠️ 后端 `dola-media-clear`（`main.js`）→ `clearDolaMediaItems()`（`dola-media.js`）
    *   清空后**会 `emit()` 推一次空列表** ⇒ 面板经既有 `onDolaMedia` 通道自动变空（无需本地清）。
    */
   clearDolaMedia(): Promise<Result<void>>;
@@ -482,8 +498,8 @@ export interface MediaPort {
  * 账号会话 / 指纹 / 代理 / 账号数据导入导出
  *
  * ★ **2026-10-10 契约更正（又一组"照文档抄"的签名）**：后端三个 `ensure*` 收的是
- *   **账号对象**，不是 id 字符串 —— `preload.js:89/94/97` 原样转发 `acc`，而
- *   `main.js:2692/2805` 读 `acc.partition` / `acc.proxy`，读不到就**回落到 `persist:lovart`**。
+ *   **账号对象**，不是 id 字符串 —— `preload.js` 原样转发 `acc`，而
+ *   `main.js` 读 `acc.partition` / `acc.proxy`，读不到就**回落到 `persist:lovart`**。
  *   ⚠️ **必须传对象** —— 传字符串 ⇒ `'abc'.partition === undefined` ⇒ **分区与指纹目录全错**（静默）。
  *
  * ⚠️ **约束 #5（`docs/过程.md`）：cookie 由后端管理，前端一律不碰** ——
@@ -519,9 +535,9 @@ export interface AccountPort {
   fpNetDiag(partition: string): Promise<Result<unknown>>;
 
   // ── 真实 Chrome 集成（原 `_Component25` 的「Lovart 会话条」三键）──
-  //   ★ 后端早已实现（`electron/chrome-cdp.js` + `main.js:2887/2907/2924` + `preload.js:110-112`），
+  //   ★ 后端早已实现（`electron/chrome-cdp.js` + `main.js` + `preload.js`），
   //     前端此前**没有调用面** ⇒ 这三条是**唯一消费者**（`ui/panels/BackendView` 的会话条）。
-  //   ⚠️ **只这三条**：`lovartChromeIsOpen` 后端**明写恒返 `{ok:true, open:false}`**（`main.js:2982`
+  //   ⚠️ **只这三条**：`lovartChromeIsOpen` 后端**明写恒返 `{ok:true, open:false}`**（`main.js`
   //      的注释：「故意恒返 false：采集统一走内嵌 webview」）⇒ 落它 = 落了没人用（判据 B5）。
   //      `ensureLovartFirefoxProfile` / `openLovartFirefox` / `removeLovartFirefoxProfile` /
   //      `getFirefoxStatus` 四个 **源前端 0 调用** ⇒ 不落。
@@ -538,7 +554,7 @@ export interface AccountPort {
    * 把真实 Chrome 里的会话 cookie 同步进该账号的 webview 分区（原 `window.api.syncLovartSession`）
    *
    * ⚠️ 后端会先**关窗**（释放 profile 锁）→ 临时 headless 导出 cookie → **清空分区旧 cookie**
-   *    → **剔除 Cloudflare 指纹绑定 cookie** → 注入（`main.js:2927-2974`）。
+   *    → **剔除 Cloudflare 指纹绑定 cookie** → 注入（`main.js`）。
    */
   syncLovartSession(accountId: string, partition: string): Promise<Result<LovartSessionSync>>;
 
@@ -607,10 +623,20 @@ export interface ApiPort {
   configSetKey(providerId: string, key: string): Promise<Result<{ keyHint?: string; maskedBy?: string }>>;
   configSetSecret(providerId: string, key: string): Promise<Result<{ hasSecret: boolean }>>;
   configTest(providerId: string): Promise<Result<{ message?: string }>>;
-  /** 提交单个任务 ⇒ 后端**只回 `jobId`**（结果经 `onJobEvent` 推送） */
-  jobSubmit(payload: unknown): Promise<Result<{ jobId: string }>>;
-  /** 批量提交 ⇒ 逐位 `jobIds` / `errors` */
-  jobBatch(basePayload: unknown, matrix: unknown): Promise<Result<ApiBatchResult>>;
+  /**
+   * 提交单个任务 ⇒ 后端**只回 `jobId`**（结果经 `onJobEvent` 推送）
+   *
+   * ⚠️ 入参形状 = `stable/model/gen` 的 `ApiJobPayload`（**后端读的就是这些字段名**）——
+   *    此前是 `unknown` ⇒ 报文形状漂移只在运行期暴露（且后端会静默兜底成"成功"）。
+   */
+  jobSubmit(payload: ApiJobPayload): Promise<Result<{ jobId: string }>>;
+  /**
+   * 批量提交 ⇒ 逐位 `jobIds` / `errors`
+   *
+   * ⚠️ `matrix` **必须是数组**（`ApiJobVariant[]`）—— 类型上钉死后，「传对象」**编译不过**；
+   *    后端也同步改成非数组即 `ok:false`（不再兜成 `[]` ⇒ 不再"提交 0 个却报成功"）。
+   */
+  jobBatch(basePayload: ApiJobPayload, matrix: readonly ApiJobVariant[]): Promise<Result<ApiBatchResult>>;
   /**
    * 取消一个任务（原 `cancelApiJob` `shared.js:30694` 的 `await window.api.apiJobCancel(n)`）
    *
@@ -629,7 +655,7 @@ export interface ApiPort {
    *   `apiJobList` 在 `expanded_components/**` **0 命中**（源既不调它、也没有"任务列表"UI）；
    *   源里那张 `apiJobs` 表由 **`applyApiJobEvent` 的事件增量**维护（`shared.js:30713-30714`
    *   的 `apiJobs: { ...t().apiJobs, … }`），**从不"拉列表"**。
-   *   后端 `api-job:list` handler 确实在（`main.js:3170`），但**前端不需要它** ——
+   *   后端 `api-job:list` handler 确实在（`main.js`），但**前端不需要它** ——
    *   与 `setMuted` / `resolveImageRef` 同判据（判据 B5：不留"声明了但没人调"的契约面）。
    *   ⚠️ 本仓 `settings.apiJobs` **不是**它的替代物：那张表由 `state/subscriptions` 的事件增量写、
    *      由 `core/usecases/applyApiJobEvent` 读（判"上一快照"），链路自洽、不依赖本方法。
@@ -733,7 +759,7 @@ export interface AssetMigration {
   videos?: number;
 }
 
-/** 目录占用统计（原 `main.js:500` 的 `{bytes, files, partial, elapsedMs}`） */
+/** 目录占用统计（原 `main.js` 的 `{bytes, files, partial, elapsedMs}`） */
 export interface StorageUsage {
   bytes: number;
   files: number;

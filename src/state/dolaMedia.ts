@@ -19,10 +19,14 @@
  */
 
 import type { Ports } from '@/core/ports';
+// ★ 默认通道的唯一真源（数据层：`core/model/defaults`）
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 import type { AppStore } from './store';
 import type { DolaMediaItem, DolaMediaEvent } from '@/core/ports/host.port';
 import { log } from '@/lib/log';
 import { imageGenKeyOfJobId, isImageGenJobId } from '@/core/rules/imageGenKey';
+// ★ 账号名兜底（原 `:2960` 的 `name || (isDola ? 'dola' : '豆包')`）—— 唯一实现在 `core/rules`
+import { accountNameFallback } from '@/core/rules/pendingAttempt';
 import { landVideo } from './videoLanding';
 
 /**
@@ -150,7 +154,7 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
       if (accountId) satisfiedAt.set(accountId, now);
 
       try {
-        landVideo(store, ports, {
+        landVideo(store, {
           url: item.url,
           // ⚠️ 源在视频支里 `vid` 用的**就是 url**（`addVideoNode({ vid: Y.url })`，`:305/311`）
           vid: item.url,
@@ -182,10 +186,13 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
     // ② 落点（原 `:27489-27498`）—— key 由作业 id 取回；**释放占用在 `addImageGenResult` 内部**
     //   （原 `:27440-27444`，此处不再另写一份）
     const account = st().accounts.find((a) => a.id === job.accountId);
+    // ★ 源标签取自**站点能力位**（`SitePort.mediaSource`，豆包系工厂声明）—— 本处零站点字面量；
+    //   找不到账号 / 非豆包系站点 ⇒ 沿用原来的默认档
+    const src = account ? ports.sites[account.type]?.mediaSource : undefined;
     st().addImageGenResult({
       key: imageGenKeyOfJobId(job.nodeId),
       dataUrl: fetched.value,
-      source: account?.type === 'dola' ? 'dola' : 'doubao',
+      source: src ?? DEFAULT_CHANNEL,
       accountName: job.accountName,
       accountId: job.accountId,
     });
@@ -220,7 +227,7 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
       list.push({
         nodeId,
         accountId,
-        accountName: acc?.name || '豆包',
+        accountName: acc?.name || accountNameFallback(acc?.type),
         sentAt: ports.clock.now(),
         satisfied: false,
       });

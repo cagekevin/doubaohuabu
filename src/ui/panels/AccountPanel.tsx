@@ -33,6 +33,8 @@ import { ACCOUNT_STATUS, isAccountUsable, type Account, type SiteType } from '@/
 import { ContextMenu, type MenuItem } from '@/ui/common/ContextMenu';
 // ⚠️ 头像字是**纯规则**（原 `OP.jsx:724`）⇒ 住 `core/rules`，不在组件里内联
 import { accountAvatarText } from '@/core/rules/accountName';
+// ★ 画廊的站点能力判据 + 站点名（原 `OP.jsx:710-711` 的 `fe`/`Te`）—— 真源在画廊领域模块
+import { gallerySiteLabelOf, isGallerySite } from '@/core/rules/lovartGallery';
 import { AccountTypePicker } from './AccountTypePicker';
 import { LoginModal } from './LoginModal';
 import { GalleryPanel } from './GalleryPanel';
@@ -472,14 +474,20 @@ export function AccountPanel() {
                 )}
                 {/* 以下四颗走**图标钮**（源 `lib-icon`，`OP.jsx:751-812`）——
                     文本钮会把名字列挤没（同一处截图实测）。 */}
-                <button
-                  type="button"
-                  className={styles.iconBtn}
-                  title={ACCOUNT_PANEL_TEXT.galleryTitle}
-                  onClick={() => setGalleryFor(a.id)}
-                >
-                  {ACCOUNT_PANEL_TEXT.galleryGlyph}
-                </button>
+                {/* ★ 画廊入口 —— **只对支持画廊的站点出现**（原 `OP.jsx:774` 的 `{fe && …}`，
+                    `fe = type ∈ {lovart, tapnow}`）。
+                    ⚠️ 此前**无条件**渲染 ⇒ 豆包账号也能打开那个面板（标题「🎨 Tapnow 画廊 · 豆包01」），
+                    看着像文案错，其实是**入口判据丢了**。 */}
+                {isGallerySite(a.type) && (
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    title={ACCOUNT_PANEL_TEXT.galleryTitle(a.name, gallerySiteLabelOf(a.type))}
+                    onClick={() => setGalleryFor(a.id)}
+                  >
+                    {ACCOUNT_PANEL_TEXT.galleryGlyph}
+                  </button>
+                )}
                 {/* ★ 指纹诊断（原 `OP.jsx:751-756` 的 🔍）—— ⚠️ 只在 Windows 显示（源 `_P`） */}
                 {canDiagnose && (
                   <button

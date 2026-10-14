@@ -14,6 +14,7 @@
  */
 
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
+import type { ApiJobAttempt } from '@/stable/model/gen';
 import { GEN_HISTORY_ATTEMPT_LIMIT } from '@/constants';
 import { COMMON_TEXT, VIDEO_NODE_TEXT } from '@/constants/text';
 import { asRecord } from '@/lib/object';
@@ -64,7 +65,7 @@ export function makeAttemptId(now: number, seq: number): string {
   return `a${now.toString(36)}${seq.toString(36)}`;
 }
 
-export function makeGenAttempt(input: GenAttemptInput): Record<string, unknown> {
+export function makeGenAttempt(input: GenAttemptInput): ApiJobAttempt {
   const {
     id,
     at,

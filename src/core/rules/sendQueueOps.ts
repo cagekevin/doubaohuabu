@@ -152,13 +152,20 @@ export type SendMode =
  *   （它按类型选，说"分组"并不准）⇒ 本实现**原样保留**并在此注明 —— 改掉就是行为不等价。
  * ⚠️ 入参收**字符串**而不是节点：源版 `$3(nodeId)` 要先查节点，那是 `state` 的事。
  */
+
+/**
+ * `auto:group:` 与 `auto:<type>` 两档**共用**的 label（源版两处都写它 —— 见上方"措辞不一致"注：
+ * `auto:<type>` 按类型选却说"分组"，**照源不改**）⇒ 一处声明，免得两处各写一份（`TD-16-149`）。
+ */
+const GROUP_MODE_LABEL = '所选分组';
+
 export function resolveSendMode(sendAccount: unknown): SendMode {
   const n = typeof sendAccount === 'string' && sendAccount ? sendAccount : 'auto';
   if (n.startsWith('auto:group:')) {
-    return { mode: 'auto', opts: { groupId: n.slice(11) }, label: '所选分组' };
+    return { mode: 'auto', opts: { groupId: n.slice(11) }, label: GROUP_MODE_LABEL };
   }
   if (n.startsWith('auto:')) {
-    return { mode: 'auto', opts: { type: n.slice(5) }, label: '所选分组' };
+    return { mode: 'auto', opts: { type: n.slice(5) }, label: GROUP_MODE_LABEL };
   }
   if (n !== 'auto') {
     return { mode: 'fixed', accountId: n, label: '所选账号' };

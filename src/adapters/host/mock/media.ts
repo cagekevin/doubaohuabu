@@ -76,7 +76,7 @@ export function createMockMedia(): MediaPort {
      *   （= 该链路在 DEV 不可验证 · `BP-31`）。
      *
      * 【不联网】图是**合成**的，**不真去 fetch 那个 url** —— DEV 不该打真实 CDN。
-     * 【同形】非法地址 ⇒ `err` —— 真实宿主对 `bad-url` 就是 `{ok:false}`（`electron/main.js:1167`
+     * 【同形】非法地址 ⇒ `err` —— 真实宿主对 `bad-url` 就是 `{ok:false}`（`electron/main.js`
      *   只认 `^https?://`）；`ok(null)` 那种「成功但没图」在真实实现里**从不出现**，
      *   不该由 mock 独有（那会让调用方静默走到 `not-inline`）。
      * ⚠️ `reason` 用 `unknown` + **原文 message**：`SendFailKind` 表里没有 `bad-url`，
@@ -126,8 +126,6 @@ export function createMockMedia(): MediaPort {
     },
 
     captureRect: async (_rect: CaptureRect) => ok(null),
-
-    showInFolder: async () => ok(undefined),
 
     // mock：浏览器里没有"拖出文件到系统"这回事 ⇒ `ok`（无副作用，不算失败）
     startFileDrag: () => ok(undefined),

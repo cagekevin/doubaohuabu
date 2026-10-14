@@ -14,7 +14,7 @@
  *   | `selectFolder` | `host.file.selectFolder` | `DownloadNode`（选目录） |
  *   | `downloadFile` | `host.file.downloadFile` | `DownloadNode`（批量下载） |
  *   | `downloadFileAs` | `host.file.downloadFileAs` | `GenVideoNode`（`gv-dl` 另存为，2026-10-11） |
- *   | `revealPath` | `host.file.revealPath` | `GenVideoNode`（下载 toast 的「在文件夹中显示」，2026-10-11） |
+ *   | `revealPath` | `host.file.revealPath` | `GenVideoNode` / `GenImageNode`（下载 toast 的「在文件夹中显示」，传真实路径）· `NodeContextMenu`（「打开文件所在位置」，传 `img://`） |
  *   | `openExternal` | `host.file.openExternal` | `GalleryLightbox`（打开原图） |
  *   | `getDolaMediaDownloadSettings` · `pickDolaMediaDownloadPath` · `downloadDolaMedia` · `clearDolaMedia` | `host.media.*` | `WatermarkPanel`（无水印资源面板，源 `SD.jsx` 的 4 个专用宿主方法） |
  *
@@ -41,7 +41,7 @@ export interface HostOpsController {
    *
    * ⚠️ 返回的 `Result` **只可能表达两件事**：宿主缺失 / 调用本身抛出。
    *    「拖拽有没有真的成功」**无从判定** —— 后端走 `ipcRenderer.send`（无回执），失败只 `console.warn`
-   *    （`electron/main.js:1232,1246,1254`）⇒ 调用方**不得**据此报「已拖出」（TD-16-63，母体 M5）。
+   *    （`electron/main.js`）⇒ 调用方**不得**据此报「已拖出」（TD-16-63，母体 M5）。
    */
   dragFileOut(input: { dataUrl: string; name: string }): Result<void>;
 
@@ -96,23 +96,14 @@ export interface HostOpsController {
     filters?: Array<{ name: string; extensions: string[] }>,
   ): Promise<Result<{ path?: string; size?: number; canceled?: boolean }>>;
 
-  /** 在系统文件管理器里定位文件（`GenVideoNode` 的 toast 操作按钮 —— `host.file.revealPath`） */
-  revealPath(p: string): Promise<Result<void>>;
-
   /**
-   * ★ **按 `img://` 引用在文件管理器里定位**（原 `_Component42.jsx:1132-1134` 的 `window.api.showInFolder(ue)`）
+   * ★ **在系统文件管理器里定位文件** —— 收**真实路径**或 **`img://` 引用**（宿主自己判别并解析）
    *
-   * ⚠️ **它与 `revealPath` 不是重复，是"收的东西不同"**：
-   *   · `revealPath(p)` → 主进程 `reveal-path`（`main.js:1904`）→ **`shell.showItemInFolder(p)`**
-   *     ⇒ **只认真实路径**（`img://` 传进去不解析）；
-   *   · `showInFolder(ref)` → 主进程 `show-in-folder`（`main.js:1273`）→ **先 `resolveImageRef(ref)`**
-   *     ⇒ **收 `img://` 引用**。
-   * ★ **2026-10-11 修（`TD-16-…`）**：`NodeContextMenu` 的「打开文件所在位置」原先调的是
-   *   `revealPath(dataUrl)`，而那里的 `dataUrl` **只可能是 `img://`**（见其 `canReveal` 判据）
-   *   ⇒ 传进去主进程不解析 ⇒ **该功能实际打不开**。
-   *   （`MediaPort.showInFolder` 此前**零消费**，根因正是"**该用它的地方用错了方法**"。）
+   * 两个消费者传的不是同一种东西：`GenVideoNode` / `GenImageNode` 的下载 toast 传**真实路径**，
+   * `NodeContextMenu` 的「打开文件所在位置」传 **`img://`**（其 `canReveal` 判据）。
+   * ⇒ 只在**端口**处做一次判别，调用方**没有**「该调哪个方法」的余地（源 `_Component42.jsx:1132-1134`）。
    */
-  showInFolder(ref: string): Promise<Result<void>>;
+  revealPath(p: string): Promise<Result<void>>;
 
   /** 用系统默认程序打开外链（`GalleryLightbox` 打开原图 —— `host.file.openExternal`） */
   openExternal(url: string): Promise<Result<void>>;
@@ -167,8 +158,6 @@ export function createHostOps(ports: Ports): HostOpsController {
     downloadFile: (url, fileName) => ports.host.file.downloadFile(url, fileName),
     downloadFileAs: (url, defaultName, filters) => ports.host.file.downloadFileAs(url, defaultName, filters),
     revealPath: (p) => ports.host.file.revealPath(p),
-    // ★ 收 `img://` 引用的那个（主进程会先 resolve；与 `revealPath` 收的**不是**同一种东西）
-    showInFolder: (ref) => ports.host.media.showInFolder(ref),
     openExternal: (url) => ports.host.file.openExternal(url),
     // ★ 无水印资源面板（源 `SD.jsx` 的 4 个专用宿主方法）：只转发（无编排、无第二份判据）
     getDolaMediaDownloadSettings: () => ports.host.media.getDolaMediaDownloadSettings(),

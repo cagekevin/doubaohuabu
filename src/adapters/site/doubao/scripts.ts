@@ -6,7 +6,7 @@
  * | 级 | 规则 |
  * |---|---|
  * | 1 类名精确 | `.send-btn-wrapper` / `[class*="send-btn"]` / `[class*="chat-send"]` / `[class*="submit-btn"]` / `[class*="msg-send"]` / `[class*="input-send"]` |
- * | 2 输入框邻近 | `textarea` / `[contenteditable]` / `[role=textbox]` 的同级或父级按钮；排除 `arrow\|dropdown\|clear\|attach\|upload\|emoji\|plus\|add`；并取 `nextElementSibling` |
+ * | 2 输入框邻近 | 「主输入框候选」（`COMPOSER_LIST_SRC`）的同级或父级按钮；排除 `arrow\|dropdown\|clear\|attach\|upload\|emoji\|plus\|add`；并取 `nextElementSibling` |
  * | 3 全页扫描 | 遍历 `button` / `[role=button]` / `[tabindex]`；`hasArrowIcon`（SVG ↑/▲/arrow-up/send-icon）或 `hasSendText`（发送/submit/send）；排除 `copy\|share\|like\|dislike\|refresh\|menu\|nav\|header\|sidebar\|toolbar` |
  * | 4 兜底 | 输入容器内**倒序**找 `宽<80 && 高<80` 的可点击元素 |
  *
@@ -22,7 +22,8 @@
  * 输入框锚定 · `isPreviewCandidate` / `isNearInput` · 全页 img 与 background-image 筛选 ·
  * inputBar 后代兜底。
  *
- * ⚠️ 两份都在源里（源的 `_a`/`cD` 就是两份）⇒ **改一处必须改两处**。
+ * ⚠️ 两份都在源里（源的 `_a`/`cD` 就是两份）⇒ **改一处必须改两处**（例外：输入框锚定的候选取自
+ * `COMPOSER_LIST_SRC` —— 那是**站点内唯一一份**，两段脚本都只是引用它）。
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
@@ -44,6 +45,45 @@ import {
 const EXCLUDE_NEAR = 'arrow|dropdown|clear|attach|upload|emoji|plus|add';
 const EXCLUDE_PAGE = 'copy|share|like|dislike|refresh|menu|nav|header|sidebar|toolbar';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ★ **主对话输入框·候选 —— 站点内唯一一份**
+//
+// ⚠️ **为什么住这里**：注入脚本跑在 guest 主世界、**不能 `require`** ⇒ 站点选择器没有
+//    `constants/**` 那个落点；本文件导出的**就是宿主侧字符串** ⇒ 各页内脚本用本常量
+//    **模板拼接**（先例 = `electron/dola-duration-main.js` 的宿主传参）。
+// ⚠️ **顺序即语义**（`||` 链命中即停）：Semi 主输入框 → placeholder 变体 → 通用可编辑
+//    → 兜底 `textarea` / `input[type="text"]`。值逐字取自源 `Ap` / `Ql`
+//    （`shared.js:36845` / `36861`）。
+// ★ 下列页内脚本里凡标注「逐字搬入」者，**只有"取输入框"这一段**是本常量的模板拼接
+//    （其余逐字）；读那些标注时按本条理解。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 「主对话输入框」候选选择器（有序列 —— 精 → 粗） */
+const COMPOSER_SELECTORS = [
+  'textarea.semi-input-textarea',
+  'textarea[placeholder*="发消息"]',
+  'textarea[placeholder*="Message"]',
+  'textarea[placeholder*="message"]',
+  '[contenteditable="true"]',
+  '[role="textbox"]',
+  'textarea',
+  'input[type="text"]',
+] as const;
+
+/** 页内「命中即停」链的唯一拼法：`document.querySelector('…') || …` */
+const COMPOSER_LOOKUP_SRC = COMPOSER_SELECTORS.map(
+  (s) => `document.querySelector('${s}')`,
+).join(' ||\n      ');
+
+/**
+ * 页内**集合口径**的唯一拼法（逗号列表）—— 给 `querySelectorAll` / 存在性 `querySelector` 用。
+ *
+ * ⚠️ 末尾的 `[contenteditable]`（无值限定）**只给收集用**（源 `_a`/`cD` 要「全部可编辑元素」，
+ *    再按可见面积取最大）：**不进 `||` 链** —— 链是「命中即停」，无值限定会让
+ *    `contenteditable="false"` 抢到「主输入框」。
+ */
+export const COMPOSER_LIST_SRC = [...COMPOSER_SELECTORS, '[contenteditable]'].join(', ');
+
 /** 生成「定位发送按钮并点击」脚本；返回 `{ok, clicked, tag, strategy}` */
 export function buildClickSendScript(): string {
   return `(() => {
@@ -58,7 +98,7 @@ export function buildClickSendScript(): string {
   if (l1.length) return fire(l1[0], 1, 'class-exact');
 
   // 级 2：输入框邻近
-  const inputs = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')].filter(clickable);
+  const inputs = [...document.querySelectorAll('${COMPOSER_LIST_SRC}')].filter(clickable);
   for (const inp of inputs) {
     const wrap = inp.closest('.semi-input-wrapper') || inp.parentElement;
     const cands = [...(wrap ? wrap.querySelectorAll('button, [role="button"]') : [])].filter(clickable);
@@ -121,7 +161,7 @@ export function buildClickSendScript(): string {
 export const GEN_SUBMITTED_COUNT_SCRIPT = `
 (function(){
   try {
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var inputText = '';
     if (input) inputText = (input.value || input.textContent || input.innerText || '');
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
@@ -153,7 +193,7 @@ export const GEN_CONFIRM_REQUEST_COUNT_SCRIPT = `
 (function(){
   try {
     // 输入框文本（我方已发送/待发送内容）——用于排除自触发
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var inputText = '';
     if (input) inputText = (input.value || input.textContent || input.innerText || '');
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
@@ -213,16 +253,13 @@ export const CLICK_CONFIRM_BUTTON_SCRIPT = `
 /**
  * 读输入框**内容**（归空白；原 `j0` 37252）
  *
- * ⚠️ **逐字搬入**（源文本原样，含转义层级）—— 别改。
+ * ⚠️ **逐字搬入**（源 `j0` 原文本样）—— **唯一例外** = 输入框候选改由
+ *    `COMPOSER_LOOKUP_SRC` 模板拼接（值 = 源 `Ap`/`Ql` 逐字，源 `j0` 那串是它的子集）。
  */
 export const READ_COMPOSER_TEXT_SCRIPT = `
 (function(){
   try {
-    var input = document.querySelector('textarea.semi-input-textarea')
-      || document.querySelector('textarea[placeholder*="发消息"]')
-      || document.querySelector('[contenteditable="true"]')
-      || document.querySelector('[role="textbox"]')
-      || document.querySelector('textarea');
+    var input = ${COMPOSER_LOOKUP_SRC};
     if (!input) return { found:false, text:'' };
     var value = input.value != null ? input.value : (input.innerText || input.textContent || '');
     return { found:true, text:String(value || '').replace(/\\s+/g,' ').trim() };
@@ -235,21 +272,6 @@ export const READ_COMPOSER_TEXT_SCRIPT = `
 // 依赖：`Ap`(填文本前聚焦) · `Ql`(读输入框状态) · `AD`(setter 回落) ·
 //       `jD`(读消息基线) · `_D`(读回复，择优 JSON 块)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * 输入框候选选择器（原 `Ap`/`Ql`/`AD` 三处**逐字相同**的那一串）
- * ⚠️ 抽成一处（判据 C1 —— 原版自己重复了 3 遍）
- */
-const INPUT_SELECTORS = [
-  "document.querySelector('textarea.semi-input-textarea')",
-  "document.querySelector('textarea[placeholder*=\"发消息\"]')",
-  "document.querySelector('textarea[placeholder*=\"Message\"]')",
-  "document.querySelector('textarea[placeholder*=\"message\"]')",
-  "document.querySelector('[contenteditable=\"true\"]')",
-  "document.querySelector('[role=\"textbox\"]')",
-  "document.querySelector('textarea')",
-  "document.querySelector('input[type=\"text\"]')",
-].join('\n      || ');
 
 /**
  * 消息块选择器（原 `lS` shared.js:38722 —— 基线读取与回复读取**共用**）
@@ -269,32 +291,26 @@ const MSG_BLOCK_SELECTORS = [
 /** 「聚焦输入框」脚本（原 `Ap` 36845）—— 返回 `true` / `false` / `{error}` */
 export const INPUT_FOCUS_SCRIPT = `(function(){
   try {
-    var input = ${INPUT_SELECTORS};
+    var input = ${COMPOSER_LOOKUP_SRC};
     if (input){ input.focus(); return true; }
     return false;
   } catch(e) { return { error: e.message || String(e) }; }
 })()`;
 
 /**
- * ★ **附件缩略图计数**（原 `_a`，`shared.js:36887-37061`）—— **逐字抄录**
+ * ★ **附件缩略图元素收集**（源 `_a` 36887-37061 / `cD` 37266-37448 里**各写一份、逐字相同**）—— 本仓收成**一处**
  *
- * 用途（源 `_Component43` 的 Phase 2）：发送前先取**基数** `attachImgCount`，附图后反复探测
- * **增量**，据此判「这张到底贴上去了没有」—— CDP 主通路、剪贴板回退、按键补充、Phase 2b
- * 增量重试**四档都靠它**。
- *
- * 返回：`{attachImgCount, strategy, inputFound, inputTag, inputArea, edCount, nearCount, bgCount, inputBarCount, totalImgTags}`
- * （异常 ⇒ `{attachImgCount:0, strategy:'error', error}`）
- *
- * ⚠️ **纯读**（只 `querySelectorAll` / `getBoundingClientRect` / `getComputedStyle`）—— 不碰页面状态，合「零注入」
- * ⚠️ 定位思路（源注释原话）：**放弃容器定位**（豆包可能把缩略图渲染在 textarea 的**兄弟**容器里，
- *    容器爬升法会漏）⇒ 改「**位置近邻**」（参考图必在输入框附近）；另兜底穿透 Shadow DOM 查 inputBar 后代
- * ⚠️ 去重用**局部 `WeakSet`**，**绝不用 DOM 自定义属性**（源注释明写）
- * ⚠️ ★ **与 `ATTACH_FINGERPRINT_SCRIPT` 共用同一套元素收集实现**（源里也是两份）——
- *    改这里的 DOM 定位**必须同时改那边**；见文件头注
+ * ⚠️ **为什么是"宿主侧片段"而不是 `constants/**`**：脚本跑在 guest 主世界、**不能 `require`** ⇒
+ *    站点实现没有 `constants` 那个落点；本文件导出的**就是宿主侧字符串** ⇒ 片段由两个脚本**模板拼入**
+ *    （先例 = 同文件的 `COMPOSER_LIST_SRC` / `COMPOSER_LOOKUP_SRC` · `shared/scanScripts.buildLibraryScanScript`）。
+ * ⚠️ **两个消费方的差异只在各自外层 return**：`ATTACH_COUNT_SCRIPT`（源 `_a`，只**数**）与
+ *    `ATTACH_FINGERPRINT_SCRIPT`（源 `cD`，还要**取指纹**）—— 收集逻辑（`okCls` / `deepQuery` /
+ *    输入框锚定 / `isPreviewCandidate` / `isNearInput` / 全页 img+background 筛选 / inputBar 兜底）**完全同一份**。
+ * ⚠️ **纯读**（只 `querySelectorAll` / `getBoundingClientRect` / `getComputedStyle`）—— 合「零注入」。
+ * ⚠️ 返回 `{list, bgUrls, …}`：`bgUrls` 与 `list` **逐位平行**（背景图项的真实 url，否则 `''`）——
+ *    计数脚本不读它，指纹脚本要拿它算 `sigOf`（源里是给每个背景图项包一层 `{src, alt, _bg, _el}`）。
  */
-export const ATTACH_COUNT_SCRIPT = `
-(function(){
-  try {
+const ATTACH_COLLECT_SRC = `
     // ─────────────────────────────────────────────────────────────
     // 核心思路：放弃容器定位（豆包可能把图片缩略图渲染在 textarea 的
     // 兄弟容器而非后代，容器爬升法会漏），改为「位置近邻」——
@@ -302,241 +318,57 @@ export const ATTACH_COUNT_SCRIPT = `
     // 同时也兜底保留 inputBar 后代查询（穿透 Shadow DOM）。
     // 注意：去重用局部 seen，绝不能用 DOM 自定义属性。
     // ─────────────────────────────────────────────────────────────
-    var out = [];
-    var seen = new WeakSet();
-    function add(el) {
-      if (!el || seen.has(el)) return;
-      seen.add(el);
-      out.push(el);
-    }
-    function okCls(el) {
-      var c = (el.className || '').toString();
-      // 只排除明确的 UI 装饰（头像/logo/收藏/昵称/光标）；参考图缩略图的包装元素常含 icon/btn/close 等字眼，
-      // 若据此误删会漏计真实参考图。是否是真缩略图交由位置与尺寸判定（isPreviewCandidate / isNearInput）负责。
-      return !/avatar|logo|favicon|nickname|cursor/i.test(c);
-    }
-
-    // 深查询：穿透 Shadow DOM
-    function deepQuery(root, selector) {
-      var res = [];
-      var walks = [root];
-      var wi = 0;
-      while (wi < walks.length) {
-        var cur = walks[wi++];
-        if (!cur || !cur.querySelectorAll) continue;
-        try {
-          res = res.concat(Array.prototype.slice.call(cur.querySelectorAll(selector)));
-          var els = cur.querySelectorAll('*');
-          for (var ei = 0; ei < els.length; ei++) {
-            if (els[ei].shadowRoot) walks.push(els[ei].shadowRoot);
-          }
-        } catch (e) {}
+    function collectAttach() {
+      var out = [];
+      var bgUrls = [];
+      var seen = new WeakSet();
+      function add(el, bgUrl) {
+        if (!el || seen.has(el)) return;
+        seen.add(el);
+        out.push(el);
+        bgUrls.push(bgUrl || '');
       }
-      return res;
-    }
-
-    // ── 步骤 A：定位输入框/编辑器（优选「可见面积最大」的可编辑元素）──
-    // 解析：豆包为 Semi Design 单页应用，同一页可能同时存在多个 textarea/可编辑元素
-    // （主聊天输入框、视频生成弹窗输入框、搜索框等）。document.querySelector('textarea')
-    // 只取 DOM 中【第一个】，极易锚定到错误甚至隐藏的目标，导致参考图「临近输入框」判定失效、漏计。
-    // 改为收集所有可见可编辑元素，以可见面积最大者为锚点。
-    var inputEl = null;
-    var inputRect = null;
-    var edCands = [];
-    var edAll = document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable], [role="textbox"]');
-    for (var ei = 0; ei < edAll.length; ei++) {
-      var ed = edAll[ei];
-      var er;
-      try { er = ed.getBoundingClientRect(); } catch (e) { continue; }
-      var earea = er.width * er.height;
-      if (er.width < 60 || er.height < 24) continue;        // 仅保留可见且有实际面积的编辑器
-      edCands.push({ el: ed, rect: er, area: earea });
-    }
-    if (edCands.length) {
-      var bestEd = edCands[0];
-      for (var bi2 = 1; bi2 < edCands.length; bi2++) if (edCands[bi2].area > bestEd.area) bestEd = edCands[bi2];
-      inputEl = bestEd.el; inputRect = bestEd.rect;
-    } else {
-      var fbEd = document.querySelector('textarea') ||
-        document.querySelector('[contenteditable="true"]') ||
-        document.querySelector('[role="textbox"]');
-      if (fbEd) { inputEl = fbEd; inputRect = fbEd.getBoundingClientRect(); }
-    }
-
-    // 判定元素是否位于「输入框附近的图片预览区域」——放宽几何窗口，以同时兼容
-    // 参考图与输入框「上下堆叠」（Seedance 弹窗：缩略图在输入框上方）与
-    // 「同层并列」（缩略图在输入框左侧）两种布局；仅通过尺寸排除明显非缩略图的元素。
-    function isPreviewCandidate(rect) {
-      if (!inputRect) return false;
-      if (rect.width < 20 || rect.height < 20) return false;     // 过小：多为图标/光标
-      if (rect.width > 430 || rect.height > 430) return false;   // 过大：多为大图/弹窗主图
-      // 垂直：缩略图底部最多低于 input.top+200，顶部向上可探 620px
-      if (rect.bottom > inputRect.top + 200) return false;
-      if (inputRect.top - rect.top > 620) return false;
-      // 横向：±220px（同层并列时缩略图位于输入框一侧）
-      if (rect.right < inputRect.left - 220) return false;
-      if (rect.left > inputRect.right + 220) return false;
-      return true;
-    }
-    // 进一步放宽：与输入框中心点距离 ≤ 520px（兜底）
-    function isNearInput(rect) {
-      if (!inputRect) return false;
-      var dx = Math.max(inputRect.left - rect.right, rect.left - inputRect.right, 0);
-      var dy = Math.max(inputRect.top - rect.bottom, rect.top - inputRect.bottom, 0);
-      return Math.sqrt(dx*dx + dy*dy) <= 520;
-    }
-
-    // ── 步骤 B：全页 img 位置近邻筛选（≥16px，排除 UI 类） ──
-    var allImgs = document.querySelectorAll('img');
-    var nearCount = 0;
-    for (var i = 0; i < allImgs.length; i++) {
-      var r = allImgs[i].getBoundingClientRect();
-      if (r.width < 16 || r.height < 16) continue;
-      if (!okCls(allImgs[i])) continue;
-      if (isPreviewCandidate(r) || isNearInput(r)) { add(allImgs[i]); nearCount++; }
-    }
-
-    // ── 步骤 C：全页 background-image 元素位置近邻筛选（≥40px，排除 UI） ──
-    var bgCount = 0;
-    var allDivs = document.querySelectorAll('div, span, section, button, a');
-    for (var b = 0; b < allDivs.length; b++) {
-      try {
-        var st = window.getComputedStyle(allDivs[b]);
-        var bg = st.backgroundImage || '';
-        if (!bg || bg === 'none' || bg.indexOf('url(') === -1) continue;
-        var rb = allDivs[b].getBoundingClientRect();
-        if (rb.width < 40 || rb.height < 40) continue;
-        if (!okCls(allDivs[b])) continue;
-        // 背景图元素不能包含 img 子元素（避免双计）
-        if (allDivs[b].querySelector('img')) continue;
-        if (isPreviewCandidate(rb) || isNearInput(rb)) { add(allDivs[b]); bgCount++; }
-      } catch (e) {}
-    }
-
-    // ── 步骤 D：输入框所在容器（inputBar）后代穿透 Shadow DOM ──
-    // 即便参考图是兄弟容器而非后代，输入框所在的 footer-bar 容器通常也包含预览区
-    var imgBarCount = 0;
-    if (inputEl) {
-      var node = inputEl.parentElement;
-      var guard = 0;
-      var inputBar = null;
-      while (node && node !== document.body && guard < 14) {
-        var rc = node.getBoundingClientRect();
-        if (rc.height > 0 && rc.height <= 700) inputBar = node;
-        else break;
-        node = node.parentElement;
-        guard++;
+      function okCls(el) {
+        var c = (el.className || '').toString();
+        // 只排除明确的 UI 装饰（头像/logo/收藏/昵称/光标）；参考图缩略图的包装元素常含 icon/btn/close 等字眼，
+        // 若据此误删会漏计真实参考图。是否是真缩略图交由位置与尺寸判定（isPreviewCandidate / isNearInput）负责。
+        return !/avatar|logo|favicon|nickname|cursor/i.test(c);
       }
-      if (inputBar) {
-        var bAll = deepQuery(inputBar, 'img');
-        for (var bi = 0; bi < bAll.length; bi++) {
-          if (seen.has(bAll[bi])) continue;
-          var rb2 = bAll[bi].getBoundingClientRect();
-          if (rb2.width >= 16 && rb2.height >= 16 && okCls(bAll[bi])) {
-            add(bAll[bi]); imgBarCount++;
-          }
-        }
-        var bBg = deepQuery(inputBar, 'div,span,section,button,a');
-        for (var bb = 0; bb < bBg.length; bb++) {
-          if (seen.has(bBg[bb])) continue;
+
+      // 深查询：穿透 Shadow DOM
+      function deepQuery(root, selector) {
+        var res = [];
+        var walks = [root];
+        var wi = 0;
+        while (wi < walks.length) {
+          var cur = walks[wi++];
+          if (!cur || !cur.querySelectorAll) continue;
           try {
-            var st2 = window.getComputedStyle(bBg[bb]);
-            var bg2 = st2.backgroundImage || '';
-            if (!bg2 || bg2 === 'none' || bg2.indexOf('url(') === -1) continue;
-            var rbg = bBg[bb].getBoundingClientRect();
-            if (rbg.width >= 40 && rbg.height >= 40 && okCls(bBg[bb]) && !bBg[bb].querySelector('img')) {
-              add(bBg[bb]); imgBarCount++;
+            res = res.concat(Array.prototype.slice.call(cur.querySelectorAll(selector)));
+            var els = cur.querySelectorAll('*');
+            for (var ei = 0; ei < els.length; ei++) {
+              if (els[ei].shadowRoot) walks.push(els[ei].shadowRoot);
             }
           } catch (e) {}
         }
-      }
-    }
-
-    return {
-      attachImgCount: out.length,
-      strategy: 'position-proximity',
-      inputFound: !!inputEl,
-      inputTag: inputEl ? (inputEl.tagName.toLowerCase() + '.' + (inputEl.className || '').toString().split(/s+/)[0]) : null,
-      inputArea: inputRect ? Math.round(inputRect.width * inputRect.height) : 0,
-      edCount: edCands ? edCands.length : 0,
-      nearCount: nearCount,
-      bgCount: bgCount,
-      inputBarCount: imgBarCount,
-      totalImgTags: allImgs.length
-    };
-  } catch(e) { return { attachImgCount: 0, strategy: 'error', error: e.message || String(e) }; }
-})()
-`;
-
-/**
- * ★ **附件指纹**（原 `cD`，`shared.js:37266-37448`）—— **逐字抄录**
- *
- * 用途（源 Phase 3a）：读输入区**已贴上的**参考图指纹，交给 `uD` 与期望顺序比对
- * ⇒ 判「图够不够 / 顺序对不对」。
- *
- * 返回：`{sigs, count, sigCount, totalImgs, inputFound, inputTag, inputArea, edCount}`
- * （异常 ⇒ `{sigs:[], count:0, error}`）
- *
- * ⚠️ 与 `ATTACH_COUNT_SCRIPT`（原 `_a`）**不是同一个**：那个只**数**元素（`attachImgCount`），
- *    这个还要**取指纹**（`sigs`）—— 两者的「收集元素」那半**同源同逻辑**（位置近邻 + inputBar 兜底），
- *    源里就是**各写一份**；本仓照抄两份（合并会改变两边各自的 `add` 去重语义）。
- * ⚠️ ★ **与 `_a` 共用同一套元素收集实现** —— 改 DOM 定位**必须同时改两处**；见文件头注。
- * ⚠️ 指纹形态（`sigOf`）：`DATA$<base64 体去空白截 600>` / `BLOB$<alt|前 55 字>` /
- *    `SRC$<url 前 200>` / `ALT$<alt 前 40>`；**四种「空壳」形态会被丢掉**（`:37432`）
- * ⚠️ **纯读**（合「零注入」）
- */
-export const ATTACH_FINGERPRINT_SCRIPT = `
-(function(){
-  try {
-    // 深查询：穿透 Shadow DOM
-    function deepQuery(root, selector) {
-      var res = [];
-      var walks = [root];
-      var wi = 0;
-      while (wi < walks.length) {
-        var cur = walks[wi++];
-        if (!cur || !cur.querySelectorAll) continue;
-        try {
-          res = res.concat(Array.prototype.slice.call(cur.querySelectorAll(selector)));
-          var els = cur.querySelectorAll('*');
-          for (var ei = 0; ei < els.length; ei++) {
-            if (els[ei].shadowRoot) walks.push(els[ei].shadowRoot);
-          }
-        } catch (e) {}
-      }
-      return res;
-    }
-
-    function okCls(el) {
-      var c = (el.className || '').toString();
-      // 只排除明确的 UI 装饰（头像/logo/收藏/昵称/光标）；参考图缩略图的包装元素常含 icon/btn/close 等字眼，
-      // 若据此误删会漏计真实参考图。是否是真缩略图交由位置与尺寸判定（isPreviewCandidate / isNearInput）负责。
-      return !/avatar|logo|favicon|nickname|cursor/i.test(c);
-    }
-
-    // 统一收集：位置近邻 + 输入栏容器 双重保险，img + background-image 合并去重
-    function collectAll(){
-      var out = [];
-      var seen = new WeakSet();
-      function add(el) {
-        if (!el) return;
-        var key = el._el || el;
-        if (seen.has(key)) return;
-        seen.add(key);
-        out.push(el);
+        return res;
       }
 
-      // 定位输入框/编辑器（优选「可见面积最大」的可编辑元素，避免锚定到 DOM 中第一个隐藏 textarea）
+      // ── 步骤 A：定位输入框/编辑器（优选「可见面积最大」的可编辑元素）──
+      // 解析：豆包为 Semi Design 单页应用，同一页可能同时存在多个 textarea/可编辑元素
+      // （主聊天输入框、视频生成弹窗输入框、搜索框等）。document.querySelector('textarea')
+      // 只取 DOM 中【第一个】，极易锚定到错误甚至隐藏的目标，导致参考图「临近输入框」判定失效、漏计。
+      // 改为收集所有可见可编辑元素，以可见面积最大者为锚点。
       var inputEl = null;
       var inputRect = null;
       var edCands = [];
-      var edAll = document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable], [role="textbox"]');
+      var edAll = document.querySelectorAll('${COMPOSER_LIST_SRC}');
       for (var ei = 0; ei < edAll.length; ei++) {
         var ed = edAll[ei];
         var er;
         try { er = ed.getBoundingClientRect(); } catch (e) { continue; }
         var earea = er.width * er.height;
-        if (er.width < 60 || er.height < 24) continue;
+        if (er.width < 60 || er.height < 24) continue;        // 仅保留可见且有实际面积的编辑器
         edCands.push({ el: ed, rect: er, area: earea });
       }
       if (edCands.length) {
@@ -544,22 +376,26 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
         for (var bi2 = 1; bi2 < edCands.length; bi2++) if (edCands[bi2].area > bestEd.area) bestEd = edCands[bi2];
         inputEl = bestEd.el; inputRect = bestEd.rect;
       } else {
-        var fbEd = document.querySelector('textarea') ||
-          document.querySelector('[contenteditable="true"]') ||
-          document.querySelector('[role="textbox"]');
+        var fbEd = ${COMPOSER_LOOKUP_SRC};
         if (fbEd) { inputEl = fbEd; inputRect = fbEd.getBoundingClientRect(); }
       }
 
+      // 判定元素是否位于「输入框附近的图片预览区域」——放宽几何窗口，以同时兼容
+      // 参考图与输入框「上下堆叠」（Seedance 弹窗：缩略图在输入框上方）与
+      // 「同层并列」（缩略图在输入框左侧）两种布局；仅通过尺寸排除明显非缩略图的元素。
       function isPreviewCandidate(rect) {
         if (!inputRect) return false;
-        if (rect.width < 20 || rect.height < 20) return false;
-        if (rect.width > 430 || rect.height > 430) return false;
+        if (rect.width < 20 || rect.height < 20) return false;     // 过小：多为图标/光标
+        if (rect.width > 430 || rect.height > 430) return false;   // 过大：多为大图/弹窗主图
+        // 垂直：缩略图底部最多低于 input.top+200，顶部向上可探 620px
         if (rect.bottom > inputRect.top + 200) return false;
         if (inputRect.top - rect.top > 620) return false;
+        // 横向：±220px（同层并列时缩略图位于输入框一侧）
         if (rect.right < inputRect.left - 220) return false;
         if (rect.left > inputRect.right + 220) return false;
         return true;
       }
+      // 进一步放宽：与输入框中心点距离 ≤ 520px（兜底）
       function isNearInput(rect) {
         if (!inputRect) return false;
         var dx = Math.max(inputRect.left - rect.right, rect.left - inputRect.right, 0);
@@ -567,16 +403,18 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
         return Math.sqrt(dx*dx + dy*dy) <= 520;
       }
 
-      // ── 步骤 A：全页 img 位置近邻筛选 ──
+      // ── 步骤 B：全页 img 位置近邻筛选（≥16px，排除 UI 类） ──
       var allImgs = document.querySelectorAll('img');
+      var nearCount = 0;
       for (var i = 0; i < allImgs.length; i++) {
         var r = allImgs[i].getBoundingClientRect();
         if (r.width < 16 || r.height < 16) continue;
         if (!okCls(allImgs[i])) continue;
-        if (isPreviewCandidate(r) || isNearInput(r)) add(allImgs[i]);
+        if (isPreviewCandidate(r) || isNearInput(r)) { add(allImgs[i], ''); nearCount++; }
       }
 
-      // ── 步骤 B：全页 background-image 元素位置近邻筛选 ──
+      // ── 步骤 C：全页 background-image 元素位置近邻筛选（≥40px，排除 UI） ──
+      var bgCount = 0;
       var allDivs = document.querySelectorAll('div, span, section, button, a');
       for (var b = 0; b < allDivs.length; b++) {
         try {
@@ -586,16 +424,19 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
           var rb = allDivs[b].getBoundingClientRect();
           if (rb.width < 40 || rb.height < 40) continue;
           if (!okCls(allDivs[b])) continue;
+          // 背景图元素不能包含 img 子元素（避免双计）
           if (allDivs[b].querySelector('img')) continue;
           if (isPreviewCandidate(rb) || isNearInput(rb)) {
-            var m = bg.match(/url\\(["']?([^"')]+)["']?\\)/);
-            var obj = { src: (m && m[1]) || bg.substring(0, 200), alt: '', _bg: true, _el: allDivs[b] };
-            add(obj);
+            var m = bg.match(/url\(["']?([^"')]+)["']?\)/);
+            add(allDivs[b], (m && m[1]) || bg.substring(0, 200));
+            bgCount++;
           }
         } catch (e) {}
       }
 
-      // ── 步骤 C：输入框所在容器（inputBar）后代兜底（穿透 Shadow DOM） ──
+      // ── 步骤 D：输入框所在容器（inputBar）后代穿透 Shadow DOM ──
+      // 即便参考图是兄弟容器而非后代，输入框所在的 footer-bar 容器通常也包含预览区
+      var imgBarCount = 0;
       if (inputEl) {
         var node = inputEl.parentElement;
         var guard = 0;
@@ -612,7 +453,7 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
           for (var bi = 0; bi < bAll.length; bi++) {
             if (seen.has(bAll[bi])) continue;
             var rb2 = bAll[bi].getBoundingClientRect();
-            if (rb2.width >= 16 && rb2.height >= 16 && okCls(bAll[bi])) add(bAll[bi]);
+            if (rb2.width >= 16 && rb2.height >= 16 && okCls(bAll[bi])) { add(bAll[bi], ''); imgBarCount++; }
           }
           var bBg = deepQuery(inputBar, 'div,span,section,button,a');
           for (var bj = 0; bj < bBg.length; bj++) {
@@ -623,17 +464,92 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
               if (!bg2 || bg2 === 'none' || bg2.indexOf('url(') === -1) continue;
               var rbg = bBg[bj].getBoundingClientRect();
               if (rbg.width >= 40 && rbg.height >= 40 && okCls(bBg[bj]) && !bBg[bj].querySelector('img')) {
-                var m2 = bg2.match(/url\\(["']?([^"')]+)["']?\\)/);
-                add({ src: (m2 && m2[1]) || bg2.substring(0, 200), alt: '', _bg: true, _el: bBg[bj] });
+                var m2 = bg2.match(/url\(["']?([^"')]+)["']?\)/);
+                add(bBg[bj], (m2 && m2[1]) || bg2.substring(0, 200));
+                imgBarCount++;
               }
             } catch (e) {}
           }
         }
       }
-      return { list: out, inputFound: !!inputEl, inputTag: inputEl ? (inputEl.tagName.toLowerCase() + '.' + (inputEl.className || '').toString().split(/s+/)[0]) : null, inputArea: inputRect ? Math.round(inputRect.width * inputRect.height) : 0, edCount: edCands ? edCands.length : 0 };
+
+      return {
+        list: out,
+        bgUrls: bgUrls,
+        inputFound: !!inputEl,
+        inputTag: inputEl ? (inputEl.tagName.toLowerCase() + '.' + (inputEl.className || '').toString().split(/s+/)[0]) : null,
+        inputArea: inputRect ? Math.round(inputRect.width * inputRect.height) : 0,
+        edCount: edCands ? edCands.length : 0,
+        nearCount: nearCount,
+        bgCount: bgCount,
+        inputBarCount: imgBarCount,
+        totalImgTags: allImgs.length
+      };
     }
-    function sigOf(img){
-      var src = (img.getAttribute && img.getAttribute('src')) || img.src || '';
+`;
+
+/**
+ * ★ **附件缩略图计数**（原 `_a`，`shared.js:36887-37061`）—— **逐字抄录**
+ *
+ * 用途（源 `_Component43` 的 Phase 2）：发送前先取**基数** `attachImgCount`，附图后反复探测
+ * **增量**，据此判「这张到底贴上去了没有」—— CDP 主通路、剪贴板回退、按键补充、Phase 2b
+ * 增量重试**四档都靠它**。
+ *
+ * 返回：`{attachImgCount, strategy, inputFound, inputTag, inputArea, edCount, nearCount, bgCount, inputBarCount, totalImgTags}`
+ * （异常 ⇒ `{attachImgCount:0, strategy:'error', error}`）
+ *
+ * ⚠️ **纯读**（只 `querySelectorAll` / `getBoundingClientRect` / `getComputedStyle`）—— 不碰页面状态，合「零注入」
+ * ⚠️ 定位思路（源注释原话）：**放弃容器定位**（豆包可能把缩略图渲染在 textarea 的**兄弟**容器里，
+ *    容器爬升法会漏）⇒ 改「**位置近邻**」（参考图必在输入框附近）；另兜底穿透 Shadow DOM 查 inputBar 后代
+ * ⚠️ 去重用**局部 `WeakSet`**，**绝不用 DOM 自定义属性**（源注释明写）
+ * ★ **2026-10-14 收口（`TD-05-17`）**：收集逻辑 = 上面的 `ATTACH_COLLECT_SRC`（**唯一一份**）——
+ *    此前它与 `ATTACH_FINGERPRINT_SCRIPT` **各抄一份**（逐字相同，含注释）。
+ */
+export const ATTACH_COUNT_SCRIPT = `
+(function(){
+  try {
+${ATTACH_COLLECT_SRC}
+    var c = collectAttach();
+    return {
+      attachImgCount: c.list.length,
+      strategy: 'position-proximity',
+      inputFound: c.inputFound,
+      inputTag: c.inputTag,
+      inputArea: c.inputArea,
+      edCount: c.edCount,
+      nearCount: c.nearCount,
+      bgCount: c.bgCount,
+      inputBarCount: c.inputBarCount,
+      totalImgTags: c.totalImgTags
+    };
+  } catch(e) { return { attachImgCount: 0, strategy: 'error', error: e.message || String(e) }; }
+})()
+`;
+
+/**
+ * ★ **附件指纹**（原 `cD`，`shared.js:37266-37448`）—— **逐字抄录**
+ *
+ * 用途（源 Phase 3a）：读输入区**已贴上的**参考图指纹，交给 `uD` 与期望顺序比对
+ * ⇒ 判「图够不够 / 顺序对不对」。
+ *
+ * 返回：`{sigs, count, sigCount, totalImgs, inputFound, inputTag, inputArea, edCount}`
+ * （异常 ⇒ `{sigs:[], count:0, error}`）
+ *
+ * ⚠️ 与 `ATTACH_COUNT_SCRIPT`（原 `_a`）**不是同一个**：那个只**数**元素（`attachImgCount`），
+ *    这个还要**取指纹**（`sigs`）—— 差异只在**外层 return**；**收集元素那半同源同逻辑**
+ *    ⇒ 现共用 `ATTACH_COLLECT_SRC`（`TD-05-17`：源里是各写一份，逐字相同）。
+ * ⚠️ 指纹形态（`sigOf`）：`DATA$<base64 体去空白截 600>` / `BLOB$<alt|前 55 字>` /
+ *    `SRC$<url 前 200>` / `ALT$<alt 前 40>`；**四种「空壳」形态会被丢掉**（`:37432`）
+ * ⚠️ 背景图项取 url 走 `collectAttach()` 的 `bgUrls`（**与 `list` 逐位平行**）——
+ *    源里是给该项包一层 `{src, alt:'', _bg:true, _el}`，本仓不再造包装对象。
+ * ⚠️ **纯读**（合「零注入」）
+ */
+export const ATTACH_FINGERPRINT_SCRIPT = `
+(function(){
+  try {
+${ATTACH_COLLECT_SRC}
+    function sigOf(img, bg){
+      var src = bg || (img.getAttribute && img.getAttribute('src')) || img.src || '';
       var alt = (img.alt || '').trim();
       if (src && src.indexOf('data:') === 0) {
         var comma = src.indexOf(',');
@@ -647,10 +563,10 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
     }
     var sigs = [];
     var seen = {};
-    var cols = collectAll();
+    var cols = collectAttach();
     var imgs = cols.list;
     for (var k = 0; k < imgs.length; k++) {
-      var s = sigOf(imgs[k]);
+      var s = sigOf(imgs[k], cols.bgUrls[k]);
       if (!s || s === 'DATA$' || s === 'BLOB$' || s === 'SRC$' || s === 'ALT$') continue;
       if (!seen[s]) { seen[s] = 1; sigs.push(s); }
     }
@@ -675,7 +591,7 @@ export const ATTACH_FINGERPRINT_SCRIPT = `
  */
 export const READ_INPUT_STATE_SCRIPT = `(function(){
   try {
-    var input = ${INPUT_SELECTORS};
+    var input = ${COMPOSER_LOOKUP_SRC};
     if (!input) return { found:false };
     // textarea/input 用 value；contenteditable/role=textbox 用 textContent/innerText
     var isEditable = input.tagName && input.tagName.toLowerCase() !== 'textarea' && input.tagName.toLowerCase() !== 'input';
@@ -704,7 +620,7 @@ export const READ_INPUT_STATE_SCRIPT = `(function(){
 export function buildSetInputScript(text: string): string {
   return `(function(Q){
   try {
-    var el = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var el = ${COMPOSER_LOOKUP_SRC};
     if (!el) return { ok:false, reason:'no-input' };
     try { el.focus(); } catch(_) {
     }
@@ -741,7 +657,7 @@ export function buildSetInputScript(text: string): string {
 export const MESSAGE_BASELINE_SCRIPT = `(function(){
   try {
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var blocks = document.querySelectorAll('${MSG_BLOCK_SELECTORS}');
     var out = [];
     for (var i = blocks.length - 1; i >= 0 && out.length < 20; i--) {
@@ -780,7 +696,7 @@ export function buildReplyReadScript(opts: ReplyReadScriptOptions): string {
     var head = norm(opts && opts.head || '');
     var full = norm(opts && opts.full || '');
     var baseline = (opts && opts.baseline) || [];
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var blocks = document.querySelectorAll('${MSG_BLOCK_SELECTORS}');
     var best = null;
     for (var i = 0; i < blocks.length; i++) {
@@ -1095,7 +1011,7 @@ export const SEND_REPLY_ACK_SCRIPT = `
   try {
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
     // 输入框文本（我方待发送内容）——命中若只出现在这里则排除，避免自触发
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
 
     // 只统计全文：body.innerText 覆盖全部可见文本，不存在漏检；用计数而非布尔便于做增量判定
@@ -1129,7 +1045,7 @@ export const WAIT_TIME_SCRIPT = `
 (function(){
   try {
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
     var bodyText = norm(document.body.innerText || '');
 
@@ -1171,7 +1087,7 @@ export const REPLY_NOTICE_SCRIPT = `
   try {
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
     // 输入框文本（我方待发送内容）——命中若只出现在这里则排除，避免自触发
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
     var bodyText = norm(document.body.innerText || '');
     var RULES = ${JSON.stringify(REPLY_NOTICE_RULES)};
@@ -1207,7 +1123,7 @@ export const QUOTA_USAGE_SCRIPT = `
   try {
     function norm(s){ return (s||'').replace(/\\s+/g,' ').trim(); }
     // 输入框文本（我方待发送内容）——命中若只出现在这里则排除，避免自触发
-    var input = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]') || document.querySelector('[role="textbox"]');
+    var input = ${COMPOSER_LOOKUP_SRC};
     var inN = norm(input ? (input.value || input.textContent || input.innerText || '') : '');
     var bodyText = norm(document.body.innerText || '');
     var KEYWORDS = ${JSON.stringify(QUOTA_KEYWORDS)};

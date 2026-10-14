@@ -22,7 +22,7 @@ import type { SiteRegistry } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { parseAnalyzeResult, type AnalyzeParseResult } from '@/core/rules/analyzePrompt';
 import { ANALYZE_INSTRUCTION, buildReviseInstruction } from '@/constants/analyzePrompts';
-import { ANALYZE_TEXT, SEND_TEXT, type ToastLevel } from '@/constants/text';
+import { ANALYZE_TEXT, SEND_TEXT, SITE_CAP_TEXT, type ToastLevel } from '@/constants/text';
 import { SEND_FALLBACK_CHAIN, withBackendPage, type SendToSiteDeps } from './sendToSite';
 
 /** `nodes[].data.analyzePrompt` 的状态机（原 `gS`/`yS` 写进去的那个对象） */
@@ -108,7 +108,7 @@ async function runAsk(
     async (ctx) => {
       used = ctx.account;
       const ask = ctx.site.askWithImage;
-      if (!ask) return err('unknown', SEND_TEXT.noCapability(ctx.site.kind, '提示词分析'));
+      if (!ask) return err('unknown', SEND_TEXT.noCapability(ctx.site.kind, SITE_CAP_TEXT.analyzePrompt));
       const reply = await ask(
         { account: ctx.account, webContentsId: ctx.page.webContentsId },
         input.imageUrl,

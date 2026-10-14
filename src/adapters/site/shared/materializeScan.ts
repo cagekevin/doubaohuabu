@@ -43,7 +43,7 @@ import { perceptualHash } from '@/lib/phash';
 import { normalizeScanDiag } from '@/core/rules/scanDiag';
 import { log } from '@/lib/log';
 import { isRecord } from '@/lib/object';
-import { GALLERY_TEXT } from '@/constants/text';
+import { GALLERY_TEXT, SITE_SCAN_TEXT } from '@/constants/text';
 import { isImgRef, isInlineImage } from '@/stable/protocols/img';
 
 /**
@@ -154,13 +154,15 @@ export interface ScanFetchContext {
  * ⚠️ `partition` 为 `null`（未落会话）时**不传**（主进程退回默认会话），**不编造**空串。
  */
 export function scanFetchContext(
-  account: { id: string; partition: string | null },
+  account: { id: string; partition: string },
   referer: string,
   onPhase?: (event: ScanPhaseEvent) => void,
 ): ScanFetchContext {
   return {
     accountId: account.id,
-    ...(account.partition ? { partition: account.partition } : {}),
+    // ★ 恒带上：分区由产生方保证（`accountRoster.buildNewAccount`）——
+    //   原先「缺了就不传，让主进程退回默认会话」正是多账号**取到别人 cookie** 的那条路。
+    partition: account.partition,
     referer,
     ...(onPhase
       ? {
@@ -290,7 +292,7 @@ export async function materializeScannedImages(
     if (!fetch) {
       // ⚠️ 没有会话上下文 ⇒ **不能**退回 `imageFetchDataUrl`（裸 fetch 无 cookie ⇒ 需登录态的图取不到）
       //    ⇒ 如实计失败，不静默用错的通道
-      for (const p of pending) fail('fetch-failed', p.url, '缺少账号会话上下文（无法带 cookie 取图）');
+      for (const p of pending) fail('fetch-failed', p.url, SITE_SCAN_TEXT.fetchNoSession);
     } else {
       const r = await host.media.fetchImages(
         {
@@ -310,7 +312,7 @@ export async function materializeScannedImages(
         for (const p of pending) {
           const it = byUrl.get(p.url);
           if (!it) {
-            fail('fetch-failed', p.url, '批量取图未返回该图');
+            fail('fetch-failed', p.url, SITE_SCAN_TEXT.fetchItemMissing);
             continue;
           }
           // ⚠️ 拿回来的必须**真的是内联图**，否则不落
@@ -377,11 +379,11 @@ export async function scanAttemptFromRaw(
   raw: unknown,
   opts: ScanAttemptOptions = {},
 ): Promise<ScanAttempt> {
-  if (!isRecord(raw)) return { via, ok: false, error: '通道返回空' };
+  if (!isRecord(raw)) return { via, ok: false, error: SITE_SCAN_TEXT.channelEmpty };
   // ★ **TD-05-3**：用 `ok !== true` —— 漏 `ok` 或形状变了都**不能当成功**（否则 0 张会被读成"没扫到"）；
   //   照 `adapters/host/electron/api.ts:78` 的正写法。
   if (raw.ok !== true) {
-    return { via, ok: false, error: typeof raw.error === 'string' ? raw.error : '通道返回失败' };
+    return { via, ok: false, error: typeof raw.error === 'string' ? raw.error : SITE_SCAN_TEXT.channelFailed };
   }
   // ★ TD-16-50：`Array.isArray` 只保证"是数组" ⇒ **不做 `as` 断言**（元素形状在下面逐层收窄）
   const raws = Array.isArray(raw.images) ? raw.images : [];

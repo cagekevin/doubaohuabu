@@ -44,6 +44,7 @@ import { stripHtml } from '@/lib/text';
 import { resolveSendAccountForChain, type SendAccountChoice } from '@/core/usecases/sendToSite';
 import { resolveStyles } from '@/core/rules/style';
 import { makeRecipe } from '@/core/rules/recipe';
+import { BATCH_SEND_TEXT } from '@/constants/text';
 import type { PendingAttemptController } from './pendingAttempt';
 import {
   runBatchSend,
@@ -90,7 +91,8 @@ export function createSendPipeline(
     // 原 `jS` 41237-41243：节点不存在或不是 `text`/`genvideo`（`SendFailKind` 里没有 `not-text`
     //   ⇒ 按 `unknown` 报，原文照旧）
     if (!node || !BATCH_SENDABLE_TYPES.includes(node.type)) {
-      return err('unknown', '节点不存在或不是文本框');
+      // 文案真源 = `BATCH_SEND_TEXT.notTextNode`（`TD-16-150`：原内联在 state 层）
+      return err('unknown', BATCH_SEND_TEXT.notTextNode);
     }
     const data = node.data;
 
@@ -144,7 +146,7 @@ export function createSendPipeline(
     if (!body) {
       // 原 `jS` 41358-41367：`r.releaseAccountBusy(a.id)` 之后返回 `empty-text`
       store.useStore.getState().releaseAccount(choice.account.id);
-      return err('empty-text', '文本框内容为空，无法发送');
+      return err('empty-text', BATCH_SEND_TEXT.emptyText);
     }
 
     // ★ 发报**之前**清掉该节点的三样历史状态（原 `shared.js:41384-41392`：`clearNodeWaitTime`

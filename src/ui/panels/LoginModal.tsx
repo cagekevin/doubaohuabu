@@ -39,7 +39,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PanelShell } from '@/ui/common/PanelShell';
 import { useAccountOps, useHostOps, useStore } from '@/state';
 import { LOGIN_MODAL_TEXT } from '@/constants/text';
-import { SITE_LOGIN_URL } from '@/constants/models';
+import { LOVART_WEBPREFERENCES, SITE_LOGIN_URL } from '@/constants/models';
+// ★ `<webview>` 属性值的唯一落点（同 `BackendView`）
+import { WEBVIEW_ALLOW_POPUPS } from './webviewAttrs';
+// ★ 站点能力表（"某站点有没有 X"的唯一真源）—— `ui` 拿不到 Ports，只能问它
+import { capsOf, needsSessionPrep } from '@/core/rules/siteCaps';
 import { ACCOUNT_STATUS, type SiteType } from '@/stable/model/account';
 import styles from './LoginModal.module.css';
 
@@ -91,12 +95,14 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
   const [verifying, setVerifying] = useState(false);
   /** 指纹 preload（原 `b`/`x`） */
   const [preloadUrl, setPreloadUrl] = useState<string | null>(null);
+  /** Lovart 容器给的会话 UA（原 `$P.jsx:29` 的 `k`）—— 只有容器模式有（源 `:285` 的三目） */
+  const [containerUA, setContainerUA] = useState<string | null>(null);
   /**
    * 会话是否已就绪（原 `C`/`S`）—— 未就绪时**不渲染 webview**
    * ⚠️ `other` 不需要指纹 ⇒ 恒就绪（源版 `$P` 对 `other` 也走 `ensureFingerprint`，
    *   但 `other` 的账号**没有指纹**，那条 preload 也无处可挂 ⇒ 本仓直接跳过，语义等价）。
    */
-  const [ready, setReady] = useState(type === 'other');
+  const [ready, setReady] = useState(!needsSessionPrep(type));
   /** 载入失败（原 `F`/`M`） */
   const [loadError, setLoadError] = useState<{ code: number; description: string } | null>(null);
   /** 已建号 ⇒ 立刻卸掉 webview（原 `J` 的 `src='about:blank'`，见 `finish`） */
@@ -106,23 +112,32 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
   /** 建号防重入（原 `r.current`）—— 自动检测与手点「完成登录」可能同拍 */
   const createdRef = useRef(false);
 
+  /** 该站点走 **Lovart 容器**（原 `$P.jsx:11` 的 `o`）—— 会话准备与 webview 三属性都按它分流 */
+  const usesContainer = capsOf(type).usesLovartContainer;
+
   /** 登录页地址（原 `$P.jsx:17`）—— `other` 用用户输入，空则 `about:blank`（逐字对源） */
-  const loginUrl =
-    type === 'other' ? url.trim() || 'about:blank' : SITE_LOGIN_URL[type] ?? 'about:blank';
+  const loginUrl = !capsOf(type).hasFixedUrl
+    ? url.trim() || 'about:blank'
+    : SITE_LOGIN_URL[type] ?? 'about:blank';
 
   // ① 会话准备（原 `$P.jsx:49-90`）—— **只在 `.then` 里回写状态**（effect 体里不同步 setState）
   useEffect(() => {
-    if (type === 'other') return;
+    if (!needsSessionPrep(type)) return;
     let cancelled = false;
     void accountOps
       .prepareWebviewSession({
         accountId: pending.id,
         partition: pending.partition,
-        ...(pending.fingerprint ? { fingerprint: pending.fingerprint } : {}),
+        lovart: usesContainer,
+        ...(usesContainer ? { proxy: pending.proxy ?? '' } : {}),
+        ...(!usesContainer && pending.fingerprint ? { fingerprint: pending.fingerprint } : {}),
       })
       .then((r) => {
         if (cancelled) return;
-        if (r.ok) setPreloadUrl(r.value.preloadUrl);
+        if (r.ok) {
+          setPreloadUrl(r.value.preloadUrl);
+          setContainerUA(r.value.userAgent);
+        }
         // ⚠️ 失败**不静默**（源版 `.catch(() => {})` 吞掉）—— 但**照常渲染**：
         //    没有 preload 只是"没有指纹伪装"，页面还能开（源版同样继续）
         else pushBackendError('unknown', r.message);
@@ -131,7 +146,7 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [accountOps, type, pending, pushBackendError]);
+  }, [accountOps, type, usesContainer, pending, pushBackendError]);
 
   /**
    * ② 建号（原 `$P.jsx:102-156` 的 `se`）—— ★★ **本弹窗唯一写 store 的地方**
@@ -149,7 +164,7 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
       status: ACCOUNT_STATUS.loggedIn,
       addedAt: Date.now(),
       // 只有 `other` 记网址（原 `:119` 的 `url: q`）—— 其余站点的地址由站点声明
-      ...(type === 'other' ? { url: withProtocol(url.trim()) } : {}),
+      ...(!capsOf(type).hasFixedUrl ? { url: withProtocol(url.trim()) } : {}),
     });
     // 原 `J`：先把 webview 卸掉（停掉 guest），再等 1.5s 关窗
     setClosed(true);
@@ -238,14 +253,16 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
 
   /** 「完成登录 / 保存」（原 `$P.jsx:261-263`） */
   const onSubmit = useCallback(() => {
-    if (type === 'other' && !url.trim()) {
+    if (!capsOf(type).hasFixedUrl && !url.trim()) {
       setUrlMsg(LOGIN_MODAL_TEXT.urlRequired);
       return;
     }
     finish();
   }, [type, url, finish]);
 
-  const title = type === 'other' ? LOGIN_MODAL_TEXT.otherTitle : `${LOGIN_MODAL_TEXT.titlePrefix}${LOGIN_MODAL_TEXT.siteName[type] ?? type}${LOGIN_MODAL_TEXT.titleSuffix}`;
+  const title = !capsOf(type).hasFixedUrl
+    ? LOGIN_MODAL_TEXT.otherTitle
+    : `${LOGIN_MODAL_TEXT.titlePrefix}${LOGIN_MODAL_TEXT.siteName[type] ?? type}${LOGIN_MODAL_TEXT.titleSuffix}`;
 
   return (
     <PanelShell
@@ -258,24 +275,24 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
       actions={
         <>
           {/* tapnow **没有**「在浏览器打开」那一颗（原 `$P.jsx:255` 的 `!a && …`） */}
-          {type !== 'tapnow' && (
+          {capsOf(type).loginCanOpenInBrowser && (
             <button
               type="button"
               className={styles.btn}
-              disabled={type === 'other' && !url.trim()}
+              disabled={!capsOf(type).hasFixedUrl && !url.trim()}
               onClick={onOpenExternal}
             >
               {LOGIN_MODAL_TEXT.openExternal}
             </button>
           )}
           <button type="button" className={styles.btnPrimary} onClick={onSubmit}>
-            {type === 'other' ? LOGIN_MODAL_TEXT.save : LOGIN_MODAL_TEXT.done}
+            {!capsOf(type).hasFixedUrl ? LOGIN_MODAL_TEXT.save : LOGIN_MODAL_TEXT.done}
           </button>
         </>
       }
     >
       {/* `other` 的网址行（原 `$P.jsx:269-284`） */}
-      {type === 'other' && (
+      {!capsOf(type).hasFixedUrl && (
         <div className={styles.verifyRow}>
           <input
             type="text"
@@ -309,12 +326,20 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
           ref={(el: WebviewLike | null) => {
             webviewRef.current = el;
           }}
-          partition={pending.partition ?? undefined}
+          partition={pending.partition}
           src={loginUrl}
-          {...(pending.fingerprint ? { useragent: pending.fingerprint.userAgent } : {})}
-          {...(type !== 'other' && preloadUrl ? { preload: preloadUrl } : {})}
-          /* ⚠️ 必须传字符串（React 不认它是布尔属性）—— 同 `BackendView` 的写法 */
-          allowpopups={'true' as unknown as boolean}
+          {...(usesContainer
+            ? containerUA
+              ? { useragent: containerUA }
+              : {}
+            : pending.fingerprint
+              ? { useragent: pending.fingerprint.userAgent }
+              : {})}
+          {...(preloadUrl ? { preload: preloadUrl } : {})}
+          /* 容器页设置：源 `$P.jsx:285` 只给 lovart 传（其余站点 `undefined`） */
+          {...(usesContainer ? { webpreferences: LOVART_WEBPREFERENCES } : {})}
+          /* ⚠️ 值走唯一落点（同 `BackendView`） */
+          allowpopups={WEBVIEW_ALLOW_POPUPS}
           className={styles.webview}
         />
       )}
@@ -333,7 +358,7 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
       )}
 
       {/* tapnow 的验证链接行（原 `$P.jsx:316-328`） */}
-      {type === 'tapnow' && (
+      {capsOf(type).loginHasVerifyRow && (
         <div className={styles.verifyRow}>
           <input
             type="text"

@@ -39,6 +39,7 @@ import type { RFCanvasNode } from '@/ui/nodes/types';
 import { InteractiveEdge } from '@/ui/edges/InteractiveEdge';
 import { playChime } from '@/ui/lib/chime';
 import { log } from '@/lib/log';
+import { dragLeftContainer } from '@/lib/dragHover';
 import { fitMaterialSize } from '@/core/rules/materialGrid';
 import { readImageFile, readTextFile, stripExtension } from '@/lib/readDroppedFile';
 import { formatClockTime } from '@/lib/time';
@@ -737,9 +738,15 @@ function Inner() {
     setDropActive(true);
   }, []);
 
-  /** 离开提示层（原 `Qn`，`_Component42.jsx:1332-1336`：`currentTarget === target` 才收） */
-  const onDragLeave = useCallback((e: React.DragEvent) => {
-    if (e.currentTarget === e.target) setDropActive(false);
+  /**
+   * 离开提示层（原 `Qn`，`_Component42.jsx:1332-1336`）
+   *
+   * ⚠️ 判据**不在本文件** —— 收口到 `lib/dragHover.dragLeftContainer`（全仓唯一）。
+   *    那里写清了「为什么不能用 `currentTarget === target`」与「为什么这是有意偏离源」，
+   *    **同一段推理只留一处**（本处只做"离开之后做什么"）。
+   */
+  const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (dragLeftContainer(e)) setDropActive(false);
   }, []);
 
   /**

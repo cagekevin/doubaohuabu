@@ -17,7 +17,7 @@ import { err, ok, type Result } from '@/core/model/result';
 // ⚠️ 文本归一（原 `Vk(In(...))`）—— `d3` 的正文清洗与提示词组装共用同一套
 import { stripHtml } from '@/lib/text';
 import { stripGeneratedArtifacts } from './prompt';
-import { CIRCULAR_REF_MESSAGE } from '@/constants/text';
+import { CIRCULAR_REF_MESSAGE, EDGE_TEXT } from '@/constants/text';
 
 /** 一条待添加的连线 */
 export interface ConnectRequest {
@@ -199,7 +199,8 @@ export function applyConnection(
   const source = nodes.find((n) => n.id === conn.source);
 
   if (!target || !source) {
-    return err('unknown', `连线端点不存在：source=${conn.source} target=${conn.target}`);
+    // 文案真源 = `EDGE_TEXT.edgeEndpointMissing`（`TD-16-150`：原内联在规则层）
+    return err('unknown', EDGE_TEXT.edgeEndpointMissing(conn.source, conn.target));
   }
 
   // 两个都是 text 才查环

@@ -21,6 +21,8 @@
  */
 
 import { NEW_IMAGES_TEXT } from '@/constants/text';
+// ★ 站点能力表（"这张图的来源站点"取自它）—— 本文件不再写站点名
+import { capsOf } from '@/core/rules/siteCaps';
 import { formatBytes } from '@/core/rules/downloadNode';
 import { withThumb } from '@/stable/protocols/img';
 import { galleryItemDims, isBigGalleryItem } from '@/core/rules/materialGrid';
@@ -46,8 +48,10 @@ export function NewImagesThumb({ item, isNew, sent, onSend, onRemove, onPressSta
   const dims = galleryItemDims(item);
   const big = isBigGalleryItem(item);
   const from = item._accName || item._accId;
+  // 来源角标：看**能力表的画廊来源键**（不写账号类型字面量）
+  const gallerySrc = capsOf(item._accType).gallerySource;
   const tagClass =
-    item._accType === 'lovart' ? styles.srcLovart : item._accType === 'tapnow' ? styles.srcTapnow : '';
+    gallerySrc === 'lovart' ? styles.srcLovart : gallerySrc === 'tapnow' ? styles.srcTapnow : '';
 
   return (
     <div className={`${styles.thumb} ${sent ? styles.thumbSent : ''}`}>

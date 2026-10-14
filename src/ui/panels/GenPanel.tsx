@@ -33,6 +33,8 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+// ★ 默认通道的唯一真源（数据层：`core/model/defaults`）
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 import { useStore as useXyStore } from '@xyflow/react';
 import { useGen, useStore } from '@/state';
 import {
@@ -246,7 +248,7 @@ export function GenPanel() {
   const hasResult = !!genNode?.data.resultUrl;
   /** 执行账号（原 `_Component45.jsx` 的 `ut`/`I`）；`channel` 缺省 `'doubao'`（源 `I` 的初值；`generate.ts:105` 同判） */
   const sendAccount = genNode?.data.sendAccount ?? 'auto';
-  const channel = genNode?.data.channel ?? 'doubao';
+  const channel = genNode?.data.channel ?? DEFAULT_CHANNEL;
   /**
    * ★ 风格（原 `Z3_1.jsx` 的 `De` / `kt`）—— **单选**：`styleIds` 实际只会是 `[]` 或 `[id]`
    *   （原 `T`：命中就清空、否则**覆盖**成 `[G]`）。

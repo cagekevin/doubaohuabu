@@ -32,14 +32,14 @@ export interface HostApi {
   downloadFile(url: string, fileName?: string): Promise<unknown>;
   downloadFileAs(url: string, defaultName?: string, filters?: unknown): Promise<unknown>;
   openExternal(url: string): Promise<unknown>;
+  /** 收**真实路径**或 **`img://` 引用**（主进程自己判别：引用先解析、路径直接用） */
   revealPath(path: string): Promise<unknown>;
-  showInFolder(path: string): Promise<unknown>;
   pickDownloadPath(): Promise<unknown>;
   getDownloadSettings(): Promise<unknown>;
 
   // ── 剪贴板 ──
   readClipboardImage(): Promise<unknown>;
-  /** ⚠️ 载荷是 **`{dataUrl, label}` 对象** + 目标 `webContentsId`（`main.js:1382`） */
+  /** ⚠️ 载荷是 **`{dataUrl, label}` 对象** + 目标 `webContentsId`（`main.js`） */
   copyImageToClipboard(img: unknown, webContentsId?: number): Promise<unknown>;
   copyTextToClipboard(text: string): Promise<unknown>;
   pasteToWebview(webContentsId: number): Promise<unknown>;
@@ -64,37 +64,36 @@ export interface HostApi {
   /** ★ **sendSync**：同步返回 `img://` 引用 */
   saveImageSync(dataUrl: string): string;
   saveVideoFromUrl(url: string, referer?: string): Promise<unknown>;
-  resolveImageRef(ref: string): Promise<unknown>;
   imageFetchDataUrl(url: string): Promise<unknown>;
   captureRect(rect: unknown): Promise<unknown>;
-  /** ★ 检测站点页里的视频（`preload.js:69` → `detect-videos` handler） */
+  /** ★ 检测站点页里的视频（`preload.js` → `detect-videos` handler） */
   detectVideos(webContentsId: number, seenKeys: readonly string[]): Promise<unknown>;
   startFileDrag(payload: unknown): void;
   clearBrowserCache(): Promise<unknown>;
 
   // ── 账号 / 会话 / 指纹 ──
-  /** ⚠️ 收的是**账号对象**（`{id, partition, fingerprint}`），不是 id 字符串（`preload.js:89`） */
+  /** ⚠️ 收的是**账号对象**（`{id, partition, fingerprint}`），不是 id 字符串（`preload.js`） */
   ensureFingerprint(account: unknown): Promise<unknown>;
-  /** ⚠️ 同上（`preload.js:94`） */
+  /** ⚠️ 同上（`preload.js`） */
   ensurePlainSession(account: unknown): Promise<unknown>;
-  /** ⚠️ 同上，多 `containerId` / `proxy`（`preload.js:97`） */
+  /** ⚠️ 同上，多 `containerId` / `proxy`（`preload.js`） */
   ensureLovartContainer(account: unknown): Promise<unknown>;
   clearAccountSession(partition: string): Promise<unknown>;
   setAccountProxy(partition: string, proxy: string): Promise<unknown>;
   fpNetDiag(partition: string): Promise<unknown>;
-  /** 真实 Chrome 登录窗口（`preload.js:110`）—— 收 `{accountId, url?, proxy?}` */
+  /** 真实 Chrome 登录窗口（`preload.js`）—— 收 `{accountId, url?, proxy?}` */
   ensureLovartChrome(args: unknown): Promise<unknown>;
-  /** 关闭真实 Chrome 登录窗口（`preload.js:111`）—— 收 `{accountId}` */
+  /** 关闭真实 Chrome 登录窗口（`preload.js`）—— 收 `{accountId}` */
   closeLovartChrome(args: unknown): Promise<unknown>;
-  /** 会话 cookie 同步进 webview 分区（`preload.js:112`）—— 收 `{accountId, partition}` */
+  /** 会话 cookie 同步进 webview 分区（`preload.js`）—— 收 `{accountId, partition}` */
   syncLovartSession(args: unknown): Promise<unknown>;
-  /** 导出某分区的 cookie（`preload.js:50`） */
+  /** 导出某分区的 cookie（`preload.js`） */
   exportAccountCookies(partition: string | null): Promise<unknown>;
-  /** 把 cookie 灌回某分区（`preload.js:51`） */
+  /** 把 cookie 灌回某分区（`preload.js`） */
   importAccountCookies(partition: string, cookies: readonly unknown[]): Promise<unknown>;
-  /** 保存账号导出文件（`preload.js:52`） */
+  /** 保存账号导出文件（`preload.js`） */
   saveAccountsFile(content: string): Promise<unknown>;
-  /** 读账号导出文件（`preload.js:53`） */
+  /** 读账号导出文件（`preload.js`） */
   loadAccountsFile(): Promise<unknown>;
 
   // ── 许可 ──

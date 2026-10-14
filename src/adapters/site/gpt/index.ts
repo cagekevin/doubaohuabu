@@ -30,11 +30,9 @@ import type {
   SiteProbe,
 } from '@/core/ports/site.port';
 import { GPT_SEND_TIMEOUT_MS } from '@/constants';
-import { GPT_TEXT } from '@/constants/text';
+import { GPT_TEXT, SEND_TEXT, SITE_CAP_TEXT } from '@/constants/text';
 import { err, ok, type Result } from '@/core/model/result';
 import { sleep, withTimeout } from '@/lib/async';
-// ★ 判据 C1：`isRecord`/`asRecord` 取自 `lib/object` —— ⛔ 不在本文件 / `tapnow/api.ts` / `tapnow/index.ts` 各写一遍
-//   ⇒ 第 3 次出现即抽出到 `lib/object.ts`
 import { asRecord } from '@/lib/object';
 // ★ `TD-05-6`（2026-10-12）订正本注释与导入：会话幂等键的哈希段用 **`lib/hash.hash32`**
 //   （FNV-1a⇒base36；与 doubao 同一处）—— 原注释"先用现成的内容指纹"是**用途混用**：
@@ -43,7 +41,7 @@ import { asRecord } from '@/lib/object';
 //   已随之删除，真源只有 `lib/hash` 一处。
 import { hash32 } from '@/lib/hash';
 import { findWebview, webviewEval } from '../shared/webview';
-import { gptSendScript } from './scripts';
+import { GPT_COMPOSER_PROBE_SCRIPT, gptSendScript } from './scripts';
 
 /** 参考图附加的重试次数与间隔（原 `aO`：`for (N=0; N<3; …)` + 失败等 1500ms） */
 const ATTACH_RETRIES = 3;
@@ -51,11 +49,23 @@ const ATTACH_RETRY_DELAY_MS = 1500;
 /** 附加成功后的静置（原 `aO`：`await sleep(2000)` —— 等页面把图挂上再发文本） */
 const ATTACH_SETTLE_MS = 2000;
 
+/**
+ * GPT **会话页**地址（原 `sS`，`shared.js:36771`）—— 声明为 `SitePort.chatUrl`
+ *
+ * ⚠️ 站点 URL **只能住适配器**：两个消费者都经 `SitePort.chatUrl` 取（同一个真源）
+ *   ① `BackendView` 的 `<webview src>`（原 `_Component25.jsx:355` 的 `src` 三目）；
+ *   ② `core/usecases/sendToSite` 的导航目标（未声明 ⇒ 明确报错，不回落）。
+ * ⚠️ 取值与登录页（`SITE_LOGIN_URL.gpt` ← 原 `jP`，`shared.js:34201`）**相同**，
+ *   但源里是**两个常量**（登录 / 会话）⇒ 两处各照各的，不跨表引用。
+ */
+const GPT_URL = 'https://chatgpt.com';
+
 
 
 export function createGptSite(host: HostPort): SitePort {
   return {
     kind: 'gpt',
+    chatUrl: GPT_URL,
 
     async send(account: Account, payload: SiteSendPayload): Promise<Result<SendResult>> {
       // ⚠️ 与源一致（原 `oO` 用 `Xn`）：**找不到页面返回 `page-not-open`，不抛**
@@ -97,7 +107,7 @@ export function createGptSite(host: HostPort): SitePort {
       const r = await withTimeout(
         webviewEval(view, gptSendScript(payload.text)),
         GPT_SEND_TIMEOUT_MS,
-        'GPT 发送',
+        GPT_TEXT.sendLabel,
       );
 
       if (!r.ok) {
@@ -118,7 +128,7 @@ export function createGptSite(host: HostPort): SitePort {
 
     async scan(): Promise<Result<ScanResult>> {
       // GPT 用于**发图**，不抓素材（那是 Lovart/Tapnow 的能力）；明确报错，**不静默返回空**
-      return err('unknown', 'GPT 适配器不支持抓取素材');
+      return err('unknown', SEND_TEXT.noCapability('gpt', SITE_CAP_TEXT.grabMaterials));
     },
 
     async probe(account: Account): Promise<Result<SiteProbe>> {
@@ -128,12 +138,7 @@ export function createGptSite(host: HostPort): SitePort {
         return ok({ usable: false, loggedIn: false, pageKind: 'other' });
       }
       try {
-        const raw = asRecord(
-          await webviewEval(
-            view,
-            '({ href: location.href, hasComposer: !!(document.querySelector(\'#prompt-textarea\') || document.querySelector(\'form div[contenteditable="true"]\')) })',
-          ),
-        );
+        const raw = asRecord(await webviewEval(view, GPT_COMPOSER_PROBE_SCRIPT));
         const href = typeof raw.href === 'string' ? raw.href : '';
         return ok({ usable: raw.hasComposer === true, loggedIn: !!href, pageKind: 'other' });
       } catch (e: unknown) {

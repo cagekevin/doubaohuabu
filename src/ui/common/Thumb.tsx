@@ -12,7 +12,7 @@
 import { useState } from 'react';
 // ★ 协议规则的**真源**（冻结契约）—— 消费者一律直接引它；本文件也只自用，**不再转出去**
 import { withThumb } from '@/stable/protocols/img';
-import { MATERIAL_NODE_TEXT } from '@/constants/text';
+import { COMMON_TEXT, MATERIAL_NODE_TEXT } from '@/constants/text';
 import styles from './shared.module.css';
 
 
@@ -43,7 +43,7 @@ export function Thumb({ src, alt = '', className, width }: ThumbProps) {
     // 降级：显示占位（**不隐藏错误**，用 title 暴露原始 src）
     return (
       <div className={`${styles.thumbPlaceholder} ${className ?? ''}`} title={src}>
-        加载失败
+        {COMMON_TEXT.loadFailed}
       </div>
     );
   }

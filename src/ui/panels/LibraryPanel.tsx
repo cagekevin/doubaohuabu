@@ -31,6 +31,7 @@ import { DRAG_MIME_MATERIAL } from '@/constants';
 import { makeLibraryId } from '@/core/rules/project';
 import { countLibRefs, sortLibrary } from '@/core/rules/libraryEdit';
 import { readImageFile } from '@/lib/readDroppedFile';
+import { dragLeftContainer } from '@/lib/dragHover';
 import type { LibraryItem } from '@/stable/model/project';
 import styles from './LibraryPanel.module.css';
 
@@ -216,8 +217,9 @@ export function LibraryPanel() {
           e.dataTransfer.dropEffect = 'copy';
           setDragOver(true);
         }}
+        // 判据 = `lib/dragHover.dragLeftContainer`（全仓唯一；理由与"为什么偏离源"在该文件头注）
         onDragLeave={(e) => {
-          if (e.currentTarget === e.target) setDragOver(false);
+          if (dragLeftContainer(e)) setDragOver(false);
         }}
         onDrop={(e) => void onDropFiles(e)}
       >

@@ -30,6 +30,7 @@ import type {
 } from 'react';
 import { NodeResizer, useNodeId } from '@xyflow/react';
 import { ErrorBoundary } from '@/ui/shell/ErrorBoundary';
+import { SHELL_TEXT } from '@/constants/text';
 import { CustomHandle, type CustomHandleVariant } from './CustomHandle';
 import { useNodeHeight, useNodeWidth, useSizeSync } from './useNodeSize';
 import styles from './shared.module.css';
@@ -190,7 +191,7 @@ export function NodeShell({
         {titleRight != null && <span className={styles.nodeTitleRight}>{titleRight}</span>}
       </div>
       {/* 单节点崩溃只降级本节点，不炸整个画布（原版的局部错误边界） */}
-      <ErrorBoundary area="节点">
+      <ErrorBoundary area={SHELL_TEXT.areaNode}>
         {padded ? <div className={styles.nodeBody}>{children}</div> : children}
       </ErrorBoundary>
       {handleProps.target && <CustomHandle position="left" variant={handleVariant} />}

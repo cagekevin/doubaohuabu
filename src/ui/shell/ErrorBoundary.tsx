@@ -7,6 +7,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { log } from '@/lib/log';
+import { SHELL_TEXT } from '@/constants/text';
 import styles from './ErrorBoundary.module.css';
 
 interface Props {
@@ -43,16 +44,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className={styles.fallback}>
-        <h2 className={styles.title}>
-          {this.props.area}渲染出错（已被错误边界捕获，未白屏）
-        </h2>
+        <h2 className={styles.title}>{SHELL_TEXT.errorBoundaryTitle(this.props.area)}</h2>
         {/* ★ 原始错误原文，不改写 */}
         <pre className={styles.stack}>
           {error.message}
           {info?.componentStack ?? ''}
         </pre>
         <button type="button" onClick={this.reset}>
-          重试渲染
+          {SHELL_TEXT.retryRender}
         </button>
       </div>
     );

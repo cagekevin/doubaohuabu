@@ -16,6 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { handle } = require('./ipc');
 
 const FRAME_TIMEOUT_MS = 8000; // 单 frame 扫描上限
 const DEFAULT_MAX_FRAMES = 12;
@@ -71,7 +72,7 @@ function execWithTimeout(frame, script, ms) {
 }
 
 function initLovartScan({ getMainWindow }) {
-  const { ipcMain, webContents, app } = require('electron');
+  const { webContents, app } = require('electron');
 
   try {
     diagLogPath = path.join(app.getPath('userData'), 'lovart-diag.log');
@@ -80,7 +81,7 @@ function initLovartScan({ getMainWindow }) {
   }
 
   // ---- 在每个 frame 里跑采集脚本 ----
-  ipcMain.handle('lovart-scan-frames', async (event, args) => {
+  handle('lovart-scan-frames', async (event, args) => {
     const payload = args || {};
     const wcId = Number(payload.webContentsId) || 0;
     const script = typeof payload.script === 'string' ? payload.script : '';
@@ -154,14 +155,14 @@ function initLovartScan({ getMainWindow }) {
   });
 
   // ---- 渲染端主动写诊断（扫描汇总 / 下载失败明细）----
-  ipcMain.handle('lovart-diag', async (event, payload) => {
+  handle('lovart-diag', async (event, payload) => {
     const p = payload || {};
     writeDiag(p.tag || 'renderer', p.data || p);
     return { ok: true, path: diagLogPath };
   });
 
   // ---- 打开诊断日志（在 Finder 里定位，方便用户发给我们）----
-  ipcMain.handle('lovart-diag-open', async () => {
+  handle('lovart-diag-open', async () => {
     try {
       const { shell } = require('electron');
       if (diagLogPath && fs.existsSync(diagLogPath)) {
@@ -176,7 +177,7 @@ function initLovartScan({ getMainWindow }) {
   // 用途：用户觉得扫描不到图时，把当前 Lovart 页面真实 DOM 序列化到
   //   userData/lovart-dom-dump-{timestamp}.json
   // 我们拿到这份文件后就能精确调选择器，比盲改代码靠谱。
-  ipcMain.handle('lovart-dom-dump', async (event, args) => {
+  handle('lovart-dom-dump', async (event, args) => {
     const payload = args || {};
     const wcId = Number(payload.webContentsId) || 0;
     const script = typeof payload.script === 'string' ? payload.script : '';
@@ -249,4 +250,5 @@ function initLovartScan({ getMainWindow }) {
   console.log(`[lovart-scan] 已注册 lovart-scan-frames / lovart-diag / lovart-dom-dump；诊断日志：${diagLogPath || '(不可用)'}`);
 }
 
-module.exports = { initLovartScan, writeDiag, getDiagLogPath: () => diagLogPath };
+// 导出面 = 宿主可用面（`initLovartScan`）＋ 一处**真跨文件消费者**：`writeDiag` 被 `electron/lovart-fetch.js` 调
+module.exports = { initLovartScan, writeDiag };

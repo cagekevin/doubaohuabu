@@ -76,6 +76,10 @@ export const BATCH_SEND_TEXT = {
   triggerTitle: (n: number) => `按位置顺序（先上后下、同行先左后右）批量发送这 ${n} 个节点（文本框 / 文生视频）`,
   /** 原 187-189 的第二个按钮（**这段功能未落地**，见下方的「未落地」注释） */
   triggerQueue: '加入队列',
+  /** 发送前守卫：节点不存在 / 不是可批量发送的类型（原 `jS` 41241 的 `error`，**逐字**） */
+  notTextNode: '节点不存在或不是文本框',
+  /** 正文为空（原 `jS` 41358-41367 返回 `empty-text` 档；⚠️ 文案是本仓新增） */
+  emptyText: '文本框内容为空，无法发送',
   triggerQueueTitle: '加入右下角发送队列：可暂停 / 取消单条 / 失败重跑，适合大批量',
   /** 原 197 —— 运行中标题 */
   running: (done: number, total: number) => `批量发送中 · ${done}/${total}`,
@@ -110,8 +114,17 @@ export const BATCH_SEND_TEXT = {
 export const GEN_PANEL_TEXT = {
   /** 面板标题 —— 文生图（原 `_Component45.jsx` 的 `Ge`） */
   imageTitle: '文生图',
-  /** ★ BP-44：网页通道生成超时（原 `_Component45.jsx:1094` 的 `等待超时：未收到图片（可去${Te}会话查看该对话）`） */
-  genTimeout: (sessionName: string) => `等待超时：未收到图片（可去${sessionName}会话查看该对话）`,
+  /**
+   * ★ BP-44：网页通道生成超时（原 `_Component45.jsx:1094` 的 `等待超时：未收到图片（可去${Te}会话查看该对话）`）
+   *
+   * ⚠️ **入参是站点类型，不是"已拼好的名字"**（2026-10-14 收口）：调用方原写成
+   *    `genTimeout(acc?.type === 'dola' ? 'Dola' : '豆包')` —— 那是 **`state` 里既判站点名、又拼文案**，
+   *    撞本仓铁律「**文案只允许出现在 `constants`**」。站点名与文案同属文案层 ⇒ 选择权收回本文件。
+   * ⚠️ 词**逐字照源**：源这处是 `Dola`（大写 D），与登录弹窗那套（`dola`，源 `$P.jsx:18`）
+   *    **不是同一套**，别合并（同 `LOGIN_MODAL_TEXT.siteName` 的既有说明）。
+   */
+  genTimeout: (type: string) =>
+    `等待超时：未收到图片（可去${type === 'dola' ? 'Dola' : '豆包'}会话查看该对话）`,
   /** 提示词正文的 `aria-label`（原 `Z3_1.jsx:1005`，逐字） */
   promptAria: '提示词正文',
   /** 提示词占位 —— 文生视频（原 `Z3_1.jsx:1005` 的 `data-placeholder`，逐字） */
@@ -821,7 +834,8 @@ export const VIDEO_NODE_TEXT = {
   pulling: '拉取中…',
   pullTitle: '该次生成已记录会话/视频 id，可回到豆包拉取结果（不重发、不扣额度）',
   pulled: '已拉取到结果',
-  pullNoNode: '节点已不存在',
+  // ⚠️ 这里原有 `pullNoNode: '节点已不存在'` —— 与 `BATCH_TEXT.nodeMissing` **同句两声明**（`TD-11-8`）
+  //   ⇒ 已删；唯一消费者 `state/pullResult` 改引 `COMMON_TEXT.nodeGone`（真源）。
   pullNotAvailable: '该节点没有可拉取的生成记录',
   pullNoAccount: '找不到该次生成所用的账号',
 } as const;
@@ -870,6 +884,12 @@ export const FUZZY_TEXT = {
 export const EDGE_TEXT = {
   insertNode: '插入节点',
   disconnect: '断开连线',
+  /**
+   * 图校验：连线端点不存在（`core/rules/graph`）—— 本仓新增（源没有这条独立校验）。
+   * ⚠️ 带两端 id：这是**数据完整性**错误，用户读不懂 id，但排障必须有。
+   */
+  edgeEndpointMissing: (source: string, target: string) =>
+    `连线端点不存在：source=${source} target=${target}`,
 } as const;
 
 /**
@@ -1012,8 +1032,10 @@ export const GALLERY_TEXT = {
   /** 单张移除 */
   remove: '移除',
   removeTitle: '从画廊里删掉这一张',
-  /** 尺寸徽标（原 501：`尺寸较大：{大小} {尺寸}`） */
+  /** 尺寸徽标 `title`（原 501：`尺寸较大：{大小} {尺寸}`） */
   bigBadge: (size: string, dims: string) => `尺寸较大：${size} ${dims}`,
+  /** 尺寸徽标**可见文本**（原 `_Component23.jsx:502` / `_Component24.jsx:404` 的 `⚠ 大图`，逐字） */
+  bigBadgeText: '⚠ 大图',
   /** 张数（原 417 附近的状态行；本工程给一行计数） */
   count: (n: number) => `共 ${n} 张`,
   /**

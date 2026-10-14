@@ -25,6 +25,7 @@
  * 归属：纯数据变换（无 `window` / 时间 / 随机 —— id 由调用方注入）⇒ `core`（原则 4）。
  */
 
+import { asRecord } from '@/lib/object';
 import { createRefChipRe } from './refs';
 import type { CanvasEdge } from '@/stable/model/project';
 import type { CanvasNode } from '@/stable/model/node';
@@ -150,7 +151,7 @@ export function planPaste(input: {
     dy = position.y - (minY + maxY) / 2;
   }
 
-  // ③ 生成新节点（原 `32140-32164`）
+  // ③ 生成新节点（原 `32140-32164`）—— 只覆盖 `CanvasNode` **已有**的字段 ⇒ 仍是联合成员，无需断言
   const pasted: CanvasNode[] = clipboard.nodes.map((n) => {
     const mappedParent = n.parentId ? idMap[n.parentId] : undefined;
     const child = !!mappedParent;
@@ -162,14 +163,14 @@ export function planPaste(input: {
       position: child
         ? { x: n.position.x, y: n.position.y }
         : { x: n.position.x + dx, y: n.position.y + dy },
-    } as CanvasNode;
+    };
   });
 
   // ④ 正文 `@[老id|名]` 与 `materialIds` 重写（原 `32165-32203`）
-  for (let i = 0; i < pasted.length; i += 1) {
-    const node = pasted[i] as CanvasNode;
-    if (node.type !== 'text') continue;
-    const data = node.data as unknown as Record<string, unknown>;
+  const patched: CanvasNode[] = pasted.map((node) => {
+    if (node.type !== 'text') return node;
+    // ⚠️ 字段按 `unknown` 读（载荷来自旧工程 / 外部）⇒ 走唯一落点 `asRecord`（`lib/object`），不写断言
+    const data = asRecord(node.data);
     const patch: Record<string, unknown> = {};
     if (typeof data.text === 'string' && data.text) {
       // ★ **2026-10-12 越权修正**：内联正则 → 委托 canonical `createRefChipRe()`（原 `U0`）
@@ -180,22 +181,25 @@ export function planPaste(input: {
       if (next !== data.text) patch.text = next;
     }
     if (Array.isArray(data.materialIds)) {
-      const ids = data.materialIds as unknown[];
-      const next = ids.map((k) => idMap[k as string] ?? k);
+      const ids: unknown[] = data.materialIds;
+      const next = ids.map((k) => idMap[String(k)] ?? k);
       if (next.some((k, j) => k !== ids[j])) patch.materialIds = next;
     }
-    if (Object.keys(patch).length > 0) {
-      pasted[i] = { ...node, data: { ...data, ...patch } } as unknown as CanvasNode;
-    }
-  }
+    if (Object.keys(patch).length === 0) return node;
+    return { ...node, data: { ...node.data, ...patch } };
+  });
 
   // ⑤ 既有节点**全部反选**（原 `32204-32209`）
   const deselected = nodes.map((n) => (n.selected ? ({ ...n, selected: false } as CanvasNode) : n));
 
   // ⑥ 内部边 → `{source, target}` 对（原 `32210-32233`；`id`/`style`/`markerEnd` 交给调用方工厂）
-  const edgePairs = clipboard.edges
-    .filter((e) => idMap[e.source] && idMap[e.target])
-    .map((e) => ({ source: idMap[e.source] as string, target: idMap[e.target] as string }));
+  //    ⚠️ 用**局部量**收窄（`filter` 后再 `as` 会把「判过」与「取值」拆成两处）
+  const edgePairs: Array<{ source: string; target: string }> = [];
+  for (const e of clipboard.edges) {
+    const source = idMap[e.source];
+    const target = idMap[e.target];
+    if (source && target) edgePairs.push({ source, target });
+  }
 
-  return { nodes: [...deselected, ...pasted], edgePairs };
+  return { nodes: [...deselected, ...patched], edgePairs };
 }

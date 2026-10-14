@@ -2,8 +2,8 @@
  * 授权状态模型（★ 冻结形状 —— 来自后端 `electron/license.js`）
  *
  * 依据（**逐行回源抄录**）：
- *   - `electron/license.js:602-650`（`checkLicenseStatus` 的返回）
- *   - `electron/license.js:652-712`（`activateWithCode` 的返回）
+ *   - `electron/license.js`（`checkLicenseStatus` 的返回）
+ *   - `electron/license.js`（`activateWithCode` 的返回）
  *   - `W3.jsx`（激活页对每个状态的文案分支）
  *   - `_Component48.jsx:105-145`（启动校验 → 激活页 / 进画布）
  *
@@ -15,7 +15,7 @@
 /**
  * 授权状态（后端 `license.js` 实际会给出的取值）
  *
- * ⚠️ `used` 是**激活**独有的状态（`license.js:698`：激活码已被使用）——
+ * ⚠️ `used` 是**激活**独有的状态（`license.js`：激活码已被使用）——
  *    ⚠️ `used` **必须**在联合里（否则被静默当成未知值）。
  */
 export const LICENSE_STATUSES = ['ok', 'none', 'invalid', 'expired', 'tampered', 'used'] as const;
@@ -36,13 +36,13 @@ export const isLicenseStatusKind = (v: unknown): v is LicenseStatusKind =>
  * 授权状态载荷（`getLicenseStatus` 与 `activateWithCode` 的**同一形状**）
  *
  * ⚠️ 后端两个接口都带 `ok` 标志，且**逐行核对后 `ok === (status === 'ok')`**
- *    （`license.js:656/662/691/698/712`）⇒ 本工程**只用 `status`**，
+ *    （`license.js`）⇒ 本工程**只用 `status`**，
  *    把 `ok` 折叠进 `Result`（原则 6：传输成功与业务成功分开表达）。
  *
  * ⚠️ 失败原因有**三个不同字段**，不可合并（来源不同）：
- *    · `reason` —— `invalid`（授权文件异常 / 校验失败，`license.js:612/618`）
- *    · `tamperReason` —— `tampered`（如 `clock_rollback`，`license.js:670`）
- *    · `error` —— **激活**失败的后端原文（`license.js:662/698`）
+ *    · `reason` —— `invalid`（授权文件异常 / 校验失败，`license.js`）
+ *    · `tamperReason` —— `tampered`（如 `clock_rollback`，`license.js`）
+ *    · `error` —— **激活**失败的后端原文（`license.js`）
  */
 export interface LicenseStatus {
   status: LicenseStatusKind;

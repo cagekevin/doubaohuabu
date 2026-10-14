@@ -1,4 +1,12 @@
-(function () {
+/*
+ * ⚠️ **本文件是函数表达式，不是自执行脚本**（2026-10-14 起）：
+ *   宿主 `main.js` 的 `inject-dola-duration-main` 注入时补调用并**喂入站点域名的唯一真源**：
+ *     `(${script})(${JSON.stringify({ SITE_HOSTS: siteHosts.SITE_HOSTS })})`
+ *   ⇒ 本文件里**一个域名字面量都不许写**（站点域名真相 = `electron/site-hosts.js`）。
+ *   改注入方式时**必须同步这里**（单独执行本文件不会再自跑，这是有意的：防止它被当成
+ *   "自包含脚本"又抄一份域名回来）。
+ */
+(function (SITE_HOSTS) {
   "use strict";
 
   const INSTALL_KEY = "__watermarkFreeDurationAudioReferenceInstalledV1";
@@ -43,8 +51,51 @@
   }
   globalThis[INSTALL_KEY] = true;
 
-  const host = location.hostname.replace(/^www\./i, "").toLowerCase();
-  if (!(host === "dola.com" || host.endsWith(".dola.com") || host === "doubao.com" || host.endsWith(".doubao.com"))) {
+  /*
+   * ── 目标域判定 —— ★ **域名不写字面量**（2026-10-14 收口 · 传参版）────────────
+   *
+   * ⚠️ 「这个 host 是不是豆包／dola 系」原先在本文件**写了 3 遍**
+   *    （下面这个安装守卫 · `isSupportedGenerationHost` · dola 专属钩子的入口），
+   *    归一化口径（去 `www.` + 小写）又**各写一遍** ⇒ 5 个中心。
+   *    ⇒ 收成 3 个具名判据 + 1 个归一化，**只在这里定义**。
+   *
+   * ★★ **域名从哪来**：本文件是**注入 guest 主世界的脚本**、**不能 require** ⇒ 域名由**宿主传参**：
+   *    文件是**函数表达式** `(function (SITE_HOSTS) { … })`，宿主（`main.js` 的
+   *    `inject-dola-duration-main`）注入时补上调用：`(${script})(${JSON.stringify({SITE_HOSTS})})`，
+   *    数据来自层 1 的**唯一真源** `electron/site-hosts.js`。
+   *
+   *    ⚠️ 为什么**不是**"在本文件写一份镜像 + 两侧加对账"：那是**给两份加护栏**（第二处仍然存在，
+   *       而且要有人维护那份对账）；传参让**域名的值**根本不存在第二处 —— 这才叫让结构长出来。
+   *    ⚠️ **「归属判定」不在此列**：本文件的 `isHostOf` 与宿主 `site-hosts.js` 层 2 **同口径**，
+   *       且页内还要判**逐条请求 URL**（宿主看不到那些 URL）⇒ 这份判定形状**跨世界消不掉**，
+   *       登记为残留（见 `docs/判据登记表.md` §4「站点域名」行）。
+   *    ⚠️ 为什么**不能**直接 require：注入脚本跑在 guest 页面主世界，没有 Node 的模块系统。
+   */
+  function normalizeHost(raw) {
+    return String(raw || "").replace(/^www\./i, "").replace(/\.$/, "").toLowerCase();
+  }
+  /**
+   * 某个 host 是不是某个源（含子域）—— 判据形状与宿主侧 `site-hosts.js` 的层 2 **同口径**
+   * ⚠️ 这里只保留**判定形状**（`host === base || host.endsWith('.' + base)`），
+   *    域名的**值**全部来自注入的 `SITE_HOSTS`。
+   */
+  function isHostOf(host, source) {
+    const base = SITE_HOSTS[source];
+    if (!base) return false;
+    return host === base || host.endsWith("." + base);
+  }
+  function isDolaHost(host) {
+    return isHostOf(host, "dola");
+  }
+  function isDoubaoHost(host) {
+    return isHostOf(host, "doubao");
+  }
+  function isTargetHost(host) {
+    return isDolaHost(host) || isDoubaoHost(host);
+  }
+
+  const host = normalizeHost(location.hostname);
+  if (!isTargetHost(host)) {
     return;
   }
 
@@ -188,9 +239,8 @@
 
   function isSupportedGenerationHost(rawUrl) {
     try {
-      const requestHost = new URL(rawUrl, location.href).hostname.replace(/^www\./i, "").toLowerCase();
-      return requestHost === "dola.com" || requestHost.endsWith(".dola.com") ||
-        requestHost === "doubao.com" || requestHost.endsWith(".doubao.com");
+      // ★ 判据与归一化都取自本文件顶部那组唯一实现（此前这里逐字重复了一遍）
+      return isTargetHost(normalizeHost(new URL(rawUrl, location.href).hostname));
     } catch {
       return false;
     }
@@ -2113,7 +2163,8 @@
     dolaHandleMediaRequest(message);
   });
 
-  if (host === "dola.com" || host.endsWith(".dola.com")) {
+  if (isDolaHost(host)) {
+    // ★ 判据取自本文件顶部的唯一实现（此前这里又内联了一遍 dola 子集判定）
     dolaHookUploadChunk();
     dolaEnhanceMediaSupport();
     dolaPatchSubmit().catch(() => {});
@@ -2135,4 +2186,4 @@
     console.log('[dola-30s] 主世界注入已运行；30s 开关=', duration30Enabled());
     logDurationDiag(`injected; 30s_enabled=${duration30Enabled()}`);
   } catch (e) { /* ★ TD-16-37：这一段**就是**在打日志 ⇒ 日志自身失败只能吞（再打日志无意义） */ }
-})();
+})

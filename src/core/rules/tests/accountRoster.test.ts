@@ -6,7 +6,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { addAccountToList, buildNewAccount, removeAccountFromList, type RosterDeps } from '../accountRoster';
+import {
+  addAccountToList,
+  buildNewAccount,
+  ensureAccountPartitions,
+  removeAccountFromList,
+  type RosterDeps,
+} from '../accountRoster';
 import type { Account, Fingerprint } from '@/stable/model/account';
 
 const NOW = 1_700_000_000_000;
@@ -25,13 +31,15 @@ function makeDeps(over: Partial<RosterDeps> = {}): { deps: RosterDeps; seeds: st
       return fp(os);
     },
     proxyPool: [],
+    // 固定随机源（分区后缀）—— 断言里比的是形状与唯一性，不需要真随机
+    rand: () => 0.5,
     ...over,
   };
   return { deps, seeds };
 }
 
 const acc = (id: string, name: string, type: Account['type'] = 'doubao', extra: Partial<Account> = {}): Account =>
-  ({ id, name, type, groupId: null, autoStart: false, fpSalt: 0, status: '已登录', partition: null, addedAt: 0, ...extra }) as Account;
+  ({ id, name, type, groupId: null, autoStart: false, fpSalt: 0, status: '已登录', partition: `persist:${id}`, addedAt: 0, ...extra }) as Account;
 
 describe('buildNewAccount · 基础字段（原 addAccount 30159-30196）', () => {
   it('★ 名字不给 ⇒ 按分组自动编号', () => {
@@ -48,6 +56,30 @@ describe('buildNewAccount · 基础字段（原 addAccount 30159-30196）', () =
     const { deps } = makeDeps();
     expect(buildNewAccount([], { type: 'doubao' }, deps).id).toBe(`acc_${NOW.toString(36)}`);
     expect(buildNewAccount([], { type: 'doubao', id: 'acc_fixed' }, deps).id).toBe('acc_fixed');
+  });
+
+  /*
+   * ★★ **分区产生方**（源 `$P.jsx:35`）—— 本仓唯一的产生点（`addAccount` / `buildPendingAccount` 共用）。
+   *
+   * 改前是 `partition: input.partition ?? null` ⇒ **恒为 `null`** ⇒ 这个断言必红；
+   * 改后由 `newAccountPartition` 生成账号专属分区 ⇒ 绿。
+   * ⚠️ 断言的是**行为**（产出了什么），且与「会话隔离」这件事直接挂钩 —— 不是同义反复。
+   */
+  it('★ partition 不给 ⇒ 建号走的是那个**唯一产生方**（前缀对，且不是裸 `persist:<type>`）', () => {
+    const { deps } = makeDeps();
+    const a = buildNewAccount([], { type: 'dola' }, deps);
+    // ⚠️ **形状细节**（base36 时间 / 随机段 / 类型进键）的真源测试点在 `partition.test.ts` ——
+    //    这里只锁「建号链路确实接到产生方」这一条，**不重复测形状**。
+    expect(a.partition.startsWith('persist:dola_d_')).toBe(true);
+    // 裸键 = 整个站点共用一个会话（多账号串味）—— 出现即红
+    expect(a.partition).not.toBe('persist:dola');
+  });
+
+  it('★ partition 给了就**原样用**（导入路径 `persist:import_<id>`，源 `OP.jsx:636`）', () => {
+    const { deps } = makeDeps();
+    expect(
+      buildNewAccount([], { type: 'doubao', partition: 'persist:import_acc_x' }, deps).partition,
+    ).toBe('persist:import_acc_x');
   });
 
   it('默认值：`status` = 已登录 · `addedAt` = now · `autoStart` 必须**真为 true** 才算', () => {
@@ -196,5 +228,68 @@ describe('removeAccountFromList（原 `vo(r.filter(...))`）', () => {
   it('只删匹配的那一个（同名不同 id 不受影响）', () => {
     const out = removeAccountFromList([acc('a', '主号'), acc('b', '主号')], 'a');
     expect(out.map((x) => x.id)).toEqual(['b']);
+  });
+});
+
+/**
+ * 启动归位 · 给缺分区的账号补会话分区
+ *
+ * ⚠️ 这里的输入是**真实盘上形状**（`partition` 为空的存量账号 —— 本仓此前无产生方），
+ *    不是编给 mock 的值；断言断的是**产出了什么**。
+ */
+describe('ensureAccountPartitions · 启动归位（补账号会话分区）', () => {
+  const opts = { now: NOW, rand: () => 0.5 };
+  /** 盘上的存量形状：`partition` 为空（类型是 `acc()` 的第三个参数） */
+  const broken = (id = 'acc_1', name = '豆包01', type: Account['type'] = 'doubao'): Account => ({
+    ...acc(id, name, type),
+    partition: '',
+  });
+
+  it('★ 缺分区的账号被补上，且是**账号专属**分区（不是裸 `persist:<type>`）', () => {
+    const out = ensureAccountPartitions([broken()], opts);
+    expect(out.changed).toBe(true);
+    expect(out.value[0]!.partition).toMatch(/^persist:doubao_d_[0-9a-z]+_[0-9a-z]+$/);
+    // 裸键 = 整个站点共用一个会话（多账号串味）⇒ 出现即红
+    expect(out.value[0]!.partition).not.toBe('persist:doubao');
+  });
+
+  it('★ 分区类型取自账号自己的站点（dola 号不会拿到豆包的键）', () => {
+    const out = ensureAccountPartitions([broken('acc_2', 'Dola 号', 'dola')], opts);
+    expect(out.value[0]!.partition.startsWith('persist:dola_d_')).toBe(true);
+  });
+
+  it('★ 已有分区的账号**一个字节都不动**（引用也不换）', () => {
+    const good = acc('acc_9', '豆包09');
+    const out = ensureAccountPartitions([good], opts);
+    expect(out.changed).toBe(false);
+    expect(out.value[0]).toBe(good);
+  });
+
+  it('★ 幂等：跑完第二遍 `changed === false`（跑完即静默，不是常驻兜底）', () => {
+    const once = ensureAccountPartitions([broken()], opts);
+    const twice = ensureAccountPartitions(once.value, opts);
+    expect(once.changed).toBe(true);
+    expect(twice.changed).toBe(false);
+    expect(twice.value[0]!.partition).toBe(once.value[0]!.partition);
+  });
+
+  it('★ 不静默：有改动时给日志并点名账号', () => {
+    const out = ensureAccountPartitions([broken()], opts);
+    expect(out.notes.length).toBeGreaterThan(0);
+    expect(out.notes.join('\n')).toContain('豆包01');
+  });
+
+  it('★ 不可变：入参账号对象不被就地改写', () => {
+    const b = broken();
+    const input = [b];
+    ensureAccountPartitions(input, opts);
+    expect(b.partition).toBe('');
+  });
+
+  it('空名册 / 全部都有分区 ⇒ 不动、无日志', () => {
+    expect(ensureAccountPartitions([], opts)).toMatchObject({ changed: false, notes: [] });
+    const out = ensureAccountPartitions([acc('a', '甲'), acc('b', '乙')], opts);
+    expect(out.changed).toBe(false);
+    expect(out.notes).toEqual([]);
   });
 });

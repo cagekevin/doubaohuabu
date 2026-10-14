@@ -14,7 +14,7 @@
  */
 
 import type { Account, SiteType } from '@/stable/model/account';
-import { normalizeAccountType, SITE_TYPES } from '@/stable/model/account';
+import { normalizeAccountType } from '@/stable/model/account';
 import { pad2 } from '@/lib/time';
 
 /**
@@ -117,9 +117,6 @@ export function nextAccountName(
   }
   return makeAccountName(type, max + 1);
 }
-
-/** 全站类型列表（供 UI 的"选平台"用；与 `SITE_TYPES` 同源） */
-export const ACCOUNT_TYPES = SITE_TYPES;
 
 /**
  * 账号头像里的那一个字（原 `OP.jsx:724`）

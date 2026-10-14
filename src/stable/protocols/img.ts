@@ -38,7 +38,7 @@ export function isImgRef(v: unknown): v is string {
  *   ⇒ **一律原样返回**。
  *
  * ⚠️ 判据是**图片 + base64**（`fp` 逐字）：`data:text/…` 这类**非图片**的 data URL ⇒
- *   **不落盘**（`saveImageSync` 只认图片，见 `electron/main.js:679`）。
+ *   **不落盘**（`saveImageSync` 只认图片，见 `electron/main.js`）。
  *
  * ★★ **2026-10-11 收口（判据 C1 + 回源纠错）**：此前这条判据在**两处**各写一遍，且
  *   **其中一处写反了** —— `core/rules/lovartGallery.ts` 的 `shouldMaterializeImage` 用的是
@@ -59,7 +59,7 @@ export function isInlineImage(v: unknown): v is string {
  * 拼缩略图 URL：`img://xxx.png` → `img://xxx.png?w=480`
  *
  * ★ **只对 `img://` 拼**（源 `Xt` 22564-22570：`Kh(e) ? …?w=… : e`，`Kh` = 「已是 `img://` 引用」）。
- *   `?w=` 是**宿主协议处理器**认的参数（`electron/main.js:709`：「`img://xxx.png?w=480` 直接命中磁盘缓存」）
+ *   `?w=` 是**宿主协议处理器**认的参数（`electron/main.js`：「`img://xxx.png?w=480` 直接命中磁盘缓存」）
  *   —— 挂到远程 URL 上，CDN 只会收到一个它不认识的 query（可能 404 / 返回别的图）。
  *   ⇒ 调用方**无需**再自己加 `isImgRef` 守卫（`adapters/media/faceDetect.ts` 已随之简化）。
  *

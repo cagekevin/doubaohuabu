@@ -48,9 +48,18 @@ describe('报文公共形状（跨进程契约）', () => {
     expect(p.content.autoSend).toBe(true);
   });
 
-  it('★ partition 缺省 → `persist:doubao`', () => {
-    const p = buildVideo({ account: { id: 'a', name: 'n' }, text: '猫', now: NOW });
-    expect(p.account.partition).toBe('persist:doubao');
+  /*
+   * ⚠️ 原有一条「partition 缺省 → `persist:doubao`」**已删**：那正是被撤销的设计
+   *    （整个站点共用一个会话 ⇒ 多账号串味）。现在 `PayloadAccount.partition` 是**必填**
+   *    ⇒ 那条路径在**类型层**已不可能（比一条测试更强的守卫，见 `payload.ts` 该字段注释）。
+   */
+  it('★ partition 原样转发（本层不兜、不改写 —— 原则 6）', () => {
+    const p = buildVideo({
+      account: { id: 'a', name: 'n', partition: 'persist:doubao_d_abc_4fzzz' },
+      text: '猫',
+      now: NOW,
+    });
+    expect(p.account.partition).toBe('persist:doubao_d_abc_4fzzz');
     expect(p.content.genParams).toEqual({ duration: null, model: null });
   });
 

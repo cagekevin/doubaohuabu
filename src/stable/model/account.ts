@@ -6,9 +6,16 @@
 
 import type { HostOS } from '@/constants';
 
-/** 站点类型（原 `bT` 26399） */
-export const SITE_TYPES = ['doubao', 'dola', 'lovart', 'tapnow', 'gpt', 'other'] as const;
-export type SiteType = (typeof SITE_TYPES)[number];
+/**
+ * 站点类型（原 `bT` 26399）—— ★ **真源已搬到 L0**（`@/constants/siteTypes`，2026-10-14）
+ *
+ * 这里**只转发**（同一份值，不是第二份）：既有 37 处 `from '@/stable/model/account'` 的 import
+ * 一律不用改。⚠️ 搬家原因见 `@/constants/siteTypes` 头注 —— 一句话：
+ * **L0 的文案表需要它，而 L0 不得依赖 L1**，否则文案表只能再抄一份站点清单。
+ */
+import { SITE_TYPES, type SiteType } from '@/constants/siteTypes';
+
+export { SITE_TYPES, type SiteType };
 
 /** 账号池选号策略（原 34468-34474） */
 export const POOL_STRATEGIES = ['round-robin', 'least-load'] as const;
@@ -76,8 +83,15 @@ export interface Account {
   type: SiteType;
   /** 默认 `'已登录'` */
   status: string;
-  /** Electron session partition（会话隔离键） */
-  partition: string | null;
+  /**
+   * Electron session partition（会话隔离键）—— **恒有值的不变量**
+   *
+   * ★ 产生方 = `core/rules/accountRoster.buildNewAccount`（账号诞生那一刻生成，源 `$P.jsx:35`；
+   *   导入路径给 `persist:import_<id>`，源 `OP.jsx:636`）。
+   * ⚠️ 它**不是** `string | null`：允许为空正是「多账号共用一个站点会话」的病根
+   *   （消费方各自兜一份 `persist:<type>` ⇒ 登录弹窗 / 后台 / 发送三边落在不同会话）。
+   */
+  partition: string;
   addedAt: number;
   groupId: string | null;
   autoStart: boolean;

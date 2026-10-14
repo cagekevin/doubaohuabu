@@ -29,7 +29,7 @@ const TOAST_DURATION_MS = 2600;
  *
  * ⚠️ **只列本片真的用**的键（判据 B5：不留没人读的开关）—— 四处：
  *   `doubao-newimages-{autocap,current-only,folded}` + `doubao-view-head-collapsed`（后台视图头部折叠）。
- * ⚠️ `autocap` = **非 Lovart 站点**的自动值守总开关（`docs/过程.md` #11 / `main.js:2749` 的裁定**只覆盖 Lovart**）。
+ * ⚠️ `autocap` = **非 Lovart 站点**的自动值守总开关（`docs/过程.md` #11 / `main.js` 的裁定**只覆盖 Lovart**）。
  */
 export type UiFlagKey =
   | typeof LS_NEWIMAGES_FOLDED

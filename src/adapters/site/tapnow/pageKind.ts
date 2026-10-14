@@ -4,18 +4,17 @@
  * 用途：抓取 / 发送前先判「用户当前停在哪种页」——
  *   **画布页**（可抓）· **首页/广场**（不可抓，要提示去打开画布页）· **其他**。
  *
- * ⚠️ **归属（判据 A1）**：**站点专属**（主机名正则 + 路径规则都是 Tapnow 的）⇒ 留在本目录。
- *    按 **C1 三振出局**：Lovart 也有同类判定（`KT` 32942-33016）⇒ 现为 **2 处，还不够**，
- *    到**第三个**站点时再抽到 `adapters/site/shared/`。
+ * ⚠️ **归属（判据 A1）**：**路径规则**是 Tapnow 的 ⇒ **留本目录**；
+ *    而**主机名归属**是渲染侧共用的判据（值 = `constants/siteHosts`、判定 = `core/rules/siteHost`）
+ *    ⇒ 本文件**只引用，不自持主机名正则**（`TD-05-12`：域名字面量不许在适配器里再写一份）。
  */
 
 // ★ **枚举真源已收口**（原 `$s` 33108 与 Lovart 的 `Sn` 22637 是**同一枚举**）：与 `SCAN_PHASES` /
-//   `SCAN_SCOPES` 同法搬到 `core/rules/scanChain.ts` —— 本文件**不再自持副本**（判据 C1：第 3 处到点）；
-//   **判定函数仍留本目录**（判据 A1：主机名与路径规则是站点专属）。
+//   `SCAN_SCOPES` 同法搬到 `core/rules/scanChain.ts` —— 本文件**不再自持副本**（判据 C1：第 3 处到点）。
 import { PAGE_KINDS, type PageKind } from '@/core/rules/scanChain';
+// ★ **归属判定真源**（渲染侧唯一；值在 `constants/siteHosts`）
+import { isHostOfSite } from '@/core/rules/siteHost';
 
-/** Tapnow 主机名（原 `Dk` 33113）—— **只认这两个域**（含子域） */
-const TAPNOW_HOST_RE = /(^|\.)(tapnow\.media|tapnow\.art)$/i;
 /** 画布页路径（原 `n0` 内联）—— `/canvas/<8+ 位十六进制/横线>` */
 const CANVAS_PATH_RE = /^\/canvas\/[0-9a-f-]{8,}/i;
 /** 首页 / 广场类路径（原 `n0` 内联） */
@@ -34,7 +33,7 @@ export function tapnowPageKind(href: unknown): PageKind {
   if (!href || typeof href !== 'string') return PAGE_KINDS.OTHER;
   try {
     const url = new URL(href);
-    if (!TAPNOW_HOST_RE.test(url.hostname)) return PAGE_KINDS.OTHER;
+    if (!isHostOfSite(url.hostname, 'tapnow')) return PAGE_KINDS.OTHER;
     const path = url.pathname || '';
     if (CANVAS_PATH_RE.test(path)) return PAGE_KINDS.CANVAS;
     if (/^\/?$/.test(path) || FEED_PATH_RE.test(path)) return PAGE_KINDS.FEED;

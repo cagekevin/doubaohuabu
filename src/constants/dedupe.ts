@@ -40,7 +40,7 @@ export const RECURRING_TABLE_KINDS = ['urls', 'hashes'] as const;
 /** 一个桶的**条目上限**（原 `$R`，36237 = 400）—— 超出时按 `last` 升序**砍掉前一半** */
 export const RECURRING_TABLE_MAX = 400;
 
-/** 长边过小剔除阈值（px；`lovart-fetch.js:214-227`） */
+/** 长边过小剔除阈值（px；`lovart-fetch.js`） */
 export const MIN_IMAGE_SIDE = 200;
 
 /** 文件过小剔除阈值（bytes；同上） */

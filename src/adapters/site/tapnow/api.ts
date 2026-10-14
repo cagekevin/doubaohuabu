@@ -17,6 +17,7 @@ import { err, ok, type Result } from '@/core/model/result';
 import { withTimeout } from '@/lib/async';
 import { isRecord } from '@/lib/object';
 import { canvasIdFromHref } from '@/core/rules/scanChain';
+import { isHostOfSite } from '@/core/rules/siteHost';
 import { findWebview, type WebviewAccountRef } from '../shared/webview';
 import { tapnowFetchScript } from './scripts';
 
@@ -90,7 +91,9 @@ export async function tapnowApi(
   if (res.error) return err('page-error', res.error);
   if (!res.ok) {
     const status = res.status || 0;
-    return err('page-error', `接口返回 ${status}${res.error ? '：' + res.error : ''}`, { status });
+    // ⚠️ 不带 `error` 详情那一支：上面 `if (res.error) return …` 已经处理过 ⇒ 到这里 `res.error` 恒空
+    //   （源 `shared.js:33312` 的 `s.error ? '：' + s.error : ''` 在本仓是**死支**，故不传）
+    return err('page-error', TAPNOW_TEXT.apiHttpError(String(status)), { status });
   }
 
   // ⚠️ 显式判「到底有没有返回体」（`TD-16-104`）：原先写 `JSON.parse(res.text ?? '')`
@@ -175,10 +178,17 @@ export async function tapnowCurrentCanvasId(
 }
 
 // ── 画布节点 API（原 `qc` 33400 + 它的 4 个收集助手 `aP`/`Ci`/`ao`/`Gc` 33114-33195）──────────
-// ⚠️ 这一段是 **Tapnow 专属**（域名 / 路径 / 参数名都是它的）⇒ 按判据 A1 留在本目录（不进 `core/rules`）。
+// ⚠️ 这一段是 **Tapnow 专属**（路径 / 参数名都是它的）⇒ 按判据 A1 留在本目录（不进 `core/rules`）；
+//     **主机名归属**不在此列（渲染侧共用的判据：值 = `constants/siteHosts`、判定 = `core/rules/siteHost`）。
 
-/** 允许的图片域（原 `Dk` + `nP`，`:33114`）：Tapnow 自家域 **或** 它的 OSS CDN */
-const TAPNOW_DOMAIN_RE = /(^|\.)(tapnow\.media|tapnow\.art)$/i;
+/**
+ * 允许的图片域（原 `Dk` + `nP`，`:33114`）：Tapnow 自家域 **或** 它的 OSS CDN
+ *
+ * ⚠️ **自家域不在这里**：走 `isHostOfSite(host, 'tapnow')`（真源）—— 与 `tapnow/pageKind` **同一份**
+ *    （`TD-05-12`：域名字面量不许在适配器里再写一份）。
+ * ⚠️ **OSS 域留下**：它是**额外的 CDN 域**，语义独立于"站点归属"
+ *    （同主进程 `dola-media.js` 的 `FALLBACK_API_ROOT_HOSTS` 处置：额外域就地声明，源主域引用层 1）。
+ */
 const TAPNOW_OSS_RE = /(^|\.)oss-cn-[a-z0-9-]+\.aliyuncs\.com$/i;
 /** 上传接口路径（原 `rP`，`:33115`）—— 这是 Tapnow 图片最可靠的形状特征 */
 const UPLOAD_PATH_RE =
@@ -243,7 +253,7 @@ export function isUsableCanvasImageUrl(url: string): boolean {
   if (!url || /^(blob|data):/i.test(url) || JUNK_URL_RE.test(url)) return false;
   try {
     const u = new URL(url);
-    if (!TAPNOW_DOMAIN_RE.test(u.hostname) && !TAPNOW_OSS_RE.test(u.hostname)) return false;
+    if (!isHostOfSite(u.hostname, 'tapnow') && !TAPNOW_OSS_RE.test(u.hostname)) return false;
     return UPLOAD_PATH_RE.test(u.pathname) || IMAGE_EXT_RE.test(u.pathname);
   } catch (e: unknown) {
     void e;

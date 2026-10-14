@@ -186,7 +186,11 @@ type WatermarkVidScriptFail = { ok: false; error: string; note?: string };
  *    而 `withBackendPage` 会把后台页导航到 `site.chatUrl`（`/chat/`）⇒ **这一步不能省**。
  */
 const AISPACE_URL = 'https://www.doubao.com/samantha/aispace/';
-const AISPACE_RE = /\/samantha\/aispace/;
+/**
+ * 「已在 aispace 页」的判定 —— 路径片段**由 `AISPACE_URL` 派生**（不再两处各写一份，
+ * `TD-05-13`：值 + 正则字面量漂移 ⇒「判定已在页」与「导航目标」不一致）。
+ */
+const AISPACE_RE = new RegExp(new URL(AISPACE_URL).pathname);
 /** 站过去之后的静置（源 `await new Promise(T => setTimeout(T, 1500))`，`:2106-2108`） */
 const AISPACE_SETTLE_MS = 1500;
 
@@ -271,7 +275,7 @@ const detectRestores = new Map<string, () => void>();
  * 构造 `SitePort.detectVideos` 的实现（原 `it` 的取数段：`Y.getWebContentsId()` ＋
  *   `window.api.detectVideos(Me, Array.from(b.current))`，`_Component43.jsx:1561-1590`）
  *
- * ⚠️ 取数本身在**宿主主进程**（`electron/main.js:2224` 的 `detect-videos`）；本适配器只负责
+ * ⚠️ 取数本身在**宿主主进程**（`electron/main.js` 的 `detect-videos`）；本适配器只负责
  *   「站到 aispace 页 → 交 `webContentsId` 与已见键 → 转发 `Result`」。
  */
 export function createDoubaoDetectVideos(host: HostPort): NonNullable<SitePort['detectVideos']> {

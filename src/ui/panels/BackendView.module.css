@@ -35,11 +35,42 @@
   background: var(--color-surface-raised);
 }
 
-/* 隐藏态（对应源 `dv-hidden`）—— **只隐藏，不卸载**（`<webview>` 仍在 DOM） */
+/*
+ * 隐藏态（原 `.doubao-view.dv-hidden`，真值 = `index-Dg_Oc7MR.css`）
+ *
+ * ★★ **不是 `display:none`**（那是本仓自造的写法，已纠正）—— 原版：
+ *   ```css
+ *   .doubao-view.dv-hidden{flex:0 0 0!important;width:0!important;overflow:hidden;
+ *                          visibility:hidden;pointer-events:none}
+ *   .doubao-view.dv-hidden .doubao-view-webviews{width:1280px!important;height:800px!important;flex:none!important}
+ *   ```
+ *   ⇒ 收成 0 宽（不占位）用 `visibility` 而不是 `display`，**并且把 webviews 强行撑成 1280×800**
+ *     —— 为的是**让 `<webview>` 的 guest 视口永不塌陷**（页面与页内脚本在后台照常工作）。
+ * ⚠️ 本仓原写 `display:none` ⇒ guest 视口被塌成 0；**实测塌了就回不来**
+ *   （宿主元素盒 760×670 时 guest 仍报 760×150，连显式 `style.height` 也拉不动）
+ *   ⇒ 用户看到的「后台下面全白」就是它。
+ * ⚠️ 本仓 `.view` 是绝对定位覆盖层（不占流）⇒ 无需原版那句 `flex:0 0 0/width:0`，
+ *   但**必须**照抄第二条（撑住 webviews）。
+ */
 .viewHidden {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
+}
+.viewHidden .webviews {
+  width: 1280px !important;
+  height: 800px !important;
+  flex: none !important;
 }
 
+/*
+ * webview 容器 —— ★ **逐字照抄原版**（真值 = `index-Dg_Oc7MR.css` 的 `.doubao-view-webviews`）：
+ *   `.doubao-view-webviews{position:relative;flex:1;width:100%;min-height:0;overflow:hidden}`
+ *
+ * ⚠️ 本仓此前多写了 `display:flex; flex-direction:column` —— 那是**为了把会话条当"流内兄弟"**
+ *   而加的一层（并据此把 webview 写成 `flex:1`）。逐字回源后：**容器不是 flex**，
+ *   会话条（`.lsb-clip`）与 webview（`.doubao-view-webview`）**都是绝对定位**，各自由 inset/z-index 定层。
+ *   ⇒ 多出来的 flex 层已删（复杂度净减，且不再与"尺寸恒定"打架）。
+ */
 .webviews {
   position: relative;
   /* ★ 铺满视图剩余高度（源里 `<webview>` 就是整个视图区）——
@@ -47,11 +78,6 @@
   flex: 1;
   min-height: 0;
   width: 100%;
-  /* ★ **纵向 flex**：容器里除 `<webview>` 外还有**流内兄弟**（Lovart 会话条，源 `_Component25.jsx:359`）
-     ⇒ 会话条占自身高度、webview 走 `flex: 1` 填剩余（无会话条时行为不变）。 */
-  display: flex;
-  flex-direction: column;
-  /* 真值 = `docs/mockup/assets/mockup.css:1844`（`.doubao-view-webviews`） */
   overflow: hidden;
   background: var(--color-surface-sunken);
 }
@@ -145,26 +171,40 @@
   color: var(--color-text-muted);
 }
 
-/* 隐藏态：仍在 DOM 里（后台任务要能用它跑脚本），但不可见、不占位 */
-.hidden {
+/*
+ * ★★ `<webview>` 的两态（真值 = 原版 `index-Dg_Oc7MR.css`，**逐字照抄**）
+ *
+ * ```css
+ * .doubao-view-webview{position:absolute;top:0;left:0;right:0;bottom:0;border:none;
+ *                      background:var(--panel);visibility:hidden;pointer-events:none}
+ * .doubao-view-webview.dv-wv-active{visibility:visible;pointer-events:auto;z-index:2}
+ * .doubao-view-webview.dv-wv-force {visibility:visible;pointer-events:none;z-index:1}
+ * ```
+ * ⇒ **尺寸恒定**（四边钉死 = 铺满 `.webviews`），状态**只切 `visibility` / `pointer-events` / `z-index`**。
+ *
+ * ⚠️ 本仓原写 `.hidden{position:absolute;width:1px;height:1px}` / `.active{position:relative;flex:1}`
+ *   —— **把"尺寸恒定"抄成了"用尺寸表达状态"**。`<webview>` 的 guest 视口一被抖到极小就回不来
+ *   （实测：显式 `style.height` 也拉不动）⇒ 当前可见的那个 webview 也只有 150px 高。
+ * ⚠️ 原版第三态 `dv-wv-force`（可见但不吃指针）本仓**暂无消费者**（对应 `.view` 的 `dv-send-overlay`
+ *    第三态已按既有裁定"不造空壳"）⇒ 不落。
+ * ⚠️ 原版这两个 z-index（2 / 1）是**同层内的相对序**（会话条是 7，浮在其上），不是间距刻度 ⇒ 照抄裸值。
+ */
+.webview {
   position: absolute;
   top: 0;
   left: 0;
-  width: 1px;
-  height: 1px;
+  right: 0;
+  bottom: 0;
+  border: none;
+  background: var(--color-surface-raised);
   visibility: hidden;
   pointer-events: none;
 }
-
-/* 可见态：用户就在这个页面里登录 —— 铺满 webview 区的**剩余**高度（源里就是整块视图） */
-.active {
-  position: relative;
-  display: block;
-  width: 100%;
-  /* ⚠️ 不能用 `height: 100%`：容器是纵向 flex 且可能有会话条 ⇒ 会撑出容器（`overflow: hidden` 被切掉） */
-  flex: 1;
-  min-height: 0;
-  background: var(--color-surface-raised);
+/* 当前账号：可见 + 可交互（原 `.dv-wv-active`） */
+.webviewActive {
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 2;
 }
 
 /* ───────────────── 头部工具栏（原 `.dv-head-wrap` / `.dv-head-clip` / `.doubao-view-head` / `.dv-head-toggle`）─────────────────
@@ -243,7 +283,15 @@
    ⚠️ 折叠：高度**由 JS 量出后内联**（源 `:60-77` 的 ResizeObserver ＋ `:359-363`），本文件只管裁切与过渡。 */
 
 .sessionClip {
-  flex: 0 0 auto;
+  /* ★ 真值 = 原版 `index-Dg_Oc7MR.css` 的 `.lsb-clip`：**绝对定位浮层**（不是流内项）——
+     因为 `<webview>` 是 `position:absolute; inset:0` 铺满容器，流内会让它被 webview 盖住。
+     原版：`position:absolute;top:0;left:0;right:0;z-index:7;overflow:hidden;transition:height .26s …`
+     ⚠️ 高度仍由 JS 量出后**内联**（本组件已有 ResizeObserver 那条链），本类只管裁切与过渡。 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 7;
   overflow: hidden;
   transition: height 0.15s ease;
 }

@@ -327,7 +327,7 @@ export const NEW_IMAGES_FRESH_MS = 3600000;
 //
 // ⚠️ 源版按站点分两档节奏：`ho(acc) ? qR : KR`（Lovart 3000 / 其它 6000），退避同形
 //    （`YR` 10000 / `XR` 15000）。本仓**只用「非 Lovart 档」** —— Lovart **不参与值守**
-//    （`docs/过程.md` #11 · `electron/main.js:2749`），所以 Lovart 那一档被刻意留空不用。
+//    （`docs/过程.md` #11 · `electron/main.js`），所以 Lovart 那一档被刻意留空不用。
 
 /** 值守轮询的**基础间隔**（原 `KR` shared.js:36672 = 6000；Lovart 档 `qR` = 3000 用不到） */
 export const AUTO_WATCH_INTERVAL_MS = 6000;
@@ -452,6 +452,16 @@ export const DRAG_ICON_SIZE = 64;
 
 /** 账号忙超时（ms，原 `HP` 34477 = 1h） */
 export const ACCOUNT_BUSY_TIMEOUT_MS = 3600000;
+
+/**
+ * ★ **站点类型清单**（原 `bT` 26399）—— 真源已提到 L0（`./siteTypes`），与上面 `HOST_OS` **同一理由**：
+ *   它是**跨层共享的字面量联合**；而下方 `export * from './text'` 的文案表也要用它做**穷尽键**
+ *   （见 `ACCOUNT_TYPE_PICKER_TEXT.cards: Record<SiteType, …>`）。
+ * ⚠️ **为什么不内联在本文件**（`HOST_OS` 是内联的）：`./text` 需要引它，而本文件
+ *    `export * from './text'` ⇒ 内联会让两边成环。
+ * ⚠️ 从 `stable/model/account.ts` 搬来（那里改为**转发**，既有 37 处 import 零改动）。
+ */
+export * from './siteTypes';
 /** 账号池默认并发 */
 export const DEFAULT_ACCOUNT_CONCURRENCY = 1;
 /** API 任务默认并发 */

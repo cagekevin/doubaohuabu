@@ -8,6 +8,9 @@
  *    原始 message 必须一路透传到 UI，本表只提供「按 reason 分类的提示语」。
  */
 
+// ★ 站点类型清单（**同层真源** `./siteTypes`）—— `ACCOUNT_TYPE_PICKER_TEXT.cards` 用它做**穷尽键**
+import type { SiteType } from './siteTypes';
+
 // ⚠️ 失败 / 后端错误 label 的**真源是 `./failure`** —— 公开入口由 `constants/index.ts` 的 `export *` 统一提供。
 //    ⛔ 本文件**不得**再 `export { FAIL_LABEL, BACKEND_ERROR_LABEL } from './failure'`：会与
 //    `constants/index.ts` 的 `export * from './failure'` **歧义重名** ⇒ TS 静默丢名（`@/constants` 拿不到，TD-11-3）。
@@ -84,6 +87,36 @@ export const COMMON_TEXT = {
   dash: '—',
   /** 无提示词（两处源均：`'（无提示词）'`，逐字） */
   noPrompt: '（无提示词）',
+  /**
+   * **附件名**：随剪贴板载荷发给目标页的参考图标签（源 `_Component43` 与 GPT 的 `aO` 三处都写 `'参考图'`）
+   * —— 也用于后端拼临时文件名（`attachImages` 的 `label`）。
+   *
+   * ⚠️ 它会**出现在目标页面的附件条上**（进第三方页面）⇒ 属**用户可见**文案。
+   * ⚠️ **与 `core/rules/refs.ts` 的 `REFERENCE_LABEL` 同值、但不同命题，故不合并**（2026-10-14 分类结论）：
+   *    · 那个是**提示词协议 token**（`参考图N` 发给**模型**，改它 = 变更模型输入；既有裁定"不放文案表"）；
+   *    · 这个是**发给目标页 / 宿主的附件名**（第三方系统与临时文件名）。
+   *    合并会让"调模型协议"顺手改掉"页面里的附件名"⇒ 两个消费者各自演化，**同值不是同真相**。
+   */
+  referenceImageLabel: '参考图',
+  /**
+   * ★ **「节点已不存在」—— 全仓唯一声明**（`TD-11-8`）
+   *
+   * 源里这句**只出现一次**（`shared.js:41804` 的 `msg`，属**发送队列**域），而本仓有 **3 个域**要用它：
+   * ① 批量发送的跳过记录（`BATCH_TEXT.nodeMissing`）· ② 视频节点「拉取结果」的守卫（`state/pullResult`）·
+   * ③ 截图落库的守卫（`state/capture`）⇒ 按判据 C1（同一形态到第 3 次即抽出）只在此处声明，三处引用。
+   * ⚠️ 它**不能**改住 `sendPanelText.ts` 那侧：本文件会 re-export 那个分片 ⇒ 分片反向 import 本文件**成环**
+   *   （depcruise `no-circular`）；反方向（本文件 import 分片）才是允许的 ✅
+   */
+  nodeGone: '节点已不存在',
+  /**
+   * 缩略图**加载失败**（`ui/common/Thumb` 的失败占位）—— ★ **本仓新增**
+   *
+   * ⚠️ 源里只有**具体**版本（`视频加载失败` `BL.jsx:400` · `图片加载失败（引用可能已失效）`
+   *   `G3.jsx:97` · `后台页面加载失败` `_Component25.jsx:180`），没有这个通用句。
+   * ⚠️ 它**必须是通用句**：`Thumb` 是**跨域公共组件**（素材节点 / 画廊卡 / 生成节点都用它）——
+   *   写死某一个域的具体版本，另两处就说不通。
+   */
+  loadFailed: '加载失败',
   /**
    * 宿主边界契约违约（后端返回的形状与声明契约不符）
    *
@@ -410,6 +443,32 @@ export const SHELL_TEXT = {
   expandLibrary: '展开资源栏',
   /** 右栏折叠钮 —— 展开时（原 `:182`，逐字） */
   collapseLibrary: '收起资源栏',
+  /**
+   * 错误边界的**区域名**（3 个调用点各传一个）
+   *
+   * ⚠️ 它会进**两处**：① 用户可见的 `errorBoundaryTitle`；② 开发者日志前缀（`[${area}] 渲染错误：`）
+   *    ⇒ 前半是**用户可见**的 ⇒ 与其余文案同口径归 SSOT（此前 3 处各写一份裸字面量）。
+   * ⚠️ `应用` 与源 `shared.js:43478` 的**全局**边界同词；`节点` / `画布` 是本仓**按区域**挂边界的产物。
+   */
+  areaApp: '应用',
+  areaNode: '节点',
+  areaCanvas: '画布',
+  /**
+   * 错误边界的**标题**（源 `shared.js:43478` 是**全局**边界的
+   * `⚠ 应用渲染出错（已被全局边界捕获，未白屏）`）
+   *
+   * ⚠️ **本仓有意偏离（措辞随行为）**：本仓的边界是**按区域**挂的（`props.area`）⇒ 标题用
+   *   `area` 替换源里的"应用"、去掉"全局"二字（否则"左栏"出错时会写成"应用渲染出错"）。
+   *   `⚠` 字形归该组件自己的样式（`styles.title`）⇒ 不进文案。
+   */
+  errorBoundaryTitle: (area: string) => `${area}渲染出错（已被错误边界捕获，未白屏）`,
+  /**
+   * 边界里的重试按钮（源 `shared.js:43517` 是 `重新加载`，走 `handleReload` **整页重载**）
+   *
+   * ⚠️ **本仓有意偏离（措辞随行为）**：本仓是**区域**边界，`reset` 只清错误态、重渲染该区域
+   *   —— 区域出错时整页重载是**错的**（会丢掉用户其余未保存的界面态）⇒ 按钮如实写"重试渲染"。
+   */
+  retryRender: '重试渲染',
 } as const;
 
 export const LIBRARY_TEXT = {
@@ -461,7 +520,10 @@ export const LIBRARY_TEXT = {
   /**
    * 换图失败（守卫没过）—— ⚠️ **源里没有这句**：`_Component42.jsx:967` 把
    * `replaceMaterialWithLib` 的返回值**直接丢掉**（完全静默）⇒ 本仓按原则 6 不静默。
-   * 原文来自 `core/rules/materialReplace.ts` 的 `err('bad-input', …)`。
+   *
+   * ★ **2026-10-14（`TD-16-150`）**：本键是**真源** —— 生产者 `core/rules/materialReplace.ts` 的
+   * `err('bad-input', …)` 与消费侧 `ui/panels/MaterialPickerModal` 的 toast **原先各写一份同句**
+   * ⇒ 现生产者引用本键（方向：constants 声明 → 规则引用，符合「文案只许住 constants」）。
    */
   replaceFailed: '更换素材：节点不是素材节点或未选择图片',
   alreadyOnCanvas: (name: string) => `「${name}」已在画布上，已移到落点（同一素材不重复创建）`,
@@ -532,6 +594,17 @@ export const CANVAS_EXPORT_TEXT = {
   done: '已自动导出画布快照（可能包含界面元素）',
   /** 快照名（原 `YT` 的 `画布快照 ${index + 1}`，`:33028`） */
   name: (n: number) => `画布快照 ${n}`,
+  // ── 页内脚本 `Ay`（`shared.js:23234-23306`）的失败原文 —— 会**原样进 `err` 给用户看** ──
+  /** 原 `shared.js:23241`：页面里一个 `<canvas>` 都没有 */
+  noCanvas: '没有找到画布',
+  /** 原 `shared.js:23304`：有 canvas 但都够不上尺寸 / 像素门槛 */
+  noValidCanvas: '没有找到有效画布',
+  /** 原 `shared.js:23302` 的 `t && t.message || '导出画布失败'`（页内抛错且无 message 时） */
+  failed: '导出画布失败',
+  /** 本仓新增：页内跑通了但**没回 `dataUrl`**（形状对不上 ⇒ 如实报，不静默当空图） */
+  noImageData: '导出画布失败：页内没有返回图片数据',
+  /** 本仓新增：`withTimeout` 的 label（拼成 `${label}超时（Xs）`） */
+  timeout: '画布导出超时',
 } as const;
 
 /**
@@ -666,6 +739,8 @@ export const FACEMASK_TEXT = {
    *   按「失败可见」给一条 toast（**有意差异**，见 `TD-03-20`）。
    */
   failed: '遮脸失败',
+  /** ★ 本仓新增：人脸检测缩放要的 2D 上下文建不出来（源在 `faceDetect` 里是抛裸 `Error`，无文案） */
+  detectCanvasFailed: '无法创建 2D 画布上下文（人脸检测缩放）',
 } as const;
 
 /**
@@ -700,6 +775,8 @@ export const GPT_TEXT = {
   attachFailedSuffix: '（可移除引用后重试）',
   /** 原 `aO`：附加失败但拿不到具体原因 */
   attachUnknownReason: '未知原因',
+  /** 原 `gn(…, nO = 30000, 'GPT 发送')` 的 label（`withTimeout` 拼成 `${label}超时（Xs）`） */
+  sendLabel: 'GPT 发送',
 } as const;
 
 /**
@@ -925,8 +1002,8 @@ export const BATCH_TEXT = {
   sendFailed: '发送失败',
   /** 原 `x3` 41770 / `PS` 42406 / 42412 */
   sendException: '发送异常',
-  /** 原 `x3` 41804 */
-  nodeMissing: '节点已不存在',
+  /** 原 `x3` 41804 —— 句子真源在 `COMMON_TEXT.nodeGone`（同句另有 2 个域要用，见那里的说明） */
+  nodeMissing: COMMON_TEXT.nodeGone,
   /** 原 `x3` 41748 / 41733 / `PS` 42422 */
   sentTo: (name: string) => `已发送至 ${name}`,
   /** 原 `PS` 42361 */
@@ -1051,29 +1128,28 @@ export const ANALYZE_UI_TEXT = {
 /**
  * 「选择账号类型」弹窗（原 `TP.jsx`，64 行 —— 逐字回源）
  *
- * ⚠️ 六张卡片的 `type` 与 `stable/model/account.ts` 的 `SITE_TYPES` **同序同集**
- *   （源 `TP.jsx:17-60` 的六张卡片就是这个顺序）。
- *   ⚠️ 本表**不 import `SITE_TYPES`**（`constants` 是 L0，不得依赖 `stable` 这个 L1）；
- *       `type` 字段只作 `onPick` 的入参，合法性由调用方的 `addAccount` 兜。
+ * ★ **2026-10-14 结构收口**：卡片文案改成**按 `SiteType` 穷尽的字典**，
+ *   **集合与渲染顺序都取自 `SITE_TYPES`**（真源 `./siteTypes`，同在 L0 ⇒ 本表可直接引）。
+ *   ❌ 此前是数组、每张卡自带 `type` —— 那是**站点清单的第二份**：旧注释自认"L0 不得依赖 L1"
+ *      所以只能抄一份，并且把"这个类型合不合法"推给运行期（"由调用方的 `addAccount` 兜"）。
+ *   ⇒ 现在**漏写一个站点 / 多写一个未知站点，两种都编译不过**（`Record<SiteType, …>` 的穷尽性）。
  */
-export const ACCOUNT_TYPE_PICKER_TEXT = {
+export const ACCOUNT_TYPE_PICKER_TEXT: {
   /** 标题（原 `TP.jsx:9`，逐字） */
+  title: string;
+  /** 卡片文案（原 `TP.jsx:17-60`，emoji / 名 / 说明**逐字**）—— 键 = 站点类型；**渲染顺序看 `SITE_TYPES`** */
+  cards: Record<SiteType, { emoji: string; name: string; desc: string }>;
+} = {
   title: '选择账号类型',
-  /** 卡片（原 `TP.jsx:17-60`，emoji / 名 / 说明**逐字**） */
-  cards: [
-    { type: 'doubao', emoji: '🫘', name: '豆包', desc: '登录 www.doubao.com，沿用现有流程' },
-    { type: 'dola', emoji: '🎬', name: 'dola', desc: '登录 www.dola.com/chat/，操作逻辑与豆包一致' },
-    { type: 'lovart', emoji: '🎨', name: 'Lovart', desc: '登录 www.lovart.ai/zh，用于登录与后台浏览' },
-    { type: 'tapnow', emoji: '✨', name: 'Tapnow', desc: '进入 app.tapnow.media/home，支持邮箱验证链接登录' },
-    {
-      type: 'gpt',
-      emoji: '🤖',
-      name: 'GPT',
-      desc: '登录 chatgpt.com，登录后可在文生图面板选号（出图链路后续上线）',
-    },
-    { type: 'other', emoji: '🌐', name: '其他', desc: '手动输入网址，进入任意网站（仅浏览，独立会话）' },
-  ],
-} as const;
+  cards: {
+    doubao: { emoji: '🫘', name: '豆包', desc: '登录 www.doubao.com，沿用现有流程' },
+    dola: { emoji: '🎬', name: 'dola', desc: '登录 www.dola.com/chat/，操作逻辑与豆包一致' },
+    lovart: { emoji: '🎨', name: 'Lovart', desc: '登录 www.lovart.ai/zh，用于登录与后台浏览' },
+    tapnow: { emoji: '✨', name: 'Tapnow', desc: '进入 app.tapnow.media/home，支持邮箱验证链接登录' },
+    gpt: { emoji: '🤖', name: 'GPT', desc: '登录 chatgpt.com，登录后可在文生图面板选号（出图链路后续上线）' },
+    other: { emoji: '🌐', name: '其他', desc: '手动输入网址，进入任意网站（仅浏览，独立会话）' },
+  },
+};
 
 /**
  * 登录弹窗（原 `$P.jsx`，331 行）—— **逐字对源**
@@ -1141,7 +1217,16 @@ export const ACCOUNT_PANEL_TEXT = {
   scanTitle: '跨账号指纹关联扫描：看哪些账号的环境指纹高度重合（重合越多越像同一台设备）',
   /** ★ 打开该账号的画廊（原 `OP.jsx:778` 的 `📷`，逐字） */
   galleryGlyph: '📷',
-  galleryTitle: '查看该账号的 Tapnow / Lovart 画廊',
+  /**
+   * 画廊按钮的提示语（原 `OP.jsx:774` 的 `title`）—— ★ **按站点算名字**（源那行的 `Te`）
+   *
+   * ⚠️ 源版那两档（有图 ⇒ 带「当前 N 张」/ 无图 ⇒ 带「暂无图片：进去后点「扫描」即可抓取」）
+   *    本仓只落**公共前缀**（张数要另经 store 数一遍，属另一件事）。
+   * ⚠️ 原为静态字面量「查看该账号的 Tapnow / Lovart 画廊」—— 把两个站点名都写上，等于**不判断**
+   *    （对 lovart 账号说 Tapnow、对 tapnow 账号说 Lovart 也都"没说错"，但也没说对）。
+   *    判据与入口同源：`core/rules/lovartGallery.gallerySiteLabelOf`。
+   */
+  galleryTitle: (accountName: string, siteLabel: string) => `打开「${accountName}」的 ${siteLabel} 画廊`,
   /** 源版空态提示（`_Component43.jsx:3297`，逐字） */
   emptyHint: '请先在左侧添加并登录账号',
   /** 原 `OP.jsx:827` 的按钮（**逐字**，含全角 `＋`） */
@@ -1253,6 +1338,8 @@ export const BACKEND_PAGE_TEXT = {
   aispaceNavFailed: '无法切换到豆包 aispace 页面（无水印拉取的前置）',
   /** 新增：页内脚本**跑通了**但返回的形状对不上（契约违约 ⇒ 明确报错，不静默当"没读到"） */
   probeBadShape: '页面脚本返回了无法识别的结果',
+  /** 静默快照的超时前缀（`@/lib/async` 的 `withTimeout` 拼成 `${label}超时（Xs）`；只进日志） */
+  snapshotTimeoutLabel: '页面快照',
 } as const;
 
 /**
@@ -1276,9 +1363,13 @@ export const SEND_TEXT = {
   /** 站点没声明会话页（`SitePort.chatUrl` 缺项）—— **明确报错，不回落**（判据 B4） */
   noChatUrl: (site: string) => `站点 ${site} 未声明会话页（chatUrl），无法准备后台页`,
   /**
-   * 站点**没声明某个可选能力**（`SitePort` 的可选成员缺项）—— **明确报错，不回落**（判据 B4 · 原则 6）。
+   * 站点**缺某条链**的用户可见文案 —— **一处措辞，两个发现点**（判据 C1）：
+   *   ① 用例发现 `SitePort` 的**可选成员**缺项（`scanCanvas` / `askWithImage` / `fetchWatermarkFree`…）；
+   *   ② **适配器**发现**必选成员**（`scan` / `send`）这条链本站点不实现。
+   *    两者问的是同一件事（"这个站点有没有 Y"）⇒ 共用本句，**不给第二套措辞**。
    *
-   * ★ 判据 C1（同一形态到第 3 次即抽出）——**`message` 由本表产，用例只转发**（原则 6）。
+   * ⚠️ `site` 一律传**裸类型名**（`account.type` / `site.kind`）—— 与既有消费方同口径；
+   *    **明确报错，不回落**（判据 B4 · 原则 6）。
    */
   noCapability: (site: string, capability: string) => `站点 ${site} 不支持${capability}`,
 } as const;
@@ -1312,6 +1403,111 @@ export const VIDEO_TEXT = {
 } as const;
 
 /**
+ * 站点适配器（`adapters/site/**`）里**用户可见**的错误原文 —— 抓取降级链 / 结果扫描 / 页内探针共用
+ *
+ * ⚠️ 用户可见文案的真源在 `constants/**` ⇒ 适配器只**引用**，不写第二份。
+ */
+export const SITE_SCAN_TEXT = {
+  /** 拿不到 `<webview>` 的 `webContentsId`（视图未挂载） */
+  noWebContentsId: '无法取得 webview 的 webContentsId',
+  /** 降级链全试过、一条都没成功（拼不出明细时的兜底） */
+  allChannelsFailed: '抓取失败：全部通道不可用',
+  /** 结果扫描通道返回坏形状（`raw.ok !== true` 时的原文兜底） */
+  rawResultFailed: '结果扫描返回失败',
+  /** 页内探针取不到 `<webview>` / 它不能执行脚本 */
+  probeUnavailable: 'webview 不可用',
+  /** 本仓新增：按分区找不到 `<webview>`（后台视图未挂载 / 已被销毁） */
+  webviewPartitionMissing: (partition: string) =>
+    `未找到 partition=${partition} 的 webview（后台视图可能未挂载）`,
+  // ── 素材取回的**逐张失败原文**（进 `failures[]` ⇒ 用户可见；本仓新增，源里静默吞）──────
+  /** 没有账号会话上下文 ⇒ 带不了 cookie（**不能**退回裸 `fetch`，那取不到需登录的图） */
+  fetchNoSession: '缺少账号会话上下文（无法带 cookie 取图）',
+  /** 批量取图回执里没有这一张 */
+  fetchItemMissing: '批量取图未返回该图',
+  /** 通道回执不是对象 / 形状对不上 */
+  channelEmpty: '通道返回空',
+  /** 通道回执 `ok !== true` 且没给 `error` 原文 */
+  channelFailed: '通道返回失败',
+  /** `runProbe` 超时文案的前缀（`@/lib/async` 的 `withTimeout` 拼成 `${label}超时（Xs）`） */
+  probeTimeoutLabel: '页内脚本',
+  // ── 降级链的**阶段行**（`onPhase` 的 message，用户可见）────────────────────
+  /** 正在试某一档（`via` = `frames` / `webview` —— 档名真源在 `core/rules/scanChain`） */
+  phaseAttempting: (via: string) => `尝试 ${via} 通道…`,
+  /** 这一档扫到了几张 */
+  phaseFound: (n: number) => `扫描到 ${n} 张`,
+  /** 本轮完成的基句 */
+  phaseDoneAdded: (n: number) => `完成：新增 ${n} 张`,
+  /** 完成行后缀：读不到的 frame **如实报**（原则 6） */
+  phaseUnreadSuffix: (n: number) => `（${n} 个 frame 未读到）`,
+} as const;
+
+/**
+ * 「站点能力」的名字 —— `SEND_TEXT.noCapability(site, capability)` 的 `capability` 段
+ *
+ * ⚠️ 它**会进用户可见的 message**（`` `站点 ${site} 不支持${capability}` ``）⇒ 与其余文案同口径归 SSOT：
+ *    此前 8 处各写一份（4 用例 ＋ 4 适配器守卫），`'发送'` / `'抓取素材'` 各出现两次。
+ * ⚠️ 名字**不是**能力位名：能力位（`SitePort` 的成员名）是代码标识符，这里写给人看。
+ */
+export const SITE_CAP_TEXT = {
+  scan: '扫描画布',
+  fetchWatermarkFree: '无水印拉取',
+  sendWatch: '「发送后监测」',
+  analyzePrompt: '提示词分析',
+  send: '发送',
+  grabMaterials: '抓取素材',
+  /** 豆包系：抓素材只有 Lovart 有 ⇒ 名字里**带上指引**（用户看到的是这一句） */
+  grabMaterialsHint: '抓取素材（请用 Lovart 后台）',
+} as const;
+
+/**
+ * 宿主 IPC（`adapters/host/electron/**`）里**用户可见**的失败原文
+ *
+ * ⚠️ 与 `SITE_SCAN_TEXT` 同一口径：文案真源住 `constants/**` ⇒ 适配器只**引用**，不写第二份。
+ * ⚠️ `fallback*` 是「后端**已经判失败**、但没给 `error` 原文」时的兜底句（`checkOk` 的 `fallback`）——
+ *    **不是静默兜底**：失败照样上报（原则 6），它只补一句人话。
+ * ⚠️ 本组各句是**本仓新增**（源里这些失败多为静默 / 只回码），除 `apiMissing` 外无源行号。
+ */
+export const HOST_TEXT = {
+  /** 宿主桥不存在（`window.api` 缺失 ⇒ 没跑在 Electron 里） */
+  apiMissing: 'window.api 不存在：当前不在 Electron 宿主中',
+  /** 批量取图的**提交回执**失败（回执没带 `error` 时的兜底） */
+  fetchSubmitFailed: '批量取图提交失败',
+  /** 批量取图回执里缺 `reason` 的兜底 */
+  fetchInvalidImage: '无效图',
+  /** 批量取图回执里缺 `error` 的兜底 */
+  fetchFailed: '失败',
+  // ── `checkOk{fallback}`：后端判失败但未给 `error` 原文时的人话 ──────────────
+  // ★ 2026-10-14：其中 3 句原为**裸 IPC 通道名**（`attach-dola-debugger 失败` 等）—— 那是开发者术语，
+  //   用户读了等于没读；本仓新增、**无源可照** ⇒ 按「用户能懂」改写（① 正确性；行为等价，只是措辞）。
+  fallbackScanFrames: '多帧扫描返回失败',
+  fallbackDetectVideos: '视频检测返回失败',
+  fallbackAttachDolaDebugger: '挂接后台页调试器失败',
+  fallbackInjectDolaDuration: '强开 30s 时长失败',
+  fallbackDolaDurationDiag: '写入时长诊断日志失败',
+  fallbackReadDownloadSettings: '读取下载设置失败',
+  fallbackPickDownloadDir: '选择下载目录失败',
+  fallbackDownload: '下载失败',
+  fallbackClear: '清空失败',
+  fallbackClearBrowserCache: '清理浏览器缓存返回失败',
+} as const;
+
+/**
+ * 豆包 / Dola 站点（`adapters/site/doubao/**`）里**用户可见**的失败原文
+ *
+ * ⚠️ 与 `GPT_TEXT` / `TAPNOW_TEXT` 同族：**站点自己的话**住站点自己的组。
+ * ⚠️ 三句都是**本仓新增**（源对应位置是静默 / 只有码）⇒ 无源行号；`未找到发送按钮` 的源版见
+ *    `shared.js:39014`（那句带"请手动发送"的提示，本仓改成带 `strategy` 的**诊断**版，见 `TD-16-147` 分类表）。
+ */
+export const DOUBAO_TEXT = {
+  /** 出片轮询里**取回某张图**失败（带 url 便于定位是哪张） */
+  imageFetchFailed: (url: string) => `无法取得图片内容：${url}`,
+  /** 同一 `(账号, 文本)` 重复发送被幂等键拦下（带 sessionId 便于定位） */
+  duplicateSend: (sessionId: string) => `重复发送被拦截（sessionId=${sessionId}）`,
+  /** 四级降级全试过、一次都没点成（带最终策略便于定位） */
+  sendButtonNotFound: (strategy: string) => `未找到发送按钮（strategy=${strategy}）`,
+} as const;
+
+/**
  * Tapnow 站点（原 `Ok` 33272-33327 · `Uk` 33328-33353 · `Yl` 33401-33420）
  *
  * ⚠️ 这些字符串**会出现在用户看到的错误/提示里** ⇒ 按原则 5 归 SSOT，规则层不得硬编码。
@@ -1335,6 +1531,14 @@ export const TAPNOW_TEXT = {
   apiLabel: '接口调用',
   /** 原 `Yl` 调 `gn` 时的 label */
   hrefLabel: '读取页面地址',
+  /**
+   * 原 `shared.js:33312`：`'接口返回 ' + (s.status || 0) + (s.error ? '：' + s.error : '')`
+   *
+   * ⚠️ **不带 `error` 详情段**：源那个三元在本仓是**死支** —— 调用方 `tapnow/api.ts` 上面已有
+   *   `if (res.error) return err('page-error', res.error)` ⇒ 走到这里时 `res.error` 恒空。
+   *   （不留一个**全仓无人传**的可选参数 —— 那是新增待清理物。）
+   */
+  apiHttpError: (status: string) => `接口返回 ${status}`,
 } as const;
 
 /**

@@ -73,8 +73,6 @@ contextBridge.exposeInMainWorld('api', {
   // 视频外置存储：远端视频直链 → 落盘为 vid:// 引用（历史版本跨重启可播放）
   // 返回 { ok, ref: 'vid://<sha1>.mp4', size } 或 { ok:false, error }
   saveVideoFromUrl: (url, referer) => ipcRenderer.invoke('save-video-from-url', { url, referer }),
-  // 解析 img:// 引用为磁盘文件绝对路径（供剪贴板等场景）
-  resolveImageRef: (ref) => ipcRenderer.invoke('img-resolve', ref),
   // 远端图片直链 → dataUrl（主进程下载转 base64；文生图后台通道的 CDP 图片回流用）
   imageFetchDataUrl: (url) => ipcRenderer.invoke('image-fetch-dataurl', url),
   // 清理浏览器缓存（各账号分区的 Cache / Code Cache 等纯缓存），释放磁盘空间；保留登录态
@@ -83,8 +81,6 @@ contextBridge.exposeInMainWorld('api', {
   // 渲染进程长按时调用，主进程把 dataUrl 落盘后调用 webContents.startDrag 启动系统拖拽。
   // payload: { dataUrl, name }，dataUrl 才是真正 drop 的文件；拖拽 icon 由主进程从原图 resize 到 64px。
   startFileDrag: (payload) => ipcRenderer.send('start-file-drag', payload),
-  // 在 Finder 中显示 img:// 引用对应的本地文件（素材节点右键菜单）
-  showInFolder: (ref) => ipcRenderer.invoke('show-in-folder', ref),
   // 指纹伪装：为本账号生成专属 webview preload（按 id 隔离），返回 { ok, preloadUrl }
   ensureFingerprint: (acc) => ipcRenderer.invoke('ensure-fingerprint', acc),
   // 指纹诊断：查该账号会话的真实出口链路（DIRECT / PROXY x.x.x.x:port）与真实引擎版本

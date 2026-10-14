@@ -4,7 +4,7 @@
  * 依据（**逐行回源抄录**）：
  *   - 启动校验：`_Component48.jsx:105-145`（`getLicenseStatus` → `status !== 'ok'` ⇒ 激活页）
  *   - 激活页：`W3.jsx`（机器码 / 复制 / 导出 / 提交激活码 / 4 种结果分支）
- *   - 后端契约：`electron/license.js:602-712`
+ *   - 后端契约：`electron/license.js`
  *
  * ⚠️ **fail-close**：`allowed` 只有 `status === 'ok'` 才为 `true`
  *    （判据 N4：拿不到授权**不得**进画布）。判定真源在 `core/rules/license.ts`。

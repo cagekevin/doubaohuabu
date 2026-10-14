@@ -17,6 +17,7 @@ import type { SitePort, SiteRegistry } from '@/core/ports/site.port';
 import type { SiteSendPayload } from '@/core/rules/payload';
 import type { ApiPort, HostPort } from '@/core/ports/host.port';
 import type { ClockPort } from '@/core/ports/clock.port';
+import type { ApiJobPayload, ApiJobVariant } from '@/stable/model/gen';
 
 const acc = (id: string, status = '已登录'): Account => ({
   id,
@@ -87,12 +88,12 @@ function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0
       if (step && 'ok' in step) return ok({ jobId: 'apj-test-1' });
       return err(step!.reason, step!.message);
     },
-    jobBatch: async (basePayload: unknown, matrix: unknown) => {
+    jobBatch: async (basePayload: ApiJobPayload, matrix: readonly ApiJobVariant[]) => {
       batchCalls.push({ basePayload, matrix });
       const step = nextStep();
       if (!step || !('ok' in step)) return err(step!.reason, step!.message);
       // ★ 与后端同形：`matrix` 逐位展开 ⇒ 逐位回 `jobIds`（`job-manager.js:463-480`）
-      const n = Array.isArray(matrix) ? matrix.length : 0;
+      const n = matrix.length;
       return ok({
         jobIds: Array.from({ length: n }, (_, k) => `apj-batch-${k + 1}`),
         errors: Array.from({ length: n }, () => null),

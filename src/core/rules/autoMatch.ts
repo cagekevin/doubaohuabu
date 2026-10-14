@@ -26,10 +26,15 @@
 //   （**宽松**形态：允许残缺芯片）—— 现委托 `refs.createRefLooseRe()`（源头已补齐形态）。
 //   ⚠️ 宽松**不是笔误**：本文件的用途是"避开正文里**已有的**芯片字面量"，残缺的也算已有
 //      （源 `Jh` 的 `o` 就是宽松版）；换严格版会漏掉残缺的、于是**重复插一条**。
-import { createRefLooseRe } from './refs';
+import { createRefLooseRe, REFERENCE_LABEL } from './refs';
 
-const REF_LABEL = '参考图';
-const REF_LEN = REF_LABEL.length;
+/**
+ * 本文件要**往前/往后扫**的那个词 = `refs.ts` 的**同一个词**（唯一词源）。
+ *
+ * ⚠️ 它**必须**与 `formatReferenceLabel` 逐字相同 —— 否则"用户/我们写出去的 `参考图N`，
+ *   自动匹配认不出来"（同一 token 两处各写一份 = 迟早漂）。故不再本文件自写字面量。
+ */
+const REF_LEN = REFERENCE_LABEL.length;
 
 /**
  * 空白判定（原 `Oc`，`shared.js:24207-24209`）
@@ -66,7 +71,7 @@ function scanBackward(text: string, t: number): number {
   if (n < REF_LEN - 1) return -1;
   let found = -1;
   while (n >= REF_LEN - 1) {
-    if (text.slice(n - REF_LEN + 1, n + 1) === REF_LABEL) {
+    if (text.slice(n - REF_LEN + 1, n + 1) === REFERENCE_LABEL) {
       found = n - REF_LEN + 1;
       n -= REF_LEN;
       while (n >= 0 && isBlank(text[n])) n--;
@@ -89,7 +94,7 @@ function scanForward(text: string, t: number): number {
   if (n > text.length - REF_LEN) return -1;
   let found = -1;
   while (n <= text.length - REF_LEN) {
-    if (text.slice(n, n + REF_LEN) === REF_LABEL) {
+    if (text.slice(n, n + REF_LEN) === REFERENCE_LABEL) {
       found = n + REF_LEN;
       n += REF_LEN;
       while (n < text.length && isBlank(text[n])) n++;

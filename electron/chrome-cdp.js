@@ -32,8 +32,9 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
-const { app } = require('electron');
+const { app, session } = require('electron');
 const WebSocket = require('ws');
+const { handle } = require('./ipc');
 
 // ---------- 路径 / 进程探测 ----------
 
@@ -238,11 +239,6 @@ async function closeLovartChrome(accountId) {
   return { ok: true, wasOpen: true };
 }
 
-function isOpen(accountId) {
-  const entry = sessions.get(accountId);
-  return !!(entry && entry.child && !entry.child.killed);
-}
-
 function getStatus() {
   const exe = systemChromePath();
   return { available: !!exe, path: exe, open: Array.from(sessions.keys()) };
@@ -369,20 +365,100 @@ async function dumpCookies(accountId) {
   }
 }
 
-function removeProfile(accountId) {
-  const dir = profileDirFor(accountId);
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* 删 profile 目录失败可忽略（下次启动会重建） */ }
-  sessions.delete(accountId);
-  return { ok: true };
+// ───────────────────── IPC 自注册（本域） ─────────────────────
+// 六个 handler 说的都是「Lovart 的真实 Chrome 登录会话」这一件事 ⇒ 住本文件（TD-13-24）。
+/**
+ * ★ **域唯一门面**：宿主壳只说「初始化 Lovart 真实 Chrome 域」。
+ * ⚠️ 宿主壳不再需要域内任何别的名字 —— 起窗 / 关窗 / 导 cookie / 会话同步全在本文件。
+ */
+function initChromeCdp() {
+  handle('ensure-lovart-chrome', async (_e, { accountId, url, proxy } = {}) => {
+    if (!accountId) return { ok: false, error: '缺少 accountId' };
+    return await ensureLovartChrome(accountId, url, { proxy });
+  });
+
+  // 仅打开真实 Chrome（不强制导航到某个 URL）：先 ensure，若已打开则保持当前页。
+  handle('open-lovart-chrome', async (_e, { accountId, url, proxy } = {}) => {
+    if (!accountId) return { ok: false, error: '缺少 accountId' };
+    const r = await ensureLovartChrome(accountId, url || null, { proxy });
+    return r && r.ok ? r : { ok: false, error: (r && r.error) || '打开真实 Chrome 失败' };
+  });
+
+  handle('close-lovart-chrome', async (_e, { accountId } = {}) => {
+    if (!accountId) return { ok: false, error: '缺少 accountId' };
+    return await closeLovartChrome(accountId);
+  });
+
+  // 把真实 Chrome 里登录 Lovart 后的会话 cookie 同步进内嵌 webview 分区，
+  // 使 webview 带上合法会话、继续承担「自动采集图片」的职责（零 CDP 暴露）。
+  //
+  // ⚠️ Cloudflare 安全 cookie（cf_clearance / __cf_bm 等）与「访问者的引擎指纹」绑定
+  // （TLS ClientHello / HTTP2 指纹）。真实 Chrome 导出的这类 cookie 注入 Electron
+  // webview 后指纹对不上，Cloudflare 会直接给硬 403（"request has been blocked …
+  // potential threats"，WAF 拦截页）——比不给 cookie 更糟。因此同步时必须剔除，
+  // 让 webview 自己过 Cloudflare 的透明质询、拿到属于自己的 CF cookie。
+  handle('sync-lovart-session', async (_e, { accountId, partition } = {}) => {
+    if (!accountId || !partition) return { ok: false, error: '缺少参数（accountId / partition）' };
+    // 1) 关闭登录窗口，释放 SingletonLock，使同 profile 可被临时 headless 读取
+    await closeLovartChrome(accountId);
+    await new Promise((r) => setTimeout(r, 600));
+    // 2) 导出明文 cookie（临时 headless，绝不访问 Lovart）
+    const dump = await dumpCookies(accountId);
+    if (!dump || !dump.ok) {
+      return { ok: false, error: (dump && dump.error) || 'cookie 导出失败', message: (dump && dump.message) || '' };
+    }
+    // 3) 注入内嵌 webview 的 persist 分区（该 profile 专用于本 Lovart 账号，cookie 即其会话）
+    const ses = session.fromPartition(partition);
+    // 3a) 先清空分区里的旧 cookie：尤其要清掉上次注入的、与 webview 指纹失配的
+    //     Cloudflare cookie——否则一重新导航就会被 WAF 403（2026-09-22 实测）。
+    try {
+      const olds = await ses.cookies.get({});
+      for (const c of olds) {
+        try {
+          const host = (c.domain || '').replace(/^\./, '');
+          const url = `http${c.secure ? 's' : ''}://${host}${c.path || '/'}`;
+          await ses.cookies.remove(url, c.name);
+        } catch { /* 个别删除失败不影响整体 */ }
+      }
+    } catch { /* 清旧 cookie 是 best-effort（失败仍继续注入新 cookie） */ }
+    // 3b) 剔除 Cloudflare 指纹绑定 cookie 后再注入（登录态本身不含 CF cookie，不受影响）
+    const CF_COOKIE_RE = /^(cf_clearance|__cf_bm|__cfruid|__cfhostmanager|__cf_cookies|__cfwait|__cfserverzone|cf_chl_[a-z0-9_]+|__cf_chl_[a-z0-9_]+|__cf_chl_[a-z0-9_]+_rc)$/i;
+    const cookies = (dump.cookies || []).filter((c) => c && c.name && !CF_COOKIE_RE.test(c.name));
+    const sameSiteMap = { None: 'no_restriction', Lax: 'lax', Strict: 'strict' };
+    let count = 0;
+    for (const c of cookies) {
+      try {
+        const secure = !!c.secure;
+        const host = (c.domain || '').replace(/^\./, '');
+        const url = `http${secure ? 's' : ''}://${host}${c.path || '/'}`;
+        const exp = (typeof c.expires === 'number' && c.expires > 0) ? c.expires : undefined;
+        await ses.cookies.set({
+          url,
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path || '/',
+          secure,
+          httpOnly: !!c.httpOnly,
+          expirationDate: exp,
+          sameSite: sameSiteMap[c.sameSite] || 'unspecified'
+        });
+        count++;
+      } catch (e) { /* 个别 cookie 写入失败不影响整体 */ }
+    }
+    return { ok: true, count, total: cookies.length, rawTotal: (dump.cookies || []).length };
+  });
+
+  // 故意恒返 false：采集统一走内嵌 webview（会话同步后已登录），不走真实 Chrome。
+  // 真实 Chrome 仅用于人工登录 + cookie 源；其开关状态请走 get-lovart-chrome-status。
+  handle('lovart-chrome-is-open', async (_e, accountId) => {
+    return { ok: true, open: false };
+  });
+
+  handle('get-lovart-chrome-status', async () => {
+    return { ok: true, ...getStatus() };
+  });
 }
 
-module.exports = {
-  ensureLovartChrome,
-  closeLovartChrome,
-  isOpen,
-  getStatus,
-  dumpCookies,
-  removeProfile,
-  systemChromePath,
-  profileDirFor
-};
+// 导出面 = **宿主可用面**：只有 `initChromeCdp` 出本文件（其余函数都是本文件内部实现）
+module.exports = { initChromeCdp };

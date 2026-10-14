@@ -431,7 +431,13 @@ function cmdShow(argv) {
     const f = r.fields;
     const warn = ['A', 'B', 'C'].includes(r.mode) ? ` · 列错位已自动解析（${r.mode}）` : r.mode === 'manual' ? ' · ⚠️ 列错位需人工' : '';
     console.log(`── ${f.id}${SRC_TAG(r)}${warn}`);
-    console.log(`  状态   : [${statusWord(f.status)}]${f.status.replace(/^\*{0,2}\[[^\]]*\]/, '')}`);
+    // ⚠️ 剥外壳**不能**用 `/^\*{0,2}\[[^\]]*\]/`：note 里可能含 `]`（如 `[]` / `[x]`）⇒ 会在
+    //   那里截断、把残段漏到 `[状态]` 后面（`TD-16-85`）。外壳的闭合 = **结尾**那个 `]`；
+    //   只有当值**不以 `]` 结尾**时（= 外壳之后还有正文）才去剥一次前缀。
+    const statusRest = String(f.status).trim().endsWith(']')
+      ? ''
+      : String(f.status).replace(/^\*{0,2}\[[\s\S]*?\]/, '');
+    console.log(`  状态   : [${statusWord(f.status)}]${statusRest}`);
     console.log(`  归类   : ${normClass(f.class).value}   利息率 : ${normRate(f.rate).value}   区域 : ${f.area ?? ''}`);
     console.log(`  现象   : ${f.summary}`);
     // 完整解法：从"全文归档"取该 ID 的原始行（账本压缩时丢掉的长决策都在那儿）

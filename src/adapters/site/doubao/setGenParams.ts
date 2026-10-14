@@ -13,13 +13,17 @@
  *      `shared.js:41418`）⇒ 源侧该值**恒为 `null`**（模型档其实从未被设置）。
  *      **这是疑似源笔误，本仓照抄 + 登记**（不擅自改成 `io(params.model)` —— 源是唯一真源，改动要用户裁）。
  *
- * ⚠️ 脚本本体**逐字搬入**源 `yD`（`shared.js:37948-38637`），只有那一个占位符由 builder 替换。
+ * ⚠️ 脚本本体**逐字搬入**源 `yD`（`shared.js:37948-38637`），例外两处：① 参数占位符由 builder 替换；
+ *   ② 「页内输入框候选」（源 `:38540` 的四项列表）改引 `COMPOSER_LIST_SRC`（`TD-05-14` 收口：
+ *   它与探针 / 各页内脚本的「主输入框」是同一判据，原先五处各写一份）。
  * ⚠️ 参考件里这段模板**不含任何反斜杠**（例：`norm` 用的是 `/[s ]/g`）—— 本仓**逐字照抄**，未改写。
  */
 import type { Result } from '@/core/model/result';
 import { collectGenParams, type GenParamsToApply } from '@/core/rules/genParams';
 import { log } from '@/lib/log';
 import { runProbe } from '../shared/waits';
+// ★ 「页内输入框候选」的唯一真源（`TD-05-14`）—— 本文件的诊断 dump 与探针/各页内脚本同口径
+import { COMPOSER_LIST_SRC } from './scripts';
 import type { WebviewElement } from '../shared/webview';
 
 /** 源 `yD` 的返回（宽松 —— 源直接把它透进诊断串） */
@@ -625,7 +629,7 @@ const GEN_PARAMS_SCRIPT = `(function(params){
       log.push('📍 页面: ' + (location.href||'?').substring(0, 120) + ' title=' + (document.title||'').substring(0, 60));
 
       // 检测是否有输入框（判断是否在对话界面）
-      var inputs = document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"], input[type="text"]');
+      var inputs = document.querySelectorAll('${COMPOSER_LIST_SRC}');
       out.diag.inputCount = inputs.length;
       var inputPlaceholders = [];
       for(var ii=0;ii<Math.min(inputs.length,10);ii++){

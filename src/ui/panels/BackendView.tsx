@@ -32,9 +32,15 @@ import { isAccountUsable, type Account } from '@/stable/model/account';
 import { WEBVIEWS_HOST_CLASS } from '@/stable/contracts/schemas';
 import { ACCOUNT_PANEL_TEXT, BACKEND_VIEW_TEXT, WATERMARK_PANEL_TEXT } from '@/constants/text';
 import { NEW_IMAGES_SITES } from '@/core/rules/accountPick';
-// ★ 默认会话分区的**唯一真源**（`TD-04-11`：同一语义此前 5 处定义 3 套值）
-import { defaultPartitionOf } from '@/core/rules/partition';
+// ★ 站点能力表（所有"某站点有没有 X"的唯一真源）—— `ui` 拿不到 Ports，只能问它
+import { capsOf, needsSessionPrep } from '@/core/rules/siteCaps';
+// ★ Lovart 容器页设置的 SSOT（源 `_Component25.jsx:355` 与登录弹窗同一串）
+import { LOVART_WEBPREFERENCES } from '@/constants/models';
+// ★ 会话条的站点适用性（原 `_Component25.jsx:359` 的 `p`）—— 真源住会话条领域模块
+import { isChromeSessionSite } from '@/core/rules/lovartSession';
 import { NewImagesPanel } from './NewImagesPanel';
+// ★ `<webview>` 属性值的唯一落点（含 allowpopups 的「类型 boolean ↔ 运行时字符串」那一处断言）
+import { WEBVIEW_ALLOW_POPUPS } from './webviewAttrs';
 import { WatermarkPanel } from './WatermarkPanel';
 import { LovartSessionBar } from './LovartSessionBar';
 import styles from './BackendView.module.css';
@@ -48,22 +54,17 @@ import styles from './BackendView.module.css';
  * ⚠️ `other` 类型用账号自己的 `url`（原版就是 `e.url || 'about:blank'`）。
  */
 function backendUrlOf(account: Account, chatUrl?: string): string {
-  if (account.type === 'other') return account.url || 'about:blank';
+  // 没有固定地址的站点（`other`）⇒ 用账号自带的 `url`（判据 = 能力表，不写站点名）
+  if (!capsOf(account.type).hasFixedUrl) return account.url || 'about:blank';
   return chatUrl ?? 'about:blank';
 }
 
-/**
- * `<webview>` 的 `partition`（原 `_Component25.jsx:355` 的六路三目）
- *
- * ★ **源版那个长长的三目其实是一条通用规则**：`account.partition || \`persist:${type}\``
- *   （六个分支的值分别就是 `persist:lovart`/`persist:dola`/… —— 与 `type` 一一对应）
- *   ⇒ 这里写成**一条规则**，不再逐个列举（判据 C1；行为完全一致）。
+/*
+ * ⚠️ 原 `partitionOf(account)` = `account.partition || defaultPartitionOf(account.type)` **已删**。
+ * 源 `_Component25.jsx:355` 那条六路三目的 `||` 分支，前提是「账号可能没有分区」——
+ * 而分区现在由产生方保证恒有值（`accountRoster.buildNewAccount`，源 `$P.jsx:35`）
+ * ⇒ 消费方**直读** `account.partition`。留着它只会掩盖「产生方又缺了」。
  */
-function partitionOf(account: Account): string {
-  // ★ 2026-10-12（`TD-04-11`）：改委托**唯一真源** `core/rules/partition.defaultPartitionOf`
-  //   （此前这里是唯一 type-aware 的写法，但**值**在本仓另有 3 套写死版本 ⇒ 同一语义 5 处定义）
-  return account.partition || defaultPartitionOf(account.type);
-}
 
 /** `<webview>`（Electron 自定义元素）上我们需要的**最小面** —— React 无精确类型 ⇒ 结构化声明 */
 interface WebviewElementLike {
@@ -76,13 +77,19 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
   //   已收口到 `accountOps`（TD-16-8）—— 组件不再持有 `Ports`。
   const accountOps = useAccountOps();
   /**
-   * ★ `partition`（真源 `partitionOf`）在**组件体**算一次，effect 与 `<webview>` 标签共用。
-   * ⚠️ 不能让 effect 内联调用 `partitionOf(account)` —— 那会把**整个 `account` 对象**带进依赖
-   *    （eslint 看不出 `partitionOf` 只读哪几个字段）⇒ 对象标识每次 store 更新都变 ⇒ effect 每轮重跑。
+   * ★ `partition` 在**组件体**取一次，effect 与 `<webview>` 标签共用。
+   * ⚠️ **直读 `account.partition`** —— 产生方保证恒有值（`accountRoster.buildNewAccount`），
+   *    消费方不再有「默认分区」兜底（留兜底会掩盖「产生方又缺了」）。
+   * ⚠️ 抽成局部量是为了**字段级依赖**：effect 里内联写 `account.partition` 会把**整个 `account`
+   *    对象**带进依赖（对象标识每次 store 更新都变 ⇒ effect 每轮重跑 ⇒ 重复打 `ensureFingerprint` IPC）。
    */
-  const partition = partitionOf(account);
-  /** 宿主产出的指纹 preload 地址（原 `_Component25` 的 `preload={h}`） */
+  const partition = account.partition;
+  /** 该账号走 **Lovart 容器**（原 `_Component25.jsx:21` 的 `p`）—— 会话准备与三属性都按它分流 */
+  const usesContainer = capsOf(account.type).usesLovartContainer;
+  /** 宿主产出的 preload 地址（原 `_Component25` 的 `preload={h}`） */
   const [preloadUrl, setPreloadUrl] = useState<string | null>(null);
+  /** 容器给的会话 UA（原 `_Component25.jsx:23` 的 `w`）—— 只有容器模式有 */
+  const [containerUA, setContainerUA] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,31 +98,36 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
      * ⚠️ 这里**不能** `setPreloadUrl(null)` —— 在 effect 里**同步** setState 会触发级联渲染
      *    （被 `eslint` 的 `react-hooks` 规则拦下）。改为**渲染侧守卫**（见下面的 `preload` 展开）。
      */
-    if (account.type !== 'other') {
+    if (needsSessionPrep(account.type)) {
       void (async () => {
         const r = await accountOps.prepareWebviewSession({
           accountId: account.id,
-          // ★ **2026-10-12（`TD-04-11` 源头修法）**：此前这里传的是**原始** `account.partition`
-          //   （建号时为 `null`）⇒ 后端只好"猜"一个站点（写死 lovart / doubao）⇒ **静默落到错的
-          //   session**（探债段症状①：指纹 HTTP 层头注入被跳过、却仍报成功）。而同一个组件的
-          //   `<webview>` 用的**已经是** type-aware 的 `partitionOf(account)` ⇒ 现在两边**同一个来源**
-          //   （真源 `core/rules/partition.defaultPartitionOf`），后端不必再猜。
+          // ★ 分区**直读** `account.partition`（上面那个局部量）—— 由**产生方**保证恒有值
+          //   （`accountRoster.buildNewAccount`，源 `$P.jsx:35`），存量账号由**启动归位**补齐
+          //   （`accountRoster.ensureAccountPartitions`）⇒ 本处**不兜、不改写**，如实交给后端
+          //   （它按这个键开 session；`main.js` 那几个 handler 早已改成"拿不到就明确失败"）。
           partition,
-          fingerprint: account.fingerprint,
+          lovart: usesContainer,
+          ...(usesContainer
+            ? { proxy: account.proxy ?? '' }
+            : { fingerprint: account.fingerprint }),
         });
         if (cancelled) return;
-        // ⚠️ 失败**不抛也不编造** —— 页面照常加载（只是没有指纹伪装），
-        //    错误已由适配器如实返回；这里只决定要不要挂 preload
-        if (r.ok && r.value.preloadUrl) setPreloadUrl(r.value.preloadUrl);
+        // ⚠️ 失败**不抛也不编造** —— 页面照常加载（只是没有会话准备），
+        //    错误已由适配器如实返回；这里只决定要不要挂 preload / 用不用容器 UA
+        if (r.ok) {
+          if (r.value.preloadUrl) setPreloadUrl(r.value.preloadUrl);
+          setContainerUA(r.value.userAgent);
+        }
       })();
     }
     return () => {
       cancelled = true;
     };
-    // ⚠️ 指纹或盐一变就要**重新准备**（换指纹 = 换身份）
+    // ⚠️ 指纹或盐一变就要**重新准备**（换指纹 = 换身份）；容器模式看代理
     //   ⚠️ **必须用字段级依赖**（不是 `account` 对象）：`accounts` 每次 store 更新都会换对象标识，
     //      用整个 `account` 会让本 effect 每轮重跑 ⇒ 重复打 `ensureFingerprint` IPC。
-  }, [accountOps, account.id, partition, account.fingerprint, account.type]);
+  }, [accountOps, account.id, partition, account.fingerprint, account.proxy, account.type, usesContainer]);
 
   /**
    * ★ `<webview>` 元素引用 —— 只为挂 **`dom-ready`**（原 `_Component25.jsx:113-142` 的 `F`）
@@ -151,7 +163,7 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
         —— 顺序照源：条在 `<webview>` **之前**；`Fragment` 不产生 DOM 节点
         ⇒ `adapters/site/shared/webview.ts` 的 `findWebview` 照旧找得到（`WEBVIEWS_HOST_CLASS` 容器内）。
       */}
-      {account.type === 'lovart' && active ? (
+      {isChromeSessionSite(account.type) && active ? (
         <LovartSessionBar account={account} partition={partition} />
       ) : null}
       <webview
@@ -171,21 +183,28 @@ function AccountWebview({ account, active }: { account: Account; active: boolean
          */
         partition={partition}
         src={backendUrlOf(account, accountOps.chatUrlOf(account.type))}
-        // 原版：有指纹就用指纹的 UA；否则交给引擎默认（不编一个）
-        {...(account.fingerprint ? { useragent: account.fingerprint.userAgent } : {})}
-        // ⚠️ 渲染侧守卫（不是 effect 里重置状态）：`other` 类型永远不挂 preload，
-        //    这样即使类型从有指纹的站点改成 `other`，也不会把旧 preload 带过去
-        {...(account.type !== 'other' && preloadUrl ? { preload: preloadUrl } : {})}
+        // 原版：容器模式用容器 UA，有指纹用指纹的 UA；都没有就交给引擎默认（不编一个）
+        {...(usesContainer
+          ? containerUA
+            ? { useragent: containerUA }
+            : {}
+          : account.fingerprint
+            ? { useragent: account.fingerprint.userAgent }
+            : {})}
+        // ⚠️ 渲染侧守卫（不是 effect 里重置状态）：两类会话准备都没有的站点（`other`）永远不挂 preload，
+        //    这样即使类型从别的站点改成 `other`，也不会把旧 preload 带过去
+        {...(preloadUrl ? { preload: preloadUrl } : {})}
+        // 容器页设置：源 `_Component25.jsx:355` 只给 lovart 传（其余站点 `undefined`）
+        {...(usesContainer ? { webpreferences: LOVART_WEBPREFERENCES } : {})}
+        // ⚠️ 值走唯一落点（类型声明是 `boolean`、运行时必须字符串 ⇒ 断言只在那处）
+        allowpopups={WEBVIEW_ALLOW_POPUPS}
         /*
-         * ⚠️ **必须传字符串**（源版 `_Component25.jsx:355` 也是 `"true"`）：
-         *    React 不认 `allowpopups` 是布尔属性 ⇒ 裸布尔 `true` 会告警
-         *    （"Received `true` for a non-boolean attribute"）；Electron 只认「属性存在」⇒ 等价。
-         * ⚠️ 类型层要跨一次断言：`@types/react` 的 `WebViewHTMLAttributes` 把它声明成 `boolean`，
-         *    而运行时事实是**字符串**（第三方类型 ↔ 运行时事实的边界，**不是**本仓的类型双轨）。
+         * ★ 可见性（原 `_Component25.jsx:355` 的 `className={`doubao-view-webview${I0(t, n)}`}`）。
+         * ⚠️ **基础态不是"隐藏档"，是"恒定铺满 + 不可见"**（原 `.doubao-view-webview` 就是
+         *   `position:absolute; inset:0; visibility:hidden`）；`.webviewActive` = 原 `.dv-wv-active`。
+         *   ⇒ 尺寸**不随状态变**（这正是原版对 guest 视口的保护，见 CSS 注释）。
          */
-        allowpopups={'true' as unknown as boolean}
-        // 可见性（原 `I0` 的三态；本工程只用到「当前账号可见 / 其余隐藏」两态）
-        className={active ? styles.active : styles.hidden}
+        className={active ? `${styles.webview} ${styles.webviewActive}` : styles.webview}
       />
     </>
   );
@@ -306,7 +325,7 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
   const onOpenInBrowser = useCallback(() => {
     if (!active) return;
     const url =
-      active.type === 'other' ? active.url || 'about:blank' : accountOps.chatUrlOf(active.type);
+      !capsOf(active.type).hasFixedUrl ? active.url || 'about:blank' : accountOps.chatUrlOf(active.type);
     void hostOps.openExternal(url).then((r) => {
       if (!r.ok) pushToast(r.message, 4000, 'error');
     });
@@ -384,7 +403,7 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
                   ★ 「无水印资源（N）」按钮（原 `_Component43.jsx:3255-3261`）——
                     条件**逐字照源** = `type === 'dola' || type === 'doubao'`（**不是**「非 lovart」）。
                 */}
-                {active && (active.type === 'dola' || active.type === 'doubao') ? (
+                {active && capsOf(active.type).hasWatermarkButton ? (
                   <button type="button" className={styles.headBtn} onClick={() => setWatermarkOpen(!watermarkOpen)}>
                     {WATERMARK_PANEL_TEXT.title}
                     {watermarkOpen ? '' : `（${watermarkCount}）`}
@@ -471,7 +490,7 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
         ★ 「无水印资源」面板（原 `SD`，`_Component43.jsx:3298`）——
         ★ 位置照源：在 **webviews 之后**（视图底部）；条件 = `t && c.length>0 && Ke?.type !== 'lovart'`。
       */}
-      {visible && loggedIn.length > 0 && active && active.type !== 'lovart' && watermarkOpen ? (
+      {visible && loggedIn.length > 0 && active && capsOf(active.type).watermarkPanelAllowed && watermarkOpen ? (
         <WatermarkPanel onClose={() => setWatermarkOpen(false)} />
       ) : null}
 

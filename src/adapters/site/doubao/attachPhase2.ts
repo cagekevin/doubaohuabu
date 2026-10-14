@@ -36,7 +36,7 @@ import {
   retryImproved,
   type DedupedRefImage,
 } from '@/core/rules/attachRefImages';
-import { REFERENCE_IMAGE_LABEL } from '../shared/attachImage';
+import { COMMON_TEXT } from '@/constants/text';
 import { webviewEvalSafe, type WebviewElement } from '../shared/webview';
 import { ATTACH_COUNT_SCRIPT, INPUT_FOCUS_SCRIPT } from './scripts';
 
@@ -130,7 +130,7 @@ async function clipboardPasteOne(
   img: DedupedRefImage,
 ): Promise<{ wrote: boolean; pasted: boolean }> {
   const wrote = await deps.clipboard.writeImage(
-    { dataUrl: img.dataUrl, label: img.label || REFERENCE_IMAGE_LABEL },
+    { dataUrl: img.dataUrl, label: img.label || COMMON_TEXT.referenceImageLabel },
     webContentsId,
   );
   if (!wrote.ok) return { wrote: false, pasted: false };
@@ -180,7 +180,7 @@ export async function attachImagesPhase2(
   if (webContentsId) {
     const r = await deps.clipboard.attachImages(
       webContentsId,
-      list.map((it) => ({ dataUrl: it.dataUrl, label: it.label || REFERENCE_IMAGE_LABEL })),
+      list.map((it) => ({ dataUrl: it.dataUrl, label: it.label || COMMON_TEXT.referenceImageLabel })),
     );
     const errs = r.ok ? (r.value.errors ?? []) : [r.message];
     if (errs.length === 0) {
@@ -211,7 +211,7 @@ export async function attachImagesPhase2(
     if (tried.has(img.fp)) continue;
 
     const wrote = await deps.clipboard.writeImage(
-      { dataUrl: img.dataUrl, label: img.label || REFERENCE_IMAGE_LABEL },
+      { dataUrl: img.dataUrl, label: img.label || COMMON_TEXT.referenceImageLabel },
       webContentsId,
     );
     if (!wrote.ok) {

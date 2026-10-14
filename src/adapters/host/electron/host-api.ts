@@ -6,12 +6,12 @@
  */
 
 import { err, ok, toMessage, type Result } from '@/core/model/result';
-import { COMMON_TEXT } from '@/constants/text';
+import { COMMON_TEXT, HOST_TEXT } from '@/constants/text';
 import type { SendFailKind } from '@/constants/failure';
 import type { HostApi } from './window-api';
 
-/** 宿主缺失时的明确错误（**不返回假成功**） */
-export const HOST_MISSING = 'window.api 不存在：当前不在 Electron 宿主中';
+/** 宿主缺失时的明确错误（**不返回假成功**）—— 文案真源 = `HOST_TEXT.apiMissing`（本处只转发） */
+export const HOST_MISSING = HOST_TEXT.apiMissing;
 
 /** 取 `window.api`；不存在则返回 `null`（调用方转成 Result） */
 export function getHostApi(): HostApi | null {
@@ -83,8 +83,8 @@ export function normalize<T>(raw: unknown, opts: BoundaryOpts = {}): Result<T> {
  *   · `normalize` 是 `ok === false`（**fail-open**）—— 服务"后端**无 `ok` 裸返回**"的通道
  *     （`save-file` 返 `true`、`load-file` 返字符串 / `null`）；那里漏 `ok` 是**正常**的。
  *   · 本函数服务"后端**恒带 `ok`**"的通道 —— 下列 handler 的**每条 return 都带 `ok`**（已逐条回源核）：
- *     `reveal-path`（`main.js:1893`）· `show-in-folder`（`main.js:1262`）·
- *     `project-storage-reveal`（`main.js:408`）· `lovart-scan.js` · `clear-browser-cache`（`main.js:1201,1213`）。
+ *     `reveal-path`（`main.js`）·
+ *     `project-storage-reveal`（`main.js`）· `lovart-scan.js` · `clear-browser-cache`（`main.js`）。
  *     ⇒ 漏 `ok` / 非布尔即**契约违约**（`boundaryViolation`），**不得静默当成功**（原则 6）。
  *
  * @param reason 失败分类（默认 `unknown`；调用方有更准的分类时可覆盖）

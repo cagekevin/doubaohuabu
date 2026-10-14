@@ -16,8 +16,9 @@
  * ⚠️ 这里**只等**，不做决策（决策归 `core/usecases`，判据 D1）。
  */
 
-import { sleep } from '@/lib/async';
+import { sleep, withTimeout } from '@/lib/async';
 import { log } from '@/lib/log';
+import { SITE_SCAN_TEXT } from '@/constants/text';
 import type { WebviewElement } from './webview';
 
 /** 轮询步长（原 `fr(500)`） */
@@ -40,23 +41,10 @@ export type ProbeResult<T> = { ok: true; value: T } | { ok: false; error: string
 
 
 /**
- * 超时竞速（原 `OP.jsx:59-64` 的 `Promise.race([executeJavaScript, setTimeout])`）
- *
- * ⚠️ 错误文案 `webview_exec_timeout` **逐字对源**（源版也是这个字面量）
- */
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_resolve, reject) => {
-      setTimeout(() => reject(new Error('webview_exec_timeout')), ms);
-    }),
-  ]);
-}
-
-/**
  * 在 webview 里跑一个探针（原 `On`）
  * ⚠️ **不抛**：webview 不可用 / 脚本抛错 / 超时 ⇒ `{ok:false, error}`（错误原文保留）
- * @param timeoutMs 不给 ⇒ **不设超时**（等页面自己答）；给了 ⇒ 竞速（见 `withTimeout`）
+ * @param timeoutMs 不给 ⇒ **不设超时**（等页面自己答）；给了 ⇒ 竞速
+ *   （唯一实现 = `@/lib/async` 的 `withTimeout`，回源 `gn` `shared.js:23587`）
  */
 export async function runProbe<T = unknown>(
   view: WebviewElement | null | undefined,
@@ -64,11 +52,14 @@ export async function runProbe<T = unknown>(
   timeoutMs?: number,
 ): Promise<ProbeResult<T>> {
   if (!view || typeof view.executeJavaScript !== 'function') {
-    return { ok: false, error: 'webview 不可用' };
+    return { ok: false, error: SITE_SCAN_TEXT.probeUnavailable };
   }
   try {
     const pending = view.executeJavaScript(script, true) as Promise<T>;
-    return { ok: true, value: timeoutMs === undefined ? await pending : await withTimeout(pending, timeoutMs) };
+    if (timeoutMs === undefined) return { ok: true, value: await pending };
+    // ★ 超时与脚本异常都由唯一实现转成判别联合（`lib/async.withTimeout` **不抛**）⇒ 原样透传（原则 6）
+    const r = await withTimeout(pending, timeoutMs, SITE_SCAN_TEXT.probeTimeoutLabel);
+    return r.ok ? { ok: true, value: r.value } : { ok: false, error: r.error };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

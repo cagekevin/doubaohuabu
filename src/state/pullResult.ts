@@ -27,8 +27,7 @@ import { fetchWatermarkFreeByVid } from '@/core/usecases/fetchWatermarkFree';
 import { patchGenHistoryAttempt, pullTargetOf } from '@/core/rules/genHistory';
 import { err, ok, type Result } from '@/core/model/result';
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
-import { VIDEO_NODE_TEXT } from '@/constants/text';
-import { localizeNodeInto } from './localizeOps';
+import { COMMON_TEXT, VIDEO_NODE_TEXT } from '@/constants/text';
 import type { PostSendDetectController } from './postSendDetect';
 import { log } from '@/lib/log';
 
@@ -57,7 +56,8 @@ export function createPullResultController(
     async pull(nodeId) {
       const s = store.useStore.getState();
       const node = s.nodes.find((n) => n.id === nodeId);
-      if (!node) return err('unknown', VIDEO_NODE_TEXT.pullNoNode);
+      // 句子真源 = `COMMON_TEXT.nodeGone`（同句另有 2 个域要用 ⇒ 见那里的说明）
+      if (!node) return err('unknown', COMMON_TEXT.nodeGone);
 
       const data = node.data as Record<string, unknown>;
       const target = pullTargetOf(data);
@@ -109,10 +109,9 @@ export function createPullResultController(
       }
       // ★ **一次**写：原版是 `updateNodeData` + `patchVideoAttempt` 两次，但结果是一个整体 ——
       //   分两次会在中间留下「有 `url` 但尝试仍是 `pending`」的半态（已留痕）。
-      store.useStore.getState().patchNodeData(nodeId, patch);
-
-      // 原 3160：写完 `url` 立刻本地化（直链会过期 / 需要 referer ⇒ 必须落盘）
-      void localizeNodeInto(store, ports, nodeId);
+      // ★ 走**写视频 `url` 的唯一入口**（源 `_Component43.jsx:3160`）：它**内建**了本地化
+      //   ⇒ 这里不需要、也不该再单独调一次。
+      store.useStore.getState().writeVideoUrl(nodeId, patch);
       return ok(undefined);
     },
   };

@@ -36,8 +36,8 @@ export interface ArrangeEdgeLike {
   target: string;
 }
 
-export type ArrangeResult =
-  | { ok: true; nodes: GroupNodeLike[]; count: number }
+export type ArrangeResult<T extends GroupNodeLike = GroupNodeLike> =
+  | { ok: true; nodes: T[]; count: number }
   | { ok: false; reason: 'need-2' | 'unknown-mode' };
 
 /** 一个被排列节点的**绝对**几何（原 `l` 的元素） */
@@ -59,11 +59,11 @@ interface Box {
  * @returns 成功 ⇒ `{ok:true, nodes, count}`（`nodes` 里**未选中的节点保持原引用**）；
  *          少于 2 个非组节点 ⇒ `need-2`；模式不认识 ⇒ `unknown-mode`。
  */
-export function planArrange(
-  nodes: readonly GroupNodeLike[],
+export function planArrange<T extends GroupNodeLike>(
+  nodes: readonly T[],
   edges: readonly ArrangeEdgeLike[],
   mode: string,
-): ArrangeResult {
+): ArrangeResult<T> {
   // ① 取 `selected && type !== 'group'`（组不参与排列）；少于 2 个 ⇒ need-2（原 31652-31660）
   const picked = nodes.filter((n) => n.selected && n.type !== 'group');
   if (picked.length < 2) return { ok: false, reason: 'need-2' };
@@ -174,7 +174,7 @@ export function planArrange(
   }
 
   // ④ 落回节点：**带 `parentId` 的换回相对坐标**（原 31813-31837）—— 未命中的节点原样返回
-  const next = nodes.map((node) => {
+  const next: T[] = nodes.map((node) => {
     const v = positions[node.id];
     if (!v) return node;
     if (!node.parentId) return { ...node, position: { x: v.x, y: v.y } };

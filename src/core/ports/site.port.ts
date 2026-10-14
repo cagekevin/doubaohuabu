@@ -365,6 +365,19 @@ export interface SitePort {
   readonly chatUrl?: string;
 
   /**
+   * ★ **该站点的媒体源键**（豆包系专有；主进程的 `SOURCE_HOSTS` 用**同名键**）
+   *
+   * 有值 ⇒ 该站点走**豆包系媒体链**：CDP 挂载（`/im/chain/single` 拦截）＋ Dola「30s 主世界钩子」注入。
+   * 值 = 媒体源的键（`'doubao'` / `'dola'`），供需要**区分两源**的消费者用（如给 CDP 回流的图打 `source` 标签）。
+   *
+   * ★ **为什么它是「能力声明」**（与 `autoWatch?` 同法）：哪个站点有这条链是**站点细节** ⇒ 必须住 adapter。
+   *    `state` 因此**不写** `type === 'dola' || type === 'doubao'` —— 那是**站点能力**判断
+   *    （红线边界见 `autoWatch?` 的注释：该红线只管站点能力，账号类型的领域判断本来就在 `core/rules`）。
+   * ⚠️ **缺项 ⇒ 不是豆包系**：调用方**跳过**该账号，不回落、不报错。
+   */
+  readonly mediaSource?: 'doubao' | 'dola';
+
+  /**
    * 可选的「**附原图 + 提问 + 等回复**」能力（原 `hS` 38893 + `mS` 38990）
    *
    * 只有**豆包 / Dola** 有这条链路（提示词分析 / 调整）。
@@ -420,7 +433,7 @@ export interface SitePort {
   readonly fetchWatermarkFree?: (ctx: ImageQuestionContext, vid: string) => Promise<Result<WatermarkVideo>>;
 
   /**
-   * 可选的「**发送后检测视频**」能力（原 `detect-videos` handler 的取数，`electron/main.js:2224`）
+   * 可选的「**发送后检测视频**」能力（原 `detect-videos` handler 的取数，`electron/main.js`）
    *
    * ★ **只有豆包 / Dola** 有这条链（host `detectVideos` 打的是 `/samantha/aispace/` 的 API）。
    *   缺项时 `state/postSendDetect` **直接不跑**（不回落、不报假成功）。
@@ -523,7 +536,7 @@ export interface SitePort {
    *    ⇒ 红线**只针对站点能力**（本项 `autoWatch` 那类）；账号类型的领域判断**本来就在 `core/rules`** ✓。
    *    遵守红线的实例见 `state/accountOps.ts:436`（"只问注册表 `ports.sites[type].autoWatch`，**不写** `type === 'lovart'`"）。
    * ⚠️ **缺项 ⇒ 不支持**（调用方**跳过**该站点，不回落、不报错）。
-   * ⚠️ **`lovart` 故意不声明**：风控 —— `docs/过程.md` #11 · `electron/main.js:2749`「默认关闭
+   * ⚠️ **`lovart` 故意不声明**：风控 —— `docs/过程.md` #11 · `electron/main.js`「默认关闭
    *    **Lovart** 自动抓取，避免每 3 秒执行一次页面脚本被判定为机器人」。⚠️ 该约束**只点名 Lovart**
    *    （那段就叫「Lovart 容器隔离」）；其余站点照常声明（见 `tapnow/index.ts`）。
    * ⚠️ **与 `scan` 的关系**：`scan` = 「能不能抓」；本项 = 「能不能**自动反复**抓 + 什么节奏」。

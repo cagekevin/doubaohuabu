@@ -97,6 +97,15 @@ export interface AppStoreDeps {
   activateStorage?: GlobalSliceDeps['activateStorage'];
   /** 立即落盘（`PersistController.flush`）—— 回启动页前先落盘（源 `showStartup` 30146） */
   flushPersist?: GlobalSliceDeps['flushPersist'];
+  /**
+   * ★ **视频本地化**（写视频 `url` 之后的收尾）—— 见 `CanvasSliceDeps.localizeVideoNode`
+   *
+   * ⚠️ **为什么由 `bootstrap/container` 注入**：它同时持 `store` 与 `ports`（本地化要经
+   *   `MediaPort.saveVideoFromUrl`，原则 1 禁 slice 碰 ports）；而 `state/store` 自己 import
+   *   `state/localizeOps` 会造成 **`store ⇄ localizeOps` 环**（depcruise `no-circular`）。
+   *   ⇒ 这是 `localizeNodeInto` 的**唯一调用点**（与 `logOperation` / `activateStorage` 同法）。
+   */
+  localizeVideoNode: CanvasSliceDeps['localizeVideoNode'];
 }
 
 /**
@@ -183,6 +192,9 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       }),
       ...createCanvasSlice(setPartial, getState, {
         now: () => ports.clock.now(),
+        // ★ 写视频 `url` 之后的收尾（源 `addVideoNode` 末尾内建 / `_Component43.jsx:3160`）——
+        //   实现由 `bootstrap/container` 注入（见 `AppStoreDeps.localizeVideoNode`）
+        localizeVideoNode: deps.localizeVideoNode,
         makeEdge: (conn) => ({
           // ★ **2026-10-12 越权收口**：改走**唯一工厂** `makeId('edge', …)` —— 此前自拼
           //   `e_<base36>_<十进制 seq>`（形状也漂：源 `Pt` 的 seq 段是 base36）

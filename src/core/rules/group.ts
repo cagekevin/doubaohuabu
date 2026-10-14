@@ -11,7 +11,14 @@
  *
  * 几何常量（原 31554-31556 内联）：组头高 `d = 34` · 内边距 `f = 18` ·
  * 最小尺寸 **200×140** · 子节点默认盒 **200×180**（原 `s(x)` 的两级兜底）。
+ *
+ * ★ **节点类型泛型化**：入参只要求 `GroupNodeLike`（结构子集），**出参与入参同型** ——
+ *   传 `CanvasNode[]` 就出 `CanvasNode[]`。这样调用方**不需要**回写 store 前再收窄，
+ *   也就不用断言（「节点是 8 类判别联合」的真源 = `stable/model/node.ts`）。
+ *   新造的组节点按真源 `GroupNode` 声明，它本就是那个联合的成员 ⇒ 出参里加它不会擦宽。
  */
+
+import type { GroupNode } from '@/stable/model/node';
 
 /**
  * 组内节点的**默认盒尺寸**（原 `s(x)`：`width ?? measured.width ?? 200`）
@@ -42,6 +49,8 @@ export interface GroupNodeLike {
   /** ReactFlow 量出来的实际尺寸（未显式给 `width` 时的二级兜底） */
   measured?: { width?: number; height?: number };
   zIndex?: number;
+  /** 组内节点才有（限制在父节点内）—— 从组里摘出时要**去掉**这个键 */
+  extent?: unknown;
   data?: Record<string, unknown>;
 }
 
@@ -80,15 +89,17 @@ export function absolutePositionOf(
  * ⚠️ **不带 `selected`** —— 是否选中是**调用方各自的判据**：显式取消组 ⇒ `true`（源同）；
  *    删组释放 ⇒ **不动**（源在删除路径不设）。
  */
-export function detachFromGroup(node: GroupNodeLike, group: GroupNodeLike): GroupNodeLike {
-  const { parentId: _parentId, extent: _extent, ...rest } = node as GroupNodeLike & { extent?: string };
-  return {
-    ...rest,
+export function detachFromGroup<T extends GroupNodeLike>(node: T, group: GroupNodeLike): T {
+  const next = {
+    ...node,
     position: {
       x: (node.position.x || 0) + (group.position.x || 0),
       y: (node.position.y || 0) + (group.position.y || 0),
     },
-  } as GroupNodeLike;
+  };
+  delete next.parentId;
+  delete next.extent;
+  return next;
 }
 
 /**
@@ -109,8 +120,8 @@ export function selectedGroupIdOf(nodes: readonly GroupNodeLike[]): string | nul
   return parents.every((p) => p === first) ? first : null;
 }
 
-export type GroupResult =
-  | { ok: true; nodes: GroupNodeLike[]; groupId: string; count: number }
+export type GroupResult<T extends GroupNodeLike = GroupNodeLike> =
+  | { ok: true; nodes: Array<T | GroupNode>; groupId: string; count: number }
   | { ok: false; reason: 'need-2' };
 
 /**
@@ -124,14 +135,16 @@ export type GroupResult =
  * ⑤ 同批选中的**非成员**（理论上只有组）⇒ **只取消选中**
  * ⑥ 组节点插入到**列表最前**（原版就是 `[{…组}, ...nodes]`）
  *
+ * ⚠️ 出参 = **入参同型** ＋ 新造的 `GroupNode`（见文件头 ★）；`T` 是 `CanvasNode` 时二者合成它本身。
+ *
  * @param idFactory 造新组 id（原 `Pt('grp')` —— 时间/序号由 state 注入，原则 4）
  * @param labelIndex 新组序号（原 `已有组数 + 1`）
  */
-export function groupSelectedNodes(
-  nodes: readonly GroupNodeLike[],
+export function groupSelectedNodes<T extends GroupNodeLike>(
+  nodes: readonly T[],
   idFactory: () => string,
   labelIndex: number,
-): GroupResult {
+): GroupResult<T> {
   const picked = nodes.filter((n) => n.selected && n.type !== 'group');
   if (picked.length < 2) return { ok: false, reason: 'need-2' };
 
@@ -156,7 +169,7 @@ export function groupSelectedNodes(
   const groupId = idFactory();
   const members = new Set(picked.map((n) => n.id));
 
-  const groupNode: GroupNodeLike = {
+  const groupNode: GroupNode = {
     id: groupId,
     type: 'group',
     position: { x: originX, y: originY },
@@ -167,7 +180,7 @@ export function groupSelectedNodes(
     data: { label: `组 ${labelIndex}` },
   };
 
-  const rest = nodes.map((n) => {
+  const rest: T[] = nodes.map((n) => {
     if (!members.has(n.id)) {
       // 原 31580-31590：不在组内的（含其它组）**只是取消选中**
       return n.selected ? { ...n, selected: false } : n;
@@ -185,8 +198,8 @@ export function groupSelectedNodes(
   return { ok: true, nodes: [groupNode, ...rest], groupId, count: picked.length };
 }
 
-export type UngroupResult =
-  | { ok: true; nodes: GroupNodeLike[] }
+export type UngroupResult<T extends GroupNodeLike = GroupNodeLike> =
+  | { ok: true; nodes: T[] }
   | { ok: false; reason: 'no-group' };
 
 /**
@@ -197,11 +210,14 @@ export type UngroupResult =
  * ③ 成员：**去掉 `parentId` 与 `extent`**、`selected: true`、**`position` 换回绝对坐标**
  * ④ 非成员**原样不动**
  */
-export function ungroupNodes(nodes: readonly GroupNodeLike[], groupId: string): UngroupResult {
+export function ungroupNodes<T extends GroupNodeLike>(
+  nodes: readonly T[],
+  groupId: string,
+): UngroupResult<T> {
   const target = nodes.find((n) => n.id === groupId && n.type === 'group');
   if (!target) return { ok: false, reason: 'no-group' };
 
-  const next = nodes
+  const next: T[] = nodes
     .filter((n) => n.id !== groupId)
     .map((n) => (n.parentId === groupId ? { ...detachFromGroup(n, target), selected: true } : n));
 
@@ -224,11 +240,11 @@ export function ungroupNodes(nodes: readonly GroupNodeLike[], groupId: string): 
  * @param before      变更前的节点表（源里的 `s`：用来判"被删的哪些是组" ＋ 取组坐标）
  * @param removedIds  被删的节点 id
  */
-export function releaseDeletedGroupChildren(
-  nodes: readonly GroupNodeLike[],
+export function releaseDeletedGroupChildren<T extends GroupNodeLike>(
+  nodes: readonly T[],
   before: readonly GroupNodeLike[],
   removedIds: ReadonlySet<string>,
-): GroupNodeLike[] {
+): T[] {
   const gone = new Map<string, GroupNodeLike>();
   for (const n of before) {
     if (removedIds.has(n.id) && n.type === 'group') gone.set(n.id, n);

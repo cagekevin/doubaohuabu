@@ -47,7 +47,7 @@ import type {
   SiteRegistry,
 } from '@/core/ports/site.port';
 import { err, ok, type Result } from '@/core/model/result';
-import { CANVAS_EXPORT_TEXT, NEW_IMAGES_TEXT, SEND_TEXT } from '@/constants/text';
+import { CANVAS_EXPORT_TEXT, NEW_IMAGES_TEXT, SEND_TEXT, SITE_CAP_TEXT } from '@/constants/text';
 import { log } from '@/lib/log';
 import {
   captureCanvasImageName,
@@ -255,7 +255,7 @@ export async function scanCanvasGallery(
 
   const scanCanvas = site.scanCanvas;
   // ⚠️ 站点没有这条链 ⇒ **明确报错**（不回落 DOM 扫描：源里 `wp`/`wP` 是两条独立函数）
-  if (!scanCanvas) return err('unknown', SEND_TEXT.noCapability(account.type, '扫描画布'));
+  if (!scanCanvas) return err('unknown', SEND_TEXT.noCapability(account.type, SITE_CAP_TEXT.scan));
 
   // ★ 与 `scanGallery` **共用同一把闩**（原 `Xl` 就管 tapnow 这半边：`xp` 与画廊扫描都走它）
   if (capturing) return err('busy', NEW_IMAGES_TEXT.busy);

@@ -193,7 +193,7 @@ describe('buildAccountGroups（原 _Component45.jsx:601-621 的 `T`）', () => {
     { id: 'g3', name: '' }, // 空名 ⇒ 未命名分组
   ];
   const mk = (id: string, groupId: string | null, type: SiteType = 'doubao', status = '已登录'): Account =>
-    ({ id, name: id, type, status, partition: null, addedAt: 0, groupId, autoStart: false, fpSalt: 0 }) as Account;
+    ({ id, name: id, type, status, partition: `persist:${id}`, addedAt: 0, groupId, autoStart: false, fpSalt: 0 }) as Account;
 
   it('★ 只列出**非空**分组，且按 `groups` 的顺序', () => {
     const out = buildAccountGroups([mk('a', 'g2'), mk('b', 'g1'), mk('c', null)], groups);

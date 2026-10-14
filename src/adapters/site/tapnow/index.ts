@@ -34,20 +34,16 @@ import type {
   SitePort,
   SiteProbe,
 } from '@/core/ports/site.port';
-import { AUTO_WATCH_IDLE_BACKOFF_MS, AUTO_WATCH_INTERVAL_MS, SCAN_MAX_FRAMES, TAPNOW_MIN_SIDE } from '@/constants';
-import { GALLERY_TEXT, TAPNOW_TEXT } from '@/constants/text';
-import { err, ok, toMessage, type Result } from '@/core/model/result';
-import { canvasIdFromHref, nextScanStrategy, summarizeScanAttempts, type ScanStrategy } from '@/core/rules/scanChain';
+import { AUTO_WATCH_IDLE_BACKOFF_MS, AUTO_WATCH_INTERVAL_MS, TAPNOW_MIN_SIDE } from '@/constants';
+import { GALLERY_TEXT, SEND_TEXT, SITE_CAP_TEXT, TAPNOW_TEXT } from '@/constants/text';
+import { err, ok, type Result } from '@/core/model/result';
+import { canvasIdFromHref } from '@/core/rules/scanChain';
 // ★ 「已在库过滤」（原 `wp`/`wP` 的 `haveUrls`/`seen`）＋ 画布 DOM 那半的 `Yh` 清洗 —— 都走 `scanClean`
 import { cleanScannedImages, excludeSeenImages } from '@/core/rules/scanClean';
 // ★ 单档归一 + **逐张落盘**（`normalizeAttempt` 在 `site/shared/materializeScan.ts`，两档共用 —— 判据 C1）
-import {
-  materializeScannedImages,
-  scanAttemptFromRaw,
-  scanFetchContext,
-  type ScanAttempt,
-  type ScanAttemptOptions,
-} from '../shared/materializeScan';
+import { materializeScannedImages, scanFetchContext } from '../shared/materializeScan';
+// ★ 降级链**编排**（`scan` 那条）—— 与 `lovart` **共用一份**（`site/shared/scanRun.ts`，判据 C1）
+import { runScanChain, tryScanOnce, type SiteScanSpec } from '../shared/scanRun';
 import { buildResultScanScript } from '../shared/scanScripts';
 import {
   canvasImageKey,
@@ -55,53 +51,47 @@ import {
   stripVariantParams,
   tapnowCanvasNodes,
 } from './api';
-import { findWebview, webviewEval } from '../shared/webview';
+import { findWebview } from '../shared/webview';
 import { tapnowCurrentCanvasId, tapnowCurrentHref } from './api';
 import { tapnowPageKind } from './pageKind';
+
+/**
+ * Tapnow **会话页**地址（原 `rS`，`shared.js:36770`）—— 声明为 `SitePort.chatUrl`
+ *
+ * ⚠️ 站点 URL **只能住适配器**：两个消费者都经 `SitePort.chatUrl` 取（同一个真源）
+ *   ① `BackendView` 的 `<webview src>`（原 `_Component25.jsx:355` 的 `src` 三目）；
+ *   ② `core/usecases/sendToSite` 的导航目标（未声明 ⇒ 明确报错，不回落）。
+ * ⚠️ 取值与登录页（`SITE_LOGIN_URL.tapnow` ← 原 `EP`，`shared.js:34200`）**相同**，
+ *   但源里是**两个常量**（登录 / 会话）⇒ 两处各照各的，不跨表引用。
+ */
+const TAPNOW_URL = 'https://app.tapnow.media/home';
 
 /** 批量取图冒充站内请求的 `referer`（原 `wP` 调 `vP` 的实参，`shared.js:34090`，逐字） */
 const TAPNOW_REFERER = 'https://app.tapnow.media/';
 
-/** 跑一档（**不自动重试** —— 重试是上层编排的事） */
-async function tryScan(
-  host: HostPort,
-  account: Account,
-  via: ScanStrategy,
-  script: string,
-  opts: ScanOptions,
-): Promise<ScanAttempt> {
-  // ★ 批量取图的会话上下文（原 `vP` 的实参：account + referer）—— 缺它 ⇒ 远端图取不到（如实计失败）
-  const attemptOpts: ScanAttemptOptions = {
-    ...(opts.seenUrls ? { seenUrls: opts.seenUrls } : {}),
-    fetch: scanFetchContext(account, TAPNOW_REFERER, opts.onPhase),
+/**
+ * 本站的扫描差异（`SiteScanSpec` 的那三处）—— `scan` 与 `scanCanvas` 的 DOM 那半**共用同一组**
+ */
+function tapnowScanSpec(account: Account, script: string): SiteScanSpec {
+  return {
+    script,
+    referer: TAPNOW_REFERER,
+    // ⚠️ 与源一致（原 `Xn`）：**找不到页面返回 null 而不是抛**；两句文案都是本站自己的
+    view: () => {
+      const v = findWebview({ id: account.id, partition: account.partition });
+      if (!v) return { ok: false as const, error: TAPNOW_TEXT.pageNotFound };
+      if (typeof v.executeJavaScript !== 'function') {
+        return { ok: false as const, error: TAPNOW_TEXT.webviewNotReady };
+      }
+      return { ok: true as const, view: v };
+    },
   };
-  // ⚠️ 与源一致（原 `Xn`）：**找不到页面返回 null 而不是抛**
-  const view = findWebview({ id: account.id, partition: account.partition });
-  if (!view) return { via, ok: false, error: TAPNOW_TEXT.pageNotFound };
-
-  if (via === 'frames') {
-    // 多帧：主进程遍历全部 frame（含嵌套 / 跨域）—— **经 HostPort**（TD-05-1）
-    const wcId = view.getWebContentsId?.() ?? 0;
-    if (!wcId) return { via, ok: false, error: '无法取得 webview 的 webContentsId' };
-    const r = await host.media.scanFrames({ webContentsId: wcId, script, maxFrames: SCAN_MAX_FRAMES });
-    if (!r.ok) return { via, ok: false, error: r.message }; // ★ 原样透传
-    // ⚠️ `scanFrames` 的形状是 `{items, href}` ⇒ 包成脚本形状，与 webview 那条路共用同一处理
-    return scanAttemptFromRaw(host, via, { ok: true, images: r.value.items, href: r.value.href }, attemptOpts);
-  }
-
-  if (typeof view.executeJavaScript !== 'function') {
-    return { via, ok: false, error: TAPNOW_TEXT.webviewNotReady };
-  }
-  try {
-    return await scanAttemptFromRaw(host, via, await webviewEval(view, script), attemptOpts);
-  } catch (e) {
-    return { via, ok: false, error: toMessage(e) };
-  }
 }
 
 export function createTapnowSite(host: HostPort): SitePort {
   return {
     kind: 'tapnow',
+    chatUrl: TAPNOW_URL,
 
     // ★ **无人值守轮询**能力声明（注册制：站点细节住 adapter —— 见 `site.port.ts` 的注释）
     //   源版的 `Ee` 循环对 Tapnow **也跑**（`_Component26.jsx:451` 的 `ho(acc) ? wp : xp` 走 else）。
@@ -169,7 +159,7 @@ export function createTapnowSite(host: HostPort): SitePort {
 
       // ③ DOM 那半（原 `:33923-33958`）—— 只在"接口给的不够 + 页面确实停在**同一个**画布"时合并
       if (byKey.size < limit) {
-        const dom = await tryScan(host, account, 'webview', buildResultScanScript(TAPNOW_MIN_SIDE), opts);
+        const dom = await tryScanOnce(host, account, tapnowScanSpec(account, buildResultScanScript(TAPNOW_MIN_SIDE)), 'webview', opts);
         if (dom.ok) {
           const sameCanvas = canvasIdFromHref(dom.href ?? '') === canvasId;
           if (sameCanvas) {
@@ -218,54 +208,18 @@ export function createTapnowSite(host: HostPort): SitePort {
 
     async scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>> {
       // 脚本按 `minSide` 生成（原 `fP` 的 `{ light, minSide }` 入参；默认 `Kl` = 96）
-      const script = buildResultScanScript(opts.minSide ?? TAPNOW_MIN_SIDE);
-      const attempts: ScanAttempt[] = [];
-      const tried: ScanStrategy[] = [];
-
-      // ★ 降级链：frames → webview（顺序由 `core/rules/scanChain` 决定，不在此硬编码）
-      for (;;) {
-        const via = nextScanStrategy(tried);
-        if (!via) break;
-        tried.push(via);
-        opts.onPhase?.({ phase: 'scanning', message: `尝试 ${via} 通道…` });
-
-        // ⚠️ 把 `opts` 交下去：`scanAttemptFromRaw` 要用 `seenUrls` 在**取图之前**过滤（原 `wp:32588`）
-        const a = await tryScan(host, account, via, script, opts);
-        attempts.push(a);
-        if (a.ok) {
-          opts.onPhase?.({ phase: 'found', message: `扫描到 ${a.count ?? 0} 张` });
-          break;
-        }
-      }
-
-      const summary = summarizeScanAttempts(attempts);
-      if (!summary.ok) {
-        // ★ 失败原因**原样拼接**（原则 6：不改写、不编造）
-        const detail = summary.failures.map((f) => `[${f.via}] ${f.error}`).join(' | ');
-        return err('page-error', detail || '抓取失败：全部通道不可用');
-      }
-
-      const hit = attempts.find((a) => a.ok);
-      const items = hit?.items ?? [];
-      const skipped = hit?.skipped ?? 0;
-      const unread = hit?.unread ?? [];
-      // ★ 逐张落盘失败（原 `wp.failed`）—— 调用方据此报「已抓取 N 张，M 张失败」
-      const failed = hit?.failed ?? 0;
-
-      // ★ 读不到的 frame **如实上报**（原则 6：不静默）
-      opts.onPhase?.({
-        phase: 'done',
-        message:
-          unread.length > 0
-            ? `完成：新增 ${items.length} 张（${unread.length} 个 frame 未读到）`
-            : `完成：新增 ${items.length} 张`,
-      });
-      return ok({ items, skipped, href: hit?.href, unread, failed });
+      // ⚠️ `done` 基句与 `lovart` 相同 ⇒ 不给 `doneBase`，用共用那句（链路自带"（M 个 frame 未读到）"后缀）
+      return runScanChain(
+        host,
+        account,
+        tapnowScanSpec(account, buildResultScanScript(opts.minSide ?? TAPNOW_MIN_SIDE)),
+        opts,
+      );
     },
 
     async send(): Promise<Result<SendResult>> {
       // Tapnow 只用于**抓取素材**，不发消息（原 `fP` 无发送路径）
-      return err('unknown', 'Tapnow 适配器不支持发送');
+      return err('unknown', SEND_TEXT.noCapability('tapnow', SITE_CAP_TEXT.send));
     },
 
     async probe(account: Account): Promise<Result<SiteProbe>> {

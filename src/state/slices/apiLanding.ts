@@ -17,10 +17,12 @@
  * ── 未落（如实标注，判据 B5：不留「落了但没人调」）──────────────────────────
  * | 缺 | 源 | 原因 |
  * |---|---|---|
- * | `localizeNodeVideos(q)` / 海报抓取（`_cmp_bk`） | 28150-28160 | `localizeNodeVideos` **已接线** —— `state/localizeOps`（← `state/generate` 写完 `resultUrl` 后 · 启动 5s 的 `container.startVideoBackfill()`）；**只剩海报抓取**（`_cmp_bk`）未落（需宿主能力，TD-02-5 家族） |
+ * | 海报抓取（`_cmp_bk`） | 28150-28160 | **只剩它**未落（需宿主能力，`TD-02-5` 家族）。`localizeNodeVideos` **已内建在本文件**（两分支各一处，见下）＋ 启动 5s 全量回填（`container.startVideoBackfill()`） |
  */
 
 import type { CanvasNode, XY } from '@/stable/model/node';
+// ★ 默认通道的唯一真源（数据层：`core/model/defaults`）
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
 import type { LibraryItem } from '@/stable/model/project';
 import type { ApiJobAttempt } from '@/stable/model/gen';
@@ -224,6 +226,8 @@ export interface ApiLandingDeps {
   now(): number;
   /** 原 `Tn`：把内联 `data:` 图落成本地引用（**宿主**，同步 IPC） */
   persistImage(dataUrl: string): string;
+  /** ★ 视频节点 `url` 写完后的收尾（落本地）—— 见 `CanvasSliceDeps.localizeVideoNode` */
+  localizeVideoNode(nodeId: string): void;
   /** 原 `Pt('lib')` */
   nextLibraryId(): string;
   /** 原 `Pt('vid')` —— 网格新建视频节点的 id */
@@ -350,7 +354,9 @@ export function createApiLandingActions(
       const item = {
         name: IMAGE_GEN_TEXT.feedName,
         dataUrl,
-        source: input.source === 'dola' ? 'dola' : input.source || 'doubao',
+        // ⚠️ 这里的 `'dola'` 是**媒体源键的数据值**（源键域见 `SitePort.mediaSource` 与主进程 `SOURCE_HOSTS`），
+//    不是站点能力判断；只把**默认值**换成真源常量。
+source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
         accountName: input.accountName || '',
         genKey: key,
       };
@@ -551,6 +557,10 @@ export function createApiLandingActions(
               : n,
           ),
         });
+        // ★ 写完 `resultUrl` ⇒ **立刻**落本地（源 `shared.js:28140` 的 `localizeNodeVideos(j.id)`）。
+        //   ⚠️ 本支**不返回节点 id** ⇒ 这件事只能内建在这里：调用方写 `if (id) 本地化` 会**漏掉本支**
+        //   （直链会过期 / 需要 referer ⇒ 漏了就只剩启动 5s 全量回填兜底）。
+        deps.localizeVideoNode(sourceNode.id);
         return null;
       }
 
@@ -671,6 +681,8 @@ export function createApiLandingActions(
         },
       } as CanvasNode;
       set({ nodes: [...nextNodes, created] });
+      // ★ 落库后**立刻**本地化（源 `shared.js:28308` 的 `localizeNodeVideos(q)`）
+      deps.localizeVideoNode(id);
       return id;
     },
   };

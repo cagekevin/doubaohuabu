@@ -20,6 +20,7 @@
  *   由调用方决定要不要提示（**不静默**：截图失败用户必须知道，否则会反复点）。
  */
 
+import { COMMON_TEXT } from '@/constants/text';
 import { captureElementOf } from '@/lib/captureRegistry';
 import { formatClipTime, toCaptureRect } from '@/core/rules/capture';
 import type { AppStore } from './store';
@@ -70,7 +71,8 @@ export function createCaptureController(
 
       const s = store.useStore.getState();
       const node = s.nodes.find((n) => n.id === nodeId);
-      if (!node) return { ok: false, reason: '节点已不存在' };
+      // 句子真源 = `COMMON_TEXT.nodeGone`（`TD-11-8`：同句原先三处各写一遍）
+      if (!node) return { ok: false, reason: COMMON_TEXT.nodeGone };
       const d = node.data as { label?: string; vid?: string };
 
       // ★ 播放位置**从元素上读**（原 32364：`s && s.currentTime || 0`）

@@ -108,6 +108,36 @@ export interface ApiBatchResult {
 }
 
 /**
+ * 「提交 API 任务」的**入参形状** —— 后端 `submit(payload)` 的读取面（`job-manager.js:415-419`）
+ *
+ * ⚠️ **字段名就是后端读的名字**（`providerId / kind / prompt / params / nodeId / refSources / attempt`）。
+ *    曾传 `{kind, prompt, stylePrefix, model, duration, sourceNodeId, images}` ⇒ `providerId === undefined`
+ *    ⇒ `registry.getProvider(undefined)` 恒空 ⇒ **API 提交必失败**。
+ * ⚠️ 它**不是"渲染层自己的形状"**：`ApiPort.jobSubmit` / `jobBatch` 的入参用它 ⇒ 形状漂移**编译期**就被拦
+ *    （此前入参是 `unknown` ⇒ 传对象当 `matrix` 都能编译通过，后端再静默兜成 `[]`）。
+ */
+export interface ApiJobPayload {
+  /** 后端 `registry.getProvider(providerId)` 的键（`null` ⇒ 提交必失败） */
+  providerId: string | null;
+  kind: 'image' | 'video';
+  prompt: string;
+  /** 提交参数；模型 / 分辨率 / 水印由 provider 配置与常量决定，**模型不进这里** */
+  params: Record<string, unknown>;
+  /** 来源节点 id（可空 —— 无节点来源的任务落资源库） */
+  nodeId: string | null;
+  /** 参考图引用（后端只取前 8 条） */
+  refSources: string[];
+  /** 尝试记录（后端存进 `job.attempt`，出片事件原样带回） */
+  attempt?: ApiJobAttempt | null;
+}
+
+/**
+ * 批量提交里的**变体**：覆盖 `base` 的任意顶层字段
+ * （⚠️ `params` 是**深层合并**而非整覆盖 —— 原 `job-manager.js:485-489`）
+ */
+export type ApiJobVariant = Partial<ApiJobPayload>;
+
+/**
  * provider 动态表单字段（原 `api/types.js` 的 `ParamField`；后端 `registry.js:31` **逐字**下发）
  *
  * ★ **schema 驱动**：新增一个服务商 = 一个 provider 文件 + 一行注册，**零 UI 代码**

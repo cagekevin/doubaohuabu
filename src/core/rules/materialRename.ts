@@ -34,11 +34,14 @@ export interface RenamableLibraryItem {
 
 import type { LovartGalleries } from './lovartGallery';
 
-export interface MaterialRenamePlan {
-  /** 改名后的**全部**节点（未命中的原样返回同一引用） */
-  nodes: MaterialNodeLike[];
-  /** 改名后的资源库（未命中 ⇒ **同一引用**） */
-  library: RenamableLibraryItem[];
+export interface MaterialRenamePlan<
+  T extends MaterialNodeLike = MaterialNodeLike,
+  L extends RenamableLibraryItem = RenamableLibraryItem,
+> {
+  /** 改名后的**全部**节点（未命中的原样返回同一引用）—— **与入参同型**（见 `planMaterialRename`） */
+  nodes: T[];
+  /** 改名后的资源库（未命中 ⇒ **同一引用**）—— **与入参同型**（`LibraryItem` 进就 `LibraryItem` 出） */
+  library: L[];
   /** 解析出来的 `libId`（节点自己没带、由 `dataUrl` 反查得到时是新补的） */
   libId: string;
   /** 实际被改名的节点 id（含被双击的那个）—— 便于调用方做事后提示/测试 */
@@ -76,9 +79,12 @@ export function resolveMaterialLibId(
   return hit?.id ?? '';
 }
 
-export function planMaterialRename(input: {
-  nodes: readonly MaterialNodeLike[];
-  library: readonly RenamableLibraryItem[];
+export function planMaterialRename<
+  T extends MaterialNodeLike,
+  L extends RenamableLibraryItem = RenamableLibraryItem,
+>(input: {
+  nodes: readonly T[];
+  library: L[];
   nodeId: string;
   name: string;
   /**
@@ -86,7 +92,7 @@ export function planMaterialRename(input: {
    * ⚠️ 不给 ⇒ 与从前一样（这条支路是**后接上**的，不改变原有调用方的行为）
    */
   galleries?: LovartGalleries;
-}): MaterialRenamePlan | null {
+}): MaterialRenamePlan<T, L> | null {
   const target = input.nodes.find((n) => n.id === input.nodeId);
   if (!target || !target.data) return null;
 
@@ -99,7 +105,7 @@ export function planMaterialRename(input: {
   const libId = resolveMaterialLibId(target, input.library);
 
   const renamedNodeIds: string[] = [];
-  const nodes = input.nodes.map((n) => {
+  const nodes: T[] = input.nodes.map((n) => {
     if (n.type !== 'material' || !n.data) return n;
     // ③ 同源判据（逐字对齐源版 27609）
     const sameLib = !!libId && str(n.data.libId) === libId;
@@ -123,10 +129,10 @@ export function planMaterialRename(input: {
 
   // ④ 资源库同名项
   const libraryHit = !!libId && input.library.some((l) => l.id === libId);
-  const library = libraryHit
+  const library: L[] = libraryHit
     ? input.library.map((l) => (l.id === libId ? { ...l, name } : l))
     : // ⚠️ 未命中 ⇒ **返回同一引用**（与 `renumberAccounts` 同法：让调用方能用 `===` 判"没变"）
-      (input.library as RenamableLibraryItem[]);
+      input.library;
 
   // ★ 画廊同步（原 27571-27590）：**逐账号逐条**比 `dataUrl`，命中就改名
   let galleries: LovartGalleries | undefined;

@@ -43,8 +43,12 @@ export type SessionMode = 'fingerprint' | 'plain' | 'lovart';
 export interface PrepareSessionInput {
   mode: SessionMode;
   accountId: string;
-  /** 允许 `null`（真实样本里就有未设分区的账号）—— **如实传**，后端自己回落 */
-  partition: string | null;
+  /**
+   * 账号自己的会话分区 —— **恒有值**（产生方 `accountRoster.buildNewAccount`）。
+   * ⚠️ 原为 `string | null`（"如实传，后端自己回落"）：后端已改成**不猜、缺了就抛**
+   *    （`main.js`），留着 `null` 只会把「产生方缺位」传到后端去炸。
+   */
+  partition: string;
   /** `mode='fingerprint'` 用：要注入的环境指纹 */
   fingerprint?: unknown;
   /** `mode='lovart'` 用：容器 id 与出口代理 */
@@ -113,13 +117,13 @@ export async function prepareSession(
  *
  * ⚠️ 源版两处都是 `try{}catch{}` **静默吞掉** ⇒ 重写如实转发。
  * ⚠️ **调用时机由 state 决定**（源版是"移除账号前"顺带清）；本用例只管清，不管账号列表。
- * ⚠️ 空分区**直接返回 `ok`**（源版 `if (s.partition)` 守卫）—— 不去清一个不存在的分区。
+ * ⚠️ 原有一条「空分区直接返回 `ok`」（源版 `if (s.partition)` 守卫）已删 ——
+ *   分区恒有值 ⇒ 该分支不可达（留着就是替调用方掩盖「分区又缺了」）。
  */
 export async function releaseSession(
   deps: PrepareSessionDeps,
-  partition: string | null,
+  partition: string,
 ): Promise<Result<void>> {
-  if (!partition) return ok(undefined);
   return deps.account.clearSession(partition);
 }
 

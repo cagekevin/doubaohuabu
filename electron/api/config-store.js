@@ -126,7 +126,7 @@ function createConfigStore(userDataPath, safeStorage) {
    *
    * ★ **解密失败必须抛**（TD-13-16）：原实现 `catch { return '' }` ⇒ 与同文件 `loadRaw`
    *   的「三态不吞」原则**自相矛盾** —— 调用方会把「密钥读不出来」当成「没配密钥」。
-   * ⚠️ **调用方须接住**：`main.js` 的 `api-config:test` 在 `ipcGuard` 内 ✓；
+   * ⚠️ **调用方须接住**：`main.js` 的 `api-config:test` 走注册处守卫（`electron/ipc.js` 的 `handle`）✓；
    *    `job-manager` 的 `submit` / `runJob` 已就地 try/catch（如实报，不回落成"未配"）。
    */
   function getApiKey(adapter) {

@@ -40,6 +40,7 @@ import {
   // ⚠️ 统计形状住纯层（`MediaPort.faceDetectStats` 也要它 ⇒ 端口只有类型，原则 3）
   type FaceDetectStats,
 } from '@/core/rules/faceDetect';
+import { FACEMASK_TEXT } from '@/constants/text';
 import { createCanvas, loadImage } from '@/lib/image';
 import { withThumb } from '@/stable/protocols/img';
 import { PROTOCOL_APPASSET } from '@/stable/contracts/schemas';
@@ -74,7 +75,7 @@ export function faceDetectStats(): FaceDetectStats {
 /**
  * 资源基址（原 `Ip`）
  * ⚠️ 生产环境页面由 `file://` 加载，Chromium 禁止 `file://` 页面 fetch 本地文件
- *    ⇒ 必须走主进程注册的 `appasset://` 特权 scheme（`main.js:652-656, 1060-1098`）。
+ *    ⇒ 必须走主进程注册的 `appasset://` 特权 scheme（`main.js, 1060-1098`）。
  */
 function assetBase(): string {
   // ★ **2026-10-12（`TD-01-7`）**：改吃契约层 `PROTOCOL_APPASSET` —— 此前这里硬编码 `appasset://`，
@@ -123,7 +124,7 @@ function scaleImage(img: HTMLImageElement, scale: number): HTMLCanvasElement {
   const h = Math.max(1, Math.round((img.naturalHeight || img.height || 1) * scale));
   const canvas = createCanvas(w, h);
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('无法创建 2D 画布上下文（人脸检测缩放）');
+  if (!ctx) throw new Error(FACEMASK_TEXT.detectCanvasFailed);
   ctx.drawImage(img, 0, 0, w, h);
   return canvas;
 }

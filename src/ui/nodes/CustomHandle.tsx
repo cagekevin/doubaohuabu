@@ -10,8 +10,9 @@
  * ⚠️ 外观改动需同时看 `CustomHandle.module.css`，别只改这里。
  */
 
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef } from 'react';
 import { Handle, Position } from '@xyflow/react';
+import { cssVars } from '@/ui/common/cssVars';
 import styles from './CustomHandle.module.css';
 
 export type CustomHandleVariant = 'large' | 'small';
@@ -83,13 +84,13 @@ export function CustomHandle({ position, variant = 'large', handleId, top }: Cus
     };
   }, [isLeft]);
 
-  const wrapStyle = {
+  const wrapStyle = cssVars({
     top: top !== undefined ? `calc(${top} - ${half}px)` : `calc(50% - ${half}px)`,
     width: size,
     height: size,
     ...(isLeft ? { left: -half } : { right: -half }),
     '--cust-anchor-x': '50%',
-  } as unknown as CSSProperties;
+  });
 
   return (
     <div

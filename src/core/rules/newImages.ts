@@ -30,6 +30,8 @@
 
 import type { Account, SiteType } from '@/stable/model/account';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
+// ★ 站点能力表（本文件的"站点判定"全部改问它 —— 站点名不写在这里）
+import { capsOf } from './siteCaps';
 // ⚠️ 条目形状的**真源**在持久化契约层（`lovartGallery.ts` 只转发 `LovartImage`，不另定义）
 import type { LovartGalleryImage } from '@/stable/contracts/lsValues';
 import { NEW_IMAGES_FRESH_MS, NEW_IMAGES_LIMIT } from '@/constants';
@@ -40,22 +42,24 @@ import { NEW_IMAGES_FRESH_MS, NEW_IMAGES_LIMIT } from '@/constants';
  *   只判**站点类型**，文案仍住 `NEW_IMAGES_TEXT`（`core` 不碰文案）。
  */
 export function isAggregatableSite(account: Pick<Account, 'type'> | null | undefined): boolean {
-  return !!account && (account.type === 'lovart' || account.type === 'tapnow');
+  // ★ 判据 = 能力表的**画廊来源键**（有来源即"值得聚合"）
+  return !!account && capsOf(account.type).gallerySource !== null;
 }
 
 /** 站点判定（原 `ho`） */
 function isLovartSite(account: Pick<Account, 'type'> | null | undefined): boolean {
-  return !!account && account.type === 'lovart';
+  return !!account && capsOf(account.type).gallerySource === 'lovart';
 }
 
 /** 站点判定（原 `tS`）：`other`（自定义网站）—— 面板的抓取按钮据此显示「抓取本页图」 */
 export function isOtherSite(account: Pick<Account, 'type'> | null | undefined): boolean {
-  return !!account && account.type === 'other';
+  // ★ 判据 = 能力表的 `hasFixedUrl` 取反（**没有站点声明的固定地址** ⇒ 自定义网站；当前只有 `other`）
+  return !!account && !capsOf(account.type).hasFixedUrl;
 }
 
 /** 站点判定（原 `Ud`） */
 function isTapnowSite(account: Pick<Account, 'type'> | null | undefined): boolean {
-  return !!account && account.type === 'tapnow';
+  return !!account && capsOf(account.type).gallerySource === 'tapnow';
 }
 
 /**
@@ -64,7 +68,8 @@ function isTapnowSite(account: Pick<Account, 'type'> | null | undefined): boolea
  * ⚠️ 与源一致：`doubao` / `dola` / `gpt` **不在**聚合范围内（它们的页面里没有"图库"）。
  */
 export function isFetchableSite(account: Pick<Account, 'type'> | null | undefined): boolean {
-  return isAggregatableSite(account) || (!!account && account.type === 'other');
+  // ★ 判据 = 能力表的 `hasNewImagesPanel`（源里"抓取范围"与"出新图条出现"是同一条件）
+  return !!account && capsOf(account.type).hasNewImagesPanel;
 }
 
 /**
@@ -90,7 +95,9 @@ export function galleryItemKey(item: Pick<NewImageItem, 'id'> & { _accId?: strin
  * 来源标签（原 `_Component26.jsx:642-644` 的三目）：Lovart → `L` · Tapnow → `T` · 其它 → `网`
  */
 export function sourceTag(type: string | undefined): string {
-  return type === 'lovart' ? 'L' : type === 'tapnow' ? 'T' : '网';
+  // ★ 看**来源键**（能力表），不写站点类型字面量
+  const src = capsOf(type ?? '').gallerySource;
+  return src === 'lovart' ? 'L' : src === 'tapnow' ? 'T' : '网';
 }
 
 /**

@@ -23,8 +23,7 @@ const WIRE: unique symbol = Symbol('doubao.wirePayload');
 const SITE: unique symbol = Symbol('doubao.siteSendPayload');
 // ★ **2026-10-12（`TD-16-109`）**：时间戳格式化收口到 `lib/time.toIsoTimestamp`（此前本文件 ×3 各写一份）
 import { toIsoTimestamp } from '@/lib/time';
-// ★ 2026-10-12（`TD-04-11`）：分区前缀取值收口到**唯一真源**（此前此处是第二套写死值）
-import { defaultPartitionOf } from '@/core/rules/partition';
+
 
 /** 发送来源（原实现三种；跨进程契约，不得改名） */
 export const SEND_SOURCES = ['canvas-image-gen', 'canvas-text-node', 'canvas-account-node'] as const;
@@ -60,7 +59,7 @@ export interface SiteSendPayload {
  *
  * ⚠️ **`label` 不是装饰**（源两处读它）：
  *   · 去重键 `vD`（`shared.js:38638-38642`）= `dataUrl 前 80 字 :: label`；
- *   · 后端拼**临时文件名**（`electron/main.js:1426` 的 `img.label || 'image'`）。
+ *   · 后端拼**临时文件名**（`electron/main.js` 的 `img.label || 'image'`）。
  *   ⇒ 丢掉它会让去重键失真、附件文件名全同。
  */
 export interface RefImageRef {
@@ -118,8 +117,15 @@ export function toSitePayload<C extends Record<string, unknown>>(
 export interface PayloadAccount {
   id: string;
   name: string;
-  /** 缺省走 `DEFAULT_PARTITION`（★ 2026-10-12 `TD-04-11`：值取自真源 `defaultPartitionOf`；⚠️ 因本形状**不带 `type`**，只能兜豆包） */
-  partition?: string | null;
+  /**
+   * **必填**：账号自己的会话分区（源 `e.partition || 'persist:doubao'` 的 `e.partition`）。
+   *
+   * ★ 它由**产生方**保证恒有值（`accountRoster.buildNewAccount`，源 `$P.jsx:35`）——
+   *   调用方手上就有 `account.partition`，**只需如实传**。
+   * ⚠️ 此前这里允许缺省、由本文件兜一个 `persist:doubao`：那既**没有 `type` 可依**（只能兜豆包），
+   *   又是**整个站点共用一个会话**（多账号串味）⇒ 已删。缺了就是调用方的契约违约，编译期即拦。
+   */
+  partition: string;
 }
 
 /** 跨进程报文的公共外形（`apiVersion: '1.0'`） */
@@ -145,18 +151,9 @@ export interface WirePayload<C extends Record<string, unknown>> {
   autoSend: boolean;
 }
 
-/**
- * 缺省分区 —— ★ 2026-10-12（`TD-04-11`）：值改从**唯一真源**取（此前此处是第二套写死值）
- *
- * ⚠️ **这里只能兜 `doubao`**：跨进程报文里的 `account`（`PayloadAccount`）**只有 `id`/`name`/`partition`**
- *   三个字段、**不带 `type`** ⇒ 本函数拿不到类型，无法 type-aware（探债段症状③ 的根因就在这里）。
- *   要彻底修需给 `PayloadAccount` 加 `type`（**跨进程契约扩容**）—— 那属另一步，**不在这里擅自扩**。
- *   至少现在：**分区前缀的取值只有真源一处**，本行不再是自造的第二套。
- */
-const DEFAULT_PARTITION = defaultPartitionOf('doubao');
-
 function accountOf(a: PayloadAccount): { id: string; name: string; partition: string } {
-  return { id: a.id, name: a.name, partition: a.partition || DEFAULT_PARTITION };
+  // ★ 原样转发（原则 6）—— 分区由产生方保证，本层不兜、不改写
+  return { id: a.id, name: a.name, partition: a.partition };
 }
 
 /** 图片报文（原 `PL`） */

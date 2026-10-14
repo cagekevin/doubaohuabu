@@ -11,9 +11,11 @@
  */
 
 import { useState } from 'react';
+// ★ 站点能力表（"哪些站点用代理池"的唯一真源）—— 本文件不再写站点名
+import { capsOf } from '@/core/rules/siteCaps';
 import { Modal } from '@/ui/common/Modal';
 import { useAccountOps, useStore } from '@/state';
-import { normalizeAccountType } from '@/stable/model/account';
+
 import { PROXY_TEXT } from '@/constants/text';
 import styles from './ProxyPoolPanel.module.css';
 
@@ -30,7 +32,7 @@ export function ProxyPoolPanel({ onClose }: ProxyPoolPanelProps) {
   const [msg, setMsg] = useState('');
 
   // 只列 Lovart 账号（原 19-21）
-  const lovart = accounts.filter((a) => normalizeAccountType(a.type) === 'lovart');
+  const lovart = accounts.filter((a) => capsOf(a.type).usesProxyPool);
 
   const save = async (): Promise<void> => {
     const r = await accountOps.saveProxyPool(text);

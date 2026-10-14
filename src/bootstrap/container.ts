@@ -26,7 +26,7 @@ import { createSendQueueController, type SendQueueController } from '@/state/sen
 import { createCaptureController, type CaptureController } from '@/state/capture';
 import { createLicenseOps, type LicenseOpsController } from '@/state/licenseOps';
 import { createHostOps, type HostOpsController } from '@/state/hostOps';
-import { createLocalizeOps, type LocalizeOpsController } from '@/state/localizeOps';
+import { createLocalizeOps, localizeNodeInto, type LocalizeOpsController } from '@/state/localizeOps';
 import { VIDEO_BACKFILL_DELAY_MS } from '@/constants';
 import { createProjectOps, type ProjectOpsController } from '@/state/projectOps';
 import { createApiOps, type ApiOpsController } from '@/state/apiOps';
@@ -127,6 +127,14 @@ export function createContainer(): Container {
 
   const store = createAppStore(ports, {
     roster,
+    /**
+     * ★ **视频本地化**（写视频 `url` 之后的收尾，见 `CanvasSliceDeps.localizeVideoNode`）
+     *
+     * ⚠️ **`localizeNodeInto` 的全仓唯一调用点** —— 它同时需要 `store`（写回）与 `ports`（落盘），
+     *   而 `state/store` 自己 import 它会成环（`store ⇄ localizeOps`）⇒ 只能在这里注入。
+     * ⚠️ `store` 在**定义期**仍处 TDZ，但闭包只在**调用期**读它（同下面 `logOperation`）。
+     */
+    localizeVideoNode: (id) => void localizeNodeInto(store.useStore, ports, id),
     /**
      * ★ **操作日志**（原 `commit` 尾部的 `window.api.logProjectOperation`，`shared.js:26912-26928`）
      *

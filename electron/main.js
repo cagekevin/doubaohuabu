@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, clipboard, nativeImage, webContents, session, protocol, net, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, dialog, shell, clipboard, nativeImage, webContents, session, protocol, net, Menu, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -7,7 +7,10 @@ const { Readable } = require('stream');
 const { pathToFileURL } = require('url');
 const { execFileSync } = require('child_process');
 const license = require('./license');
-const { readClipboardImage } = require('./clipboard-image');
+const clipboardImage = require('./clipboard-image');
+const apiBridge = require('./api/bridge');
+// IPC 注册唯一入口（`handle` = invoke 型 · `on` = send/sendSync 型）见 `electron/ipc.js`
+const { handle, on } = require('./ipc');
 
 // ── userData 目录固定（2026-09-29 历史工程"消失"事故根治）────
 // Electron 默认按 package.json 的 name 解析 userData；但旧版 Electron 打包时代
@@ -346,7 +349,7 @@ function appendProjectOperation(event, ctx = activeProjectStorage) {
 // 工程索引只存 localStorage（leveldb），2026-09-29 该库曾被整库清空且无快照可回滚。
 // 渲染层每次落盘时同步把同一份 JSON 发到这里，写到 userData/projects-autobackup.json，
 // 与 leveldb 物理隔离 —— 即使 Local Storage 再被清掉，也能直接从这份 JSON 恢复。
-ipcMain.on('projects-backup', (_e, json) => {
+on('projects-backup', (_e, json) => {
   try {
     if (typeof json !== 'string' || json.length < 2) return;
     const file = path.join(app.getPath('userData'), 'projects-autobackup.json');
@@ -357,7 +360,7 @@ ipcMain.on('projects-backup', (_e, json) => {
 });
 
 // 项目切换前同步设置存储上下文，确保新画布首次渲染 img:// / vid:// 时已经指向正确目录。
-ipcMain.on('project-storage-activate-sync', (e, payload) => {
+on('project-storage-activate-sync', (e, payload) => {
   try {
     const ctx = activateProjectStorage(payload || {});
     e.returnValue = { ok: true, path: ctx ? ctx.root : '' };
@@ -367,7 +370,7 @@ ipcMain.on('project-storage-activate-sync', (e, payload) => {
   }
 });
 
-ipcMain.handle('project-storage-pick', async (_e, payload = {}) => {
+handle('project-storage-pick', async (_e, payload = {}) => {
   if (!mainWindow) return { ok: false, error: 'no_window' };
   const existing = typeof payload.storagePath === 'string' ? payload.storagePath.trim() : '';
   const res = await dialog.showOpenDialog(mainWindow, {
@@ -390,43 +393,40 @@ ipcMain.handle('project-storage-pick', async (_e, payload = {}) => {
     }, target);
     return { ok: true, path: target.root, migrated };
   } catch (err) {
+    // 失败即回滚激活状态（守卫不做这件事）⇒ 就地保留；回执转换交注册处
     activeProjectStorage = previous;
-    return { ok: false, error: (err && err.message) || String(err) };
+    throw err;
   }
 });
 
-ipcMain.on('project-snapshot', (_e, project) => {
+on('project-snapshot', (_e, project) => {
   try { writeProjectSnapshot(project); } catch (err) {
     console.warn('[project-storage] 工程快照写入失败:', (err && err.message) || err);
   }
 });
 
-ipcMain.on('project-operation', (_e, event) => {
+on('project-operation', (_e, event) => {
   try { appendProjectOperation(event); } catch (err) {
     console.warn('[project-storage] 操作记录写入失败:', (err && err.message) || err);
   }
 });
 
-ipcMain.handle('project-storage-reveal', async (_e, storagePath) => {
-  try {
-    const raw = String(storagePath || '').trim();
-    if (!raw) return { ok: false, error: '项目尚未设置保存路径' };
-    const root = path.resolve(raw);
-    if (!fs.existsSync(root)) return { ok: false, error: '项目保存路径不存在' };
-    // 新结构下「项目保存路径」其实是用户挑的外层目录，实际工程在 wrapper 里；
-    // 「打开目录」按钮应当定位到 wrapper（即真的装着工程文件 + 资源 的那一层），
-    // 否则用户打开 Finder 看到的只有空的外层目录，不知所云。
-    let target = root;
-    if (activeProjectStorage && path.resolve(activeProjectStorage.root) === root) {
-      target = activeProjectStorage.wrapperPath || root;
-    } else if (knownProjectStorageRoots.has(root)) {
-      target = root;
-    }
-    const error = await shell.openPath(target);
-    return error ? { ok: false, error } : { ok: true, path: target };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
+handle('project-storage-reveal', async (_e, storagePath) => {
+  const raw = String(storagePath || '').trim();
+  if (!raw) return { ok: false, error: '项目尚未设置保存路径' };
+  const root = path.resolve(raw);
+  if (!fs.existsSync(root)) return { ok: false, error: '项目保存路径不存在' };
+  // 新结构下「项目保存路径」其实是用户挑的外层目录，实际工程在 wrapper 里；
+  // 「打开目录」按钮应当定位到 wrapper（即真的装着工程文件 + 资源 的那一层），
+  // 否则用户打开 Finder 看到的只有空的外层目录，不知所云。
+  let target = root;
+  if (activeProjectStorage && path.resolve(activeProjectStorage.root) === root) {
+    target = activeProjectStorage.wrapperPath || root;
+  } else if (knownProjectStorageRoots.has(root)) {
+    target = root;
   }
+  const error = await shell.openPath(target);
+  return error ? { ok: false, error } : { ok: true, path: target };
 });
 
 // ── 工程占用储存空间统计 ────────────────────────────────────────
@@ -434,75 +434,71 @@ ipcMain.handle('project-storage-reveal', async (_e, storagePath) => {
 // 用途：顶部栏「工作/测试」按钮在设置保存路径后展示占用大小，而非路径本身。
 // 安全边界：仅对当前项目激活过的 storagePath 或 knownProjectStorageRoots 集合内的目录
 // 做统计，避免渲染层借此枚举用户整盘文件系统（任意读 ls 既是性能炸弹也是隐私雷）。
-ipcMain.handle('project-storage-size', async (_e, storagePath) => {
-  try {
-    const raw = String(storagePath || '').trim();
-    if (!raw) return { ok: false, error: 'empty_path' };
-    const resolvedInput = path.resolve(raw);
-    if (!fs.existsSync(resolvedInput)) return { ok: false, error: '项目保存路径不存在' };
-    const stat = fs.statSync(resolvedInput);
-    if (!stat.isDirectory()) return { ok: false, error: '不是目录' };
+handle('project-storage-size', async (_e, storagePath) => {
+  const raw = String(storagePath || '').trim();
+  if (!raw) return { ok: false, error: 'empty_path' };
+  const resolvedInput = path.resolve(raw);
+  if (!fs.existsSync(resolvedInput)) return { ok: false, error: '项目保存路径不存在' };
+  const stat = fs.statSync(resolvedInput);
+  if (!stat.isDirectory()) return { ok: false, error: '不是目录' };
 
-    // 渲染层传的是「用户在文件对话框里挑的 outer root」，新结构下我们真正要扫的是 wrapper；
-    // 但渲染层也可能在某些场景直接传 wrapper（兼容旧行为）。两种都接：
-    //   - 命中激活项目的 outer root → 翻译为 wrapper
-    //   - 直接命中 wrapper 或已注册过的项目根 → 原样走
-    let root = resolvedInput;
-    if (activeProjectStorage) {
-      const activeRoot = path.resolve(activeProjectStorage.root);
-      const activeWrapper = path.resolve(activeProjectStorage.wrapperPath);
-      if (resolvedInput === activeRoot && activeWrapper !== activeRoot) {
-        root = activeWrapper;
-      }
+  // 渲染层传的是「用户在文件对话框里挑的 outer root」，新结构下我们真正要扫的是 wrapper；
+  // 但渲染层也可能在某些场景直接传 wrapper（兼容旧行为）。两种都接：
+  //   - 命中激活项目的 outer root → 翻译为 wrapper
+  //   - 直接命中 wrapper 或已注册过的项目根 → 原样走
+  let root = resolvedInput;
+  if (activeProjectStorage) {
+    const activeRoot = path.resolve(activeProjectStorage.root);
+    const activeWrapper = path.resolve(activeProjectStorage.wrapperPath);
+    if (resolvedInput === activeRoot && activeWrapper !== activeRoot) {
+      root = activeWrapper;
     }
+  }
 
-    // 安全白名单：当前激活项目的实际工程目录（wrapper）+ 已注册过的项目根
-    // pickProjectStorage 时已登记。新结构下 wrapper 与 root 不同，必须以 wrapper 为准。
-    const allowed = knownProjectStorageRoots.has(root)
-      || (activeProjectStorage && path.resolve(activeProjectStorage.wrapperPath) === root);
-    if (!allowed) return { ok: false, error: 'path_not_allowed' };
+  // 安全白名单：当前激活项目的实际工程目录（wrapper）+ 已注册过的项目根
+  // pickProjectStorage 时已登记。新结构下 wrapper 与 root 不同，必须以 wrapper 为准。
+  const allowed = knownProjectStorageRoots.has(root)
+    || (activeProjectStorage && path.resolve(activeProjectStorage.wrapperPath) === root);
+  if (!allowed) return { ok: false, error: 'path_not_allowed' };
 
-    // 异步递归求和；遇到软链 / 硬链不递增，避免双计。
-    // 设 30s 硬上限：超大工程（GB 级图库）卡死会让顶部栏永远「正在统计…」，
-    // 30s 没扫完就返回当前已累计值，宁可少算也不阻塞 UI。
-    const startedAt = Date.now();
-    const HARD_TIMEOUT_MS = 30000;
-    let bytes = 0;
-    let files = 0;
-    let aborted = false;
+  // 异步递归求和；遇到软链 / 硬链不递增，避免双计。
+  // 设 30s 硬上限：超大工程（GB 级图库）卡死会让顶部栏永远「正在统计…」，
+  // 30s 没扫完就返回当前已累计值，宁可少算也不阻塞 UI。
+  const startedAt = Date.now();
+  const HARD_TIMEOUT_MS = 30000;
+  let bytes = 0;
+  let files = 0;
+  let aborted = false;
 
-    async function walk(dir) {
+  async function walk(dir) {
+    if (aborted) return;
+    if (Date.now() - startedAt > HARD_TIMEOUT_MS) { aborted = true; return; }
+    let entries;
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (_) {
+      return; // 权限拒绝 / 已删除等异常吞掉，单个目录失败不影响整棵子树
+    }
+    for (const entry of entries) {
       if (aborted) return;
       if (Date.now() - startedAt > HARD_TIMEOUT_MS) { aborted = true; return; }
-      let entries;
-      try {
-        entries = await fs.promises.readdir(dir, { withFileTypes: true });
-      } catch (_) {
-        return; // 权限拒绝 / 已删除等异常吞掉，单个目录失败不影响整棵子树
-      }
-      for (const entry of entries) {
-        if (aborted) return;
-        if (Date.now() - startedAt > HARD_TIMEOUT_MS) { aborted = true; return; }
-        const child = path.join(dir, entry.name);
-        if (entry.isSymbolicLink()) continue; // 跳过软链，避免递归环 + 双计
-        if (entry.isDirectory()) {
-          await walk(child);
-        } else if (entry.isFile()) {
-          try {
-            const s = await fs.promises.stat(child);
-            if (s.isFile()) {
-              bytes += s.size;
-              files += 1;
-            }
-          } catch (_) { /* 单文件读不到大小，跳过 */ }
-        }
+      const child = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) continue; // 跳过软链，避免递归环 + 双计
+      if (entry.isDirectory()) {
+        await walk(child);
+      } else if (entry.isFile()) {
+        try {
+          const s = await fs.promises.stat(child);
+          if (s.isFile()) {
+            bytes += s.size;
+            files += 1;
+          }
+        } catch (_) { /* 单文件读不到大小，跳过 */ }
       }
     }
-    await walk(root);
-    return { ok: true, bytes, files, partial: aborted, elapsedMs: Date.now() - startedAt };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
   }
+  await walk(root);
+  return { ok: true, bytes, files, partial: aborted, elapsedMs: Date.now() - startedAt };
 });
 
 // ── 界面主题锁定浅色 ─────────────────────────────────────────
@@ -688,7 +684,7 @@ const imagesDir = () => activeProjectStorage ? activeProjectStorage.dirs.images 
  * ★ **失败即抛**（**不**降级回内联 base64）—— `§八·五#1`「不得内联 base64」：
  *   返回原 base64 会把它写进工程 JSON（单张 2~20MB）。
  *   三个调用点**都已兜底**：`img-save-sync` → 前端 `adapters/host/electron` 的 catch 转 `err`（原则 6）；
- *   `import-files` → `ipcMain.handle` reject → 前端 catch；`start-file-drag` → 本地 `try/catch` 已就位。
+ *   `import-files` → 注册处守卫转 `{ok:false,error}` 回执（不 reject）；`start-file-drag` → 本地 `try/catch` 已就位。
  */
 function persistImageDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl;
@@ -838,6 +834,9 @@ function resolveVideoRef(ref) {
 const { buildFingerprintPreload } = require('./fingerprint-preload');
 // ★ **零注入**：Lovart 容器不挂载任何自定义 preload —— 自定义 UA preload 会留下 fn.toString() 可探测痕迹。
 const dolaMedia = require('./dola-media');
+// ★ 站点域名真相（层 1 域名 + 层 2 归属判定）—— 2026-10-14 收口：此前 main.js 自己内联了
+//   3 遍域名判定（`includes('dola')` 选源 · `includes(sourceHost)` 精确找 · `includes('doubao.com')` 兜底）
+const siteHosts = require('./site-hosts');
 const lovartFetch = require('./lovart-fetch');
 const lovartScan = require('./lovart-scan');
 const firefox = require('./firefox');
@@ -882,13 +881,29 @@ function createWindow() {
     }
   });
 
+  /*
+   * ★ 加载目标**只有一条路**：`dist/index.html`（与生产同构）。
+   *
+   * ⚠️ 原先这里还有一条「`dist` 不在 ⇒ `loadURL('http://localhost:5123')`」的推断，已删 —— 三个理由：
+   *   ① **判据错位**：拿**文件系统的偶然状态**去猜「开发者想连 dev server」；
+   *   ② **端口是错的**（vite 在 `vite.config.ts` 的 5175）⇒ 这条路**不可能成功**，
+   *      却把「忘了构建」报成「连不上 dev server」，查错方向从一开始就是歪的；
+   *   ③ **Electron 窗口永远是生产同构**：`file://` + `appasset://` 特权 scheme
+   *      （`main.js` 的 `registerSchemesAsPrivileged`，注册理由就是"生产由 file:// 加载"），
+   *      且 `adapters/media/faceDetect.ts` 按 `location.protocol === 'file:'` 分支选资源基址
+   *      ⇒ 连 dev server 是**另一个环境**（`appasset://` 整条不执行），验不过生产要验的东西。
+   *   ⇒ 「让改动到达窗口」归**构建流水线**（`npm run build:watch`，窗口内 `Ctrl+R`），
+   *      不归主进程推断。
+   */
   const distPath = path.join(__dirname, '../dist/index.html');
-  if (fs.existsSync(distPath)) {
-    mainWindow.loadFile(distPath);
-  } else {
-    // 开发模式：需要先运行 `npm run dev` 启动 vite
-    mainWindow.loadURL('http://localhost:5123');
+  if (!fs.existsSync(distPath)) {
+    // 原则 6：不静默、不落到别的地址 —— 明确报出来并给出修法
+    console.error(
+      `[main] 找不到 ${distPath}（前端还没构建）——` +
+        ' 先跑 `npm run build`（或 `npm run build:watch` 持续重建），再重启本应用。',
+    );
   }
+  mainWindow.loadFile(distPath);
 
   // ── webview 调试支持 ──────────────────────────────────────
   // 跟踪当前聚焦的 webview guest，便于菜单打开其 DevTools；
@@ -1111,7 +1126,7 @@ app.whenReady().then(() => {
   });
   createWindow();
   // 无水印资源捕获：对 dola / 豆包账号的 webview（标签页）做 CDP Fetch 拦截，抽聊天里的无水印图/视频
-  dolaMedia.initDolaMediaCapture({ getMainWindow: () => mainWindow });
+  dolaMedia.initDolaMedia({ getMainWindow: () => mainWindow });
   // Lovart 图片画廊：渲染端在 Lovart 页面里主动扫描出图片 URL（含历史图片），
   // 再由主进程带该账号 cookie 下载原图 → 推回画廊。取代了旧的 CDP 被动拦截方案：
   // 后者只能拦到挂 debugger 之后新发生的请求，用户在后台早已浏览过的图永远抓不到，
@@ -1122,6 +1137,14 @@ app.whenReady().then(() => {
   // webContents.mainFrame.framesInSubtree 在每个 frame 里执行同一段采集脚本。
   // 同时把扫描/下载的关键事实落盘到 userData/lovart-diag.log，便于定位。
   lovartScan.initLovartScan({ getMainWindow: () => mainWindow });
+  // 宿主壳只说意图：各域自注册自己的 IPC（TD-13-24）
+  firefox.initFirefox();
+  chromeCdp.initChromeCdp();
+  license.initLicense();
+  // 剪贴板域要一个**不由它实现**的东西：`img://` → 本地路径（存储/媒体域）
+  clipboardImage.initClipboardImage({ resolveImageRef });
+  // api 域要两个**不由它实现**的东西：窗口（事件回推）· `img://` 解析（存储/媒体域）
+  apiBridge.initApi({ getMainWindow: () => mainWindow, resolveImageRef });
   console.log(`[dola-media] 调试日志写入文件：${dmDebugLogPath}（双击 .app 启动时请直接打开此文件查看 [dola-media] 日志）`);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -1132,9 +1155,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// IPC 注册唯一入口（守卫在注册处统一施加）见 `electron/ipc.js`
+
 // 导入素材文件：主进程直接读取 → 落盘 → 返回 img:// 引用列表
 // （不再把大 base64 送回渲染进程，避免内存与 IPC 膨胀）
-ipcMain.handle('import-files', ipcGuard(async () => {
+handle('import-files', async () => {
   if (!mainWindow) return [];
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '导入素材',
@@ -1152,44 +1177,37 @@ ipcMain.handle('import-files', ipcGuard(async () => {
       dataUrl: persistImageDataUrl(`data:${mime};base64,${buf.toString('base64')}`)
     };
   });
-}));
+});
 
 // 同步保存图片：渲染进程持久化时把 dataUrl 批量转成 img:// 引用（sendSync 保证同步返回）
-ipcMain.on('img-save-sync', (e, dataUrl) => {
+on('img-save-sync', (e, dataUrl) => {
   e.returnValue = persistImageDataUrl(dataUrl);
 });
 
-// 读取引用对应的真实文件路径（供剪贴板等场景）
-ipcMain.handle('img-resolve', async (_e, ref) => resolveImageRef(ref));
-
 // 远端图片直链 → dataUrl（文生图后台通道用：CDP 抓到的无水印图是临时签名直链，
 // 渲染进程有 CORS 拿不到，统一走主进程下载转 base64；上限 20MB 防滥用）
-ipcMain.handle('image-fetch-dataurl', async (_e, url) => {
+handle('image-fetch-dataurl', async (_e, url) => {
+  if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'bad-url' };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 30000);
+  let res;
   try {
-    if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'bad-url' };
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 30000);
-    let res;
-    try {
-      res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > 20 * 1024 * 1024) return { ok: false, error: 'too-large' };
-    const ct = String((res.headers && res.headers.get && res.headers.get('content-type')) || 'image/jpeg');
-    const mime = ct.startsWith('image/') ? ct.split(';')[0] : 'image/jpeg';
-    return { ok: true, mime, dataUrl: `data:${mime};base64,${buf.toString('base64')}` };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
+    res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  } finally {
+    clearTimeout(timer);
   }
+  if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 20 * 1024 * 1024) return { ok: false, error: 'too-large' };
+  const ct = String((res.headers && res.headers.get && res.headers.get('content-type')) || 'image/jpeg');
+  const mime = ct.startsWith('image/') ? ct.split(';')[0] : 'image/jpeg';
+  return { ok: true, mime, dataUrl: `data:${mime};base64,${buf.toString('base64')}` };
 });
 
 // 清理浏览器缓存：删除各账号分区与应用级的纯缓存目录（Cache / Code Cache / GPUCache）。
 // 这些文件可自动重建，删除后页面首次打开会稍慢一点；登录态存在 Local Storage / Cookies /
 // IndexedDB 里，不会受影响，账号不会掉线。用于释放长期积累的十几 GB 磁盘占用。
-ipcMain.handle('clear-browser-cache', async () => {
+handle('clear-browser-cache', async () => {
   const targets = []; // 仅这些名称属于「纯缓存」
   const cacheNames = new Set(['Cache', 'Code Cache', 'CodeCache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache']);
   const userData = app.getPath('userData');
@@ -1211,7 +1229,8 @@ ipcMain.handle('clear-browser-cache', async () => {
       }
     }
   } catch (e) {
-    return { ok: false, error: '扫描缓存目录失败: ' + (e && e.message ? e.message : e) };
+    // 语境前缀是守卫不做的 ⇒ 就地保留；回执转换交注册处
+    throw new Error('扫描缓存目录失败: ' + (e && e.message ? e.message : e));
   }
   let freed = 0;
   let failed = 0;
@@ -1236,7 +1255,7 @@ ipcMain.handle('clear-browser-cache', async () => {
 //    下方 `nativeImage.createFromPath(filePath).resize({width:64})` 从**原图**生成
 //    （`docs/10` #53「拖拽预览 icon 必须是 64px」）。⇒ 该字段已从渲染层端口删除（幽灵字段）。
 // 真正 drop 到页面的文件仍是原图 filePath，保证画质。
-ipcMain.on('start-file-drag', (e, payload) => {
+on('start-file-drag', (e, payload) => {
   const win = (BrowserWindow.fromWebContents && BrowserWindow.fromWebContents(e.sender)) || mainWindow;
   if (!win || win.isDestroyed()) return;
   let filePath = (payload && payload.path) || null;
@@ -1271,20 +1290,8 @@ ipcMain.on('start-file-drag', (e, payload) => {
   }
 });
 
-// 在 Finder 中显示 img:// 引用对应的图片文件（素材节点右键「打开文件所在位置」）
-ipcMain.handle('show-in-folder', async (_e, ref) => {
-  try {
-    const p = resolveImageRef(ref);
-    if (!p) return { ok: false, error: '未找到对应的本地文件（素材可能还没有落盘）' };
-    shell.showItemInFolder(p);
-    return { ok: true, path: p };
-  } catch (e) {
-    return { ok: false, error: (e && e.message) || '打开失败' };
-  }
-});
-
 // 保存画布到文件
-ipcMain.handle('save-file', ipcGuard(async (_e, content) => {
+handle('save-file', async (_e, content) => {
   if (!mainWindow) return false;
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '保存画布',
@@ -1294,10 +1301,10 @@ ipcMain.handle('save-file', ipcGuard(async (_e, content) => {
   if (res.canceled || !res.filePath) return false;
   fs.writeFileSync(res.filePath, content, 'utf-8');
   return true;
-}));
+});
 
 // 从文件加载画布
-ipcMain.handle('load-file', ipcGuard(async () => {
+handle('load-file', async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '打开画布',
@@ -1306,159 +1313,12 @@ ipcMain.handle('load-file', ipcGuard(async () => {
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return fs.readFileSync(res.filePaths[0], 'utf-8');
-}));
+});
 
 // 打开外部链接（豆包账号等）
-ipcMain.handle('open-external', ipcGuard(async (_e, url) => {
+handle('open-external', async (_e, url) => {
   await shell.openExternal(url);
   return true;
-}));
-
-// ─────────────────────────────────────────────────────────────
-// 写图片到系统剪贴板（「粘贴发送参考图」链路的核心一步）
-//
-// ⚠ 本机 Electron 44.4.3 的**主进程** clipboard 模块只暴露
-//   clear / has / readText / writeText / read / write，
-//   **没有 writeImage / readImage / availableFormats / writeBuffer**。
-//   原先这里直接调用 clipboard.writeImage(ni) 会抛 TypeError，被外层 catch 吞掉后
-//   返回 { ok:false }，于是 runSilentSend 的 Phase 2 把每一张参考图都判成
-//   「✗ 剪贴板写入失败」并 continue 跳过 —— 图片一张都没进豆包对话框，
-//   正文里的「参考图N」自然落空（这正是「文本框发送节点不发送参考图」的根因）。
-//
-// 分层写入（任一成功即返回）：
-//   ① 主进程原生 clipboard.writeImage（存在就用，兼容有该 API 的 Electron）
-//   ② 回落到「目标 webview 页面内」用标准 Async Clipboard API 写入
-//      （navigator.clipboard.write + ClipboardItem）—— 已实测能把 image/png
-//      真正写进系统剪贴板（回读 navigator.clipboard.read() 可确认 image/png）。
-// ─────────────────────────────────────────────────────────────
-async function writeImageToPasteboard(ni, webContentsId) {
-  if (ni && typeof clipboard.writeImage === 'function') {
-    clipboard.writeImage(ni);
-    return { ok: true, via: 'main-native' };
-  }
-  if (!webContentsId) {
-    return {
-      ok: false,
-      error: '当前 Electron 主进程没有 clipboard.writeImage，且未指定目标 webview（无法回落到页面内写入）'
-    };
-  }
-  const wc = webContents.fromId(webContentsId);
-  if (!wc) return { ok: false, error: `找不到目标 webContents: ${webContentsId}` };
-
-  // 页面内写剪贴板需要 clipboard-sanitized-write 权限；豆包等分区默认没有权限处理器，
-  // 这里按与 Lovart 容器同样的口径放行（只影响该 webview 所在分区会话）。
-  try {
-    const ses = wc.session;
-    if (ses && !ses.__dcClipboardPermPatched) {
-      ses.__dcClipboardPermPatched = true;
-      try { ses.setPermissionCheckHandler(() => true); } catch (_) { /* 忽略 */ }
-      try { ses.setPermissionRequestHandler((_w, _p, cb) => cb(true)); } catch (_) { /* 忽略 */ }
-    }
-  } catch (_) { /* 忽略 */ }
-
-  let b64 = '';
-  try { b64 = ni.toPNG().toString('base64'); } catch (e) {
-    return { ok: false, error: `图片编码失败: ${e && e.message || e}` };
-  }
-  if (!b64) return { ok: false, error: '图片数据为空' };
-
-  const script = `(async () => {
-    try {
-      if (!navigator.clipboard || !navigator.clipboard.write) {
-        return { ok: false, error: '页面不支持 navigator.clipboard.write' };
-      }
-      const bin = atob(${JSON.stringify(b64)});
-      const arr = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': new Blob([arr], { type: 'image/png' }) })
-      ]);
-      let verified = null;
-      try {
-        verified = (await navigator.clipboard.read()).some((it) => it.types.indexOf('image/png') !== -1);
-      } catch (_) { verified = null; }
-      return { ok: true, verified };
-    } catch (e) {
-      return { ok: false, error: String((e && e.name) + ': ' + ((e && e.message) || e)) };
-    }
-  })()`;
-
-  try {
-    const r = await wc.executeJavaScript(script);
-    if (r && r.ok) return { ok: true, via: 'page-clipboard', verified: r.verified === true };
-    return { ok: false, error: (r && r.error) || '页面写剪贴板失败' };
-  } catch (e) {
-    return { ok: false, error: `页面写剪贴板异常: ${(e && e.message) || e}` };
-  }
-}
-
-// 将 dataUrl 图片写入临时文件并复制到系统剪贴板（用于粘贴发送）
-// 兼容两种输入：data:base64 原值，或 img:// 引用（引用先解析为真实文件）
-// webContentsId: 可选。主进程无 writeImage 时，用它把图片经该 webview 页面写进系统剪贴板。
-ipcMain.handle('copy-image-to-clipboard', async (_e, img, webContentsId) => {
-  // img: { dataUrl: string, label: string }
-  try {
-    let dataUrl = (img.dataUrl || '');
-    let realPath = null;
-    if (dataUrl.startsWith('img://')) {
-      realPath = resolveImageRef(dataUrl);
-      if (!realPath) return { ok: false, error: '图片文件不存在（img:// 引用失效）' };
-    }
-
-    const ext = realPath
-      ? path.extname(realPath).slice(1).toLowerCase()
-      : (dataUrl.match(/^data:image\/(\w+);/) || [])[1];
-
-    let buffer;
-    if (realPath) {
-      buffer = fs.readFileSync(realPath);
-    } else {
-      const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-      if (!match) {
-        return { ok: false, error: '无效的 dataUrl 格式' };
-      }
-      buffer = Buffer.from(match[2], 'base64');
-    }
-    if (!buffer || buffer.length === 0) return { ok: false, error: '图片数据为空' };
-
-    // 写入临时文件（nativeImage 需要文件路径）
-    const tmpDir = path.join(os.tmpdir(), 'doubao-canvas');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-
-    const safeLabel = (img.label || 'image').replace(/[\\/:"*?<>|]/g, '_').slice(0, 40);
-    const fileName = `${safeLabel}-${Date.now()}.${ext || 'png'}`;
-    const filePath = path.join(tmpDir, fileName);
-    fs.writeFileSync(filePath, buffer);
-
-    // 用 nativeImage 加载并写入剪贴板
-    const ni = nativeImage.createFromPath(filePath);
-    if (ni.isEmpty()) {
-      return { ok: false, error: '图片数据为空或格式不支持' };
-    }
-
-    // 写系统剪贴板（分层：主进程原生 → 目标页面内 Async Clipboard API）
-    const writeRes = await writeImageToPasteboard(ni, webContentsId);
-    if (!writeRes.ok) {
-      // 临时文件不再需要，清掉再返回失败原因（原因会一路带到发送日志/界面提示）
-      try { fs.unlinkSync(filePath); } catch (_) { /* 忽略清理失败 */ }
-      return { ok: false, error: writeRes.error || '写入系统剪贴板失败' };
-    }
-
-    // 通知所有窗口：系统剪贴板刚被写入图片（画布侧用它判定「最近一次操作是外部/也是图片」，
-    // 从而在 Cmd+V 时优先粘贴图片而不是画布内部复制的节点）
-    try {
-      BrowserWindow.getAllWindows().forEach((w) => {
-        if (!w.isDestroyed()) w.webContents.send('clipboard-image-changed');
-      });
-    } catch (_) { /* 忽略广播失败 */ }
-
-    // 清理临时文件（剪贴板已持有内存副本）
-    try { fs.unlinkSync(filePath); } catch (_) { /* 忽略清理失败 */ }
-
-    return { ok: true, ext: ext || 'png', via: writeRes.via, verified: writeRes.verified === true };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -1514,7 +1374,8 @@ async function pickImageFileInput(dbg) {
   return fallback || { nodeId: 0, accept: '', reason: '未找到可用 file input' };
 }
 
-ipcMain.handle('attach-images-to-webview', async (_e, webContentsId, imgs) => {
+// 容错靠内层 `out.errors` 累积（不抛）⇒ 无外层 catch，注册处守卫仅作兜底
+handle('attach-images-to-webview', async (_e, webContentsId, imgs) => {
   // imgs: [{ dataUrl, label }]，数组顺序即参考图顺序
   const out = { ok: false, via: 'cdp-file-input', files: [], errors: [] };
   const wc = webContents.fromId(webContentsId);
@@ -1597,70 +1458,57 @@ ipcMain.handle('attach-images-to-webview', async (_e, webContentsId, imgs) => {
   return out;
 });
 
-// 具体实现见 electron/clipboard-image.js：
-// 本机 Electron 44 的 clipboard 已换成 W3C 异步 API（readImage/readFilePath 被移除），
-// 那里同时兼容新旧两套接口，并把 macOS 文件路径读取兜到了 osascript。
-ipcMain.handle('read-clipboard-image', async () => readClipboardImage());
-
 // 复制文本到系统剪贴板（用于真实粘贴发送）
 // 【最终安全网】即使渲染进程的 stripHtmlToText 失效，此处也会拦截所有 HTML 标签和实体
 // 【关键】必须先 clear() 再 writeText()，防止剪贴板残留 text/html 等富文本格式
 //         导致豆包 webview 的 paste 事件读取到含标签的 HTML 而非纯文本
-ipcMain.handle('copy-text-to-clipboard', async (_e, text) => {
-  try {
-    let clean = String(text || '');
+handle('copy-text-to-clipboard', async (_e, text) => {
+  let clean = String(text || '');
 
-    // ── Step 1: 反复移除所有 HTML 标签（含自定义标签如 <sc-clipboard>）──
-    // 条件：只要包含 <字母 或 <数字 就触发清理（避免误判数学表达式）
-    if (/<[a-zA-Z\/!]/.test(clean)) {
-      let prev = '';
-      let iter = 0;
-      while (clean !== prev && iter < 15) {
-        prev = clean;
-        clean = clean.replace(/<[^>]*>/g, '');
-        iter++;
-      }
+  // ── Step 1: 反复移除所有 HTML 标签（含自定义标签如 <sc-clipboard>）──
+  // 条件：只要包含 <字母 或 <数字 就触发清理（避免误判数学表达式）
+  if (/<[a-zA-Z\/!]/.test(clean)) {
+    let prev = '';
+    let iter = 0;
+    while (clean !== prev && iter < 15) {
+      prev = clean;
+      clean = clean.replace(/<[^>]*>/g, '');
+      iter++;
     }
-
-    // ── Step 2: 解码所有 HTML 实体（防止 &quot; &amp; &nbsp; &#NNN; &#xHHH; 残留）──
-    clean = clean
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&#39;/g, "'")
-      .replace(/&#x27;/g, "'")
-      .replace(/&#(\d+);/g, (_, cp) => String.fromCharCode(parseInt(cp, 10)))
-      .replace(/&#x([0-9a-fA-F]+);/g, (_, cp) => String.fromCharCode(parseInt(cp, 16)));
-
-    // ── Step 3: 清理空白 ──
-    clean = clean.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-
-    // ── Step 4: 清空剪贴板所有格式后再写入纯文本 ──
-    // （防止残留 text/html 格式导致豆包 webview paste 读到富文本）
-    // ⚠ Electron 44：clear()/writeText() 返回 Promise，必须 await，
-    //   否则「清空」和「写入」竞争，可能写完就被清空，paste 拿到空文本。
-    await clipboard.clear();
-    await clipboard.writeText(clean);
-
-    return { ok: true, cleanedLen: clean.length };
-  } catch (err) {
-    return { ok: false, error: err.message };
   }
+
+  // ── Step 2: 解码所有 HTML 实体（防止 &quot; &amp; &nbsp; &#NNN; &#xHHH; 残留）──
+  clean = clean
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#(\d+);/g, (_, cp) => String.fromCharCode(parseInt(cp, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, cp) => String.fromCharCode(parseInt(cp, 16)));
+
+  // ── Step 3: 清理空白 ──
+  clean = clean.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+
+  // ── Step 4: 清空剪贴板所有格式后再写入纯文本 ──
+  // （防止残留 text/html 格式导致豆包 webview paste 读到富文本）
+  // ⚠ Electron 44：clear()/writeText() 返回 Promise，必须 await，
+  //   否则「清空」和「写入」竞争，可能写完就被清空，paste 拿到空文本。
+  await clipboard.clear();
+  await clipboard.writeText(clean);
+
+  return { ok: true, cleanedLen: clean.length };
 });
 
 // 在指定 webview 的 webContents 中触发真实粘贴（等同用户按 Cmd+V）
 // 豆包原生 paste 处理器会把系统剪贴板内容写入 React state，规避合成事件无效的问题
-ipcMain.handle('paste-to-webview', async (_e, webContentsId) => {
-  try {
-    const wc = webContents.fromId(webContentsId);
-    if (!wc) return { ok: false, error: '找不到 webContents: ' + webContentsId };
-    wc.paste();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+handle('paste-to-webview', async (_e, webContentsId) => {
+  const wc = webContents.fromId(webContentsId);
+  if (!wc) return { ok: false, error: '找不到 webContents: ' + webContentsId };
+  wc.paste();
+  return { ok: true };
 });
 
 // ============================================================
@@ -1668,57 +1516,49 @@ ipcMain.handle('paste-to-webview', async (_e, webContentsId) => {
 // ============================================================
 
 // 读取指定 partition 持久化会话的全部 cookie
-ipcMain.handle('export-account-cookies', async (_e, partition) => {
-  try {
-    const ses = session.fromPartition(partition);
-    const cookies = await ses.cookies.get({});
-    // 序列化：移除 hostOnly/sameSite 等无法直接 set 的只读字段，保留核心字段
-    const clean = cookies.map((c) => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain,
-      path: c.path || '/',
-      secure: c.secure || false,
-      httpOnly: c.httpOnly || false,
-      expirationDate: c.expirationDate,
-      sameSite: c.sameSite || 'unspecified'
-    }));
-    return { ok: true, cookies: clean, count: clean.length };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+handle('export-account-cookies', async (_e, partition) => {
+  const ses = session.fromPartition(partition);
+  const cookies = await ses.cookies.get({});
+  // 序列化：移除 hostOnly/sameSite 等无法直接 set 的只读字段，保留核心字段
+  const clean = cookies.map((c) => ({
+    name: c.name,
+    value: c.value,
+    domain: c.domain,
+    path: c.path || '/',
+    secure: c.secure || false,
+    httpOnly: c.httpOnly || false,
+    expirationDate: c.expirationDate,
+    sameSite: c.sameSite || 'unspecified'
+  }));
+  return { ok: true, cookies: clean, count: clean.length };
 });
 
 // 将一组 cookie 写入指定 partition 的持久化会话
-ipcMain.handle('import-account-cookies', async (_e, partition, cookies) => {
-  try {
-    const ses = session.fromPartition(partition);
-    let okCount = 0;
-    for (const c of cookies) {
-      try {
-        const url = `${c.secure ? 'https' : 'http'}://${c.domain.replace(/^\./, '')}${c.path || '/'}`;
-        await ses.cookies.set({
-          url,
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path || '/',
-          secure: c.secure || false,
-          httpOnly: c.httpOnly || false,
-          expirationDate: c.expirationDate,
-          sameSite: c.sameSite || 'unspecified'
-        });
-        okCount++;
-      } catch { /* 单个 cookie 失败不中断 */ }
-    }
-    return { ok: true, restored: okCount, total: cookies.length };
-  } catch (err) {
-    return { ok: false, error: err.message };
+handle('import-account-cookies', async (_e, partition, cookies) => {
+  const ses = session.fromPartition(partition);
+  let okCount = 0;
+  for (const c of cookies) {
+    try {
+      const url = `${c.secure ? 'https' : 'http'}://${c.domain.replace(/^\./, '')}${c.path || '/'}`;
+      await ses.cookies.set({
+        url,
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path || '/',
+        secure: c.secure || false,
+        httpOnly: c.httpOnly || false,
+        expirationDate: c.expirationDate,
+        sameSite: c.sameSite || 'unspecified'
+      });
+      okCount++;
+    } catch { /* 单个 cookie 失败不中断 */ }
   }
+  return { ok: true, restored: okCount, total: cookies.length };
 });
 
 // 保存账号导出文件
-ipcMain.handle('save-accounts-file', ipcGuard(async (_e, content) => {
+handle('save-accounts-file', async (_e, content) => {
   if (!mainWindow) return { ok: false, error: '窗口未就绪' };
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '导出豆包账号',
@@ -1728,10 +1568,10 @@ ipcMain.handle('save-accounts-file', ipcGuard(async (_e, content) => {
   if (res.canceled || !res.filePath) return { ok: false, error: '已取消' };
   fs.writeFileSync(res.filePath, content, 'utf-8');
   return { ok: true, path: res.filePath };
-}));
+});
 
 // 打开账号导入文件
-ipcMain.handle('load-accounts-file', ipcGuard(async () => {
+handle('load-accounts-file', async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '导入豆包账号',
@@ -1740,10 +1580,10 @@ ipcMain.handle('load-accounts-file', ipcGuard(async () => {
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return fs.readFileSync(res.filePaths[0], 'utf-8');
-}));
+});
 
 // 选择下载目录
-ipcMain.handle('select-folder', ipcGuard(async () => {
+handle('select-folder', async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '选择下载目录',
@@ -1751,7 +1591,7 @@ ipcMain.handle('select-folder', ipcGuard(async () => {
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return res.filePaths[0];
-}));
+});
 
 // 下载文件到指定路径（支持重定向跟随）
 function downloadUrl(url, filePath) {
@@ -1790,7 +1630,7 @@ function downloadUrl(url, filePath) {
   });
 }
 
-ipcMain.handle('download-file', async (_e, url, filePath) => {
+handle('download-file', async (_e, url, filePath) => {
   if (!url || !filePath) return { ok: false, error: 'missing_args' };
   // vid:// 引用：文件已在本地，直接复制（不走网络）
   if (typeof url === 'string' && url.startsWith('vid://')) {
@@ -1834,19 +1674,19 @@ ipcMain.handle('download-file', async (_e, url, filePath) => {
 // 视频本地化：把远端视频直链下载进 userData/videos/，返回 vid:// 引用。
 // 先带豆包 Referer（多数 CDN 防盗链要求）下载；失败再不带 Referer 试一次。
 // 下载失败不影响原直链继续使用（渲染层保留原 URL，行为同旧版）。
-ipcMain.handle('save-video-from-url', ipcGuard(async (_e, p) => {
+handle('save-video-from-url', async (_e, p) => {
   const url = p && p.url;
   if (!url) return { ok: false, error: 'missing_args' };
   const r = await saveVideoFromUrl(url, (p && p.referer) || 'https://www.doubao.com/');
   if (r.ok) return r;
   const r2 = await saveVideoFromUrl(url, '');
   return r2.ok ? r2 : r;
-}));
+});
 
 // 下载并「另存为」：先弹原生保存对话框让用户选路径（默认落在「下载」目录），确认后才下载。
 // 之所以要有这条：download-file 只传文件名时会被解析成**相对路径**，结果静默落在应用工作目录里，
 // 用户既不知道存到哪、也无从设置路径。这里把「选路径」做进流程，并把最终绝对路径回传给渲染层展示。
-ipcMain.handle('download-file-as', async (_e, url, defaultName, filters) => {
+handle('download-file-as', async (_e, url, defaultName, filters) => {
   if (!url) return { ok: false, error: 'missing_args' };
   if (!mainWindow) return { ok: false, error: 'no_window' };
   // 文件名做一次清洗：macOS/Windows 都不允许 / \ : * ? " < > | 出现在文件名里
@@ -1902,319 +1742,41 @@ ipcMain.handle('download-file-as', async (_e, url, defaultName, filters) => {
   return { ...r, canceled: false, path: (r && r.path) || res.filePath };
 });
 
-// 在 Finder / 资源管理器中定位任意本地文件（下载完成后「在文件夹中显示」用）
-ipcMain.handle('reveal-path', async (_e, p) => {
-  try {
-    if (!p) return { ok: false, error: 'missing_args' };
-    shell.showItemInFolder(p);
-    return { ok: true, path: p };
-  } catch (e) {
-    return { ok: false, error: (e && e.message) || '打开失败' };
-  }
-});
-
-// ── dola 无水印资源：下载 / 清空 ──
-function dolaMediaDownloadPath(url, mediaType) {
-  const dir = path.join(app.getPath('userData'), 'dola-media');
-  let basename = `media-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`;
-  try {
-    const pathname = new URL(url).pathname;
-    const last = pathname.split('/').filter(Boolean).pop() || '';
-    const decoded = decodeURIComponent(last)
-      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
-      .trim()
-      .replace(/[. ]+$/g, '')
-      .slice(0, 120);
-    if (decoded) basename = decoded;
-  } catch { /* ★ TD-16-37：URL 解析失败保持默认扩展名（与上面的 `:775` 同口径） */ }
-  const ext = mediaType === 'image' ? '.png' : '.mp4';
-  return path.join(dir, basename.endsWith(ext) ? basename : basename + ext);
-}
-
-// 找到 doubao / dola 类型的 webview（guest WebContents），返回其 session
-// 视频和图片的 URL 是 CDN 域名（tosvbytedou.com / douyinpic.com 等），
-// 不能按 hostname 匹配，所以改为：找任意 doubao.com / dola.com 的 webview，
-// 用其 session 下载即可继承 cookie/认证信息。
-function findWebviewSessionForUrl(targetUrl) {
-  try {
-    if (!mainWindow || mainWindow.isDestroyed()) return null;
-    // 从目标 URL 推断来源类型（CDN 域名 → 回退到默认找 doubao）
-    let preferSource = 'doubao';
-    try {
-      const h = new URL(targetUrl).hostname.toLowerCase();
-      if (h.includes('dola') || h.includes('byteintl')) preferSource = 'dola';
-    } catch (_) { /* URL 非法 ⇒ 用默认来源（doubao） */ }
-    const sourceHost = preferSource === 'dola' ? 'dola.com' : 'doubao.com';
-    for (const wc of webContents.getAllWebContents()) {
-      if (wc === mainWindow.webContents) continue;
-      try {
-        const url = wc.getURL() || '';
-        if (url.includes(sourceHost)) {
-          console.log(`[dola-media] 找到匹配 webview：host=${new URL(url).hostname} id=${wc.id} partition=${wc.session?.partition}`);
-          return wc.session;
-        }
-      } catch (_) { /* skip */ }
-    }
-    // 兜底：找不到精确来源时，尝试任意 doubao/dola webview
-    for (const wc of webContents.getAllWebContents()) {
-      if (wc === mainWindow.webContents) continue;
-      try {
-        const url = wc.getURL() || '';
-        if (url.includes('doubao.com') || url.includes('dola.com')) {
-          console.log(`[dola-media] 兜底找到 webview：url=${url.substring(0, 80)} id=${wc.id} partition=${wc.session?.partition}`);
-          return wc.session;
-        }
-      } catch (_) { /* skip */ }
-    }
-    console.warn(`[dola-media] 未找到任何 doubao/dola webview（preferSource=${preferSource}）`);
-  } catch (err) {
-    console.warn('[dola-media] findWebviewSessionForUrl 异常:', err.message || err);
-  }
-  return null;
-}
-
-// 用指定 session 下载文件（支持重定向跟随，继承该 session 的 cookie/认证）
-// Electron 31+ 用 net.request({ session }) 而非已移除的 ses.net.request()
-function downloadUrlWithSession(url, filePath, dlSession) {
-  const { net, session: sessMod } = require('electron');
-  const ses = dlSession || sessMod.defaultSession;
-  console.log(`[dola-media] downloadUrlWithSession ses=${ses ? (ses.partition || '(defaultSession)') : 'UNDEFINED'}`);
-  return new Promise((resolve) => {
-    try {
-      if (!ses) {
-        resolve({ ok: false, error: 'session 不可用（null）' });
-        return;
-      }
-      // Electron 31+: net.request({ session }) 继承 cookie；不再用已移除的 ses.net.request()
-      const request = net.request({ url, method: 'GET', session: ses });
-      const chunks = [];
-      request.on('response', (response) => {
-        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          resolve(downloadUrlWithSession(response.headers.location, filePath, ses));
-          return;
-        }
-        if (response.statusCode !== 200) {
-          resolve({ ok: false, error: 'http_' + response.statusCode });
-          return;
-        }
-        response.on('data', (d) => chunks.push(d));
-        response.on('end', () => {
-          try {
-            const dir = path.dirname(filePath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(filePath, Buffer.concat(chunks));
-            resolve({ ok: true, path: filePath, size: Buffer.concat(chunks).length });
-          } catch (writeErr) {
-            resolve({ ok: false, error: writeErr.message || String(writeErr) });
-          }
-        });
-        response.on('error', (err) => resolve({ ok: false, error: err.message || String(err) }));
-      });
-      request.on('error', (err) => resolve({ ok: false, error: err.message || String(err) }));
-      request.end();
-    } catch (ex) {
-      resolve({ ok: false, error: ex.message || String(ex) });
-    }
-  });
-}
-
-// （旧的 dola-media-download handler 已迁移到下方「无水印资源：下载路径设置 + 自动命名」区块，
-//   旧版无设置路径/自动命名；不要在这里再次注册，否则会触发
-//   "Attempted to register a second handler" 异常并中断 main.js，
-//   导致后续所有 ipcMain.handle 都未生效，渲染进程调用 get-machine-code 等会报
-//   "No handler registered"。）
-
-ipcMain.handle('dola-media-clear', ipcGuard(async () => {
-  dolaMedia.clearDolaMediaItems();
-  return { ok: true };
-}));
-
-// ── 无水印资源：下载路径设置 + 自动命名 ─────────────
-const settingsJsonPath = path.join(app.getPath('userData'), 'settings.json');
-
-function readSettings() {
-  try {
-    if (fs.existsSync(settingsJsonPath)) {
-      const obj = JSON.parse(fs.readFileSync(settingsJsonPath, 'utf8'));
-      if (obj && typeof obj === 'object') return obj;
-    }
-  } catch (e) {
-    console.warn('[dola-media] 读取 settings.json 失败，使用默认：', e.message || e);
-  }
-  return {};
-}
-
-function writeSettings(obj) {
-  try {
-    const dir = path.dirname(settingsJsonPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(settingsJsonPath, JSON.stringify(obj, null, 2), 'utf8');
-    return true;
-  } catch (e) {
-    console.warn('[dola-media] 写入 settings.json 失败：', e.message || e);
-    return false;
-  }
-}
-
-// 默认下载目录：系统 Downloads；用户设置过则用 settings.json 里的 downloadPath
-function getEffectiveDownloadDir() {
-  const s = readSettings();
-  if (s && typeof s.downloadPath === 'string' && s.downloadPath.trim()) {
-    const trimmed = s.downloadPath.trim();
-    try {
-      if (!fs.existsSync(trimmed)) fs.mkdirSync(trimmed, { recursive: true });
-      if (fs.statSync(trimmed).isDirectory()) return trimmed;
-    } catch (_) { /* 落到默认 */ }
-  }
-  const def = app.getPath('downloads');
-  // ★ TD-16-37：默认下载目录建不出来**留痕**（否则后续下载失败时无从判断是"目录不存在"）
-  try { if (!fs.existsSync(def)) fs.mkdirSync(def, { recursive: true }); } catch (e) { console.warn('[download] 默认下载目录创建失败:', (e && e.message) || e); }
-  return def;
-}
-
-// 自动编号命名：session 内单调递增；若目标名已被旧文件占用则继续往后找，直到拿到未占用的名字。
-// - typePrefix: 'video' / 'image'
-// - ext: '.mp4' / '.png'
-// - sessionCounter: 当前会话已用过的最大编号（首次传 0）
-// 返回 { name, fullPath, nextCounter }
-function nextAutoFilePath(dir, typePrefix, ext, sessionCounter) {
-  let n = (sessionCounter || 0) + 1;
-  // 防止极端情况下无限循环（>1 万）
-  for (let i = 0; i < 100000; i++) {
-    const name = `${typePrefix}_${String(n).padStart(2, '0')}${ext}`;
-    const full = path.join(dir, name);
-    if (!fs.existsSync(full)) return { name, fullPath: full, nextCounter: n };
-    n++;
-  }
-  throw new Error('自动命名空间已用尽（>100000），请清理下载目录');
-}
-
-// 会话级计数器：每次主进程启动从 0 开始；本进程内单调递增；落盘到 settings.json 用于跨重启序号延续（避免重启后又从 01 开始覆盖旧文件）。
-function getSessionCounter() {
-  const s = readSettings();
-  return Number.isInteger(s.dolaMediaCounter) && s.dolaMediaCounter >= 0 ? s.dolaMediaCounter : 0;
-}
-function bumpSessionCounter(n) {
-  const s = readSettings();
-  s.dolaMediaCounter = n;
-  writeSettings(s);
-}
-
-// 查询 / 修改下载路径
-ipcMain.handle('get-download-settings', ipcGuard(async () => {
-  const s = readSettings();
-  const eff = getEffectiveDownloadDir();
-  return {
-    ok: true,
-    path: eff,
-    configured: !!(s && typeof s.downloadPath === 'string' && s.downloadPath.trim()),
-    configuredPath: (s && s.downloadPath) || ''
-  };
-}));
-
-ipcMain.handle('pick-download-path', ipcGuard(async () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'no_window' };
-  const cur = getEffectiveDownloadDir();
-  const res = await dialog.showOpenDialog(mainWindow, {
-    title: '选择无水印资源下载目录',
-    defaultPath: cur,
-    buttonLabel: '设为下载目录',
-    properties: ['openDirectory', 'createDirectory']
-  });
-  if (res.canceled || !res.filePaths || res.filePaths.length === 0) {
-    return { ok: false, canceled: true };
-  }
-  const picked = res.filePaths[0];
-  const s = readSettings();
-  s.downloadPath = picked;
-  writeSettings(s);
-  console.log(`[dola-media] 已设置下载目录：${picked}`);
-  return { ok: true, path: picked, configured: true };
-}));
-
-// 改造：现有「下载」也走设置路径 + 自动命名（保持外部签名不变 url/mediaType）
-// 旧的同名 handler 已在文件更上方删除（避免重复注册抛异常），此处直接注册新版即可。
-ipcMain.handle('dola-media-download', async (_e, url, mediaType) => {
-  console.log(`[dola-media] 下载请求：type=${mediaType} url=${url ? url.substring(0, 120) : '(空)'}`);
-  if (!url) return { ok: false, error: 'missing_url' };
-  const isImage = mediaType === 'image';
-  const ext = isImage ? '.png' : '.mp4';
-  const typePrefix = isImage ? 'image' : 'video';
-  const dir = getEffectiveDownloadDir();
-  let curCounter = getSessionCounter();
-  let filePath, name, nextC;
-  try {
-    const r = nextAutoFilePath(dir, typePrefix, ext, curCounter);
-    filePath = r.fullPath; name = r.name; nextC = r.nextCounter;
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-  bumpSessionCounter(nextC);
-  console.log(`[dola-media] 下载目标路径：${filePath}（已用编号=${nextC}）`);
-  const wvSession = findWebviewSessionForUrl(url);
-  console.log(`[dola-media] 下载使用 session：${wvSession ? wvSession.partition : '(defaultSession - 无匹配 webview!)'}`);
-  const result = await downloadUrlWithSession(url, filePath, wvSession);
-  console.log(`[dola-media] 下载结果：${JSON.stringify(result)}`);
-  if (result && result.ok) {
-    return { ...result, path: filePath, name, dir, configured: !dir.endsWith('Downloads') };
-  }
-  return result;
+// 在 Finder / 资源管理器中定位文件：
+//   · 下载完成后的「在文件夹中显示」传的是**真实路径**；
+//   · 素材节点右键「打开文件所在位置」传的是 **`img://` 引用**。
+// ⇒ 一个入口收两种输入，由本 handler 自己判别并解析 —— 调用方**没有**「该调哪个方法」的选择余地。
+handle('reveal-path', async (_e, p) => {
+  if (!p) return { ok: false, error: 'missing_args' };
+  const target = String(p).startsWith('img://') ? resolveImageRef(p) : p;
+  if (!target) return { ok: false, error: '未找到对应的本地文件（素材可能还没有落盘）' };
+  shell.showItemInFolder(target);
+  return { ok: true, path: target };
 });
 
 // ============================================================
 // 授权激活
 // ============================================================
 
-// 获取本机机器码（供界面展示 / 复制 / 导出）
-ipcMain.handle('get-machine-code', () => {
-  try {
-    return { ok: true, machineCode: license.getMachineCode(app) };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
-
-// 查询当前授权状态（含时间防篡改检测，可能联网取可信时间）
-ipcMain.handle('get-license-status', async () => {
-  try {
-    return { ok: true, ...(await license.checkLicenseStatus(app)) };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
-
-// 用激活码激活（校验 + 持久化 + 时间防篡改检测）
-ipcMain.handle('activate-with-code', async (_e, code) => {
-  try {
-    return { ok: true, ...(await license.activateWithCode(app, code || '')) };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
-
 // ============================================================
 // 视频截图：捕获画布中指定屏幕区域的画面（绕过跨域 canvas 污染问题）
 //   rect：渲染进程传入的「CSS 像素 × devicePixelRatio」矩形（相对 webContents 视口左上角）
 //   返回裁剪后的 PNG dataUrl；区域超出视口时自动夹紧，完全不可见则返回错误
 // ============================================================
-ipcMain.handle('capture-rect', async (_e, rect) => {
-  try {
-    if (!mainWindow) return { ok: false, error: '窗口未就绪' };
-    const img = await mainWindow.webContents.capturePage();
-    if (!rect) return { ok: true, dataUrl: img.toDataURL() };
-    const size = img.getSize();
-    const x = Math.max(0, Math.min(Math.round(rect.x), size.width));
-    const y = Math.max(0, Math.min(Math.round(rect.y), size.height));
-    const w = Math.max(0, Math.min(Math.round(rect.width), size.width - x));
-    const h = Math.max(0, Math.min(Math.round(rect.height), size.height - y));
-    if (w <= 0 || h <= 0) {
-      return { ok: false, error: 'capture-rect-out-of-bounds' };
-    }
-    const cropped = img.crop({ x, y, width: w, height: h });
-    return { ok: true, dataUrl: cropped.toDataURL() };
-  } catch (err) {
-    return { ok: false, error: err.message || String(err) };
+handle('capture-rect', async (_e, rect) => {
+  if (!mainWindow) return { ok: false, error: '窗口未就绪' };
+  const img = await mainWindow.webContents.capturePage();
+  if (!rect) return { ok: true, dataUrl: img.toDataURL() };
+  const size = img.getSize();
+  const x = Math.max(0, Math.min(Math.round(rect.x), size.width));
+  const y = Math.max(0, Math.min(Math.round(rect.y), size.height));
+  const w = Math.max(0, Math.min(Math.round(rect.width), size.width - x));
+  const h = Math.max(0, Math.min(Math.round(rect.height), size.height - y));
+  if (w <= 0 || h <= 0) {
+    return { ok: false, error: 'capture-rect-out-of-bounds' };
   }
+  const cropped = img.crop({ x, y, width: w, height: h });
+  return { ok: true, dataUrl: cropped.toDataURL() };
 });
 
 // ============================================================
@@ -2223,35 +1785,34 @@ ipcMain.handle('capture-rect', async (_e, rect) => {
 //       自动携带浏览器完整 Cookie/认证头/TLS 指纹，避免 Node.js https
 //       被服务端识别为非浏览器请求导致 empty_response
 // ============================================================
-ipcMain.handle('detect-videos', async (_e, webContentsId, seenKeys) => {
+handle('detect-videos', async (_e, webContentsId, seenKeys) => {
+  const wc = webContents.fromId(webContentsId);
+  if (!wc || wc.isDestroyed()) return { ok: false, error: 'webview已销毁' };
+
+  const wcUrl = wc.getURL();
+  console.log('[detect-videos] webContentsId:', webContentsId, 'URL:', wcUrl);
+
+  if (!wcUrl || wcUrl === 'about:blank') {
+    return { ok: false, error: '页面未加载 url=' + wcUrl };
+  }
+  if (wc.isLoading()) {
+    return { ok: false, error: '页面加载中' };
+  }
+
+  // ── 阶段0：验证 webview 可执行脚本（区分「注入失败」vs「脚本内报错」）──
+  let injectOk = false;
   try {
-    const wc = webContents.fromId(webContentsId);
-    if (!wc || wc.isDestroyed()) return { ok: false, error: 'webview已销毁' };
+    injectOk = await wc.executeJavaScript('({injectTest:true})');
+  } catch (injectErr) {
+    return { ok: false, error: 'inject_failed', _diag: { step: 'inject_test', detail: injectErr?.message || String(injectErr), url: wcUrl } };
+  }
+  if (!injectOk || !injectOk.injectTest) {
+    return { ok: false, error: 'inject_verify_failed', _diag: { step: 'inject_test', result: injectOk, url: wcUrl } };
+  }
 
-    const wcUrl = wc.getURL();
-    console.log('[detect-videos] webContentsId:', webContentsId, 'URL:', wcUrl);
-
-    if (!wcUrl || wcUrl === 'about:blank') {
-      return { ok: false, error: '页面未加载 url=' + wcUrl };
-    }
-    if (wc.isLoading()) {
-      return { ok: false, error: '页面加载中' };
-    }
-
-    // ── 阶段0：验证 webview 可执行脚本（区分「注入失败」vs「脚本内报错」）──
-    let injectOk = false;
-    try {
-      injectOk = await wc.executeJavaScript('({injectTest:true})');
-    } catch (injectErr) {
-      return { ok: false, error: 'inject_failed', _diag: { step: 'inject_test', detail: injectErr?.message || String(injectErr), url: wcUrl } };
-    }
-    if (!injectOk || !injectOk.injectTest) {
-      return { ok: false, error: 'inject_verify_failed', _diag: { step: 'inject_test', result: injectOk, url: wcUrl } };
-    }
-
-    // ── 阶段1：在 webview 内部执行的检测脚本（细粒度错误捕获）──
-    // 使用同步返回 + 内部分步 try/catch，确保任何一步失败都能报告具体原因
-    const DETECT_JS = `
+  // ── 阶段1：在 webview 内部执行的检测脚本（细粒度错误捕获）──
+  // 使用同步返回 + 内部分步 try/catch，确保任何一步失败都能报告具体原因
+  const DETECT_JS = `
 (async function(){
   var BASE = '/samantha/aispace/';
   var PARAMS = 'aid=497858&device_platform=web&samantha_web=1&use-olympus-account=1&version_code=20800&pkg_type=release_version';
@@ -2383,21 +1944,18 @@ ipcMain.handle('detect-videos', async (_e, webContentsId, seenKeys) => {
 })()
 `;
 
-    const rawResult = await wc.executeJavaScript(DETECT_JS)
-      .catch((execErr) => ({ ok: false, error: 'exec:' + (execErr?.message || String(execErr)), _diag: { method: 'webview-fetch', url: wcUrl } }));
+  const rawResult = await wc.executeJavaScript(DETECT_JS)
+    .catch((execErr) => ({ ok: false, error: 'exec:' + (execErr?.message || String(execErr)), _diag: { method: 'webview-fetch', url: wcUrl } }));
 
-    if (!rawResult || typeof rawResult !== 'object') {
-      return { ok: false, error: 'invalid_result_type:' + typeof rawResult };
-    }
-    return rawResult;
-
-  } catch (err) {
-    return { ok: false, error: err.message || String(err) };
+  if (!rawResult || typeof rawResult !== 'object') {
+    return { ok: false, error: 'invalid_result_type:' + typeof rawResult };
   }
+  return rawResult;
 });
 
 // 通过主进程在 webview 上执行错误检测脚本
-ipcMain.handle('detect-errors', async (_e, webContentsId) => {
+// 回执含 `errors:[]`（与守卫的 `{ok:false,error}` 形状不同）⇒ 外层 try/catch 就地保留
+handle('detect-errors', async (_e, webContentsId) => {
   try {
     const wc = webContents.fromId(webContentsId);
     if (!wc || wc.isDestroyed()) return { ok: false, errors: [] };
@@ -2500,7 +2058,7 @@ function dolaDurationDump() {
 }
 const DUMP_EXPR = `(${dolaDurationDump.toString()})()`;
 
-ipcMain.handle('inject-dola-duration-main', async (_e, webContentsId) => {
+handle('inject-dola-duration-main', async (_e, webContentsId) => {
   // 保底：本 handler 一旦被调用，立刻写这一行，证明触发（写在 wc 校验之前，避免 id 无效时连日志都没有）
   const logPath = path.join(os.homedir(), 'dola-duration-debug.log');
   const writeLog = (line) => {
@@ -2521,7 +2079,14 @@ ipcMain.handle('inject-dola-duration-main', async (_e, webContentsId) => {
       .catch((e) => console.warn('[dola-30s] 打开 30s 开关失败（注入页面前置步骤）:', (e && e.message) || e));
     const script = fs.readFileSync(path.join(__dirname, 'dola-duration-main.js'), 'utf8');
     writeLog(`INJECT-SCRIPT scriptLen=${script.length}`);
-    await wc.executeJavaScript(script);
+    // ★ **站点域名由宿主传参**（2026-10-14 收口）：`dola-duration-main.js` 是**函数表达式**，
+    //   这里补上调用并把层 1 的唯一真源喂进去（`SITE_HOSTS` 来自 `electron/site-hosts.js`）。
+    //   ⚠️ 为什么是传参而不是"脚本里写一份镜像 + 两侧对账"：注入脚本跑在 guest 主世界、
+    //      **不能 require**；传参让**域名的值**只有一处（对账只是给两份加护栏）。
+    //      ⚠️ **归属判定不在此列**：guest 侧另有一份同口径的判定形状（跨世界不可消 ⇒
+    //         登记为残留，见 `docs/判据登记表.md` §4「站点域名」行）。
+    //   ⚠️ 改这里必须同步改 `dola-duration-main.js`（它已去掉自调用，单独跑不会再自执行）。
+    await wc.executeJavaScript(`(${script})(${JSON.stringify({ SITE_HOSTS: siteHosts.SITE_HOSTS })})`);
     writeLog(`INJECT-DONE wcId=${webContentsId}`);
 
     // 主进程主动拉取真实时长 DOM（每 3s，DOM 变化时写盘），绕过 webview→主进程的不可靠回传通道
@@ -2541,40 +2106,23 @@ ipcMain.handle('inject-dola-duration-main', async (_e, webContentsId) => {
 
     return { ok: true };
   } catch (err) {
+    // 写诊断日志是守卫不做的（守卫只把异常转回执）⇒ 就地保留；回执转换交注册处
     writeLog(`INJECT-ERROR ${err?.message || String(err)}`);
-    return { ok: false, error: err?.message || String(err) };
+    throw err;
   }
 });
 
 // 30s 时长诊断日志：主世界注入脚本通过 window.api.dolaDurationDiag 回传诊断行，
 // 落盘到 ~/dola-duration-debug.log，便于排查「30s 失效」时真实的生成接口路径与 model 取值。
-ipcMain.handle('dola-duration-diag', async (_e, message) => {
-  try {
-    const logPath = path.join(os.homedir(), 'dola-duration-debug.log');
-    const line = `[${new Date().toISOString()}] ${String(message || '')}\n`;
-    fs.appendFileSync(logPath, line);
-    return { ok: true, path: logPath };
-  } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
-  }
-});
-
-// 按指定 webContentsId 挂 CDP Fetch 拦截（从渲染进程 onDom 回调触发，比 did-attach-webview 更可靠）
-ipcMain.handle('attach-dola-debugger', async (_e, webContentsId) => {
-  const wc = webContents.fromId(webContentsId);
-  if (!wc || wc.isDestroyed()) return { ok: false, error: 'webview 已销毁或不存在' };
-  try {
-    const url = wc.getURL() || '';
-    console.log(`[dola-media] attach-dola-debugger IPC 触发：wcId=${webContentsId} url=${url}`);
-    dolaMedia.attachGuestDebugger(wc);
-    return { ok: true, url };
-  } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
-  }
+handle('dola-duration-diag', async (_e, message) => {
+  const logPath = path.join(os.homedir(), 'dola-duration-debug.log');
+  const line = `[${new Date().toISOString()}] ${String(message || '')}\n`;
+  fs.appendFileSync(logPath, line);
+  return { ok: true, path: logPath };
 });
 
 // 导出机器码为文本文件
-ipcMain.handle('export-machine-code', ipcGuard(async (_e, machineCode) => {
+handle('export-machine-code', async (_e, machineCode) => {
   if (!mainWindow) return { ok: false, error: '窗口未就绪' };
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '导出机器码',
@@ -2584,62 +2132,54 @@ ipcMain.handle('export-machine-code', ipcGuard(async (_e, machineCode) => {
   if (res.canceled || !res.filePath) return { ok: false, error: '已取消' };
   fs.writeFileSync(res.filePath, String(machineCode || ''), 'utf-8');
   return { ok: true, path: res.filePath };
-}));
+});
 
 // ============================================================
 // 指纹伪装：渲染进程为每个账号请求生成本账号专属的 webview preload 文件
 // acc = { id, partition, fingerprint }
 // 返回 { ok, preloadUrl }，渲染进程将其作为 <webview preload> 属性挂载
 // ============================================================
-ipcMain.handle('ensure-fingerprint', async (_e, acc) => {
+handle('ensure-fingerprint', async (_e, acc) => {
+  const dir = path.join(app.getPath('userData'), 'fingerprints');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  // 仅保留安全文件名字符，防止目录穿越
+  const id = String(acc && acc.id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const jsonPath = path.join(dir, `${id}.json`);
+  const jsPath = path.join(dir, `${id}.js`);
+  const fp = (acc && acc.fingerprint) || {};
+  fs.writeFileSync(jsonPath, JSON.stringify(fp));
+  fs.writeFileSync(jsPath, buildFingerprintPreload(fp));
+  // HTTP 层：注入 Accept-Language（DOM 层在 preload 内覆盖）
+  // ★ 2026-10-12（TD-04-11）：**分区由前端按账号类型算好**（真源 core/rules/partition.defaultPartitionOf），
+  //   后端不再猜站点；且内层失败**如实上报**（探债段解法第二条）——
+  //   此前这里是「**无兜底** + 只 console.error + **仍回 ok:true**」⇒ 建号（partition:null）时
+  //   头注入静默跳过，而调用方拿到的是"成功"（探债段症状①）。
+  if (!acc.partition) throw new Error('ensure-fingerprint: 缺少 partition（应由前端按账号类型提供）');
   try {
-    const dir = path.join(app.getPath('userData'), 'fingerprints');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    // 仅保留安全文件名字符，防止目录穿越
-    const id = String(acc && acc.id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const jsonPath = path.join(dir, `${id}.json`);
-    const jsPath = path.join(dir, `${id}.js`);
-    const fp = (acc && acc.fingerprint) || {};
-    fs.writeFileSync(jsonPath, JSON.stringify(fp));
-    fs.writeFileSync(jsPath, buildFingerprintPreload(fp));
-    // HTTP 层：注入 Accept-Language（DOM 层在 preload 内覆盖）
-    // ★ 2026-10-12（TD-04-11）：**分区由前端按账号类型算好**（真源 core/rules/partition.defaultPartitionOf），
-    //   后端不再猜站点；且内层失败**如实上报**（探债段解法第二条）——
-    //   此前这里是「**无兜底** + 只 console.error + **仍回 ok:true**」⇒ 建号（partition:null）时
-    //   头注入静默跳过，而调用方拿到的是"成功"（探债段症状①）。
-    if (!acc.partition) throw new Error('ensure-fingerprint: 缺少 partition（应由前端按账号类型提供）');
-    try {
-      const ses = session.fromPartition(acc.partition);
-      applyFingerprintHeaders(ses, fp);
-    } catch (e) {
-      throw new Error(`[fingerprint] 设置请求头失败: ${e && e.message || e}`);
-    }
-    return { ok: true, preloadUrl: pathToFileURL(jsPath).href };
-  } catch (err) {
-    return { ok: false, error: err && err.message || String(err) };
+    const ses = session.fromPartition(acc.partition);
+    applyFingerprintHeaders(ses, fp);
+  } catch (e) {
+    throw new Error(`[fingerprint] 设置请求头失败: ${e && e.message || e}`);
   }
+  return { ok: true, preloadUrl: pathToFileURL(jsPath).href };
 });
 
 // 指纹诊断（2026-09-28 Windows 502|4502 排查）：返回该账号会话的真实出口链路（系统代理会
 // 被 Chromium 默认接管，resolveProxy 能直接看出流量是否走了 PROXY）与真实引擎版本。
-ipcMain.handle('fp-net-diag', async (_e, { partition } = {}) => {
-  try {
-    // ★ 2026-10-12（TD-04-11）：**不再猜站点** —— 此前无分区就探 `persist:doubao`
-    //   ⇒ 非豆包号拿到的诊断报告是**别的会话**的出口（探债段症状②）。前端有账号类型时
-    //   会用真源算好分区（core/rules/partition.defaultPartitionOf）；这里没有 ⇒ 明确失败。
-    if (!partition) throw new Error('fp-net-diag: 缺少 partition（应由前端按账号类型提供）');
-    const ses = session.fromPartition(partition);
-    let proxy = '';
-    try { proxy = await ses.resolveProxy('https://www.doubao.com'); } catch (_) { proxy = ''; }
-    return {
-      ok: true,
-      proxy: String(proxy || '').trim(), // 'DIRECT' 或 'PROXY host:port ...'
-      engineChrome: process.versions.chrome || '',
-      hostPlatform: process.platform
-    };
-  } catch (err) {
-    return { ok: false, error: err && err.message || String(err) };
-  }
+handle('fp-net-diag', async (_e, { partition } = {}) => {
+  // ★ 2026-10-12（TD-04-11）：**不再猜站点** —— 此前无分区就探 `persist:doubao`
+  //   ⇒ 非豆包号拿到的诊断报告是**别的会话**的出口（探债段症状②）。前端有账号类型时
+  //   会用真源算好分区（core/rules/partition.defaultPartitionOf）；这里没有 ⇒ 明确失败。
+  if (!partition) throw new Error('fp-net-diag: 缺少 partition（应由前端按账号类型提供）');
+  const ses = session.fromPartition(partition);
+  let proxy = '';
+  try { proxy = await ses.resolveProxy('https://www.doubao.com'); } catch (_) { proxy = ''; }
+  return {
+    ok: true,
+    proxy: String(proxy || '').trim(), // 'DIRECT' 或 'PROXY host:port ...'
+    engineChrome: process.versions.chrome || '',
+    hostPlatform: process.platform
+  };
 });
 
 // ============================================================
@@ -2714,7 +2254,7 @@ function buildCleanChromeUA() {
 // 改写 navigator.userAgentData / window.chrome / navigator.languages，会留下 fn.toString() 的
 // 可探测痕迹，设备信任 SDK 据此判为「环境被篡改」。改为完全依赖引擎原生指纹（零注入）。
 
-ipcMain.handle('ensure-plain-session', async (_e, acc) => {
+handle('ensure-plain-session', async (_e, acc) => {
   try {
     // ★ 2026-10-12（TD-04-11）：不再猜 `persist:lovart` —— 前端按账号类型算好分区；
     //   拿不到就明确失败（静默落到别的 session 比报错更难查）。
@@ -2728,8 +2268,9 @@ ipcMain.handle('ensure-plain-session', async (_e, acc) => {
     console.log('[plain-session] UA:', ua, '| Accept-Language:', lang, '| partition:', partition);
     return { ok: true, userAgent: ua, acceptLanguage: lang };
   } catch (err) {
+    // 留痕是守卫不做的（守卫只把异常转回执）⇒ 就地保留；回执转换交注册处
     console.error('[plain-session] 应用失败:', (err && err.message) || err);
-    return { ok: false, error: (err && err.message) || String(err) };
+    throw err;
   }
 });
 
@@ -2750,16 +2291,12 @@ function applySessionProxy(ses, proxy) {
 }
 
 // 运行中修改某账号会话的代理（账号行 / 设置页调用）；proxy 为空 = 恢复直连
-ipcMain.handle('set-account-proxy', async (_e, p) => {
-  try {
-    const partition = (p && p.partition) || '';
-    if (!partition) return { ok: false, error: '缺少 partition' };
-    const ses = session.fromPartition(partition);
-    await applySessionProxy(ses, p.proxy);
-    return { ok: true, applied: normalizeProxy(p.proxy) || 'direct' };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
+handle('set-account-proxy', async (_e, p) => {
+  const partition = (p && p.partition) || '';
+  if (!partition) return { ok: false, error: '缺少 partition' };
+  const ses = session.fromPartition(partition);
+  await applySessionProxy(ses, p.proxy);
+  return { ok: true, applied: normalizeProxy(p.proxy) || 'direct' };
 });
 
 // ============================================================
@@ -2830,7 +2367,7 @@ async function prepareLovartContainer(ses, partition, proxy) {
   return { ua };
 }
 
-ipcMain.handle('ensure-lovart-container', async (_e, acc) => {
+handle('ensure-lovart-container', async (_e, acc) => {
   try {
     // ★ 2026-10-12（TD-04-11）：不再猜 `persist:lovart` —— 前端按账号类型算好分区；
     //   拿不到就明确失败（静默落到别的 session 比报错更难查）。
@@ -2846,378 +2383,20 @@ ipcMain.handle('ensure-lovart-container', async (_e, acc) => {
     console.log('[lovart-container] ready | UA:', ua, '| proxy:', proxy || 'direct', '| partition:', partition, '| preload: none');
     return { ok: true, userAgent: ua, preloadUrl, proxy: normalizeProxy(proxy) || 'direct' };
   } catch (err) {
+    // 留痕是守卫不做的（守卫只把异常转回执）⇒ 就地保留；回执转换交注册处
     console.error('[lovart-container] 失败:', (err && err.message) || err);
-    return { ok: false, error: (err && err.message) || String(err) };
+    throw err;
   }
 });
 
 // 移除账号时清理该账号容器的全部数据（cookie/storage/cache/service worker）
-ipcMain.handle('clear-account-session', async (_e, { partition } = {}) => {
-  try {
-    if (!partition) return { ok: false, error: '缺少 partition' };
-    const ses = session.fromPartition(partition);
-    await ses.clearStorageData({
-      storages: ['cookies', 'appcache', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers'],
-      quotas: ['temporary', 'syncable']
-    });
-    await ses.clearCache();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
+handle('clear-account-session', async (_e, { partition } = {}) => {
+  if (!partition) return { ok: false, error: '缺少 partition' };
+  const ses = session.fromPartition(partition);
+  await ses.clearStorageData({
+    storages: ['cookies', 'appcache', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers'],
+    quotas: ['temporary', 'syncable']
+  });
+  await ses.clearCache();
+  return { ok: true };
 });
-
-// ============================================================
-// Lovart 内置 Firefox 启动（每个账号一个独立 profile + 预装多账号容器插件）
-// ============================================================
-ipcMain.handle('ensure-lovart-firefox-profile', async (_e, { accountId } = {}) => {
-  try {
-    if (!accountId) return { ok: false, error: '缺少 accountId' };
-    firefox.ensureProfile(accountId);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-ipcMain.handle('open-lovart-firefox', async (_e, { accountId, url } = {}) => {
-  try {
-    if (!accountId) return { ok: false, error: '缺少 accountId' };
-    const res = await firefox.launch(accountId, url);
-    if (!res.ok) {
-      console.error('[lovart-firefox] 启动失败 | accountId:', accountId, '| error:', res.error, '| command:', res.command);
-      return res;
-    }
-    console.log('[lovart-firefox] 已启动 | accountId:', accountId, '| profile:', res.profile, '| command:', res.command);
-    return res;
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-ipcMain.handle('remove-lovart-firefox-profile', async (_e, { accountId } = {}) => {
-  try {
-    if (!accountId) return { ok: false, error: '缺少 accountId' };
-    firefox.removeProfile(accountId);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-ipcMain.handle('get-firefox-status', async () => firefox.getStatus());
-
-// ============================================================
-//  Lovart 改用「本机真实 Google Chrome（零 CDP / 零自动化标记）」登录
-//  —— 根治内嵌 webview 被 Lovart 设备信任识别 + 此前真实 Chrome 登录态记不住的问题。
-//  每个账号一个固定 Chrome user-data-dir（登录态持久），每账号独立出口代理；
-//  登录窗口绝不带 --remote-debugging-port（否则 navigator.webdriver=true 触发 Turnstile）。
-//  登录完成后，由 sync-lovart-session 在同 profile 起临时 headless 导出 cookie，
-//  注入内嵌 webview 分区，自动采集仍走 webview（此时已带合法会话）。
-//  注意：lovart-chrome-is-open 故意恒返 false —— 采集一律走 webview，不走登录 Chrome。
-// ============================================================
-ipcMain.handle('ensure-lovart-chrome', async (_e, { accountId, url, proxy } = {}) => {
-  try {
-    if (!accountId) return { ok: false, error: '缺少 accountId' };
-    return await chromeCdp.ensureLovartChrome(accountId, url, { proxy });
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-// 仅打开真实 Chrome（不强制导航到某个 URL）：先 ensure，若已打开则保持当前页。
-ipcMain.handle('open-lovart-chrome', async (_e, { accountId, url, proxy } = {}) => {
-  try {
-    if (!accountId) return { ok: false, error: '缺少 accountId' };
-    const r = await chromeCdp.ensureLovartChrome(accountId, url || null, { proxy });
-    return r && r.ok ? r : { ok: false, error: (r && r.error) || '打开真实 Chrome 失败' };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-ipcMain.handle('close-lovart-chrome', async (_e, { accountId } = {}) => {
-  try {
-    if (!accountId) return { ok: false, error: '缺少 accountId' };
-    return await chromeCdp.closeLovartChrome(accountId);
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-// 把真实 Chrome 里登录 Lovart 后的会话 cookie 同步进内嵌 webview 分区，
-// 使 webview 带上合法会话、继续承担「自动采集图片」的职责（零 CDP 暴露）。
-//
-// ⚠️ Cloudflare 安全 cookie（cf_clearance / __cf_bm 等）与「访问者的引擎指纹」绑定
-// （TLS ClientHello / HTTP2 指纹）。真实 Chrome 导出的这类 cookie 注入 Electron
-// webview 后指纹对不上，Cloudflare 会直接给硬 403（"request has been blocked …
-// potential threats"，WAF 拦截页）——比不给 cookie 更糟。因此同步时必须剔除，
-// 让 webview 自己过 Cloudflare 的透明质询、拿到属于自己的 CF cookie。
-ipcMain.handle('sync-lovart-session', async (_e, { accountId, partition } = {}) => {
-  try {
-    if (!accountId || !partition) return { ok: false, error: '缺少参数（accountId / partition）' };
-    // 1) 关闭登录窗口，释放 SingletonLock，使同 profile 可被临时 headless 读取
-    await chromeCdp.closeLovartChrome(accountId);
-    await new Promise((r) => setTimeout(r, 600));
-    // 2) 导出明文 cookie（临时 headless，绝不访问 Lovart）
-    const dump = await chromeCdp.dumpCookies(accountId);
-    if (!dump || !dump.ok) {
-      return { ok: false, error: (dump && dump.error) || 'cookie 导出失败', message: (dump && dump.message) || '' };
-    }
-    // 3) 注入内嵌 webview 的 persist 分区（该 profile 专用于本 Lovart 账号，cookie 即其会话）
-    const ses = session.fromPartition(partition);
-    // 3a) 先清空分区里的旧 cookie：尤其要清掉上次注入的、与 webview 指纹失配的
-    //     Cloudflare cookie——否则一重新导航就会被 WAF 403（2026-09-22 实测）。
-    try {
-      const olds = await ses.cookies.get({});
-      for (const c of olds) {
-        try {
-          const host = (c.domain || '').replace(/^\./, '');
-          const url = `http${c.secure ? 's' : ''}://${host}${c.path || '/'}`;
-          await ses.cookies.remove(url, c.name);
-        } catch { /* 个别删除失败不影响整体 */ }
-      }
-    } catch { /* 清旧 cookie 是 best-effort（失败仍继续注入新 cookie） */ }
-    // 3b) 剔除 Cloudflare 指纹绑定 cookie 后再注入（登录态本身不含 CF cookie，不受影响）
-    const CF_COOKIE_RE = /^(cf_clearance|__cf_bm|__cfruid|__cfhostmanager|__cf_cookies|__cfwait|__cfserverzone|cf_chl_[a-z0-9_]+|__cf_chl_[a-z0-9_]+|__cf_chl_[a-z0-9_]+_rc)$/i;
-    const cookies = (dump.cookies || []).filter((c) => c && c.name && !CF_COOKIE_RE.test(c.name));
-    const sameSiteMap = { None: 'no_restriction', Lax: 'lax', Strict: 'strict' };
-    let count = 0;
-    for (const c of cookies) {
-      try {
-        const secure = !!c.secure;
-        const host = (c.domain || '').replace(/^\./, '');
-        const url = `http${secure ? 's' : ''}://${host}${c.path || '/'}`;
-        const exp = (typeof c.expires === 'number' && c.expires > 0) ? c.expires : undefined;
-        await ses.cookies.set({
-          url,
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path || '/',
-          secure,
-          httpOnly: !!c.httpOnly,
-          expirationDate: exp,
-          sameSite: sameSiteMap[c.sameSite] || 'unspecified'
-        });
-        count++;
-      } catch (e) { /* 个别 cookie 写入失败不影响整体 */ }
-    }
-    return { ok: true, count, total: cookies.length, rawTotal: (dump.cookies || []).length };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-// 故意恒返 false：采集统一走内嵌 webview（会话同步后已登录），不走真实 Chrome。
-// 真实 Chrome 仅用于人工登录 + cookie 源；其开关状态请走 get-lovart-chrome-status。
-ipcMain.handle('lovart-chrome-is-open', async (_e, accountId) => {
-  try {
-    return { ok: true, open: false };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-ipcMain.handle('get-lovart-chrome-status', async () => {
-  try {
-    return { ok: true, ...chromeCdp.getStatus() };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
-});
-
-
-// ============================================================
-// API 接入（第三方图像/视频生成服务）—— 主进程桥
-// 设计见 docs/API接入功能-实现方案.md：
-//   · 密钥 safeStorage 加密存 userData/api-config.json，明文永不过 IPC；
-//   · 任务引擎在主进程（轮询/重试/下载），事件单向推送渲染层；
-//   · 新服务商 = electron/api/providers/ 下一个适配器文件 + registerProvider 一行。
-// ============================================================
-const { createConfigStore, maskKey } = require('./api/config-store');
-const { createJobManager } = require('./api/job-manager');
-const apiRegistry = require('./api/registry');
-
-apiRegistry.registerProvider(require('./api/providers/volcengine-ark'));
-apiRegistry.registerProvider(require('./api/providers/geeknow-relay')); // 中转聚合（Stage B）
-apiRegistry.registerProvider(require('./api/providers/vidu'));         // Vidu 官方直连（Stage D · 含首尾帧）
-apiRegistry.registerProvider(require('./api/providers/kling'));        // 可灵官方直连（Stage E · JWT 自签）
-apiRegistry.registerProvider(require('./api/providers/llm-openai-compat')); // LLM 通道（Stage F · 与生成隔离）
-// 后续服务商在此追加一行注册即可：
-// apiRegistry.registerProvider(require('./api/providers/<new-provider>'));
-
-let _apiConfigStore = null;
-let _apiJobManager = null;
-
-function initApiBridge() {
-  if (_apiJobManager) return; // 幂等（whenReady 可能与窗口重建并发触发一次以上）
-  try {
-    _apiConfigStore = createConfigStore(app.getPath('userData'), require('electron').safeStorage);
-
-    // img:// 引用 → 本地绝对路径；http(s)/data:/绝对路径 透传（buildSubmit 自己再编码）
-    const resolveRefPath = (ref) => {
-      try {
-        if (typeof ref !== 'string' || !ref) return '';
-        if (ref.startsWith('img://')) return resolveImageRef(ref) || '';
-        if (/^https?:\/\//i.test(ref) || ref.startsWith('data:') || fs.existsSync(ref)) return ref;
-        return '';
-      } catch (_) {
-        return '';
-      }
-    };
-
-    // 传输双栈（引擎 v2）：优先 Chromium 栈 net.fetch（吃系统代理/企业网络环境），
-    // 网络层失败自动降级 Node undici 栈 —— 哪条通走哪条。
-    const apiTransports = [];
-    try {
-      const { net } = require('electron');
-      if (net && typeof net.fetch === 'function') apiTransports.push(net.fetch.bind(net));
-    } catch (_) { /* 非 Electron 运行环境忽略 */ }
-    if (typeof globalThis.fetch === 'function') apiTransports.push(globalThis.fetch.bind(globalThis));
-
-    _apiJobManager = createJobManager({
-      configStore: _apiConfigStore,
-      registry: apiRegistry,
-      resolveRefPath,
-      transports: apiTransports,
-      onEvent: (snap) => {
-        try {
-          // 成功出片 → 今日额度计数 +1（密钥/引擎均不涉及，纯本地统计）
-          if (snap && snap.status === 'done') {
-            try { _apiConfigStore.incrementUsage(snap.kind); } catch (_) { /* 计数失败不影响主流程 */ }
-          }
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('api-job-event', snap);
-          }
-        } catch (_) { /* 推送失败不影响引擎 */ }
-      }
-    });
-
-    // ---- 服务商元信息（无密钥）----
-    ipcMain.handle('api-providers:list', ipcGuard(async () => {
-      return { ok: true, providers: apiRegistry.listProvidersMeta() };
-    }));
-
-    // ---- 配置读取（密钥脱敏）----
-    /**
-     * IPC 边界守卫 —— 把抛转成可传输的 `{ok:false, error}`（**原文**，原则 6）
-     *
-     * ⚠️ 为什么必须在边界收：配置**损坏/读盘失败**时 `loadRaw` 会抛（且损坏时已备份原文）。
-     *    IPC 是**进程边界** —— 异常必须转成可传输的判别联合，否则渲染层只拿到 rejected IPC，
-     *    拿不到"为什么"（原则 6：错误要能被展示）。
-     *
-     * ★ **2026-10-11 更正（TD-13-14）**：原注释写「**唯一实现**」—— 那是**声索**，实况是
-     *   **已接线 20 / 明确豁免 47**（67 个 `ipcMain.handle`）：
-     *   · **已接线 20**：`api-config:get/set/test` · `api-setup:get/set` ＋ 本轮补的 **15 个「无 try」handler**
-     *     （`import-files` · `save-file` · `load-file` · `open-external` · `save-accounts-file` ·
-     *      `load-accounts-file` · `select-folder` · `save-video-from-url` · `dola-media-clear` ·
-     *      `get-download-settings` · `pick-download-path` · `export-machine-code` · `api-providers:list` ·
-     *      `api-config:set-key` · `api-config:set-secret`）；
-     *   · **明确豁免 47**：其余 handler **函数体自带 `try/catch`**（与守卫**等价** —— 都把异常转成
-     *     `{ok:false}`）⇒ **不重复包**（判据 C1：同一模式不叠两层）。
-     *   ⚠️ **新增 handler 的规矩**：**要么**函数体自带 `try/catch`，**要么**包 `ipcGuard` —— 二者必居其一。
-     */
-    const ipcGuard = (fn) => async (...args) => {
-      try {
-        return await fn(...args);
-      } catch (err) {
-        // ★ 原样透传（原则 6）
-        return { ok: false, error: (err && err.message) || String(err) };
-      }
-    };
-
-    ipcMain.handle('api-config:get', ipcGuard(async () => {
-      const configs = {};
-      for (const id of apiRegistry.listProviderIds()) {
-        const adapter = apiRegistry.getProvider(id);
-        configs[id] = _apiConfigStore.publicOf(adapter);
-      }
-      return { ok: true, providers: apiRegistry.listProvidersMeta(), configs };
-    }));
-
-    // ---- 配置更新（baseUrl/model/params/enabled；不含密钥）----
-    ipcMain.handle('api-config:set', ipcGuard(async (_e, providerId, patch) => {
-      const adapter = apiRegistry.getProvider(providerId);
-      if (!adapter) return { ok: false, error: `未知服务商 ${providerId}` };
-      const pub = _apiConfigStore.updateProviderConfig(adapter, patch || {});
-      return { ok: true, config: pub };
-    }));
-
-    // ---- 保存密钥（加密落盘）----
-    ipcMain.handle('api-config:set-key', ipcGuard(async (_e, providerId, key) => {
-      const adapter = apiRegistry.getProvider(providerId);
-      if (!adapter) return { ok: false, error: `未知服务商 ${providerId}` };
-      const r = _apiConfigStore.setApiKey(adapter, key);
-      if (!r.ok) return r;
-      return { ok: true, keyHint: r.keyHint, maskedBy: maskKey(key) };
-    }));
-
-    // ---- 测试连接 ----
-    ipcMain.handle('api-config:test', ipcGuard(async (_e, providerId) => {
-      const adapter = apiRegistry.getProvider(providerId);
-      if (!adapter || typeof adapter.testConnection !== 'function') {
-        return { ok: false, message: '该服务商不支持测试连接' };
-      }
-      // ⚠️ 配置读取（getApiKey/getProviderConfig）**必须在守卫内** ——
-      //    原实现把 try 只包在 testConnection 上，配置损坏时这两行会逃出去
-      const apiKey = _apiConfigStore.getApiKey(adapter);
-      const cfgRow = _apiConfigStore.getProviderConfig(adapter);
-      try {
-        return await adapter.testConnection({
-          config: { baseUrl: cfgRow.baseUrl, model: cfgRow.model, apiKey },
-          fetchImpl: null
-        });
-      } catch (err) {
-        return { ok: false, message: (err && err.message) || String(err) };
-      }
-    }));
-
-    // ---- 任务 ----
-    ipcMain.handle('api-job:submit', async (_e, payload) => {
-      try {
-        return _apiJobManager.submit(payload);
-      } catch (err) {
-        return { ok: false, error: (err && err.message) || String(err) };
-      }
-    });
-    ipcMain.handle('api-job:cancel', async (_e, jobId) => _apiJobManager.cancel(jobId));
-    ipcMain.handle('api-job:list', async () => ({ ok: true, jobs: _apiJobManager.list() }));
-    // 批量出片（Stage F）：同一请求按 matrix 展开成多个变体，复用同一并发队列
-    ipcMain.handle('api-job:batch', async (_e, basePayload, matrix) => {
-      try {
-        return _apiJobManager.submitBatch(basePayload, matrix);
-      } catch (err) {
-        return { ok: false, error: (err && err.message) || String(err) };
-      }
-    });
-
-    // ---- 通道设置（双通道 / 兜底 / 并发）----
-    ipcMain.handle('api-setup:get', ipcGuard(async () => {
-      return { ok: true, setup: _apiConfigStore.getSetup(), usage: _apiConfigStore.getUsage() };
-    }));
-    ipcMain.handle('api-setup:set', ipcGuard(async (_e, patch) => {
-      const setup = _apiConfigStore.setSetup(patch || {});
-      // 并发数变化时实时通知引擎（不重建 manager）
-      if (setup && typeof setup.concurrency === 'number' && _apiJobManager && typeof _apiJobManager.setConcurrency === 'function') {
-        _apiJobManager.setConcurrency(setup.concurrency);
-      }
-      return { ok: true, setup };
-    }));
-
-    // ---- 保存二次密钥（secretKey，加密落盘）----
-    ipcMain.handle('api-config:set-secret', ipcGuard(async (_e, providerId, key) => {
-      const adapter = apiRegistry.getProvider(providerId);
-      if (!adapter) return { ok: false, error: `未知服务商 ${providerId}` };
-      const r = _apiConfigStore.setSecretKey(adapter, key);
-      if (!r.ok) return r;
-      return { ok: true, hasSecret: true };
-    }));
-
-    console.log('[api-bridge] API 接入桥已初始化：providers =', apiRegistry.listProviderIds().join(', '));
-  } catch (err) {
-    console.error('[api-bridge] 初始化失败:', err && err.message || err);
-  }
-}
-
-app.whenReady().then(initApiBridge);

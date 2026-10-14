@@ -123,7 +123,7 @@ export function AppShell({ canvas }: AppShellProps) {
           {/* ★ 顶栏收到的 `onOpenDoubaoView` = 源 `_Component48.jsx:173-175` 传给 `_Component42` 的那个 */}
           <TopBar onOpenDoubaoView={openDoubaoView} />
           {/* 画布级错误边界（docs/11 §9.9 的第二级） */}
-          <ErrorBoundary area="画布">
+          <ErrorBoundary area={SHELL_TEXT.areaCanvas}>
             {canvas}
             {/* 发送队列面板（有队列项或折叠态时常驻；可拖动） */}
             <SendQueuePanel />

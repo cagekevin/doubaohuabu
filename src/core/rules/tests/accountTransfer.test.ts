@@ -15,7 +15,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAccountsExportFile,
   makeImportedAccountId,
-  makeImportedPartition,
   normalizeImportedStatus,
   readAccountsFromFile,
   selectImportableAccounts,
@@ -23,7 +22,7 @@ import {
   toImportedAccount,
 } from '../accountTransfer';
 import type { Account } from '@/stable/model/account';
-import { ACCOUNTS_EXPORT_VERSION, IMPORTED_PARTITION_PREFIX } from '@/stable/contracts/schemas';
+import { ACCOUNTS_EXPORT_VERSION } from '@/stable/contracts/schemas';
 
 const acc = (over: Partial<Account> & { id: string }): Account => ({
   name: over.id,
@@ -57,12 +56,34 @@ describe('normalizeImportedStatus（原 Pe 映射）', () => {
 });
 
 describe('id / 分区默认（原 OP.jsx:635-636）', () => {
+  const opts = { nowBase36: 'bt', now: 999 };
+
   it('id = acc_<base36>_<下标>', () => {
     expect(makeImportedAccountId('mv1raqbo', 3)).toBe('acc_mv1raqbo_3');
   });
 
-  it('分区 = persist:import_<账号id>', () => {
-    expect(makeImportedPartition('acc_x_0')).toBe(`${IMPORTED_PARTITION_PREFIX}acc_x_0`);
+  /*
+   * ⚠️ 原有一条「分区 = `persist:import_<账号id>`」**已删**（2026-10-14），两个理由：
+   *   ① **与 `partition.test.ts` 重复** —— 分区键的形状只有一个真源测试点；
+   *   ② **它接近自证式**：期望值是 `IMPORTED_PARTITION_PREFIX + id`，拿**同一个常量**拼出来
+   *      ⇒ 常量一改它照样绿（不可证伪）。而 `IMPORTED_PARTITION_PREFIX` 是**冻结契约**
+   *      （`stable/contracts/schemas.ts`：老数据要能直接读）⇒ 这里必须砸**字面量**。
+   * 保留下来的这条走**真实导入链路**（`selectImportableAccounts` 是入口，不是内部函数），
+   * 锁的是**行为**：文件里没带分区 ⇒ 补出来的必须是账号级的 `persist:import_<id>`。
+   */
+  it('★ 文件里没带分区 ⇒ 导入链路补出 `persist:import_<id>`（不是空串）', () => {
+    const { drafts } = selectImportableAccounts([{ id: 'acc_z', name: '乙' }], [], opts);
+    expect(drafts[0]!.account.partition.startsWith('persist:import_')).toBe(true);
+    expect(drafts[0]!.account.partition).toContain('acc_z');
+  });
+
+  it('文件里带了分区 ⇒ 原样用（不覆盖）', () => {
+    const { drafts } = selectImportableAccounts(
+      [{ id: 'acc_y', name: '丙', partition: 'persist:doubao_d_keep_me' }],
+      [],
+      opts,
+    );
+    expect(drafts[0]!.account.partition).toBe('persist:doubao_d_keep_me');
   });
 });
 
@@ -73,7 +94,10 @@ describe('toImportedAccount（原 OP.jsx:663-676 + addAccount 归一）', () => 
     const { account } = toImportedAccount({}, opts);
     expect(account.id).toBe('acc_bt_0');
     expect(account.name).toBe('豆包00');
-    expect(account.partition).toBe(`${IMPORTED_PARTITION_PREFIX}acc_bt_0`);
+    // ⚠️ 期望值**砸字面量**（原为 `IMPORTED_PARTITION_PREFIX + id`）：该常量是**冻结契约**
+    //    （`stable/contracts/schemas.ts`，会随账号数据落盘、老数据要能直接读）⇒
+    //    拿它拼期望值等于"我写的模板等于我写的模板"（常量改名这条照样绿 = 不可证伪）。
+    expect(account.partition).toBe('persist:import_acc_bt_0');
     expect(account.status).toBe('已登录');
     expect(account.type).toBe('doubao');
     expect(account.addedAt).toBe(999);
@@ -156,18 +180,34 @@ describe('selectImportableAccounts（原 OP.jsx:615-681 三重判重）', () => 
     expect(skipped).toBe(3);
   });
 
-  it('分区为 null 的已有账号不进分区集合（源版 `.filter(Boolean)`）', () => {
-    const existing = [acc({ id: 'acc_n', name: '无分区', partition: null })];
-    // 新账号补出来的分区是 persist:import_<id>，不会与 null 冲突 ⇒ 能进
-    const { drafts } = selectImportableAccounts([{ id: 'acc_z', name: '另一个' }], existing, opts);
-    expect(drafts).toHaveLength(1);
+  /*
+   * ⚠️ 原有一条「分区为 null 的已有账号不进分区集合（源版 `.filter(Boolean)`）」**已改**：
+   *    分区现由产生方保证恒有值（`Account.partition: string`）⇒ 那个 `if` 已删。
+   *    本测试改成锁「分区判重**照常生效**」—— 判重条件被摘掉的话，这条会红。
+   */
+  it('★ 分区判重生效（同分区的已有账号 ⇒ 导入项被跳过）', () => {
+    const existing = [acc({ id: 'acc_n', name: '甲', partition: 'persist:import_acc_n' })];
+    const { drafts, skipped } = selectImportableAccounts(
+      [{ id: 'acc_z', name: '乙', partition: 'persist:import_acc_n' }],
+      existing,
+      opts,
+    );
+    expect(drafts).toHaveLength(0);
+    expect(skipped).toBe(1);
   });
 });
 
 describe('导出（原 PP.jsx:63-79）', () => {
   it('条目归一：type || doubao · fpSalt || 0 · fingerprint || null', () => {
     const e = toExportedAccountEntry(
-      acc({ id: 'acc_a', name: '甲', type: 'doubao', fpSalt: 0, status: '已登录', partition: null }),
+      acc({
+        id: 'acc_a',
+        name: '甲',
+        type: 'doubao',
+        fpSalt: 0,
+        status: '已登录',
+        partition: 'persist:import_acc_a',
+      }),
       [{ k: 'v' }],
     );
     expect(e).toEqual({
@@ -175,7 +215,7 @@ describe('导出（原 PP.jsx:63-79）', () => {
       name: '甲',
       type: 'doubao',
       status: '已登录',
-      partition: null,
+      partition: 'persist:import_acc_a',
       addedAt: 0,
       fpSalt: 0,
       fingerprint: null,

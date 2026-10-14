@@ -23,8 +23,14 @@ export interface AddGroupDeps {
   now: number;
 }
 
-/** 默认组名（原 31941 的 `n && n.trim() || '未命名分组'`） */
-const DEFAULT_GROUP_NAME = '未命名分组';
+/**
+ * 默认组名（原 31941 的 `n && n.trim() || '未命名分组'`）
+ *
+ * ★ **2026-10-14 收口（`TD-16-149`）：全仓唯一声明** —— `core/rules/accountPick` 的分组列表兜底
+ *   （原 `_Component45.jsx:607` 的 `ye.name || '未命名分组'`）是**同一命题**（分组名缺省兜底）
+ *   ⇒ 那边改引本常量，不再各写一份。
+ */
+export const DEFAULT_GROUP_NAME = '未命名分组';
 
 /** 新建分组（原 `addGroup` 31937-31951） */
 export function addGroup(

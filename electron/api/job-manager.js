@@ -475,9 +475,17 @@ function createJobManager(deps) {
    * @param {object} basePayload  { providerId, kind, prompt, params, nodeId, refSources, attempt }
    * @param {Array<{params?:object}>} matrix  每个元素覆盖 params（如不同 ratio/duration/model）
    * @returns {{ok:boolean, jobIds:(string|null)[], errors:string[], total:number}}
+   *          · `matrix` 非数组 ⇒ `{ok:false, error}`（**整份载荷不合法**，不是"某一位提交失败"）
    */
   function submitBatch(basePayload, matrix) {
-    const variants = Array.isArray(matrix) ? matrix : [];
+    // ★ 非数组 = **契约违约**（渲染侧 `ApiPort.jobBatch` 已把 `matrix` 钉成 `readonly ApiJobVariant[]`
+    //   ⇒ 这里只可能来自手改报文 / 旧版本渲染层）：**明确失败**，不再兜成 `[]` ——
+    //   兜成 `[]` 会「提交 0 个却回 ok:true」（用户以为出片了，实际什么都没提交）。
+    if (!Array.isArray(matrix)) {
+      const got = matrix === null ? 'null' : typeof matrix;
+      return { ok: false, error: `批量出片参数不合法：matrix 必须是数组（收到 ${got}）` };
+    }
+    const variants = matrix;
     const jobIds = [];
     const errors = [];
     for (const v of variants) {

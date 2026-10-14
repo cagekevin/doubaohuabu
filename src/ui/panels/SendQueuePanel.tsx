@@ -31,7 +31,8 @@
  *   —— 面板位置的读写经控制器，`ports.storage` 不进 `ui`（TD-16-8）。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { cssVars } from '@/ui/common/cssVars';
 import { useSendQueue, useStore } from '@/state';
 import { clampPanelPosition } from '@/core/rules/sendQueuePanel';
 import {
@@ -211,13 +212,11 @@ export function SendQueuePanel() {
       className={`${styles.panel} ${dragging ? styles.dragging : ''}`}
       // 没拖过时贴左下角（源版默认也是屏幕左下，位置来自 `U3` 的兜底）
       // ★ 尺寸经 CSS 变量下发（唯一真源 = 上面的 PANEL_W ／ PANEL_H）—— 防"夹取尺寸与实渲染尺寸"漂移
-      style={
-        {
-          ...(pos ? { left: pos.x, top: pos.y } : {}),
-          '--sq-panel-w': `${PANEL_W}px`,
-          '--sq-panel-h': `${PANEL_H}px`,
-        } as unknown as CSSProperties
-      }
+      style={cssVars({
+        ...(pos ? { left: pos.x, top: pos.y } : {}),
+        '--sq-panel-w': `${PANEL_W}px`,
+        '--sq-panel-h': `${PANEL_H}px`,
+      })}
       testId="send-queue-panel"
       title={SEND_QUEUE_TEXT.title}
       meta={

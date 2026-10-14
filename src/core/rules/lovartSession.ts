@@ -15,7 +15,27 @@
  *    状态**持有**在 UI 的 `useState`（源同），本模块只做**判定**。
  */
 
+// ─────────────── 站点适用性（本模块的判据之一）───────────────
+
+/**
+ * ★ **「真实 Chrome 登录会话条」支持的站点**（原 `_Component25.jsx:359` 的条件 `p && t`）
+ *
+ * 只有 lovart 有这条链（开真实 Chrome 人工登录 → cookie 同步进该账号的 webview 分区，
+ * `electron/chrome-cdp.js`）。它决定会话条**出不出现** —— 是"有/无"的判断，不是样式差异。
+ *
+ * ⚠️ 判据必须住 `core/rules`：`ui` **结构上拿不到 `Ports`**（问不了注册表）。
+ * ★ **2026-10-14 起清单不写在这里** —— 从站点能力表（`core/rules/siteCaps`）**派生**；
+ *   本文件只留领域 API（`isChromeSessionSite`），免得与表漂移。
+ */
+export const CHROME_SESSION_SITES: readonly string[] = siteTypesWhere((c) => c.hasChromeSession);
+
+/** 该站点类型有没有「真实 Chrome 登录会话条」（原 `p`） */
+export function isChromeSessionSite(type: string): boolean {
+  return CHROME_SESSION_SITES.includes(type);
+}
+
 import { LOVART_SESSION_TEXT } from '@/constants/text';
+import { siteTypesWhere } from './siteCaps';
 
 /** 打开态（原 `N.status`） */
 export type LovartOpenStatus = 'idle' | 'opening' | 'open' | 'error';

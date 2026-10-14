@@ -404,6 +404,8 @@ export function createGlobalSlice(
    */
   const rosterDeps = (env: RosterEnv, proxyPool: readonly string[]): RosterDeps => ({
     now: deps.now(),
+    // 随机源：只给分区的后缀用（源 `$P.jsx:32` 的 `Math.random()`）—— `core` 禁自取，故在此注入
+    rand: () => Math.random(),
     os: env.os,
     fingerprintVersion: FINGERPRINT_VERSION,
     // 指纹生成器（原 `zc`）—— 环境（真实窗口 / 真实 GPU）由 bootstrap 注入

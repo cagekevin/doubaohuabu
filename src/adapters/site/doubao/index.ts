@@ -61,6 +61,7 @@ import { attachImagesPhase2 } from './attachPhase2';
 import {
   ATTACH_FINGERPRINT_SCRIPT,
   buildClickSendScript,
+  COMPOSER_LIST_SRC,
   READ_INPUT_STATE_SCRIPT,
   WATERMARK_FREE_DIRECT_SCRIPT,
 } from './scripts';
@@ -72,7 +73,13 @@ import {
   compareImageOrder,
   type ImageOrder,
 } from '@/core/rules/precheckAttach';
-import { ATTACH_PRECHECK_TEXT } from '@/constants/text';
+import {
+  ATTACH_PRECHECK_TEXT,
+  DOUBAO_TEXT,
+  SEND_TEXT,
+  SITE_CAP_TEXT,
+  SITE_SCAN_TEXT,
+} from '@/constants/text';
 import {
   enableDolaForce30s,
   runDolaForcePanelUi,
@@ -161,7 +168,7 @@ async function sampleOnce(partition: string): Promise<Result<ResultScanItem[]>> 
     } | null;
     // ★ 2026-10-11 收口（TD-05-3）：`ok === false` ⇒ **fail-open**（脚本漏 `ok` 即被当成功）。
     //   脚本 `buildResultScanScript` 恒返回 `{ok:true,…}`（`shared/scanScripts.ts:100`）⇒ 改 `!== true`。
-    if (!raw || raw.ok !== true) return err('page-error', raw?.error ?? '结果扫描返回失败');
+    if (!raw || raw.ok !== true) return err('page-error', raw?.error ?? SITE_SCAN_TEXT.rawResultFailed);
     return ok(Array.isArray(raw.items) ? raw.items : []);
   } catch (e) {
     return err('page-error', toMessage(e), e);
@@ -177,7 +184,7 @@ async function fetchScanImage(host: HostPort, item: ResultScanItem): Promise<Res
   if (item.kind === 'data') return ok(item.url);
   const fetched = await host.media.imageFetchDataUrl(item.url);
   if (!fetched.ok) return fetched; // ★ 转发原始错误
-  if (!fetched.value) return err('unknown', `无法取得图片内容：${item.url.slice(0, 80)}`);
+  if (!fetched.value) return err('unknown', DOUBAO_TEXT.imageFetchFailed(item.url.slice(0, 80)));
   return ok(fetched.value);
 }
 
@@ -257,6 +264,9 @@ export function createDoubaoSite(
   return {
     kind,
     chatUrl: CHAT_URL[kind],
+    // ★ 豆包系媒体链的**声明点**（同一工厂产出 doubao / dola ⇒ 值就是 `kind`，**不写域名字面量**）：
+    //   有它 ⇒ 该站点挂 CDP 拦截 + 注 30s 主世界钩子（消费者见 `SitePort.mediaSource` 的头注）
+    mediaSource: kind,
     // ★ 提示词分析 / 调整的页内半（原 `hS` + `mS`）—— 只有豆包 / Dola 有这条链
     askWithImage: createDoubaoAskWithImage(host),
     // ★ `TD-16-103`：`store.queueProgress` 的生产者接缝（发送后追问排队进度）
@@ -289,13 +299,14 @@ export function createDoubaoSite(
      * ⚠️ 源的 Phase 2b 与 Phase 3a 的**图数/图序**那两档未落（分片见 `docs/过程.md（原 plan/02）`）。
      */
     async send(account: Account, payload: SiteSendPayload): Promise<Result<SendResult>> {
+      // ⚠️ 判空已删（同 `shared/webview.ts:68`）：分区由产生方保证恒有值（`accountRoster` 建号 / 启动归位）
+      //    ⇒ 类型层已收窄为 `string`；真找不到时由 `requireWebview` 如实抛出。
       const partition = account.partition;
-      if (!partition) return err('account-invalid', '账号缺少 partition');
 
       // ★ 幂等键：同一 (账号, 文本) 只发一次（原实现防重复点菜单）
       const sessionId = `${account.id}:${payload.source}:${hash32(payload.text)}`;
       if (sentSessions.has(sessionId)) {
-        return err('busy', `重复发送被拦截（sessionId=${sessionId}）`);
+        return err('busy', DOUBAO_TEXT.duplicateSend(sessionId));
       }
 
       let view;
@@ -306,7 +317,7 @@ export function createDoubaoSite(
       }
 
       const wcId = view.getWebContentsId?.() ?? 0;
-      if (!wcId) return err('page-error', '无法取得 webview 的 webContentsId（视图可能未挂载）');
+      if (!wcId) return err('page-error', SITE_SCAN_TEXT.noWebContentsId);
 
       // ★ **Dola「30s 强开」的配对**（原 `Mt`/`zt`，`_Component43.jsx:758-779`）——
       //   发送前装（`Mt`）／发送后 3s 清（`zt`）。清理**必须**走 `finally`（M4「作用域即配对」）：
@@ -462,7 +473,7 @@ export function createDoubaoSite(
           // ★ 原样透传脚本返回的错误（原则 6）
           return err(
             'send-stuck',
-            click?.error ?? `未找到发送按钮（strategy=${click?.strategy ?? 'none'}）`,
+            click?.error ?? DOUBAO_TEXT.sendButtonNotFound(click?.strategy ?? 'none'),
           );
         }
 
@@ -522,7 +533,8 @@ export function createDoubaoSite(
 
     async scan(): Promise<Result<ScanResult>> {
       // 豆包/Dola 不发"抓素材"（那是 Lovart 的能力）；明确报错，**不静默返回空**
-      return err('unknown', `${kind} 适配器不支持抓取素材（请用 Lovart 后台）`);
+      // ⚠️ 文案与"站点缺某能力"**同一个真源**（`SEND_TEXT.noCapability`）—— 站点名用 `kind`
+      return err('unknown', SEND_TEXT.noCapability(kind, SITE_CAP_TEXT.grabMaterialsHint));
     },
 
     async probe(account: Account): Promise<Result<SiteProbe>> {
@@ -538,7 +550,7 @@ export function createDoubaoSite(
       try {
         const raw = (await webviewEval(
           view,
-          '({ href: location.href, hasInput: !!document.querySelector(\'textarea, [contenteditable="true"]\') })',
+          `({ href: location.href, hasInput: !!document.querySelector('${COMPOSER_LIST_SRC}') })`,
         )) as { href?: string; hasInput?: boolean } | null;
         return ok({ usable: !!raw?.hasInput, loggedIn: !!raw?.href, pageKind: 'other' });
       } catch (e) {

@@ -19,18 +19,18 @@ import type {
   FetchImagesResult,
   FilePort,
   HostPort,
-  LicensePort,
   PickedFile,
 } from '@/core/ports/host.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { log } from '@/lib/log';
 import { FETCH_IMAGES_TIMEOUT_MS } from '@/constants';
-import { COMMON_TEXT } from '@/constants/text';
+import { COMMON_TEXT, HOST_TEXT } from '@/constants/text';
 import { isRecord } from '@/lib/object';
 import { createElectronProjectPort } from './project';
 import { createElectronSessionPorts } from './session';
 import { createElectronApiPort } from './api';
 import { getHostApi, guard, normalize, checkOk, HOST_MISSING } from './host-api';
+import { parseFetchDoneEvent, parseFetchItemEvent, parseFetchSubmitAck } from './lovartFetch';
 import { facePortFns } from '@/adapters/media/facePort';
 import { createWindowLifecycle } from '../shared/lifecycle';
 
@@ -88,8 +88,9 @@ const createFile = (): FilePort => ({
   revealPath: async (p: string) => {
     const r = await guard((api) => api.revealPath(p));
     if (!r.ok) return r;
-    // ★ TD-16-74：后端 `reveal-path`（`main.js:1893`）**恒返 `{ok, error}`** ⇒ 必须判**内层** `ok`
+    // ★ TD-16-74：后端 `reveal-path`（`main.js`）**恒返 `{ok, error}`** ⇒ 必须判**内层** `ok`
     //   （只判外层 `r.ok` ⇒ 后端说失败也报成功）
+    // ⚠️ 入参收**真实路径**或 **`img://` 引用**（判别在 `main.js` 的 handler 里）—— 调用方不选方法
     const c = checkOk(r.value);
     if (!c.ok) return c;
     return ok(undefined);
@@ -100,15 +101,6 @@ const createFile = (): FilePort => ({
 export function createElectronHost(): HostPort {
   const api = getHostApi();
   const { clipboard, account, license } = createElectronSessionPorts();
-
-  const licensePort: LicensePort = {
-    ...license,
-    getMachineCode: async () => {
-      const r = await guard((a) => a.getMachineCode());
-      if (!r.ok) return r;
-      return ok(typeof r.value === 'string' ? r.value : String(r.value ?? ''));
-    },
-  };
 
   return {
     // ★ 真实宿主平台（来自 preload 的 `process.platform`，**不读 navigator**）
@@ -179,26 +171,27 @@ export function createElectronHost(): HostPort {
           };
 
           // ① **先订阅**（源顺序）—— 按 `accountId` 过滤本账号的推送
+          //    ⚠️ 载荷收窄**只在** `./lovartFetch`（逐字段校验；缺字段 ⇒ 计失败，不静默）
           offItem = a.onLovartFetchItem((payload) => {
-            const p = payload as Record<string, unknown> | null;
-            if (!p || p.accountId !== req.accountId) return;
-            if (typeof p.total === 'number') total = p.total;
+            const ev = parseFetchItemEvent(payload);
+            if (!ev || ev.accountId !== req.accountId) return;
+            if (ev.total !== null) total = ev.total;
             doneCount += 1;
-            if (p.skipped) {
+            if (ev.kind === 'skipped') {
               skipCount += 1;
-              skipped.push({ url: String(p.url ?? ''), reason: String(p.reason ?? '无效图') });
-            } else if (p.failed) {
+              skipped.push({ url: ev.url, reason: ev.reason });
+            } else if (ev.kind === 'failed') {
               failCount += 1;
-              failures.push({ url: String(p.url ?? ''), error: String(p.error ?? '失败') });
-            } else if (isRecord(p.item)) {
+              failures.push({ url: ev.url, error: ev.error });
+            } else {
               okCount += 1;
-              items.push(p.item as unknown as FetchImagesItem);
+              items.push(ev.item);
             }
             onProgress?.({ done: doneCount, total, okCount, failCount, skipCount });
           });
           offDone = a.onLovartFetchDone((payload) => {
-            const p = payload as Record<string, unknown> | null;
-            if (!p || p.accountId !== req.accountId) return;
+            const ev = parseFetchDoneEvent(payload);
+            if (!ev || ev.accountId !== req.accountId) return;
             finish(ok({ items, okCount, failCount, skipCount, failures, skipped }));
           });
 
@@ -211,10 +204,10 @@ export function createElectronHost(): HostPort {
             limit: req.limit ?? req.urls.length,
           })
             .then((r) => {
-              const res = r as Record<string, unknown> | null;
-              if (!res || res.ok !== true) {
-                // 后端**每条 return 都带 `ok`** ⇒ fail-closed（TD-04-5）
-                finish(err('page-error', String(res?.error ?? '批量取图提交失败')));
+              const ack = parseFetchSubmitAck(r);
+              // 后端**每条 return 都带 `ok`** ⇒ fail-closed（TD-04-5）
+              if (!ack || !ack.ok) {
+                finish(err('page-error', ack?.error ?? HOST_TEXT.fetchSubmitFailed));
               }
               // 提交成功 ⇒ 等 `done` 事件收尾
             })
@@ -239,7 +232,7 @@ export function createElectronHost(): HostPort {
         // ★ 后端 `lovart-scan.js` 的 handler **每条 return 都带 `ok`** ⇒ fail-closed 收口（TD-04-5）
         const c = checkOk<{ items?: unknown[]; href?: string }>(r.value, {
           reason: 'page-error',
-          fallback: '多帧扫描返回失败',
+          fallback: HOST_TEXT.fallbackScanFrames,
         });
         if (!c.ok) return c;
         return ok({ items: Array.isArray(c.value.items) ? c.value.items : [], href: c.value.href });
@@ -247,10 +240,10 @@ export function createElectronHost(): HostPort {
       detectVideos: async (webContentsId: number, seenKeys: readonly string[]) => {
         const r = await guard((a) => a.detectVideos(webContentsId, seenKeys));
         if (!r.ok) return r;
-        // ★ 后端 `detect-videos` handler **每条 return 都带 `ok`**（`main.js:2397`）⇒ fail-closed（TD-04-5）
+        // ★ 后端 `detect-videos` handler **每条 return 都带 `ok`**（`main.js`）⇒ fail-closed（TD-04-5）
         const c = checkOk<{ videos?: unknown[] }>(r.value, {
           reason: 'page-error',
-          fallback: '视频检测返回失败',
+          fallback: HOST_TEXT.fallbackDetectVideos,
         });
         if (!c.ok) return c;
         const videos = Array.isArray(c.value.videos) ? (c.value.videos as DetectedVideo[]) : [];
@@ -273,10 +266,10 @@ export function createElectronHost(): HostPort {
       attachDolaDebugger: async (webContentsId: number) => {
         const r = await guard((a) => a.attachDolaDebugger(webContentsId));
         if (!r.ok) return r;
-        // ★ 后端 `attach-dola-debugger` 恒返 `{ok, error?}`（`main.js:2568`）⇒ fail-closed（TD-04-5）
+        // ★ 后端 `attach-dola-debugger` 恒返 `{ok, error?}`（`main.js`）⇒ fail-closed（TD-04-5）
         const c = checkOk(r.value, {
           reason: 'page-error',
-          fallback: 'attach-dola-debugger 失败',
+          fallback: HOST_TEXT.fallbackAttachDolaDebugger,
         });
         if (!c.ok) return c;
         return ok(undefined);
@@ -285,10 +278,10 @@ export function createElectronHost(): HostPort {
       injectDolaDurationMain: async (webContentsId: number) => {
         const r = await guard((a) => a.injectDolaDurationMain(webContentsId));
         if (!r.ok) return r;
-        // ★ 后端 `inject-dola-duration-main` 返 `{ok, error?}`（`main.js:2508/2544`）⇒ fail-closed
+        // ★ 后端 `inject-dola-duration-main` 返 `{ok, error?}`（`main.js`）⇒ fail-closed
         const c = checkOk(r.value, {
           reason: 'page-error',
-          fallback: 'inject-dola-duration-main 失败',
+          fallback: HOST_TEXT.fallbackInjectDolaDuration,
         });
         if (!c.ok) return c;
         return ok(undefined);
@@ -297,10 +290,10 @@ export function createElectronHost(): HostPort {
       logDolaDuration: async (message: string) => {
         const r = await guard((a) => a.dolaDurationDiag(message));
         if (!r.ok) return r;
-        // ★ 后端 `dola-duration-diag` 恒返 `{ok, path|error}`（`main.js:2558-2559`）⇒ fail-closed
+        // ★ 后端 `dola-duration-diag` 恒返 `{ok, path|error}`（`main.js`）⇒ fail-closed
         const c = checkOk(r.value, {
           reason: 'page-error',
-          fallback: 'dola-duration-diag 失败',
+          fallback: HOST_TEXT.fallbackDolaDurationDiag,
         });
         if (!c.ok) return c;
         return ok(undefined);
@@ -310,9 +303,9 @@ export function createElectronHost(): HostPort {
       getDolaMediaDownloadSettings: async () => {
         const r = await guard((a) => a.getDownloadSettings());
         if (!r.ok) return r;
-        // ★ 后端 `get-download-settings` 恒返 `{ok, path, configured}`（`main.js:2104`）⇒ fail-closed
+        // ★ 后端 `get-download-settings` 恒返 `{ok, path, configured}`（`main.js`）⇒ fail-closed
         const c = checkOk<{ path?: unknown; configured?: unknown }>(r.value, {
-          fallback: '读取下载设置失败',
+          fallback: HOST_TEXT.fallbackReadDownloadSettings,
         });
         if (!c.ok) return c;
         return ok({
@@ -329,7 +322,7 @@ export function createElectronHost(): HostPort {
           return ok({ canceled: true });
         }
         const c = checkOk<{ path?: unknown; configured?: unknown }>(r.value, {
-          fallback: '选择下载目录失败',
+          fallback: HOST_TEXT.fallbackPickDownloadDir,
         });
         if (!c.ok) return c;
         return ok({
@@ -341,7 +334,7 @@ export function createElectronHost(): HostPort {
         const r = await guard((a) => a.downloadDolaMedia(url, mediaType));
         if (!r.ok) return r;
         // ★ 后端 `dola-media-download` 成功分支带 `ok:true`、失败 `{ok:false, error}` ⇒ fail-closed（TD-04-5）
-        const c = checkOk<{ path?: unknown; size?: unknown }>(r.value, { fallback: '下载失败' });
+        const c = checkOk<{ path?: unknown; size?: unknown }>(r.value, { fallback: HOST_TEXT.fallbackDownload });
         if (!c.ok) return c;
         return ok({
           ...(typeof c.value.path === 'string' ? { path: c.value.path } : {}),
@@ -351,17 +344,8 @@ export function createElectronHost(): HostPort {
       clearDolaMedia: async () => {
         const r = await guard((a) => a.clearDolaMedia());
         if (!r.ok) return r;
-        // ★ 后端 `dola-media-clear` 恒返 `{ok:true}`（`main.js:2027-2030`）⇒ fail-closed
-        const c = checkOk(r.value, { fallback: '清空失败' });
-        if (!c.ok) return c;
-        return ok(undefined);
-      },
-      showInFolder: async (ref: string) => {
-        const r = await guard((a) => a.showInFolder(ref));
-        if (!r.ok) return r;
-        // ★ TD-16-74：后端 `show-in-folder`（`main.js:1262`）**恒返 `{ok, error}`** ⇒ 判**内层** `ok`
-        //   （只判外层 `r.ok` ⇒ 后端「未找到对应的本地文件」也报成功）
-        const c = checkOk(r.value);
+        // ★ 后端 `dola-media-clear` 恒返 `{ok:true}`（`main.js`）⇒ fail-closed
+        const c = checkOk(r.value, { fallback: HOST_TEXT.fallbackClear });
         if (!c.ok) return c;
         return ok(undefined);
       },
@@ -378,9 +362,9 @@ export function createElectronHost(): HostPort {
       clearBrowserCache: async () => {
         const r = await guard((a) => a.clearBrowserCache());
         if (!r.ok) return r;
-        // ★ 后端 `main.js:1201,1213` 两条 return 都带 `ok` ⇒ fail-closed 收口（TD-04-5）
+        // ★ 后端 `main.js` 两条 return 都带 `ok` ⇒ fail-closed 收口（TD-04-5）
         const c = checkOk<{ cleared?: unknown; failed?: unknown }>(r.value, {
-          fallback: '清理浏览器缓存返回失败',
+          fallback: HOST_TEXT.fallbackClearBrowserCache,
         });
         if (!c.ok) return c;
         return ok({
@@ -394,7 +378,7 @@ export function createElectronHost(): HostPort {
       ...facePortFns,
     },
     account,
-    license: licensePort,
+    license,
     api: createElectronApiPort(),
   };
 }

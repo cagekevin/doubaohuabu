@@ -17,7 +17,7 @@
 import type { ClipboardPort } from '@/core/ports/host.port';
 import { err, ok, type Result } from '@/core/model/result';
 import { sleep } from '@/lib/async';
-import { ANALYZE_TEXT } from '@/constants/text';
+import { ANALYZE_TEXT, COMMON_TEXT } from '@/constants/text';
 import {
   ATTACH_IMAGE_ATTEMPTS,
   ATTACH_IMAGE_PASTE_SETTLE_MS,
@@ -37,8 +37,7 @@ export interface AttachImageOutcome {
   count: number;
 }
 
-/** 参考图的固定标签（源版三处都是 `'参考图'`）—— 也用于后端拼临时文件名 */
-export const REFERENCE_IMAGE_LABEL = '参考图';
+
 
 
 
@@ -56,7 +55,7 @@ export async function attachImageToWebview(
   dataUrl: string,
 ): Promise<Result<AttachImageOutcome>> {
   const reasons: string[] = [];
-  const img = { dataUrl, label: REFERENCE_IMAGE_LABEL };
+  const img = { dataUrl, label: COMMON_TEXT.referenceImageLabel };
 
   // ── ① CDP 直喂（重试 3 次）──
   if (webContentsId) {

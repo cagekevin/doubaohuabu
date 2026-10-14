@@ -26,6 +26,7 @@
  */
 
 import { err, ok, type Result } from '@/core/model/result';
+import { LIBRARY_TEXT } from '@/constants/text';
 import { resolveMaterialLibId, type MaterialNodeLike, type RenamableLibraryItem } from './materialRename';
 import { replaceRefId } from './refs';
 
@@ -39,9 +40,9 @@ export interface MaterialReplaceItem {
   h?: number;
 }
 
-export interface MaterialReplacePlan {
-  /** 改写后的**全部**节点（引用改指 + 目标节点换图；未命中的原样返回） */
-  nodes: MaterialNodeLike[];
+export interface MaterialReplacePlan<T extends MaterialNodeLike = MaterialNodeLike> {
+  /** 改写后的**全部**节点（引用改指 + 目标节点换图；未命中的原样返回）—— **与入参同型** */
+  nodes: T[];
   /** 解析出来的**旧** libId（供调用方留痕/测试） */
   prevLibId: string;
   /** 新 libId（= `item.id`，可能 `undefined`） */
@@ -56,17 +57,18 @@ export interface MaterialReplacePlan {
  * @returns `{ok:false, reason:'bad-input'}` = 守卫没过 —— 调用方据此**不 commit**
  *   （源的 `commit` 在守卫之后）并给用户提示（源那行**静默**，本仓按原则 6 不静默）。
  */
-export function planMaterialReplaceWithLib(input: {
-  nodes: readonly MaterialNodeLike[];
+export function planMaterialReplaceWithLib<T extends MaterialNodeLike>(input: {
+  nodes: readonly T[];
   library: readonly RenamableLibraryItem[];
   nodeId: string;
   item: MaterialReplaceItem | null | undefined;
-}): Result<MaterialReplacePlan> {
+}): Result<MaterialReplacePlan<T>> {
   const { nodes, library, nodeId, item } = input;
   const node = (nodes ?? []).find((n) => n.id === nodeId);
   // ① 守卫（逐字对源 27686）
   if (!node || node.type !== 'material' || !node.data || !item || !item.dataUrl) {
-    return err('bad-input', '更换素材：节点不是素材节点或未选择图片');
+    // 文案真源 = `LIBRARY_TEXT.replaceFailed`（`TD-16-150`：同句原先本处与 `constants` 各写一份）
+    return err('bad-input', LIBRARY_TEXT.replaceFailed);
   }
 
   // ② 旧 libId（原 `Ms`）
@@ -78,10 +80,11 @@ export function planMaterialReplaceWithLib(input: {
 
   // ④ 引用改指（原 `Gy`）—— `null` = 一处都没改 ⇒ 用原数组
   const nextId = item.id;
-  const rewired = replaceRefId(nodes, { prevId: prevLibId, nextId: nextId ?? '', nextName: name }) ?? nodes;
+  const rewired: readonly T[] =
+    replaceRefId(nodes, { prevId: prevLibId, nextId: nextId ?? '', nextName: name }) ?? nodes;
 
   // ⑤ 目标节点换图
-  const out = (rewired as MaterialNodeLike[]).map((n) =>
+  const out: T[] = rewired.map((n) =>
     n.id === nodeId
       ? {
           ...n,

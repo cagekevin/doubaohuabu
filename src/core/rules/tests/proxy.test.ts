@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { assignProxyPool, normalizeProxyPool } from '../proxy';
 import { isSiteType, normalizeAccountType, type Account, type SiteType } from '@/stable/model/account';
 
-const acc = (id: string, type: SiteType, partition: string | null = `persist:${id}`): Account => ({
+const acc = (id: string, type: SiteType, partition: string = `persist:${id}`): Account => ({
   id,
   name: id,
   type,
@@ -74,18 +74,24 @@ describe('assignProxyPool（原 `reassignLovartProxies` 纯逻辑半）', () => 
     expect(r2.accounts[0]?.proxy).toBe('');
   });
 
-  it('★ `assignments` 只含**有 partition** 的账号（源码 `if (o.partition)`）', () => {
-    const accounts = [acc('l1', 'lovart'), acc('l2', 'lovart', null)];
+  it('★ `assignments` 含**全部** lovart 账号（分区恒有值 ⇒ 「无分区就跳过」那档已删）', () => {
+    const accounts = [acc('l1', 'lovart'), acc('l2', 'lovart')];
     const r = assignProxyPool(accounts, ['p0']);
-    expect(r.assignments).toEqual([{ accountId: 'l1', partition: 'persist:l1', proxy: 'p0' }]);
-    // 但 l2 仍被写入 proxy（源码如此）
-    expect(r.accounts[1]?.proxy).toBe('p0');
+    expect(r.assignments).toEqual([
+      { accountId: 'l1', partition: 'persist:l1', proxy: 'p0' },
+      { accountId: 'l2', partition: 'persist:l2', proxy: 'p0' },
+    ]);
   });
 
-  it('★ 未覆盖分支：`partition` 为**空串** ⇒ 不进 assignments（`if (a.partition)` 为假），但仍写 `proxy`', () => {
-    const r = assignProxyPool([acc('l1', 'lovart', '')], ['p0']);
-    expect(r.assignments).toEqual([]);
-    expect(r.accounts[0]?.proxy).toBe('p0');
+  /*
+   * ⚠️ 原有一条「`partition` 为空串 ⇒ 不进 assignments」**已删**：
+   *    空串这一档随 `if (a.partition)` 一起删除（分区由产生方保证恒有值，
+   *    `Account.partition: string`）。留着它等于替「产生方又缺了」打掩护。
+   */
+  it('★ 空池 / 未知类型仍照旧：只分配 lovart，且 proxy 一律写上', () => {
+    const r = assignProxyPool([acc('l1', 'lovart')], []);
+    expect(r.assignments).toEqual([{ accountId: 'l1', partition: 'persist:l1', proxy: '' }]);
+    expect(r.accounts[0]?.proxy).toBe('');
   });
 
   it('★ 未知类型按 `doubao` 处理 ⇒ 不参与代理分配', () => {

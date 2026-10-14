@@ -15,7 +15,8 @@
 
 import { Modal } from '@/ui/common/Modal';
 import { ACCOUNT_TYPE_PICKER_TEXT } from '@/constants/text';
-import type { SiteType } from '@/stable/model/account';
+// ★ 清单 / 顺序都取自**真源**（`@/constants` 的 L0 桶）—— 不再从卡片数组里读 `type`
+import { SITE_TYPES, type SiteType } from '@/constants';
 import styles from './AccountTypePicker.module.css';
 
 export interface AccountTypePickerProps {
@@ -29,20 +30,19 @@ export function AccountTypePicker({ onPick, onClose }: AccountTypePickerProps) {
   return (
     <Modal open onClose={onClose} title={ACCOUNT_TYPE_PICKER_TEXT.title}>
       <div className={styles.body}>
-        {ACCOUNT_TYPE_PICKER_TEXT.cards.map((card) => (
-          <button
-            key={card.type}
-            type="button"
-            className={styles.card}
-            onClick={() => onPick(card.type)}
-          >
-            <span className={styles.emoji} aria-hidden="true">
-              {card.emoji}
-            </span>
-            <span className={styles.name}>{card.name}</span>
-            <span className={styles.desc}>{card.desc}</span>
-          </button>
-        ))}
+        {/* ★ 遍历的是**真源 `SITE_TYPES`**（集合与顺序都在那一处）；文案表只按 `type` 取词 */}
+        {SITE_TYPES.map((type) => {
+          const card = ACCOUNT_TYPE_PICKER_TEXT.cards[type];
+          return (
+            <button key={type} type="button" className={styles.card} onClick={() => onPick(type)}>
+              <span className={styles.emoji} aria-hidden="true">
+                {card.emoji}
+              </span>
+              <span className={styles.name}>{card.name}</span>
+              <span className={styles.desc}>{card.desc}</span>
+            </button>
+          );
+        })}
       </div>
     </Modal>
   );

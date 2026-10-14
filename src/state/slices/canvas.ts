@@ -6,7 +6,9 @@
  * ⚠️ **快照时机 = 变更之前**（统一约定，见 `core/rules/undo.ts` 头部说明）
  */
 
-import type { CanvasNode, NodeType } from '@/stable/model/node';
+import type { CanvasNode, NodeDataOf, NodeType, TextNode } from '@/stable/model/node';
+// ★ 节点默认标签的真源（`TD-16-150`：本文件原内联 `'文生图'` 作重命名前缀兜底）
+import { GEN_IMAGE_LABEL } from '@/stable/model/node';
 import type { CanvasEdge, LibraryItem, Preset, VideoShare } from '@/stable/model/project';
 import type { OperationLogEvent } from '@/core/ports/host.port';
 import {
@@ -63,14 +65,15 @@ import { genImageCurrentUrl } from '@/core/rules/genImage';
  *   各写了一份语义相同的 `data`（后者多写 `aspectRatio:'16:9'` / `duration:7` —— **源的旧值**）⇒
  *   本仓**只留这一份**（比例/时长走 `NODE_DEFAULTS.text` 的当前默认）——
  *   于是"按关键词拆"与"按预设拆"产出的节点**必然同形**。
+ * ⚠️ 出参按 `NodeDataOf<'text'>`（**不是** `CanvasNode['data']` 那个擦宽的联合）⇒ 造出的节点仍是
+ *   `CanvasNode` 的**那个成员**，写回 store 不必收窄。
  */
-const splitTextData = (part: SplitPart): CanvasNode['data'] =>
-  ({
-    ...defaultNodeData('text'),
-    label: part.title,
-    text: part.content,
-    linkOrder: [],
-  }) as CanvasNode['data'];
+const splitTextData = (part: SplitPart): NodeDataOf<'text'> => ({
+  ...defaultNodeData('text'),
+  label: part.title,
+  text: part.content,
+  linkOrder: [],
+});
 
 /**
  * 画布默认值 → 文本节点的 `data` 覆盖（原 `29440-29442` / `29486-29488` 那两个三目）
@@ -93,19 +96,6 @@ import { buildClipboard, planPaste, type ClipboardPayload } from '@/core/rules/c
 import { asRecord } from '@/lib/object';
 import type { CanvasEdge as Edge } from '@/stable/model/project';
 
-/**
- * ★ **`TD-02-17` 确证必要的唯一断言**（散在 4 个调用点会漂）
- *
- * 纯层的出参被**擦宽**成 `*Like[]`（它们只声明了结构子集，如 `GroupNodeLike` / `MaterialNodeLike`），
- * 回写 store 前必须收窄回 `CanvasNode[]`。
- * ⚠️ **为什么是 `as unknown as` 而不是泛型**：泛型化要改 `core/rules/group.ts` 的 3 个纯函数签名
- *    + `GroupResult` / `UngroupResult` 两个结果类型（另立批次）；此处先把 **4 处收成 1 处**
- *    （判据 C1：同一断言不写四份）。
- * ⚠️ 这不是"Lite 接口与 stable 双轨"问题 —— `NodeDataBase` 本就有索引签名，**入参方向无需断言**
- *    （2026-10-11 实测：全仓 20 处里 **15 处是多余的**，已删）。
- */
-const asCanvasNodes = (nodes: readonly unknown[]): CanvasNode[] => nodes as unknown as CanvasNode[];
-
 /** 被快照的状态（原 `Td` = `structuredClone({nodes,edges,library})`） */
 export interface CanvasSnapshot {
   nodes: CanvasNode[];
@@ -116,6 +106,15 @@ export interface CanvasSnapshot {
 /** 快照深拷贝（原 `Td` 26745） */
 export const takeSnapshot = (s: CanvasSnapshot): CanvasSnapshot =>
   structuredClone({ nodes: s.nodes, edges: s.edges, library: s.library });
+
+/**
+ * 「换图 / 重命名」生成新名的**后缀**（原 `${c}·已编辑`）
+ *
+ * ★ **2026-10-14 收口（`TD-16-149`）**：本文件原**两处**各写一遍 `` `${prefix}·已编辑` ``
+ *   （换素材图 · 换生成图）—— 同一命名规则 ⇒ 一处声明。
+ * ⚠️ 它是**后缀片段**（离开前缀没有意义），不是独立文案 ⇒ 住本文件而不进 `constants`。
+ */
+const EDITED_SUFFIX = '·已编辑';
 
 /** slice 需要的注入依赖（时钟来自 `ClockPort`） */
 export interface CanvasSliceDeps {
@@ -151,6 +150,16 @@ export interface CanvasSliceDeps {
    * ⚠️ 消费者：`apiLanding.addImageGenResult` 的「收满即释放」（原 `:27440-27444`）。
    */
   releaseAccount(accountId: string): void;
+  /**
+   * ★ **「视频 `url` 已写入」的收尾** —— 立刻把直链落成本地 `vid://`（`state/localizeOps`）。
+   *
+   * ⚠️ **为什么由注入给**：slice 拿不到 `ports`（原则 1）；落盘要经 `MediaPort.saveVideoFromUrl`
+   *    ⇒ 与 `persistImage` 同法（同一处注入实现，见 `state/store.ts`）。
+   * ⚠️ **为什么必须有**：源是**内建**在 `addVideoNode` 里的（`shared.js:28140` 的 genvideo 支 ·
+   *    `:28308` 的网格支），不是"让每个调用方自己记得调" —— 直链会过期 / 需要 referer，
+   *    漏一处就是**静默不落盘**（用户看到的地址迟早失效）。
+   */
+  localizeVideoNode(nodeId: string): void;
 }
 
 export interface CanvasSlice extends ApiLandingActions {
@@ -599,6 +608,14 @@ export interface CanvasSlice extends ApiLandingActions {
   /** 更新单个节点的 `data`（局部合并） */
   patchNodeData: (id: string, patch: Record<string, unknown>) => void;
   /**
+   * ★ **写视频节点 `url` 的唯一入口**（原 `_Component43.jsx:3160`）—— 写完**立刻**落本地
+   *
+   * ⚠️ 用它而不是 `patchNodeData`：**调用方不需要知道"写完要本地化"**（直链会过期 / 需要 referer）。
+   * ⚠️ 与 `patchNodeData` 并存不是"两个入口"：后者是**通用**补丁（版本切换 / 改名 / 选中 / 配方），
+   *    只有本动作才表达「这是这条视频的直链」。
+   */
+  writeVideoUrl: (id: string, patch: Record<string, unknown>) => void;
+  /**
    * ★ **节点剪贴板**（原 `clipboard`，`shared.js:32068-32073`）
    *
    * ⚠️ **内存态**（源亦不落盘，不在 `ProjectData` 里）；`null` = 还没复制过。
@@ -706,7 +723,7 @@ export function createCanvasSlice(
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'library', deps.now()) });
       set({
         library: plan.library,
-        nodes: asCanvasNodes(plan.nodes),
+        nodes: plan.nodes,
       });
     },
 
@@ -737,7 +754,7 @@ export function createCanvasSlice(
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'library', deps.now()) });
       set({
         library: plan.library,
-        nodes: asCanvasNodes(plan.nodes),
+        nodes: plan.nodes,
       });
       return plan.replaced;
     },
@@ -876,7 +893,8 @@ export function createCanvasSlice(
       if (libId) {
         const existing = findMaterialNodeByLibId(s.nodes, library, libId);
         if (existing) {
-          const moved: Record<string, unknown> = {};
+          // ⚠️ 只覆盖 `NodeBase` 上的**公共字段** ⇒ `{...n, ...moved}` 仍是原联合成员（不需要断言）
+          const moved: Partial<Pick<CanvasNode, 'position' | 'width' | 'height'>> = {};
           if (position) moved.position = s.snap ? snapToGrid(position) : position;
           if (size && size.w != null && size.h != null) {
             moved.width = size.w;
@@ -885,7 +903,7 @@ export function createCanvasSlice(
           if (Object.keys(moved).length > 0) {
             set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'graph-move', deps.now()) });
             set({
-              nodes: s.nodes.map((n) => (n.id === existing.id ? ({ ...n, ...moved } as CanvasNode) : n)),
+              nodes: s.nodes.map((n) => (n.id === existing.id ? { ...n, ...moved } : n)),
             });
           }
           return existing.id;
@@ -1049,7 +1067,7 @@ export function createCanvasSlice(
 
       const d = node.data as Record<string, unknown>;
       const prefix = (typeof d.name === 'string' && d.name) || (typeof d.label === 'string' && d.label) || '素材';
-      const name = (opts.name ?? '').trim() || `${prefix}·已编辑`;
+      const name = (opts.name ?? '').trim() || `${prefix}${EDITED_SUFFIX}`;
       const libId = makeLibraryId(deps.now(), ++nodeSeq);
       /** 新图的**原始**尺寸（写进库条目与 `data.natW/natH`） */
       const w = opts.w || Number(d.natW) || 0;
@@ -1119,8 +1137,8 @@ export function createCanvasSlice(
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `replace-img-${nodeId}`, deps.now()) });
 
       // ③ 新名（原 `${c}·已编辑`，`c` = `name || label || '文生图'`）
-      const prefix = (typeof d.name === 'string' && d.name) || (typeof d.label === 'string' && d.label) || '文生图';
-      const name = (opts.name ?? '').trim() || `${prefix}·已编辑`;
+      const prefix = (typeof d.name === 'string' && d.name) || (typeof d.label === 'string' && d.label) || GEN_IMAGE_LABEL;
+      const name = (opts.name ?? '').trim() || `${prefix}${EDITED_SUFFIX}`;
 
       // ④ 外置（原 `Tn(r)`；`persistImage` 幂等，失败原样返回入参）
       const stored = deps.persistImage(dataUrl);
@@ -1181,7 +1199,7 @@ export function createCanvasSlice(
       if (!plan.ok) return { ok: false, reason: plan.reason };
       // 变更前 commit（统一约定；key 用源版那个**按节点分区**的 `replace-mat-${nodeId}`）
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `replace-mat-${nodeId}`, deps.now()) });
-      set({ nodes: asCanvasNodes(plan.value.nodes) });
+      set({ nodes: plan.value.nodes });
       return { ok: true };
     },
 
@@ -1216,8 +1234,8 @@ export function createCanvasSlice(
       if (!plan) return;
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `rename-${nodeId}`, deps.now()) });
       set({
-        nodes: asCanvasNodes(plan.nodes),
-        library: plan.library as typeof s.library,
+        nodes: plan.nodes,
+        library: plan.library,
         // ⚠️ 只有纯层真的改了才带这个字段（`undefined` ⇒ 不动画廊）
         ...(plan.galleries === undefined ? {} : { lovartGalleries: plan.galleries }),
       });
@@ -1234,7 +1252,7 @@ export function createCanvasSlice(
       );
       if (!r.ok) return { ok: false, reason: r.reason };
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'group', deps.now()) });
-      set({ nodes: asCanvasNodes(r.nodes) });
+      set({ nodes: r.nodes });
       return { ok: true, groupId: r.groupId };
     },
 
@@ -1243,7 +1261,7 @@ export function createCanvasSlice(
       const r = ungroupPure(s.nodes, groupId);
       if (!r.ok) return;
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'ungroup', deps.now()) });
-      set({ nodes: asCanvasNodes(r.nodes) });
+      set({ nodes: r.nodes });
     },
 
     arrangeNodes: (mode) => {
@@ -1254,7 +1272,7 @@ export function createCanvasSlice(
       // ⚠️ 与 `arrangeSelectedNodes` 的 `'graph-arrange'`（shared.js:29645）是**两个不同的 key** ——
       //   两个动作在源里就是两段独立实现，不共用撤销键（2026-10-11 曾错改成本 key，已回退）。
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), 'arrange', deps.now()) });
-      set({ nodes: asCanvasNodes(r.nodes) });
+      set({ nodes: r.nodes });
       return { ok: true, mode, count: r.count };
     },
 
@@ -1266,7 +1284,7 @@ export function createCanvasSlice(
       set({
         nodes: s.nodes.map((n) => {
           const pos = plan.get(n.id);
-          return pos ? ({ ...n, position: { x: pos.x, y: pos.y } } as CanvasNode) : n;
+          return pos ? { ...n, position: { x: pos.x, y: pos.y } } : n;
         }),
       });
       return { ok: true, count: plan.size };
@@ -1290,7 +1308,7 @@ export function createCanvasSlice(
 
       const base = src.position;
       const newIds: string[] = [];
-      const created = parts.map((part, i) => {
+      const created: TextNode[] = parts.map((part, i) => {
         const id = makeNodeId('text', deps.now(), ++nodeSeq);
         newIds.push(id);
         return {
@@ -1302,7 +1320,7 @@ export function createCanvasSlice(
           style: { width: SPLIT_NODE_WIDTH, height: SPLIT_NODE_HEIGHT },
           selected: true,
           data: splitTextData(part),
-        } as CanvasNode;
+        };
       });
 
       // 原 28614-28622：新节点**按顺序串成一条链**
@@ -1401,7 +1419,7 @@ export function createCanvasSlice(
       // ③ ★ 删掉的是**组** ⇒ **释放成员**（原 `onNodesChange` 的删组支，`shared.js:26848-26875`）——
       //   否则孩子留着悬空 `parentId`：相对坐标被当成绝对坐标 ⇒ 跳位 + 拖动/裁切异常。
       //   ⚠️ 判据用**变更前**的 `s.nodes`（被删的组已经不在 `survivors` 里了）。
-      const nodes = asCanvasNodes(releaseDeletedGroupChildren(survivors, s.nodes, kill));
+      const nodes = releaseDeletedGroupChildren(survivors, s.nodes, kill);
 
       set({ nodes, edges });
     },
@@ -1414,6 +1432,14 @@ export function createCanvasSlice(
           n.id === id ? ({ ...n, data: { ...n.data, ...patch } } as CanvasNode) : n,
         ),
       });
+    },
+
+    writeVideoUrl: (id, patch) => {
+      // ★ 「写视频 `url`」的**唯一入口**：写 + **内建**本地化（源 `_Component43.jsx:3160`：
+      //   `updateNodeData(...)` 之后立刻 `localizeNodeVideos(ee)`）—— 调用方不需要知道这件事。
+      // ⚠️ 与 `patchNodeData` 的分工：后者是**通用**补丁（版本切换 / 改名 / 选中 / 配方…都不该触发落盘）。
+      get().patchNodeData(id, patch);
+      deps.localizeVideoNode(id);
     },
 
     copyNodes: () => {
@@ -1457,7 +1483,7 @@ export function createCanvasSlice(
       // 逐字：全量映射 + 只改 `selected`（未变的返回**同一引用**，避免无谓重渲染）
       set({
         nodes: s.nodes.map((n) =>
-          n.selected === keep.has(n.id) ? n : ({ ...n, selected: keep.has(n.id) } as CanvasNode),
+          n.selected === keep.has(n.id) ? n : { ...n, selected: keep.has(n.id) },
         ),
       });
     },
@@ -1483,6 +1509,7 @@ export function createCanvasSlice(
     ...createApiLandingActions(set, get, {
       now: () => deps.now(),
       persistImage: deps.persistImage,
+      localizeVideoNode: deps.localizeVideoNode,
       nextLibraryId: () => makeLibraryId(deps.now(), ++nodeSeq),
       nextVideoNodeId: () => makeNodeId('video', deps.now(), ++nodeSeq),
       // 原 `Pt('ig')` —— 生成图片流的项 id（与 imggen 节点同前缀）

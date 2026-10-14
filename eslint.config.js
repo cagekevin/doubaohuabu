@@ -39,7 +39,13 @@ export default tseslint.config(
       'node_modules/**',
       'coverage/**',
       // ── 以下**不是**重写范围，排除出 lint ──
-      'electron/**', // 冻结的后端（与 逆向工程/electron 同一份，MD5 一致）
+      // electron = 后端 CommonJS（**不是**"逆向工程副本的镜像"：`site-hosts.js` 为本仓独有、
+      //   `main.js`/`preload.js` 与 `逆向工程/electron/` 的 md5 均不等 ⇒ 它是本仓**在维护的代码**）。
+      //   不进 lint 的理由是**技术性的**：它是无 TS 的 CommonJS，套 TS 规则集整体误报
+      //   （`--no-ignore` 实测大量 `no-require-imports`/`no-unused-vars`）。
+      //   ⇒ 它的契约面（IPC 频道 / `window.api` 方法面）**不设机器守卫**，靠人工比对
+      //   （工具 `scripts/extract-host-api.cjs`）—— 见 `AGENTS.md` §九「禁区速查」。
+      'electron/**',
       'public/**', // ★ 第三方静态资源（mediapipe：wasm 加载器 + .tflite 模型），非重写范围
       'docs/**', // 设计文档（Markdown + 少量脚本）
       '.codebuddy/**', // 工作区命令/技能

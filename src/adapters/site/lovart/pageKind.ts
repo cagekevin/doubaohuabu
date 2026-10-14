@@ -4,8 +4,10 @@
  * 用途：抓取 / 发送前先判「用户当前停在哪种页」——
  *   **画布页**（可抓）· **首页 / 广场**（不可抓，要提示去打开画布页）· **其他**。
  *
- * ⚠️ **归属（判据 A1）**：主机名正则与路径规则都是 Lovart 的 ⇒ **判定留本目录**
- *    （枚举已收口到 `core/rules/scanChain.ts`，见下）。
+ * ⚠️ **归属（判据 A1）**：**路径规则**是 Lovart 的 ⇒ **留本目录**；
+ *    而**主机名归属**是渲染侧共用的判据（值 = `constants/siteHosts`、判定 = `core/rules/siteHost`）
+ *    ⇒ 本文件**只引用，不自持主机名正则**（`TD-05-12`：自带正则就会漏掉**边界**，
+ *    那时 `evillovart.ai` 也会被判成 Lovart）。
  * ⚠️ 源里还有一份**简化版**（`hp` 内联，`:22675-22693`）：同样判域与 `/canvas`，但**不判 `feed`**
  *    ⇒ 两者差异只在"非画布时给不给得出 feed"。本文件照**完整版 `_d`**（抓取侧要 `feed` 才提示得准）。
  */
@@ -13,9 +15,9 @@
 // ★ **枚举真源已收口**（原 `Sn` 22637 与 Tapnow 的 `$s` 33108 是**同一枚举**）：与 `SCAN_PHASES` /
 //   `SCAN_SCOPES` 同法放在 `core/rules/scanChain.ts` —— 本文件**不自持副本**（判据 C1：第 3 处到点）。
 import { PAGE_KINDS, type PageKind } from '@/core/rules/scanChain';
+// ★ **归属判定真源**（渲染侧唯一；值在 `constants/siteHosts`）
+import { isHostOfSite } from '@/core/rules/siteHost';
 
-/** Lovart 主机名（原 `_d` 内联）—— **只认该域**（含子域） */
-const LOVART_HOST_RE = /lovart\.ai$/i;
 /** 画布页路径（原 `_d` 内联） */
 const CANVAS_PATH_RE = /\/canvas(\/|\?|$)/i;
 /** 首页 / 广场类路径（原 `_d` 内联的白名单） */
@@ -35,7 +37,7 @@ export function lovartPageKind(href: unknown): PageKind {
   if (!href || typeof href !== 'string') return PAGE_KINDS.OTHER;
   try {
     const url = new URL(href);
-    if (!LOVART_HOST_RE.test(url.hostname)) return PAGE_KINDS.OTHER;
+    if (!isHostOfSite(url.hostname, 'lovart')) return PAGE_KINDS.OTHER;
     const path = url.pathname || '';
     if (CANVAS_PATH_RE.test(path) || url.searchParams.has('projectId')) return PAGE_KINDS.CANVAS;
     if (/^\/?$/.test(path) || FEED_PATH_RE.test(path)) return PAGE_KINDS.FEED;

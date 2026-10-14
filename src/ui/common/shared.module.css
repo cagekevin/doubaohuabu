@@ -69,9 +69,17 @@
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--color-border);
 }
-/* 面板题（原各模块自造的 `.title` / `.xxxTitle` / `.bs-title` …） */
+/*
+ * ★★ **头部三槽的口径**（2026-10-14 修正）：
+ *   **文本槽可收缩 + 单行省略；动作槽不收缩。**
+ *
+ * ⚠️ 原判据写反了：`.panelTitle` 是 `flex: 0 0 auto`（**不收缩**）却配了 `text-overflow: ellipsis`
+ *   —— **自相矛盾**：不收缩就永远裁不到，省略号**一次都不会出现**；而"不收缩 + 内容超宽"
+ *   的结果是**溢出**，压到右侧动作槽上（用户看到的就是标题与按钮叠字）。
+ *   ⇒ 文本槽放的是**任意长度**的用户文本（账号名 / 计数 / 副标题）⇒ 必须**可收缩**。
+ */
 .panelTitle {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-bold);
@@ -83,10 +91,15 @@
 /*
  * 头部中槽（计数 / 账号 / 时长）—— 与 `panelHeadActions` 的区别：**不靠右**（紧跟在标题之后）。
  * ⚠️ plan §4 只列了 `panelHeadActions`；中槽是 `PanelShell` 落 `meta` 时必需的 ⇒ 一并补上。
+ * ⚠️ 与标题**同一条口径**（可收缩 + 单行省略）：它同样是任意长度文本，缺这三件就会**换行成窄列**
+ *    或溢出（而它是"头里的一行"，不该改变头高）。
  */
 .panelHeadMid {
   flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }

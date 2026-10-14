@@ -80,7 +80,7 @@ export function createElectronClipboard(): ClipboardPort {
       }
     },
 
-    // ★ 修（原则 6）：后端用 `{ok:false, errors:[…]}` 表达失败（`main.js:1503/1541/1561`），
+    // ★ 修（原则 6）：后端用 `{ok:false, errors:[…]}` 表达失败（`main.js`），
     //   原实现**无视 `ok` 且丢掉 `errors`** ⇒ 喂图失败会报成"成功"
     attachImages: async (webContentsId: number, imgs) => {
       const api = getHostApi();
@@ -138,7 +138,7 @@ export function createElectronAccount(): AccountPort {
   };
 
   return {
-    // ★ 修：后端收的是**账号对象**（`preload.js:89/94/97` 原样转发），原实现传的是字符串
+    // ★ 修：后端收的是**账号对象**（`preload.js` 原样转发），原实现传的是字符串
     //   ⇒ `'abc'.partition === undefined` ⇒ 后端回落到 `persist:lovart`（分区/指纹目录全错）
     ensureFingerprint: async (payload: FingerprintSessionPayload) => {
       const r = await call<{ preloadUrl?: string }>((api) => api.ensureFingerprint(payload));
@@ -184,7 +184,7 @@ export function createElectronAccount(): AccountPort {
     // ── 真实 Chrome 集成（原 `_Component25` 的「Lovart 会话条」三键）──
     /**
      * ⚠️ 后端把「业务失败」放在**一次成功的 IPC 调用**里（`{ok:false, error, message}`，
-     *    `main.js:2887-2893`）⇒ 归一成**内层判别联合**：`error` 是**错误码**（查文案表用），
+     *    `main.js`）⇒ 归一成**内层判别联合**：`error` 是**错误码**（查文案表用），
      *    `message` 是后端原文。外层 `Result` 只表达「IPC 通没通」。
      * ⚠️ 只判 `ok !== true`（fail-closed：漏 `ok` 不能当成功 —— `TD-04-5`）。
      */
@@ -215,7 +215,7 @@ export function createElectronAccount(): AccountPort {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
-        // ★ fail-closed：后端 `close-lovart-chrome` 两条 return 都带 `ok`（`main.js:2907-2913`）
+        // ★ fail-closed：后端 `close-lovart-chrome` 两条 return 都带 `ok`（`main.js`）
         const r = asRecord(await api.closeLovartChrome({ accountId }));
         if (r.ok !== true) {
           return err('unknown', typeof r.error === 'string' ? r.error : COMMON_TEXT.unknownReason);
@@ -231,7 +231,7 @@ export function createElectronAccount(): AccountPort {
       try {
         const r = asRecord(await api.syncLovartSession({ accountId, partition }));
         if (r.ok !== true) {
-          // 后端给 `error`（原文）+ 可选 `message`（`main.js:2933`）⇒ 优先更具体的那个
+          // 后端给 `error`（原文）+ 可选 `message`（`main.js`）⇒ 优先更具体的那个
           const failed: LovartSessionSync = {
             ok: false,
             message:
@@ -261,7 +261,9 @@ export function createElectronAccount(): AccountPort {
         // ★ 后端用 `{ok:false, error}` 表达失败 ⇒ 归一成 Result（**原文透传**，原则 6）
         // ★ TD-04-5：后端 `export-account-cookies` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
         const c = checkOk<{ cookies?: unknown[] }>(raw, {
-          fallback: ACCOUNT_TRANSFER_TEXT.exportFailed('未知原因'),
+          // ⚠️ "后端没给原因"用**唯一真源** `COMMON_TEXT.unknownReason`（源 `_Component23.jsx:286`
+          //   那句 `'未知原因'` 属画廊域；账号导入导出在源里用的是 `'未知错误'` 一族）
+          fallback: ACCOUNT_TRANSFER_TEXT.exportFailed(COMMON_TEXT.unknownReason),
         });
         if (!c.ok) return c;
         return ok({ cookies: Array.isArray(c.value.cookies) ? c.value.cookies : [] });
@@ -277,7 +279,7 @@ export function createElectronAccount(): AccountPort {
         const raw = await api.importAccountCookies(partition, cookies);
         // ★ TD-04-5：后端 `import-account-cookies` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
         const c = checkOk<{ restored?: number }>(raw, {
-          fallback: ACCOUNT_TRANSFER_TEXT.importFailed('未知原因'),
+          fallback: ACCOUNT_TRANSFER_TEXT.importFailed(COMMON_TEXT.unknownReason),
         });
         if (!c.ok) return c;
         return ok({ restored: typeof c.value.restored === 'number' ? c.value.restored : 0 });
@@ -352,11 +354,11 @@ export function createElectronLicense(): LicensePort {
         const raw = await api.getMachineCode();
         // ⚠️ 裸字符串是**旧形状**（无 `ok`）⇒ 必须先于 `checkOk` 放行
         if (typeof raw === 'string') return ok(raw);
-        // ★ 修：后端字段名是 `machineCode`（`main.js:2154`），原实现读的是 `code` ⇒ **恒为空串**
+        // ★ 修：后端字段名是 `machineCode`（`main.js`），原实现读的是 `code` ⇒ **恒为空串**
         // ★ TD-04-5：后端 `get-machine-code` 的 **2 条 return 都带 `ok`** ⇒ fail-closed
         const c = checkOk<{ machineCode: string }>(raw, {
           fallback: LICENSE_TEXT.fetchFailed,
-          // ★ `TD-04-10`：**点名缺哪个字段** —— 后端若把 `machineCode` 改名（源 `main.js:2154`），
+          // ★ `TD-04-10`：**点名缺哪个字段** —— 后端若把 `machineCode` 改名（源 `main.js`），
           //   这里当场报「宿主返回缺少必需字段 machineCode」，而不是静默兜成空串
           //   （本仓曾经的症状：字段名读错 ⇒ 机器码**恒空**，用户看到的是"空的"而不是报错）
           guard: (p) => typeof p.machineCode === 'string',

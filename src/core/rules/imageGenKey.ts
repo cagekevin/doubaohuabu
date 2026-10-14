@@ -18,6 +18,7 @@ import { PLACEHOLDER_EXACT_HASHES } from '@/constants/dedupe';
 import { IMAGE_GEN_TEXT } from '@/constants/text';
 import { exactHashFromDataUrl } from '@/lib/hash';
 import { clampImageCount } from './prompt';
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 
 /** 提交参数（原 `_Component45.jsx:900-909` 的 `fe`） */
 export interface ImageGenParams {
@@ -277,7 +278,7 @@ export function resolveImageGenParams(
 
   return {
     text: (bText != null ? bText : (typeof node.text === 'string' ? node.text : '')) || '',
-    channel: bChannel || (typeof node.channel === 'string' && node.channel) || 'doubao',
+    channel: bChannel || (typeof node.channel === 'string' && node.channel) || DEFAULT_CHANNEL,
     aspectRatio:
       bAspect || (typeof node.aspectRatio === 'string' && node.aspectRatio) || NODE_DEFAULT_RATIO_LABEL,
     styleIds: Array.isArray(bStyleIds)

@@ -101,7 +101,7 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
   ): boolean => {
     if (!v.key || !v.ready || !v.url) return false;
     try {
-      landVideo(store, ports, {
+      landVideo(store, {
         url: v.url,
         vid: v.key,
         width: v.width ?? null,

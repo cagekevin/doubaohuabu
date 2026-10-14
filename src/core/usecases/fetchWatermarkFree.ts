@@ -13,7 +13,7 @@
 import type { Account } from '@/stable/model/account';
 import type { WatermarkVideo } from '@/core/ports/site.port';
 import { err, type Result } from '@/core/model/result';
-import { SEND_TEXT } from '@/constants/text';
+import { SEND_TEXT, SITE_CAP_TEXT } from '@/constants/text';
 import { withBackendPage, type SendToSiteDeps } from './sendToSite';
 
 /** 注入（`bootstrap/container.ts` 组装）—— 与 `sendToSite` 同一套（选号 + 占用 + 后台页） */
@@ -47,7 +47,7 @@ export async function fetchWatermarkFreeByVid(
     },
     async (ctx) => {
       const fetch = ctx.site.fetchWatermarkFree;
-      if (!fetch) return err('unknown', SEND_TEXT.noCapability(ctx.site.kind, '无水印拉取'));
+      if (!fetch) return err('unknown', SEND_TEXT.noCapability(ctx.site.kind, SITE_CAP_TEXT.fetchWatermarkFree));
       return fetch({ account: ctx.account, webContentsId: ctx.page.webContentsId }, vid);
     },
   );

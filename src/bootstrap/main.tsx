@@ -26,6 +26,7 @@ import { ActivatePage } from '@/ui/pages/ActivatePage';
 import { isLicenseUsable } from '@/core/rules/license';
 import type { LicenseStatus } from '@/core/model/license';
 import { log } from '@/lib/log';
+import { SHELL_TEXT } from '@/constants/text';
 
 /** 根组件：按 `started` 切换启动页 / 画布外壳 */
 /**
@@ -142,7 +143,7 @@ if (!rootEl) throw new Error('#root 不存在');
 createRoot(rootEl).render(
   <StrictMode>
     {/* 全局错误边界（docs/11 §9.9 的第一级） */}
-    <ErrorBoundary area="应用">
+    <ErrorBoundary area={SHELL_TEXT.areaApp}>
       <StoreProvider store={container.store} gen={container.gen} analyze={container.analyze} accountOps={container.accountOps} batchSend={container.batchSend} sendQueue={container.sendQueue} capture={container.capture} licenseOps={container.licenseOps} hostOps={container.hostOps} projectOps={container.projectOps} apiOps={container.apiOps} pullResult={container.pullResult}>
         <Root />
       </StoreProvider>

@@ -40,9 +40,11 @@ describe('conversationIdFromUrl（原 N0 shared.js:36757-36767）', () => {
 });
 
 describe('accountNameFallback（原 :2869 的 tt ? dola : 豆包）', () => {
-  it('dola ⇒ dola；否则 ⇒ 豆包', () => {
-    expect(accountNameFallback(true)).toBe('dola');
-    expect(accountNameFallback(false)).toBe('豆包');
+  it('dola 类型 ⇒ dola；其余（含未知 / 缺项）⇒ 豆包', () => {
+    expect(accountNameFallback('dola')).toBe('dola');
+    expect(accountNameFallback('doubao')).toBe('豆包');
+    expect(accountNameFallback('lovart')).toBe('豆包');
+    expect(accountNameFallback(undefined)).toBe('豆包');
   });
 });
 

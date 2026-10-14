@@ -6,7 +6,7 @@
  *   |---|---|---|---|
  *   | 1 | 自动排列（整理所选节点） | `arrangeSelectedNodes()` | ✅ `canvas.arrangeSelectedNodes`（原 `shared.js:29635`） |
  *   | 2 | 更换素材（仅 material） | `Ye` → `Z({mode:'replace', nodeId})` | ✅ `onReplaceMaterial` ← 宿主开 `MaterialPickerModal`；state `canvas.replaceMaterialWithLib` |
- *   | 3 | 打开文件所在位置（仅 material 且 `img://`） | `Pe` → `window.api.showInFolder(dataUrl)` | ✅ `hostOps.showInFolder`（**同源方法**）—— ⚠️ **不可用 `revealPath`**：它**只认真实路径**，`img://` 传进去主进程不解析 ⇒ 功能打不开 |
+ *   | 3 | 打开文件所在位置（仅 material 且 `img://`） | `Pe` → `window.api.showInFolder(dataUrl)` | ✅ `hostOps.revealPath(dataUrl)`（**唯一入口**：宿主自己判别 `img://` 与真实路径） |
  *   | 4 | 复制 Ctrl+C | `Te` → `pe()` + `copyNodes()` | ✅ |
  *   | 5 | 保存为节点预设 | `rt` → `addNodePreset` | ✅ `onSaveAsPreset` ← 宿主开 `NodePresetModal`；纯层 `makeGraphPreset` ＋ `global.addNodePreset` 同日落 |
  *   | 6 | 粘贴 Ctrl+V（无剪贴板则禁用） | `Ue` → `pasteNodes(screenToFlow(菜单位置))` | ✅ |
@@ -87,10 +87,10 @@ export function NodeContextMenu({
   }, [pasteNodes, screenToFlowPosition, state.x, state.y]);
 
   // 源 `Pe`（1122-1137）：`img://` 才打开；失败**静默**（源 `catch {}`，本实现 warn 留痕）
-  // ⚠️ **必须用 `showInFolder`（收 `img://`）而不是 `revealPath`（只认真实路径）** —— 见文件头注第 3 项
+  // ⚠️ 传 `img://` 即可 —— 判别在宿主（`revealPath` 一个入口收两种输入）
   const onReveal = useCallback(async () => {
     if (!canReveal || !dataUrl) return;
-    const r = await hostOps.showInFolder(dataUrl);
+    const r = await hostOps.revealPath(dataUrl);
     if (!r.ok) log.warn('[NodeContextMenu] 打开文件位置失败:', r.message);
   }, [canReveal, dataUrl, hostOps]);
 

@@ -28,10 +28,13 @@ const os = require('os');
 const path = require('path');
 const https = require('https');
 const { execSync } = require('child_process');
+const { handle } = require('./ipc');
 
 // ---- 内置常量（公钥 / salt / HMAC 密钥）----
-// 公钥仅用于「验证」激活码；私钥仅在开发者生成工具中，不出现在本文件。
-const PUBLIC_KEY_SPKI = 'MCowBQYDK2VwAyEA4iwDeEcJFalhuoRFp92SOIlb4kTovVmxzrrETqfkOLc=';
+// 公钥仅用于「验证」激活码；配对的私钥**不在客户端**，离线保存在仓库外
+// `豆包画布/签发工具/`（与该目录的 `issue-code.cjs` 一起用）。
+// ⚠️ 换私钥必须同步改本行并**重新打包分发** —— 旧包的公钥验不过新码。
+const PUBLIC_KEY_SPKI = 'MCowBQYDK2VwAyEAZV+d+qmUpul0oTjuOP9zzcjowKhNZh2t+NsFK5qt2ME=';
 const SALT = 'p0Z5zCsRnTlwpaKJjnnkkg==';
 const HMAC_SECRET = 'i/UJRBkqWpwgUFGrcPGRvZ2Z8YI3K3RGzSl4ioPlUig=';
 const LICENSE_VERSION = 1;
@@ -42,11 +45,6 @@ const LICENSE_VERSION = 1;
 //   ⚠️ 删除时**无任何存量激活码**（用户 2026-10-11 确认）⇒ **零迁移成本**。
 //   ⚠️ `SALT` / `HMAC_SECRET` 是**客户端固有限制**（桌面端密钥必然可被提取），
 //      `docs/05` §5.3 已如实登记为「硬编码（仅公钥可公开）」⇒ **不在本债范围内**。
-// 永久授权使用一个足够远的固定到期时间戳（2100-01-01 UTC）
-const PERMANENT_EXPIRE = Date.UTC(2100, 0, 1);
-// 10 秒（测试用）
-const TEST_10S_MS = 10 * 1000;
-
 // 时间容差：允许正常网络/时钟漂移（5 分钟）
 const TIME_TOL_MS = 5 * 60 * 1000;
 
@@ -726,13 +724,34 @@ async function activateWithCode(app, code) {
   return { ok: true, status: 'ok', expireAt: verify.expireAt, activatedAt, machineCode: mc };
 }
 
+// ───────────────────── IPC 自注册（本域） ─────────────────────
+// 三个 handler 说的都是「本机机器码 / 授权状态」这一件事 ⇒ 住本文件（TD-13-24）。
+/**
+ * ★ **域唯一门面**：宿主壳只说「初始化授权域」。
+ * ⚠️ 宿主壳不再需要域内任何别的名字 —— 机器码派生 / 验签 / 联网取可信时间全在本文件。
+ */
+function initLicense() {
+  const { app } = require('electron');
+
+  // 获取本机机器码（供界面展示 / 复制 / 导出）
+  handle('get-machine-code', () => {
+    return { ok: true, machineCode: getMachineCode(app) };
+  });
+
+  // 查询当前授权状态（含时间防篡改检测，可能联网取可信时间）
+  handle('get-license-status', async () => {
+    return { ok: true, ...(await checkLicenseStatus(app)) };
+  });
+
+  // 用激活码激活（校验 + 持久化 + 时间防篡改检测）
+  handle('activate-with-code', async (_e, code) => {
+    return { ok: true, ...(await activateWithCode(app, code || '')) };
+  });
+}
+
+// 导出面 = **宿主可用面**（`initLicense`）＋ 一个声明了用途的测试注入口
 module.exports = {
-  getMachineCode,
-  verifyActivationCode,
-  checkLicenseStatus,
-  activateWithCode,
-  PERMANENT_EXPIRE,
-  TEST_10S_MS,
-  // 仅供测试注入可信时间
+  initLicense,
+  // 仅供测试注入可信时间（`_timeOverride`）—— 本仓当前无测试消费者，但删它会让该分支变死代码
   __setTrustedTimeOverride: (ms) => { _timeOverride = ms; }
 };

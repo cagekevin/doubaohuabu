@@ -3,6 +3,10 @@
 > **本文件只放数据流**：每条链 = **触发 → 经过（`文件` + 唯一入口符号）→ 落点**，外加一句**断点**（这条链哪一段没接）。
 > 口径：① 只写**现状**（链路变了才改）；② 不写本仓行号（源出处可写"原版文件:行"，原版不会变）；③ **不引用其他文档**（章节号 / 债号 / 用例号一律不写）。
 > 判据、红线、进度、缺口编号**不在本文件**。
+>
+> ⚠️ **「本文件没提」= 缺口 ⇒ 当场把整条链补上**（不是「无需改」）：本文件是数据流现状图 —— **链不在图上 = 图不全**。
+>   ⇒ ① 按上面的链形状（**触发 → 经过（`文件` + 唯一入口符号）→ 落点** ＋一句**断点**）**整条**写进去，不许只补一句引用；
+>     ② 补完立刻回查该链的**上下游**（入口 / 回流 / 落盘）；③ 一次补到齐。
 
 ## 读法（先看这里）
 
@@ -41,8 +45,7 @@ bootstrap/main.tsx
   → state/store（zustand 5）            【唯一写入点】
 ```
 
-**关键边**：`hydrate` 是**唯一**批量写 store 的启动入口（不经 usecase，因为它写的是"装载"而非"业务动作"）。
-★ 写入形态：经具名 action `state/slices/global.loadHydrated` **一次原子灌入** —— store 的对外句柄 `AppStoreHook` **类型上不含 `setState`** ⇒ 直写**编译不过**。
+**关键边**：`hydrate` 是**唯一**批量写 store 的启动入口（不经 usecase，因为它写的是"装载"而非"业务动作"）；写入形态见 §四。
 启动授权门（旁支）：`bootstrap/main.tsx` 的 Root（**fail-close**：只有 `ok` 放行）⇄ `ui/pages/ActivatePage`（`useLicenseOps`：`readMachineCode` / `checkStatus` / `activateWithCode` / `exportMachineCode`）→ `state/licenseOps` → `core/usecases/license` → `HostPort.license.{getMachineCode, getStatus, activateWithCode, exportMachineCode}` → `core/rules/license`（`formatLicenseRemaining`）
 
 ---
@@ -64,9 +67,9 @@ state 变更（slices）
 **关键边**：
 - 防抖窗口（`ClockPort`）与 `beforeunload` flush（`HostPort.lifecycle`）**同址**在 `state/persist` —— 两者都**走端口注入**，`state` 层**不直挂 `window`**。
 - 失败**不吞**：写 `saveError`。
-- 图片外置（base64 → `img://`）在 `usecases/persistProject` 内调 `HostPort.media.saveImageSync`，**唯一出口**。
-- 画廊（`LS_LOVART_GALLERIES`）· 体检历史（`LS_SCAN_HISTORY`）· 预设（`LS_PRESETS`）都经 `usecases/persistLsKey`（不复制第二份落盘件）。
-- ★ **预设**：`slices/global.presets` ⇄ `doubao-presets`。**写方** = 导入工程并入（`state/projectOps`）+ 文本节点「保存预设」（`slices/global.addPreset` ← `ui/nodes/TextNode`）+ 节点预设（`slices/global.addNodePreset` ← 右键菜单「保存为节点预设」· `NodePresetModal`）；**读方** = 导入时按 `id` 判重（`usecases/importProject`）+ 拆分并套用（`canvas.splitApplyPreset` ← `ui/SplitPresetPickerModal`）。⚠️ 提示词预设源里**只写不读**（没有列表 / 套用 UI）⇒ 不是缺口。
+- 画廊（`LS_LOVART_GALLERIES`）· 体检历史（`LS_SCAN_HISTORY`）· 预设（`LS_PRESETS`）都经 `usecases/persistLsKey`。
+- ★ **预设**：`slices/global.presets` ⇄ `doubao-presets`。**写方** = 导入工程并入（`state/projectOps`）+ 文本节点「保存预设」（`slices/global.addPreset` ← `ui/nodes/TextNode`）+ 节点预设（`slices/global.addNodePreset` ← 右键菜单「保存为节点预设」· `NodePresetModal`）；**读方** = 导入时按 `id` 判重（`usecases/importProject`）+ 拆分并套用（`canvas.splitApplyPreset` ← `ui/SplitPresetPickerModal`）。
+- ⚠️ **断点**：预设的**提示词**那一支**只写不读**（源里就没有列表 / 套用 UI）⇒ 该支无消费方。
 
 ---
 
@@ -79,12 +82,11 @@ state 变更（slices）
    ↓
 展示：constants/failure.ts            → reason → 文案映射（FAIL_LABEL / BACKEND_ERROR_LABEL 真源）
       constants/index.ts              → export * 统一出口（消费方从 @/constants 或 @/constants/failure 拿）
-      ⛔ constants/text.ts **不得**再导出这两张表（与 index 的 export * 歧义重名 ⇒ TS 静默丢名）
    ↓
 渲染：ui/common/ErrorBanner（BACKEND_ERROR_LABEL[kind] · 直接 import @/constants/failure）· ToastHost
 ```
 
-⚠️ **断点**：`err(reason, 字面量)` 这一形态**漏检** ⇒ 用例层仍可能自造错误文案。
+⚠️ **断点**：`err(reason, 字面量)` 这一形态**无守卫**（新增不会被拦）—— 当前 `core/usecases` 生产代码 **0 例**（命中只在 `core/usecases/tests/**` 的假 deps 与断言里）。
 
 ---
 
@@ -98,7 +100,7 @@ adapters/**    →  只转发事件（subscribeXxx(cb): () => void），不得�
 
 **关键边**：`ui` 不得直改 store；`core/usecases` 不得 import `state`（反向依赖 = 环）。
 ★ 写入口只有一个：具名 action（`setSaveError` / `setAccounts` / `pushBackendError` / `loadHydrated` …）→ 镜像点 `setPartial`；`AppStoreHook`（`state/store.ts`）**类型上不含 `setState`** ⇒ 别处直写**编译不过**。
-✅ 现状：`ui` 不再持 `Ports`（`usePorts` 已从 `@/state` 移除）；宿主能力经 `state/hostOps` 等控制器 —— 见 §十八。
+★ 启动期那一次批量灌入（`loadHydrated`）的链路见 §一；`ui` 侧拿端口能力的链路见 §十八。
 
 ---
 
@@ -117,7 +119,7 @@ ui/canvas/CanvasHost.tsx        【ReactFlow 宿主；8 类节点经 ui/nodes �
 删除：CanvasHost.onNodesChange（Delete/Backspace 或 ReactFlow 的 remove 变更）→ canvas.removeNodes   【commit 快照 + 清相关边 + 清幸存节点的 referenceOrder 引用 + 删的是**组**时释放成员（core/rules/group.releaseDeletedGroupChildren：剥 parentId/extent + 叠加父坐标）】
 剪贴板图片回落：CanvasHost.pasteClipboardImage → hostOps.readClipboardImage → addMaterialFromDrop   【图仍落 img://】
 拖放：CanvasHost → lib/readDroppedFile → addMaterialFromDrop
-右键菜单：ui/canvas/NodeContextMenu → canvas.arrangeSelectedNodes / pasteNodes / clipboard · hostOps.showInFolder（收 `img://`；**勿**用 `revealPath` —— 它只认真实路径）
+右键菜单：ui/canvas/NodeContextMenu → canvas.arrangeSelectedNodes / pasteNodes / clipboard · hostOps.revealPath（`img://` 与真实路径同一个入口）
 音效：CanvasHost（`video` 节点数变多 ∧ `soundEnabled`）→ ui/lib/chime.playChime（播放，碰 WebAudio）+ lib/chime.chimePlan（**纯排期**，可单测；音型逐字对源 C5→E5→G5→C6）
 拆分：ui/nodes/SplitKeywordModal → state/slices/canvas.splitTextNode → openSplitPresetPicker → ui/panels/SplitPresetPickerModal → canvas.splitApplyPreset
 ```
@@ -176,8 +178,8 @@ ui/panels/StyleLibraryModal（← ui/panels/GenPanel）
 **关键边**：
 - 选号 = `core/rules/accountPool.pickAccount`（`busy` 由 `state` 实时注入）；选不到三档 = `no-account` / `all-busy` / `all-excluded`。
 - 失败 = `core/rules/failure.ts` 分类 → `decideByReason` → `give-up` / `retry-switch` / `retry`；`retry-switch` ⇒ `excluded.push(account.id)`；`retry` 上限 `FAILURE_MAX_RETRY`。
-- 报文 = `core/rules/payload.ts` 的 `buildImagePayload` / `buildVideoPayload` → `toSitePayload`（**扁平形态** = `SitePort.send` 入参）★ 跨进程报文（`content.*` 嵌套，`batchSend` 用）与扁平形态是两套，`toSitePayload` 是唯一转换点。
-- API 提交：图片 = `jobBatch(base, N 个 {})`（**N 张 = N 个任务**）；视频单发 = `jobSubmit`；视频批量 = `jobBatch(base, BATCH_RATIOS.map(…))` —— ⚠️ `matrix` **必须是数组**（后端按 `Array.isArray` 判，传对象 ⇒ **提交 0 个却报成功**）。报文形状契约住 `electron/api/job-manager.js`。
+- 报文 = `core/rules/payload.ts` 的 `buildImagePayload` / `buildVideoPayload` → `toSitePayload`（**唯一转换点**，产出品牌类型 `SiteSendPayload` = `SitePort.send` 入参）。
+- API 提交：图片 = `jobBatch(base, N 个 {})`（**N 张 = N 个任务**）；视频单发 = `jobSubmit`；视频批量 = `jobBatch(base, BATCH_RATIOS.map(…))`。报文形状真源 = `src/stable/model/gen.ts` 的 `ApiJobPayload` / `ApiJobVariant`（端口入参就用它 ⇒ 形状漂移**编译期**即拦）。
 - attempt 记录 = `core/rules/genHistory.ts`（`makeGenAttempt` / `patchGenHistoryAttempt` / `appendGenHistoryAttempt`）+ `state/generate.makeAttemptId`（时间经 `ClockPort`，序号在闭包内自增）。
 - 发送管线的**五段**（`doubao/index.ts` 的 `send`，顺序即语义）：① 文本填入（原 Phase 1）→ ② **附图 = Phase 2 全段 + 2b**（`doubao/attachPhase2.ts`：CDP 主通路 + 8×1.2s 确认 → 剪贴板逐张回退 → 按键补充 → 2b 增量重试；纯判据住 `core/rules/attachRefImages.ts`）→ ③ 生成参数（Phase 2c）→ ④ **发送前完整性校验 = Phase 3a**（`core/rules/precheckAttach.ts` + `doubao/scripts.ts` 的指纹脚本）→ ⑤ Dola 面板（Phase 2d）→ ⑥ 点发送（Phase 3b）。
 - **Phase 3a 的硬闸只在 `autoSend` 分支**：只填入（`autoSend=false`）时照走 `ok` 带 `precheck.pass=false` ⇒ 账号节点反馈条显示成 `err` + 警告（`accountSendFeedback` 读 `precheck`，源 `OL.jsx:353-355`）。
@@ -209,11 +211,12 @@ bootstrap/container.ts 的 hasElectronHost()   【真实宿主优先】
 人脸检测：ui/nodes/FaceMarksLayer → state/hostOps → MediaPort.detectFaces
             → adapters/media/faceDetect.ts + core/rules/faceDetect.ts
 出片去重（adapters/site/doubao/index.ts 的 pollResults，原 DR）：扫描项先过 **RR 有效性滤网**（core/rules/resultScan.isValidScan / filterValidScans —— data:/blob:/.svg/装饰图/过小过大全丢）→ 宽限与跨会话 URL 桶 → **QM 换无水印原图直链**（doubao/scripts.ts 的 WATERMARK_FREE_DIRECT_SCRIPT，失败回落扫描 URL）→ 取回 → 感知哈希与跨会话 hashes 桶 → **占位图判定**（core/rules/dedupe.createDedupe 的 placeholderDetector.isPlaceholder，上游 lib/phash.ts）→ **近重复窗口**（core/rules/resultScan.createNearDupWindow，模块级、最近 120 个感知哈希、汉明距离 ≤ 8）→ 落盘
-视频本地化：state/pullResult（写完 `url` 后）＋ bootstrap/container 的 startVideoBackfill（启动 5s 全量回填）
-            → state/localizeOps（★ usecases/localizeVideos 的唯一调用方）→ MediaPort.saveVideoFromUrl → 回写 `vid://`
-            （`vid://` 引用由**宿主独占**：主进程产生（`main.js:787`）+ 注册 handler 供给（`main.js:1017-1059`）；前端零解析、零拼装）
-        ✅ **落库即本地化**：写完视频 url 的三处 —— `state/pullResult` · `state/subscriptions` 的 API 任务链 · `state/videoLanding.landVideo`
-                      —— 都紧跟 `localizeNodeInto`（源 `addVideoNode` 末尾内建 `localizeNodeVideos`，`shared.js:28312`）
+视频本地化：**写入口内建** —— state/slices/canvas 的 `addVideoNode`（源 `shared.js:28140` genvideo 支 / `:28308` 网格支）
+            与 `writeVideoUrl`（源 `_Component43.jsx:3160`）写完 `url` 后调**注入的** `localizeVideoNode`
+            ＋ bootstrap/container 的 startVideoBackfill（启动 5s 全量回填）
+            → state/localizeOps（★ usecases/localizeVideos 的唯一调用方；`localizeNodeInto` 的唯一调用点 = state/store 的注入实现）
+            → MediaPort.saveVideoFromUrl → 回写 `vid://`
+            （`vid://` 引用由**宿主独占**：主进程产生 + 注册协议 handler 供给；前端零解析、零拼装）
 遮脸参数：ui/panels/FaceMaskPanel ⇄ state/slices/faceMask（faceMaskOpts / faceMarks / setFaceMaskOpts）
             → ui/nodes/FaceMarksLayer（角标 → 单击遮脸 / 双击设参数）→ state/hostOps → MediaPort.applyFaceMask
 图片编辑器：ui/panels/ImageEditor（imggen 浮动编辑器）→ state/hostOps.detectFaces + applyFaceMask（涂抹 / 裁剪 / 遮脸共用）
@@ -250,13 +253,14 @@ adapters/host/electron/clipboard.onChanged(cb) → state/hostOps ← ui/canvas/C
 
 ```
 ui/panels/LibraryPanel.tsx      → hostOps.importFiles()               【从文件添加素材】
-   → state/hostOps                  【★ ui 需要的 ports.host.* 唯一落点（只转发，不写第二份判据）】
+   → state/hostOps                  【★ ui 需要的 `ports.host.*` **唯一落点**】
    → ports.host.file.importFiles
    → state/slices/canvas: commit('library') + setLibrary(...)         【唯一写入点】
    → state/store 的 setPartial                                       【镜像进 projects[activeId].data】
 工程存储：ui/shell/TopBar（保存路径 / 打开目录 / 占用统计）→ state/projectOps → usecases/projectStorage → ports.host.project.{pickStorage,revealStorage,getStorageSize,activateStorage}
 导入工程：ui/pages/StartPage → state/projectOps.importProjectFile → usecases/importProject → state/slices/global.addImportedProject
-下载（gv-dl）：ui/nodes/{GenVideoNode,GenImageNode} → hostOps.downloadFileAs → ports.host.file.downloadFileAs   【成功 toast 的「在文件夹中显示」→ hostOps.revealPath（收真实路径）；节点右键的「打开文件所在位置」走 hostOps.showInFolder（收 `img://`）—— 两者收的东西不同】
+下载（gv-dl）：ui/nodes/{GenVideoNode,GenImageNode} → hostOps.downloadFileAs → ports.host.file.downloadFileAs
+「在文件管理器里定位」：ui/nodes/{GenVideoNode,GenImageNode}（下载 toast）· ui/canvas/NodeContextMenu（「打开文件所在位置」）→ hostOps.revealPath → ports.host.file.revealPath   【真实路径与 `img://` **同一个入口**，判别在 electron/main.js 的 handler 里】
 ```
 
 **关键边**：前两条**不从 `ui` 直调端口** —— 走 `state/hostOps`（`ui` **结构上拿不到 `Ports`**）。详见 §十八。
@@ -266,8 +270,7 @@ ui/panels/LibraryPanel.tsx      → hostOps.importFiles()               【从�
 ## 十二、没有链的模块（**有实现、0 消费**）
 
 > **判"没有链"必须追到链尾**：端口方法**被某个 `core/usecases` 调用 ≠ 有链** —— 还要看**该用例本身有没有生产消费方**。
-> ⚠️ `find-dead` 抓不到它们：它把**测试引用**也算作引用（另：`index.` 关键字文件直接跳过）。
-> **逐文件清单的真源 = `scripts/dead-code-baseline.json`** —— 本文件**不维护清单**（会漂）；下表只留**已裁定"判不落"**与**该删的**（证据 = `node scripts/mv-sync-refs.mjs refs <file>` 的「① 模块引用」或 `find-dead`）。
+> **逐文件清单的真源 = `scripts/dead-code-baseline.json`** —— 本文件**不维护清单**（会漂）；下表只留**已裁定"判不落"**与**该删的**。
 
 | 落点 | 0 消费的符号 | 证据（`refs` ① / `find-dead`） | 处置 |
 | --- | --- | --- | --- |
@@ -276,9 +279,6 @@ ui/panels/LibraryPanel.tsx      → hostOps.importFiles()               【从�
 | `BackendPagePort` | `runScript` | 端口声明在、调用点 0 | **判不落**：预备消费者是源内 0 调用的那三个对外方法 |
 
 
-> ⚠️ **`find-dead` 的 .d.ts 是假阳**：它报 `adapters/host/electron/window-api.d.ts` / `ui/panels/webview.d.ts` 无引用，但前者就被 `host-api.ts` `import type { HostApi }`（工具不认 type-only / 全局声明）⇒ **别按它删**。
-> ⚠️ **基线状态**：基线 **40 条 = 当前 40 条**（2026-10-14 已清偿 25 条：`stable/protocols/vid.ts` 整文件 + `state/index.ts` 的 16 个死 barrel 再导出 + `PROTOCOL_VID` 等；见 `--update-baseline`）—— 若再出现「已消失」条目，跑 `node scripts/check-dead-code.mjs --update-baseline` 清偿。
-> ★ **已收窄的「判不落」**：`stable/protocols/vid.ts` 原判「**保留能力位**」（另一种选法：若要收窄则整文件删）—— **2026-10-14 取次选，整文件删**：`vid://` 全由宿主独占、前端零解析 ⇒ 前端镜像＝**第二份真相**。
 
 ---
 
@@ -291,7 +291,7 @@ ui/panels/NewImagesPanel.tsx        【「立即抓取」】
   → ports.sites[type].scan            【volatile：适配器内部 frames→webview 降级链】
        → adapters/site/shared/scanScripts.buildLibraryScanScript（页内脚本，原 `hp`）
                                      【产出 images + unread + **diag**（原 `hp` 的 `p`：文档/iframe/shadowRoot/img/可用/canvas/候选）】
-       → adapters/site/shared/materializeScan（scanAttemptFromRaw；内部 materializeScannedImages：**远端图走批量取图 fetchImages**（`session.fromPartition(partition).fetch` ⇒ 带账号 cookie），内联/`img://` 就地落盘）
+       → adapters/site/shared/materializeScan（scanAttemptFromRaw；内部 materializeScannedImages：**远端图走批量取图 fetchImages**（`session.fromPartition(partition).fetch` ⇒ 带账号 cookie；**载荷收窄只在** `adapters/host/electron/lovartFetch` —— 缺必需字段 ⇒ 计 failed），内联/`img://` 就地落盘）
                                      【落盘成 `img://`（ref）；落不出 ⇒ failed++，不编造引用；diag 经 normalizeScanDiag 收窄】
   一张都没扫到时 → core/rules/scanDiag.formatScanDiag（原 `GT`）→ 阶段文案「没扫到图片（文档 1 · img 32（可用 0） · 候选 32→0）」
   一张都没扫到时（**且站点声明了 `exportCanvas`**）→ **canvas 兜底**（原 `wp:32610-32651`）
@@ -308,11 +308,11 @@ ui/panels/NewImagesPanel.tsx（开关）→ state/accountOps.setAutoWatch(on)
 ```
 
 **关键边**：谁能值守 = `SitePort.autoWatch?` **能力声明**（`tapnow` 声明、`lovart` 刻意不声明 —— 风控；后端 `electron/main.js` 有「Lovart 容器隔离」）；`core` / `state` / `ui` **零站点名判断**。扫描枚举真源 = `core/rules/scanChain.ts`（`SCAN_CHAIN` / `SCAN_PHASES` / `SCAN_SCOPES`），端口只 `import type` 转发。
-⚠️ **DEV 断点**：mock 的 `imageFetchDataUrl` / `fetchImages` 都**合成内联图**（同 url 同图，不联网）⇒ 抓取链在 DEV 可验证（BP-31 / BP-34）。端到端要在 Electron 里跑 `scripts/verify-*.cjs`。
+⚠️ **DEV 断点**：mock 的 `imageFetchDataUrl` / `fetchImages` 都**合成内联图**（同 url 同图，不联网）⇒ 抓取链在 DEV 可验证；端到端要在 Electron 里跑 `scripts/verify-*.cjs`。
 
 ---
 
-## 十四、截图链（**两套，勿混**）
+## 十四、截图链（两条：后台页快照 / 节点截图）
 
 ```
 (a) 后台页静默快照：ui/panels/AccountPanel(.autostartSwitch) → accountOps.toggleAutoStart
@@ -326,7 +326,7 @@ ui/panels/NewImagesPanel.tsx（开关）→ state/accountOps.setAutoWatch(on)
       【源 `Lu`（shared.js:32311）+ `$T`（:32328）+ `Rk`（:32351）】
 ```
 
-**关键边**：两套是不同的东西 —— (a) 对象是**后台页 webview**、(b) 对象是**节点 DOM 元素**；(a) 的表在 `adapters/site/shared/backendPage.ts`（不导出），(b) 的表在 `lib/captureRegistry`。`state/capture` 返回 `{ok, reason}`（源版静默 `null`，本工程如实上报）；`dpr` 由 `bootstrap` 注入（`state` 不读 `window`）。
+**关键边**：(a) 对象是**后台页 webview**、表在 `adapters/site/shared/backendPage.ts`（不导出）；(b) 对象是**节点 DOM 元素**、表在 `lib/captureRegistry`。`state/capture` 返回 `{ok, reason}`（源版静默 `null`，本工程如实上报）；`dpr` 由 `bootstrap` 注入（`state` 不读 `window`）。
 
 ---
 
@@ -365,10 +365,46 @@ ui/panels/AccountPanel.tsx
        ├─ diagnoseAccount                   → BackendPagePort.probeFingerprint + core/rules/fingerprintDiagnosis
        └─ clearBrowserCache                 → MediaPort.clearBrowserCache
 
+会话准备（挂 `<webview>` 前 · 建号弹窗里；**两种模式由站点能力位分流**）：
+ui/panels/{LoginModal,BackendView} → state/accountOps.prepareWebviewSession（`lovart: capsOf(type).usesLovartContainer`）
+  → core/usecases/prepareSession
+       容器模式（lovart）⇒ AccountPort.ensureLovartContainer（`{partition, proxy}`）→ 回 `{userAgent, preloadUrl: null}`
+             ⇒ 落点 `ui` 的 `useState`（`containerUA`）→ `<webview>` 的 `useragent` + `webpreferences`
+       指纹模式（有指纹的站点）⇒ AccountPort.ensureFingerprint（`{partition, fingerprint}`）→ 回 `{preloadUrl}`
+             ⇒ 落点 `ui` 的 `useState`（`preloadUrl`）→ `<webview>` 的 `preload`
+⚠️ 断点：两种模式都没有的站点（`other`）⇒ 不跑准备、恒就绪、不挂 preload。
+
 账号指纹生成：core/rules/fingerprintGenerator ← state/slices/global
               （环境值经 adapters/host/shared/env 注入 —— 不纯那半不进 core）
 指纹体检：ui/panels/FingerprintScanPanel → core/rules/fingerprintScan（scanFingerprintCollisions）
               + state/slices/scan（recordScan）→ persistLsKey(LS_SCAN_HISTORY)
+
+会话分区（**恒有值**的不变量）：core/rules/partition（键形状，两种：newAccountPartition 建号 / makeImportedPartition 导入）
+              ← **产生方** = core/rules/accountRoster.buildNewAccount（账号诞生那一刻；addAccount 与 buildPendingAccount 共用）
+              ← **存量归位** = bootstrap/hydrate → core/rules/accountRoster.ensureAccountPartitions（幂等，补齐后写回 LS_ACCOUNTS）
+              消费方**直读** account.partition（零兜底，四处）：doubao/index.send 入口守卫 · BackendView 的 <webview partition> · accountOps.prepareWebviewSession · adapters/site/shared/materializeScan.scanFetchContext（批量取图走 session.fromPartition 带 cookie）
+                        （另：adapters/site/shared/webview.findWebview 用它定位 `<webview>` 元素 —— 经 account 间接取）
+站点类型（`SiteType`）—— 账号域全链路的根
+              真源 = src/constants/siteTypes.ts 的 SITE_TYPES（L0）；stable/model/account.ts 只转发
+              形状 + 归一：stable/model/account.ts 的 Account.type: SiteType · normalizeAccountType（不在表里 ⇒ 回落 doubao）· isSiteType（类型谓词）
+              按类型声明的能力位（各自真源，只声明子集；`ui`/`state` **零站点字面量**）：
+                · 站点展示/流程策略表 → core/rules/siteCaps.SITE_CAPS（`Record<SiteType, SiteCaps>` 穷尽）→ 各领域模块**派生**自己的子集（accountPick.NEW_IMAGES_SITES / lovartGallery.GALLERY_SITES / lovartSession.CHROME_SESSION_SITES / accountPick 的可执行站点）
+                · 会话页地址 → SitePort.chatUrl（各适配器声明）→ **唯一取值处** state/accountOps.chatUrlOf（未声明 ⇒ about:blank，不编造）
+                · 登录页地址 → constants/models.ts 的 SITE_LOGIN_URL
+                · 适配器 → adapters/site/registry.ts 的 createSiteRegistry（Partial；doubao / dola 同工厂；无 other）
+                · 出新图条 → core/rules/accountPick.NEW_IMAGES_SITES（派生自 siteCaps 的 `hasNewImagesPanel`）
+                · 画廊入口 → core/rules/lovartGallery.isGallerySite（`GALLERY_SITES` 派生自 siteCaps 的 `gallerySource !== null`，源 OP.jsx:710 的 fe）
+                │            ＋ gallerySiteLabelOf（画廊名，源 :711 的 Te）
+                · 值守能力 → SitePort.autoWatch?（tapnow 声明；lovart 不声明，见 §十三）
+                · 豆包系媒体链声明位 → SitePort.mediaSource?（adapters/site/doubao 工厂声明，值 = 工厂的 `kind`）⇒ CDP 挂载（§十九）· 30s 主世界钩子注入（§二十三）· CDP 回流的源标签（§二十四）三处消费者**只问注册表**
+                · 主进程域名 → electron/site-hosts.js 的 SITE_HOSTS（层 1）
+                · 渲染侧域名 → src/constants/siteHosts.ts 的 SITE_HOSTS（层 1 值）+ core/rules/siteHost.isHostOfSite（层 2 判定）
+                  消费：adapters/site/lovart/pageKind · tapnow/pageKind · tapnow/api（判归属）· doubao/dolaForce（注入载荷）
+                  ⚠️ 与主进程那份**不是镜像对账**：两个世界没有共享代码的路（主进程 CJS／渲染侧 ESM bundle）⇒ 各 1 份
+              消费：ui/panels/AccountTypePicker（遍历 SITE_TYPES；文案 = ACCOUNT_TYPE_PICKER_TEXT.cards[type]）
+                  · ui/panels/AccountPanel（画廊入口 = isGallerySite；按钮提示语 = gallerySiteLabelOf）
+                  · ui/panels/BackendView（出新图条 = NEW_IMAGES_SITES；无水印面板 ⟷ 出新图条互斥，见 §十九）
+
 分组：ui/panels/GroupManagerModal → state/slices/global（六个 action）+ core/rules/accountGroup
 
 后台视图：ui/panels/BackendView（渲染 .doubao-view-webviews 容器）
@@ -376,15 +412,17 @@ ui/panels/AccountPanel.tsx
               │    leases → BackendPagePort.subscribeLeases → state/subscriptions.ts → store.leasedAccounts
               ├─ 刷新 → accountOps.reloadBackend → BackendPagePort.reload（先撤就绪标记再 reload）
               ├─ 静默开关 → accountOps.toggleAutoStart → BackendPagePort.captureSnapshot/dropSnapshot
+              ├─ <webview> 的**显隐/尺寸**：BackendView.module.css 两态类（照原版 index-Dg_Oc7MR.css）
+              │        基础态 = position:absolute;inset:0（**尺寸恒定** = 铺满 .webviews）+ visibility:hidden + pointer-events:none
+              │        可见态 = + z-index:2 + visibility:visible + pointer-events:auto   【原 dv-wv-active】
+              │        视图隐藏 = .viewHidden（visibility，**非 display:none**）＋ .viewHidden .webviews{1280×800}
               └─ adapters/site/shared/webview（findWebview）→ 供 send / analyze / scan / 检测 复用
 
 后台页租约：BackendPagePort（core/ports/backendPage.port.ts ← adapters/site/shared/backendPage.ts）
               prepareForSend（取租约 + 建记录）→ release（末条 ⇒ 1500ms drain 后删记录）→ leases/subscribeLeases
-              ⚠️ 全部命令经端口；`ui` 不碰 DOM 命令
 ```
 
-**关键边**：`state/accountOps` 与 `state/hostOps` / `state/licenseOps` 同法 —— **只转发 + 归一，不写第二份业务判据**（业务在 `core/rules` / `usecases`）。
-⚠️ `reload` **必须先撤就绪标记**（源 `reloadAccount` `:428-435`），否则 `prepareForSend` 命中 `readyAccounts` 短路，页内脚本会打在白屏 / 半载页面上。
+**关键边**：`state/accountOps` 与 `state/hostOps` / `state/licenseOps` 同法 —— **只转发 + 归一**（业务判据在 `core/rules` / `usecases`）。
 
 ---
 
@@ -431,10 +469,17 @@ bootstrap/container.ts              【唯一装配：端口只在此注入】
 ui/shell/AppShell.tsx（centerStage · doubaoViewVisible 默认 false · openDoubaoView 来自顶栏）
   → ui/panels/BackendView.tsx                【域主视图；源 _Component43 挂载点 _Component48.jsx:171-178】
        ├─ 每账号一个 <webview>                （源 _Component25.jsx）
-       ├─ Lovart 会话条 → ui/panels/LovartSessionBar.tsx   （源 _Component25.jsx:358-382；仅 type=lovart ∧ active）
+       ├─ Lovart 会话条 → ui/panels/LovartSessionBar.tsx   （源 _Component25.jsx:358-382；守卫 = lovartSession.isChromeSessionSite ← 能力表 `hasChromeSession` ∧ active）
        │      → accountOps.openLovartChrome / closeLovartChrome / syncLovartSession → AccountPort → electron/chrome-cdp.js
        │      【真实 Chrome 人工登录 → cookie 同步进 webview 分区；提示行/禁用/错误码表 = core/rules/lovartSession】
        ├─ 无水印面板 → ui/panels/WatermarkPanel.tsx      （源 SD.jsx）
+       ├─ **CDP 挂载**（无水印捕获的**前置**；捕获回流走 §二十二 的「CDP 支」= media.onDolaMedia → state/subscriptions → state/dolaMedia）
+       │      两个入口调**同一个幂等实现**，且都只表达意图（dola-media.js 的门面 onGuestReady）：
+       │        (a) 渲染层 dom-ready → accountOps.onWebviewDomReady（守卫 = `SitePort.mediaSource?`）→ HostPort.media.attachDolaDebugger
+       │            → invoke 'attach-dola-debugger'（handler 随 `electron/dola-media.js` 的 initDolaMedia **自注册**）        【准】
+       │        (b) 主进程 did-attach-webview（早，此时 URL 多为 about:blank）→ did-navigate 再试   【早】
+       │      「谁该挂」由 dola-media.js 的 shouldAttach 内部判（按 ATTACH_SOURCES 的源声明；
+       │        host 判定走 electron/site-hosts.js 的 isHostOf）—— 调用方不判、不兜
        ├─ 出新图条   → ui/panels/NewImagesPanel.tsx      （源 _Component26.jsx）
        └─ 静默开关   → ui/panels/AccountPanel.tsx 的 .autostartSwitch
                           → accountOps.toggleAutoStart   （源 OP.jsx:509-559）
@@ -479,8 +524,6 @@ BackendView ← slices/ui        : activeAccountId / setActiveAccountId     【�
 ```
 源：h = 已登录 c ∩ (autoStart=true ∪ 租约快照 d)     ← 没人用的账号不挂（元素不在 ⇒ guest 进程不在 ⇒ 才叫不占内存/CPU）
 本仓：mounted = 已登录 ∩ (autoStart ∪ leasedAccounts ∪ accountBusy)     → BackendView 的 mounted / isActive
-      ★ 多 OR 一档 accountBusy 是**有意的**：本仓 holdAccount 在取租约之前就置好（选号阶段），只留租约快照会「瞬时卸载再重挂」
-      ★ leasedAccounts 这一档不能省：autoConfirm 申请独立租约（不占 accountBusy）
       ❌ 不造：R（Uu 快照）/ isForced / dv-send-overlay / dv-wv-* / has-snap（消费者全在没造的 UI 态里）
 ```
 
@@ -534,7 +577,7 @@ deps 组装：state/sendDeps.sendToSiteDeps —— sites / backendPage / holdAcc
        SitePort.detectVideos（← HostPort.media.detectVideos，源 window.api.detectVideos :1564）
        首轮：建基线 = 旧视频 key 集 ⇒ 写回（源 b.current）；同时处理"首轮新片"（:1606-1655）
        后续轮：新片（key ∉ 基线 ∧ created_at > 基线时间）⇒ 分配 ⇒ 落库（:1657-1695）
-       空闲 900_000ms 结束（:1696）—— ⚠️ 源日志文案写"5min"，与常量 900000 不符
+       空闲 900_000ms 结束（:1696）
        xe(nodeId)（:1553-1583）：SitePort.probeGenSubmitted（原 ze(Y,Hd,'detect-gen-submit')）命中「已提交」回复
          ⇒ setNodeTimer(nodeId, now) + removeNodePendingTimer；探不到 ⇒ 等满 DETECT_TIMER_FALLBACK_MS 兜底起
        每轮纯决策：core/rules/genDetect.ts（classifyFirstRound 首轮分类 / pickFreshVideos 新片 / detectCutoff / shouldStartTimer）
@@ -598,9 +641,26 @@ CDP 支（源 onDolaMedia :130-351 视频分支）：adapters/host/electron/medi
 Dola 30s 强开（源 :758-806；仅"发送 Dola ∧ duration>15 ∧ model==='seedance-2.5'"）：
   adapters/site/doubao/dolaForce.ts（enableDolaForce30s / runDolaForcePanelUi / scheduleDolaForceCleanup）
     → 注入 JP（patch fetch/XHR）+ window['__DOLA_CANVAS_FORCE__'] = XP(duration)（shared.js:34756-34761）；3s 后删；QP 跑面板 UI（shared.js:34906）
+      ★ JP 形态 = **函数表达式 + 调用方传参**：(JP)(JSON.stringify(SITE_HOSTS)) —— 脚本里**零域名字面量**，
+        值取自渲染侧层 1（constants/siteHosts）；判定形状与 core/rules/siteHost 同口径（跨世界消不掉）
   闸：core/rules/dolaForce.isDolaForceTarget
   挂进 send：发送前 enableDolaForce30s（源 Mt ← :2508 / :2832）→ Phase 2d runDolaForcePanelUi（源 Rt ← :1218）→ finally scheduleDolaForceCleanup（源 zt ← :2522 / :2919）
-  ⚠️ 本链是**页面注入**（改 fetch/XHR + 写 window 全局）—— 已裁：**登记为例外**（功能层注入、非指纹伪装，同 inputLock）
+
+Dola 30s「主世界钩子」注入（★ **另一条 30s 路径**：那条**改请求体**，这条走**页面自己的开关 + 页面主世界钩子**；源两条都在，互不替代）：
+  触发两处（源 _Component25.jsx:144 / :169；本仓 = state/accountOps）：
+    onWebviewDomReady   ← <webview> dom-ready，**延迟 600ms**（INJECT_DURATION_DELAY_MS：等页面把输入区挂出来）
+    onWebviewNavigated  ← <webview> did-navigate，**重注入**（钩子装在页面主世界，SPA 换页就没了）；守卫 = `SitePort.mediaSource?`（同 `onWebviewDomReady`）
+  → HostPort.media.injectDolaDurationMain(webContentsId)   【adapters/host/electron/index.ts → checkOk **fail-closed**；mock 明确 notImplemented】
+  → preload invoke 'inject-dola-duration-main' → electron/main.js 的 handler，做三件：
+       ① 页内打开开关 localStorage['intl_doubao_enable_30s_v1'] = '1'（页内 catch **刻意静默**：那是注入到页面的串，打不了宿主日志）
+       ② 读 electron/dola-duration-main.js 原文并注入 —— ★ **形态 = 函数表达式 + 宿主传参**：
+          (script)(JSON.stringify({ SITE_HOSTS: siteHosts.SITE_HOSTS }))
+          【脚本跑在 guest **主世界、不能 require** ⇒ 域名**没有位置**可写；层 1 真源 = electron/site-hosts.js】
+       ③ 每 3s dump 一次时长 DOM（DUMP_EXPR）；变化即写 ~/dola-duration-debug.log；wc destroyed ⇒ 清定时器
+  诊断回灌：页内 logDurationDiag → window.api.dolaDurationDiag → invoke 'dola-duration-diag' ⇒ **同一个日志文件**
+            ⚠️ 发送链的**阶段行**同走这条路：adapters/site/doubao/index.ts 的 diag() → HostPort.media.logDolaDuration
+            ⇒ 它是「30s 失效」排查的**唯一可观测面**（这条链断了只剩它）
+
 
 静默快照：ui/panels/AccountPanel(.autostartSwitch) → accountOps.toggleAutoStart
   开启态：先 BackendPagePort.captureSnapshot（源 OP.jsx:515-531 的 Yy(id) → je）再置 autoStart=false
@@ -614,8 +674,8 @@ Dola 30s 强开（源 :758-806；仅"发送 Dola ∧ duration>15 ∧ model==='se
 
 | 断的边（本仓侧） | 说明（源名见括注） |
 |---|---|
-| **`imageGenJobNode`** | **不落**：源 `bindImageGenJobs` 写它（`:27218`）但**全仓 0 读者** ⇒ 落它=第二份真相（API 节点 id 由 `event.nodeId` 直给）。`TD-16-111` |
-| **`aspectRatio` 末档兜底** | **差异**：`resolveImageGenParams` 用 `NODE_DEFAULT_RATIO_LABEL`(4:3)，源是字面量 `'1:1'`（`:27251`）—— 复用本仓「节点默认比例」SSOT。`TD-16-112` |
+| **`imageGenJobNode`** | **不落**：源 `bindImageGenJobs` 写它（`:27218`）但**全仓 0 读者** ⇒ 落它没有消费方（API 节点 id 由 `event.nodeId` 直给） |
+| **`aspectRatio` 末档兜底** | **差异**：`resolveImageGenParams` 用 `NODE_DEFAULT_RATIO_LABEL`(4:3)，源是字面量 `'1:1'`（`:27251`）—— 复用本仓「节点默认比例」SSOT |
 | **生成参数派生** | **不落**：唯一消费者是源那两个 0 调用方法 + 自检面板态 ⇒ 一起不落（源 `le` `:352-395`） |
 | **任务占用计数** | **不造**：消费者（`dv-send-overlay` / `isForced`）本仓没有 ⇒ 0 读者（源 `Uu` `shared.js:35353-35404`） |
 | **参数自检（自动设置 / 测试 / 脚本）** | **不落**：源内全目录 0 调用 ⇒ 只服务它们的状态/派生一起不落（源 `At` / `_t` / `runParamScript`） |

@@ -6,7 +6,7 @@
  *
  * ★ **2026-10-10 修（原则 6）**：原实现用 `call<T>()` 把返回值直接 `ok(...)` 出去 ——
  *   **完全无视后端的 `ok:false`**。而本工程这一组方法**每一个**都用
- *   `{ok:false, error}` / `{ok:false, message}` 表达失败（见 `main.js:3087-3162`）
+ *   `{ok:false, error}` / `{ok:false, message}` 表达失败（见 `main.js`）
  *   ⇒ 失败被吞成「成功且值为空」，UI 永远看不到原因。现统一按 `ok` 标志收口。
  *
  * ★ **本组收口口径（原则 6 · 母体 M2「守卫声索 > 覆盖」）**：
@@ -14,7 +14,7 @@
  *   ② 成功路径上，**后端每条 return 都恒带的字段一律走 `need()`**（缺失即契约违约，不静默给默认值）；
  *   ③ 后端原始载荷整体留在 `cause` —— `{ok:false, kind, message, advice}`（`job-manager.js:343`）
  *      不再被「error → message → 兜底」的字符串优先级**拍扁成一个 string**。
- *   ⚠️ **必需字段的判据 = 后端 `main.js:3098-3215` 每条 return**（逐条回源，见各 `pick` 处的注释）；
+ *   ⚠️ **必需字段的判据 = 后端 `main.js` 每条 return**（逐条回源，见各 `pick` 处的注释）；
  *      **可选**字段（如 `api-config:test` 的 `message`）仍走 `typeof` 判定，不冒充必需。
  *
  * ⚠️ 类型断言只出现在**宿主边界**（后端返回是 `unknown`，形状由 `main.js` / `job-manager.js` 定）。
@@ -24,7 +24,9 @@ import type { ApiPort } from '@/core/ports/host.port';
 import type {
   ApiBatchResult,
   ApiConfigMap,
+  ApiJobPayload,
   ApiJobStatus,
+  ApiJobVariant,
   ApiProviderMeta,
   ApiSetup,
   ApiUsage,
@@ -113,18 +115,18 @@ export function createElectronApiPort(): ApiPort {
   return {
     configGet: async () =>
       callOk((api) => api.apiConfigGet(), (r) => ({
-        // ★ 后端 `main.js:3130-3136` **每条 return 都恒带** `providers` + `configs`（`publicOf` 逐 provider）
+        // ★ 后端 `main.js` **每条 return 都恒带** `providers` + `configs`（`publicOf` 逐 provider）
         //   ⇒ 两个都是**必需字段**（缺失 = 契约违约，`TD-04-6`）
         providers: providersOf(r),
         configs: need(r, 'configs', isRecord) as ApiConfigMap,
       })),
 
     configSet: async (providerId: string, patch: unknown) =>
-      // ★ 后端 `main.js:3140-3145` 恒返 `{ok:true, config: publicOf(...)}`（恒为对象）⇒ `config` 必需
+      // ★ 后端 `main.js` 恒返 `{ok:true, config: publicOf(...)}`（恒为对象）⇒ `config` 必需
       callOk((api) => api.apiConfigSet(providerId, patch), (r) => ({ config: need(r, 'config', isRecord) })),
 
     configSetKey: async (providerId: string, key: string) =>
-      // ★ 后端 `main.js:3148-3154` 恒返 `{ok:true, keyHint, maskedBy}`（两者都是 `maskKey(key)`）
+      // ★ 后端 `main.js` 恒返 `{ok:true, keyHint, maskedBy}`（两者都是 `maskKey(key)`）
       callOk((api) => api.apiConfigSetKey(providerId, key), (r) => ({
         keyHint: need(r, 'keyHint', isStr),
         maskedBy: need(r, 'maskedBy', isStr),
@@ -142,12 +144,12 @@ export function createElectronApiPort(): ApiPort {
       })),
 
     // ⚠️ `jobId: ''` 是「假成功」：后端形状一漂移，UI 拿到空 id 却以为提交成功
-    jobSubmit: async (payload: unknown) =>
+    jobSubmit: async (payload: ApiJobPayload) =>
       callOk((api) => api.apiJobSubmit(payload), (r) => ({
         jobId: need(r, 'jobId', isStr),
       })),
 
-    jobBatch: async (basePayload: unknown, matrix: unknown) =>
+    jobBatch: async (basePayload: ApiJobPayload, matrix: readonly ApiJobVariant[]) =>
       callOk((api) => api.apiJobBatch(basePayload, matrix), (r): ApiBatchResult => ({
         // 三个字段**逐位对应**，缺一个整份载荷就是坏的 —— 不能各自兜底成空
         jobIds: need(r, 'jobIds', Array.isArray) as Array<string | null>,
@@ -166,13 +168,13 @@ export function createElectronApiPort(): ApiPort {
 
     setupGet: async () =>
       callOk((api) => api.apiSetupGet(), (r) => ({
-        // ★ 后端 `main.js:3196-3198` 恒返 `{ok:true, setup, usage}`（`getSetup` / `getUsage` 恒为对象）
+        // ★ 后端 `main.js` 恒返 `{ok:true, setup, usage}`（`getSetup` / `getUsage` 恒为对象）
         setup: normalizeSetup(need(r, 'setup', isRecord)),
         usage: need(r, 'usage', isRecord) as ApiUsage,
       })),
 
     setupSet: async (patch: Partial<ApiSetup>) =>
-      // ★ 后端 `main.js:3199-3206` 恒返 `{ok:true, setup}`（`setSetup` 内部返 `getSetup()`）
+      // ★ 后端 `main.js` 恒返 `{ok:true, setup}`（`setSetup` 内部返 `getSetup()`）
       callOk((api) => api.apiSetupSet(patch), (r) => ({ setup: normalizeSetup(need(r, 'setup', isRecord)) })),
 
     /** ★ 订阅：取取消函数并返回（W1） */

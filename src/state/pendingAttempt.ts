@@ -117,7 +117,7 @@ export function createPendingAttempt(
 
   const accountNameOf = (accountId: string): string => {
     const account = s().accounts.find((a) => a.id === accountId);
-    return account?.name || accountNameFallback(account?.type === 'dola');
+    return account?.name || accountNameFallback(account?.type);
   };
 
   return {

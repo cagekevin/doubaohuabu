@@ -1,7 +1,7 @@
 {
   "_comment": "死代码闸基线（scripts/check-dead-code.mjs 消费）。基线内=存量（不阻塞，可逐步清偿）；基线外新增=闸红。重生成：node scripts/check-dead-code.mjs --update-baseline",
   "knipVersion": "6.41.0",
-  "count": 40,
+  "count": 37,
   "items": [
     "src/adapters/host/electron/index.ts::exports::HOST_MISSING",
     "src/adapters/host/electron/index.ts::exports::getHostApi",
@@ -23,13 +23,11 @@
     "src/constants/index.ts::exports::TAPNOW_SCAN_TIMEOUT_MS",
     "src/constants/models.ts::exports::ACCOUNT_TYPE_LABEL",
     "src/constants/models.ts::exports::IMAGE_MODELS",
-    "src/constants/models.ts::types::GenChannel",
     "src/constants/models.ts::types::VideoModel",
     "src/constants/text.ts::exports::FINGERPRINT_TEXT",
     "src/constants/text.ts::exports::SIDE_TEXT",
     "src/core/model/defaults.ts::exports::GROUP_NODE_Z_INDEX",
     "src/core/ports/host.port.ts::types::LicenseStatusKind",
-    "src/core/rules/accountName.ts::exports::ACCOUNT_TYPES",
     "src/core/rules/prompt.ts::exports::resolveReferences",
     "src/core/rules/scanChain.ts::exports::DEPRECATED_SCAN_STRATEGY",
     "src/core/rules/scanChain.ts::exports::isScanChainExhausted",
@@ -41,7 +39,6 @@
     "src/stable/contracts/lsValues.ts::types::LsValueMapIsExhaustive",
     "src/stable/migrations/index.ts::exports::externalizeDeep",
     "src/stable/migrations/index.ts::exports::externalizeProjectImages",
-    "src/ui/common/AccountPicker.tsx::exports::PICKABLE_TYPES",
     "src/ui/nodes/RefAutocomplete.tsx::exports::toRefMarker"
   ]
 }

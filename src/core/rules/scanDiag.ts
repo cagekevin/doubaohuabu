@@ -10,11 +10,18 @@
  *    本文件只**引用**（与 `core/rules/scanClean` 引用 `ScannedImage` 同法）。
  */
 
+import { isRecord } from '@/lib/object';
 import { GEN_CANVAS_EXPORT_MIN_SIDE } from '@/constants';
 import { SCAN_DIAG_TEXT } from '@/constants/text';
 import type { CanvasBox, ScanDiag } from '@/core/ports/site.port';
 
-const FIELDS = [
+/**
+ * `ScanDiag` 除 `canvases` 外的**数字字段清单**（唯一）
+ *
+ * `satisfies` 保证它**不多**（写错名字 ⇒ 编译不过）；「**不缺**」由 `normalizeScanDiag` 的返回处
+ * 保证（少一个键，那个对象就不再是 `ScanDiag` ⇒ 编译不过）。
+ */
+const NUMBER_FIELDS = [
   'docCount',
   'iframeCount',
   'shadowCount',
@@ -24,13 +31,29 @@ const FIELDS = [
   'canvasCount',
   'itemsRaw',
   'itemsKept',
-] as const;
+] as const satisfies readonly Exclude<keyof ScanDiag, 'canvases'>[];
+type NumberField = (typeof NUMBER_FIELDS)[number];
+
+/**
+ * 逐字段读那 9 个数（缺任一 / 非有限数 ⇒ `null` —— **不补默认值**，理由见 `normalizeScanDiag`）
+ *
+ * ⚠️ 收口处**一次断言**：校验**在**它之前（每个键都在循环里验过），TS 只是无法证明
+ *    「循环已把每个键都填满」⇒ 这是唯一要跨的类型墙，**不是**用断言替代校验。
+ */
+function readNumberFields(rec: Record<string, unknown>): Record<NumberField, number> | null {
+  const out: Partial<Record<NumberField, number>> = {};
+  for (const k of NUMBER_FIELDS) {
+    const n = rec[k];
+    if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+    out[k] = n;
+  }
+  return out as Record<NumberField, number>;
+}
 
 /** 画布条目的四个数（原 `p.canvases` 的元素） */
 function normalizeCanvasBox(value: unknown): CanvasBox | null {
-  if (!value || typeof value !== 'object') return null;
-  const r = value as Record<string, unknown>;
-  const { w, h, dw, dh } = r;
+  if (!isRecord(value)) return null;
+  const { w, h, dw, dh } = value;
   if (typeof w !== 'number' || !Number.isFinite(w)) return null;
   if (typeof h !== 'number' || !Number.isFinite(h)) return null;
   if (typeof dw !== 'number' || !Number.isFinite(dw)) return null;
@@ -46,22 +69,17 @@ function normalizeCanvasBox(value: unknown): CanvasBox | null {
  *    我只认 3 个"伪装成"页面就 3 个"）
  */
 export function normalizeScanDiag(value: unknown): ScanDiag | null {
-  if (!value || typeof value !== 'object') return null;
-  const rec = value as Record<string, unknown>;
-  const out: Record<string, number> = {};
-  for (const k of FIELDS) {
-    const n = rec[k];
-    if (typeof n !== 'number' || !Number.isFinite(n)) return null;
-    out[k] = n;
-  }
-  if (!Array.isArray(rec.canvases)) return null;
+  if (!isRecord(value)) return null;
+  const nums = readNumberFields(value);
+  if (!nums) return null;
+  if (!Array.isArray(value.canvases)) return null;
   const canvases: CanvasBox[] = [];
-  for (const c of rec.canvases) {
+  for (const c of value.canvases) {
     const box = normalizeCanvasBox(c);
     if (!box) return null;
     canvases.push(box);
   }
-  return { ...(out as unknown as Omit<ScanDiag, 'canvases'>), canvases };
+  return { ...nums, canvases };
 }
 
 /**

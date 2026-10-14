@@ -101,10 +101,22 @@ export const countRefChips = (text: unknown): number =>
 export const createRefMarkRe = (): RegExp => /@图(\d{1,3})/g;
 
 /**
+ * `参考图N` 的词（★ 本 token 族的**唯一**词源）
+ *
+ * ⚠️ **为什么住协议模块而不是 `constants/text.ts`**：它是**提示词协议 token**（发给模型的），
+ *    不是 UI 文案 —— 改动它 = 变更模型输入（既有裁定，见 `formatReferenceLabel` 的注释）。
+ * ★ **2026-10-14 收口**：同一个词原先在 **3 处**各写一遍 —— 本文件的格式化器 · `autoMatch.ts` 的
+ *    解析器（`autoMatch.ts` 原先的本地字面量 `REF_LABEL`，**已删** —— 它必须与格式化器逐字相同，
+ *    否则"解析不到自己刚写出去的标签"）·
+ *    `ui/nodes/TextNode` 的预览行（内联 `` `参考图${n}` ``，重复实现格式化器）⇒ 现只此一处。
+ */
+export const REFERENCE_LABEL = '参考图';
+
+/**
  * `参考图N` 的**唯一**格式化处（原 `Ja`/`KL`/`Qc` 各自硬编码过这个 token）
  * ⚠️ 这是**提示词协议 token**（发给模型的），不是 UI 文案 ⇒ 不放 `constants/text.ts`，放协议模块
  */
-export const formatReferenceLabel = (n: number): string => `参考图${n}`;
+export const formatReferenceLabel = (n: number): string => `${REFERENCE_LABEL}${n}`;
 
 /** `@图N` 的**唯一**格式化处（原 `Ja`/`eu` 各自拼过） */
 export const formatRefMark = (n: number): string => `@图${n}`;

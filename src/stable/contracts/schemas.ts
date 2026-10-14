@@ -24,13 +24,13 @@ export const WEBVIEWS_HOST_CLASS = 'doubao-view-webviews';
 export const PROTOCOL_IMG = 'img://';
 /**
  * ⚠️ 这里**没有** `PROTOCOL_VID` —— `vid://` 由**宿主独占**：主进程产生引用
- *   （`main.js:787` 返回 `{ref: 'vid://<sha1>.mp4'}`）并注册 handler 供给（`main.js:1017-1059`）；
+ *   （`main.js` 返回 `{ref: 'vid://<sha1>.mp4'}`）并注册 handler 供给（`main.js`）；
  *   前端把该引用当**不透明串**渲染，从不自己拼 / 拆它 ⇒ 前端不需要这个常量（曾误判为"前端使用"）。
  */
 
 /**
  * `appasset://` —— ★ **不是前端业务协议**，是主进程**专为 MediaPipe 人脸检测**注册的特权 scheme
- * （`main.js:652-656` 注册 + `main.js:1060-1098` handler）：
+ * （`main.js` 注册 + `main.js` handler）：
  * `appasset://mediapipe/vision_wasm_internal.wasm` → `dist/mediapipe/vision_wasm_internal.wasm`。
  *
  * 为什么要它：生产环境页面由 `file://` 加载，而 Chromium **禁止 `file://` 页面 fetch 本地文件**

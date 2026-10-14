@@ -18,10 +18,12 @@ import type { ClockPort } from '@/core/ports/clock.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { decideByReason } from '@/core/rules/failure';
 import { FAIL_LABEL, type SendFailKind } from '@/constants/failure';
+// ★ 通道值域的真源（`GEN_CHANNELS`）在 `constants/models` —— 这两个入参类型只引用它，不重写联合
+import type { GenChannel } from '@/constants/models';
 import { pickAccount } from '@/core/rules/accountPool';
 import { buildImagePayload, buildVideoPayload, toSitePayload } from '@/core/rules/payload';
 import { applyStylePrefix, clampImageCount } from '@/core/rules/prompt';
-import type { ApiBatchResult, GenResult } from '@/stable/model/gen';
+import type { ApiBatchResult, ApiJobAttempt, GenResult } from '@/stable/model/gen';
 import { API_VIDEO_RESOLUTION, API_VIDEO_WATERMARK, BATCH_RATIOS } from '@/constants/models';
 import { ACCOUNT_PICK_TEXT, API_TEXT, SEND_TEXT } from '@/constants/text';
 import { makeGenAttempt } from '@/core/rules/genHistory';
@@ -134,8 +136,8 @@ export interface ImageGenInput extends CommonInput {
   count?: number;
   model?: string;
   resolution?: string;
-  /** 生成通道 */
-  channel: 'doubao' | 'api';
+  /** 生成通道（真源 = `constants/models.GEN_CHANNELS`） */
+  channel: GenChannel;
   /**
    * ★ 已解析的 provider id（**API 通道必填给值**）—— 同 `VideoGenInput.providerId`。
    *   由 `state` 用 `resolveApiProviderId('image', …)` 求出（纯规则 `core/rules/apiProvider.ts`）。
@@ -147,7 +149,8 @@ export interface VideoGenInput extends CommonInput {
   text: string;
   model?: string;
   duration?: number;
-  channel: 'doubao' | 'api';
+  /** 生成通道（真源 = `constants/models.GEN_CHANNELS`） */
+  channel: GenChannel;
   /** 批量出片：按三比例各出一片 */
   batch?: boolean;
   /**
@@ -381,7 +384,7 @@ export async function generateVideo(deps: GenDeps, input: VideoGenInput): Promis
      * ⚠️ **不带它 ⇒ `genHistory` 永不写入 ⇒ 版本历史对 API 出片为空**（`TD-03-6`）。
      * ⚠️ `id` / `at` 由注入给出（原则 4：`core` 不自己取时间 / 随机）。
      */
-    const attemptOf = (ratio: string, batch: boolean): Record<string, unknown> =>
+    const attemptOf = (ratio: string, batch: boolean): ApiJobAttempt =>
       makeGenAttempt({
         id: deps.makeAttemptId(),
         at: now,

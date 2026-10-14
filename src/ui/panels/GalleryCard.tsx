@@ -71,7 +71,7 @@ export function GalleryCard({
         <img className={styles.thumb} src={withThumb(item.dataUrl, 320)} alt={item.name} loading="lazy" />
         {big && (
           <span className={styles.bigBadge} title={GALLERY_TEXT.bigBadge(formatBytes(item.sizeBytes), dims)}>
-            ⚠ 大图
+            {GALLERY_TEXT.bigBadgeText}
           </span>
         )}
         {hovered && (

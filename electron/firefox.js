@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const { app } = require('electron');
+const { handle } = require('./ipc');
 
 function shellEscape(arg) {
   if (/^[a-zA-Z0-9_./:=@-]+$/.test(arg)) return arg;
@@ -192,12 +193,38 @@ function getStatus() {
   };
 }
 
-module.exports = {
-  getFirefoxExecutable,
-  addonAssetPath,
-  ensureProfile,
-  launch,
-  removeProfile,
-  getStatus,
-  profileDirFor
-};
+// ───────────────────── IPC 自注册（本域） ─────────────────────
+// 四个 handler 说的都是「Lovart 的内置 Firefox」这一件事 ⇒ 住本文件（TD-13-24）。
+/**
+ * ★ **域唯一门面**：宿主壳只说「初始化 Lovart 内置 Firefox 域」。
+ * ⚠️ 宿主壳不再需要域内任何别的名字 —— 路径解析 / profile 落点 / 启动命令全在本文件。
+ */
+function initFirefox() {
+  handle('ensure-lovart-firefox-profile', async (_e, { accountId } = {}) => {
+    if (!accountId) return { ok: false, error: '缺少 accountId' };
+    ensureProfile(accountId);
+    return { ok: true };
+  });
+
+  handle('open-lovart-firefox', async (_e, { accountId, url } = {}) => {
+    if (!accountId) return { ok: false, error: '缺少 accountId' };
+    const res = await launch(accountId, url);
+    if (!res.ok) {
+      console.error('[lovart-firefox] 启动失败 | accountId:', accountId, '| error:', res.error, '| command:', res.command);
+      return res;
+    }
+    console.log('[lovart-firefox] 已启动 | accountId:', accountId, '| profile:', res.profile, '| command:', res.command);
+    return res;
+  });
+
+  handle('remove-lovart-firefox-profile', async (_e, { accountId } = {}) => {
+    if (!accountId) return { ok: false, error: '缺少 accountId' };
+    removeProfile(accountId);
+    return { ok: true };
+  });
+
+  handle('get-firefox-status', async () => getStatus());
+}
+
+// 导出面 = **宿主可用面**：只有 `initFirefox` 出本文件（其余函数都是本文件内部实现）
+module.exports = { initFirefox };

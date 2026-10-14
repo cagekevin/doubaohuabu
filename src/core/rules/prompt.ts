@@ -24,6 +24,8 @@ import {
 } from '@/constants/models';
 // ★ SSOT 收口：`@[id|label]` 正则与 `参考图N` token **只有一份**（`refs.ts` 是 `@图N` 协议的归属模块）
 import { createRefChipRe, formatReferenceLabel } from './refs';
+// ★ 节点默认标签的真源（`TD-16-150`：本行原内联 `'文生图'`）
+import { GEN_IMAGE_LABEL } from '@/stable/model/node';
 
 /** 模型 id → 展示名（原 `io`；未知 id 原样返回，空则回落默认） */
 export function normalizeModelLabel(model: unknown): string {
@@ -351,7 +353,7 @@ export function resolveRefMaterial(
   }
   // ⑥
   if (node?.type === 'imggen' && text(d.dataUrl)) {
-    return { id: refId, label: text(d.label) || text(d.name) || '文生图', dataUrl: text(d.dataUrl) };
+    return { id: refId, label: text(d.label) || text(d.name) || GEN_IMAGE_LABEL, dataUrl: text(d.dataUrl) };
   }
   return { id: refId, label: refId, dataUrl: '' };
 }

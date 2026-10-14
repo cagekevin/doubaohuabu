@@ -16,9 +16,14 @@
  *
  * ⚠️ 归 `lib`（L0）而不是 `adapters`：它不读宿主、不经 IPC，只操作**传进来的元素**，
  *   与 `lib/selection.ts` 同类；且它**不 import `stable`**（只处理字符串/DOM）。
+ * ⚠️ ★ **2026-10-14（`TD-16-149`）唯一 import = `@/core/rules/refs` 的 `formatRefMark`**：
+ *   `@图N` 的**唯一格式化处**在那边（`refs.ts` 的既有声明）；本文件原内联 `` `@图${n}` ``
+ *   是**第二份实现**（协议 token 两处各写一份 ⇒ 迟早漂）。`refs.ts` 自身**零 import** ⇒ 不牵连依赖。
  * ⚠️ **不改入参**：源版第一行就是 `e.cloneNode(true)` 在**副本**上干活 —— 照抄（否则用户的
  *   编辑器内容会被这条"读数"路径改掉）。
  */
+
+import { formatRefMark } from '@/core/rules/refs';
 
 /** 原 `kL.jsx:12` 的剔除名单（**逐条照抄**，含 `sc-clipboard` 这类 Slate 残留） */
 const DROP_SELECTOR = [
@@ -159,7 +164,7 @@ export function gpEditorToText(el: HTMLElement | null): string {
       const cls = e.classList;
       if (cls && typeof cls.contains === 'function' && cls.contains('ref-chip')) {
         const n = Number(e.dataset?.n);
-        if (Number.isFinite(n) && n > 0) out += `@图${n}`;
+        if (Number.isFinite(n) && n > 0) out += formatRefMark(n);
         return;
       }
       if (tag === 'DIV' || tag === 'P' || tag === 'LI') {

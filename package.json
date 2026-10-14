@@ -8,6 +8,7 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
+    "build:watch": "vite build --watch",
     "build": "npm run check && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

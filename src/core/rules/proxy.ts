@@ -18,7 +18,7 @@
  */
 
 import type { Account } from '@/stable/model/account';
-import { normalizeAccountType } from '@/stable/model/account';
+import { capsOf } from './siteCaps';
 
 /**
  * 归一代理池输入（原 `setProxyPool` 30321-30324 的纯半）
@@ -44,7 +44,8 @@ export interface ProxyAssignResult {
   accounts: Account[];
   /**
    * 需要调宿主设置的清单
-   * ⚠️ 只含**有 `partition`** 的 lovart 账号（与源码 `if (o.partition)` 一致）
+   * ★ 含**全部** lovart 账号：分区恒有值（产生方保证）⇒ 不再有「跳过无分区账号」这一档
+   *   （源版 `if (o.partition)` 已随类型收窄删除）。
    */
   assignments: ProxyAssignment[];
 }
@@ -60,16 +61,18 @@ export function assignProxyPool(
   proxyPool: readonly string[] | null | undefined,
 ): ProxyAssignResult {
   const pool = proxyPool || [];
-  const lovart = accounts.filter((a) => normalizeAccountType(a.type) === 'lovart');
+  const lovart = accounts.filter((a) => capsOf(a.type).usesProxyPool);
 
   const assignments: ProxyAssignment[] = [];
   const next = accounts.map((a) => {
-    if (normalizeAccountType(a.type) !== 'lovart') return a;
+    if (!capsOf(a.type).usesProxyPool) return a;
 
     const idx = lovart.findIndex((f) => f.id === a.id);
     const proxy = pool.length ? String(pool[idx % pool.length]) : '';
 
-    if (a.partition) assignments.push({ accountId: a.id, partition: a.partition, proxy });
+    // ⚠️ 源版这里是 `if (o.partition)` —— 那档已删：分区由产生方保证恒有值
+    //    （`accountRoster.buildNewAccount`），留着它只是替「产生方又缺了」打掩护。
+    assignments.push({ accountId: a.id, partition: a.partition, proxy });
 
     return { ...a, proxy };
   });

@@ -27,7 +27,7 @@ import type {
 } from '@/core/ports/site.port';
 import type { WatchReading } from '@/core/rules/sendWatch';
 import { err, ok, type Result } from '@/core/model/result';
-import { SEND_TEXT } from '@/constants/text';
+import { SEND_TEXT, SITE_CAP_TEXT } from '@/constants/text';
 
 /** 本轮的租约上下文（由 `withBackendPage` 的 `run` 回调给） */
 export interface ProbeRoundContext {
@@ -70,7 +70,7 @@ export async function probeSendRound(
   const site = ctx.site;
   const hasAny = !!(site.probeGenAck || site.probeWaitTime || site.probeQuotaUsage || site.probeReplyNotice);
   if (!hasAny) {
-    return err('unknown', SEND_TEXT.noCapability(site.kind, '「发送后监测」'));
+    return err('unknown', SEND_TEXT.noCapability(site.kind, SITE_CAP_TEXT.sendWatch));
   }
 
   const pageCtx: ImageQuestionContext = {

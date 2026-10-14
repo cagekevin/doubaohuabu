@@ -61,21 +61,21 @@ export function countLibRefs(
 }
 
 /** 改名规划的结果 */
-export interface LibraryRenamePlan {
+export interface LibraryRenamePlan<T extends MaterialNodeLike = MaterialNodeLike> {
   /** 改名后的资源库（未命中 ⇒ **同一引用**） */
   library: LibraryItem[];
-  /** 改名后的全部节点（只动同源素材节点的 `name/label`） */
-  nodes: MaterialNodeLike[];
+  /** 改名后的全部节点（只动同源素材节点的 `name/label`）—— **与入参同型** */
+  nodes: T[];
   /** 被改名的库条目 id（找不到 ⇒ `null`） */
   libId: string | null;
 }
 
 /** 换图规划的结果 */
-export interface LibraryReplacePlan {
+export interface LibraryReplacePlan<T extends MaterialNodeLike = MaterialNodeLike> {
   /** 换图后的资源库（未命中 ⇒ **同一引用**） */
   library: LibraryItem[];
-  /** 换图后的全部节点（引用该图的都换 `dataUrl`） */
-  nodes: MaterialNodeLike[];
+  /** 换图后的全部节点（引用该图的都换 `dataUrl`）—— **与入参同型** */
+  nodes: T[];
   /** 外置后的新图地址（调用方原样写回库与节点） */
   storedUrl: string;
   /** 实际被换图的节点数（源返回 `replaced`，供调用方提示） */
@@ -107,19 +107,19 @@ function isSameSourceNode(node: MaterialNodeLike, libId: string, oldDataUrl: str
  *    输入框那侧的兜底「未命名」在调用方，原 `RT.jsx:248`）。
  * @returns `null` = 库里没有这个 id ⇒ 调用方**不 commit**
  */
-export function planLibraryRename(input: {
+export function planLibraryRename<T extends MaterialNodeLike>(input: {
   library: readonly LibraryItem[];
-  nodes: readonly MaterialNodeLike[];
+  nodes: readonly T[];
   libId: string;
   name: string;
-}): LibraryRenamePlan | null {
+}): LibraryRenamePlan<T> | null {
   const { library, nodes, libId, name } = input;
   const hit = (library ?? []).find((l) => l.id === libId);
   if (!hit) return null;
 
   const nextLibrary = (library ?? []).map((l) => (l.id === libId ? { ...l, name } : l));
   // 同源判据用**条目自己的** dataUrl（源 `s.dataUrl`）
-  const nextNodes = (nodes ?? []).map((n) =>
+  const nextNodes: T[] = (nodes ?? []).map((n) =>
     isSameSourceNode(n, libId, hit.dataUrl) ? { ...n, data: { ...n.data, name, label: name } } : n,
   );
   return { library: nextLibrary, nodes: nextNodes, libId };
@@ -137,23 +137,23 @@ export function planLibraryRename(input: {
  * ⚠️ **不改 `name`/`libId`/`natW/natH`**（源只动 `dataUrl` 与库条目的 `w/h`）。
  * @returns `null` = 守卫没过（条目不在 / 新图无地址）⇒ 调用方**不 commit**
  */
-export function planLibraryReplace(input: {
+export function planLibraryReplace<T extends MaterialNodeLike>(input: {
   library: readonly LibraryItem[];
-  nodes: readonly MaterialNodeLike[];
+  nodes: readonly T[];
   libId: string;
   /** 新图的**外置后**地址（调用方已过 `persistImage`） */
   storedUrl: string;
   /** 新图实测宽高（可空 ⇒ 保留条目原值，源 `r.w || c.w`） */
   w?: number;
   h?: number;
-}): LibraryReplacePlan | null {
+}): LibraryReplacePlan<T> | null {
   const { library, nodes, libId, storedUrl, w, h } = input;
   const hit = (library ?? []).find((l) => l.id === libId);
   if (!hit || !storedUrl) return null;
 
   const oldDataUrl = hit.dataUrl;
   let replaced = 0;
-  const nextNodes = (nodes ?? []).map((n) => {
+  const nextNodes: T[] = (nodes ?? []).map((n) => {
     if (!isSameSourceNode(n, libId, oldDataUrl)) return n;
     replaced++;
     return { ...n, data: { ...n.data, dataUrl: storedUrl } };

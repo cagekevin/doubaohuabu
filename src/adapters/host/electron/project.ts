@@ -16,6 +16,7 @@ import type {
   ProjectPort,
 } from '@/core/ports/host.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
+import type { Project } from '@/stable/model/project';
 import { PROJECT_TEXT } from '@/constants/text';
 import { isRecord } from '@/lib/object';
 import { getHostApi, checkOk, HOST_MISSING } from './host-api';
@@ -74,7 +75,7 @@ export function createElectronProjectPort(): ProjectPort {
       }
     },
 
-    saveSnapshot: (project: unknown) => {
+    saveSnapshot: (project: Project) => {
       const api = getHostApi();
       if (!api) return err('unknown', HOST_MISSING);
       try {
@@ -101,7 +102,7 @@ export function createElectronProjectPort(): ProjectPort {
       if (!api) return err('unknown', HOST_MISSING);
       try {
         const raw = await api.revealProjectStorage(storagePath);
-        // ★ 原则 6 + **TD-04-7**：后端 `main.js:408` 的 handler **每条 return 都带 `ok`**
+        // ★ 原则 6 + **TD-04-7**：后端 `main.js` 的 handler **每条 return 都带 `ok`**
         //   ⇒ 统一走 `checkOk`（fail-closed：`raw == null` 与漏 `ok` 都判失败）。
         const c = checkOk<{ path?: string }>(raw, { fallback: PROJECT_TEXT.unknownReason });
         if (!c.ok) return c;

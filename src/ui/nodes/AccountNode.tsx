@@ -24,6 +24,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+// ★ 默认通道的唯一真源（数据层：`core/model/defaults`）
+import { DEFAULT_CHANNEL } from '@/core/model/defaults';
 import { useAccountOps, useStore } from '@/state';
 import { NodeShell } from './NodeShell';
 import { AccountPicker } from '@/ui/common/AccountPicker';
@@ -162,7 +164,7 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
           {/* 绑号（原 `OL.jsx:434` 的 `foot-btn-account`）—— 绑定模式，落值回调的是**账号 id** */}
           <AccountPicker
             value={data.accountId ?? ''}
-            channel="doubao"
+            channel={DEFAULT_CHANNEL}
             accounts={accounts}
             groups={groups}
             apiReady={false}

@@ -1,7 +1,7 @@
 /**
  * 授权用例单测
  *
- * 覆盖（`_Component48.jsx:105-145` + `W3.jsx` + `electron/license.js:602-712`）：
+ * 覆盖（`_Component48.jsx:105-145` + `W3.jsx` + `electron/license.js`）：
  *   - ★ **fail-close**：只有 `status === 'ok'` 放行；`none/expired/invalid/tampered/used` 一律不放行
  *   - ★ **业务失败 ≠ 传输失败**：`{status:'used'|'tampered'}` 走 `ok(...)`，`err` 只留给后端异常
  *   - 三个原因字段（`reason` / `tamperReason` / `error`）**原样带出去**（UI 才能分支显示）

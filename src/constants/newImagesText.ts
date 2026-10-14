@@ -7,7 +7,7 @@
  *
  * ⚠️ **文案逐字对源**（含源版拼写 `Tanpnow`、全角括号与「」）—— **例外只有两处**
  *   （`liveTitle` / `autoOnTitle`）：源版写「对**全部 Lovart / Tapnow** 账号」，而本工程
- *   **刻意跳过 Lovart**（`docs/过程.md` #11 · `main.js:2749` **只点名 Lovart**）⇒ 让 UI **说真话**
+ *   **刻意跳过 Lovart**（`docs/过程.md` #11 · `main.js` **只点名 Lovart**）⇒ 让 UI **说真话**
  *   优先于与源逐字（**行为本身就偏离**，文案不该假装没偏）。
  *
  * ⚠️ 本工程**已落**：聚合列表 / 发送到画布 / 从列表移除 / 折叠 / 只留本画布 /
@@ -103,7 +103,7 @@ export const NEW_IMAGES_TEXT = {
    * ★ **自动值守按钮**（原 674-677 的三态：`dot` / `label` / `title`）
    *
    * ⚠️ **两处不逐字照抄的原因（写明）**：源版那两句写的是「**全部 Lovart / Tapnow** 账号」，
-   *   而本工程**刻意跳过 Lovart**（`docs/过程.md` #11 · `electron/main.js:2749` **只点名 Lovart**；
+   *   而本工程**刻意跳过 Lovart**（`docs/过程.md` #11 · `electron/main.js` **只点名 Lovart**；
    *   见 `adapters/site/lovart/index.ts` 为何不声明 `autoWatch`）⇒ 让 UI **说真话**优先于与源逐字。
    *   （可逐字的那些：`已暂停` / `自动抓取中` / 两条 toast —— 见下。）
    */
