@@ -16,8 +16,10 @@
  * ⚠️ **与源的一处结构性差异（留痕）**：源复用发送时的租约；本仓发送用例返回时已释放租约
  *   ⇒ 监测**自己申请一条**（`purpose: 'result-watch'`）。代价：账号在监测期间**被占用**
  *   （与源一致 —— 源那条租约同样活到监测结束）。
- * ⚠️ **换号重发未落**（原 `be` → 递归 `gt`）：额度类命中**只通知、不终止、不写 `nodeSwitches`**
- *   （见 `core/rules/sendWatch.reduceWatchRound` 的头注）⇒ `switch-status` 三块 UI 仍缺生产者。
+ * ★ **换号重发**（原 `be` → 递归 `gt`）：额度类命中（③ 额度不足 / ④a 今日次数用尽）⇒
+ *   本文件 `performSwitch` 挑空闲号 → `resend` → 写 `nodeSwitches`（三档 `switching`/`done`/`failed`）
+ *   → **递归**起新一轮监测（自带 `withBackendPage`）。
+ *   生产者 = `performSwitch`；消费者 = `TextNode` 的 `switch-status`（`ui/nodes/TextNode.tsx`）。
  */
 
 import type { Ports } from '@/core/ports';

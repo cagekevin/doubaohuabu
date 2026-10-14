@@ -74,24 +74,27 @@ export interface GenDeps {
    */
   makeAttemptId: () => string;
   /**
-   * ★ **一次发送结束后的回调**（原 `sendPayload` 里 `Be` 返回后立刻做的那件事，
-   *   `_Component43.jsx:2865-2913` 成功 / `:2921-2942` 失败）。
+   * ★★ **一次发送的「前后编排」**（注入）—— 源 `sendPayload` 的**发送半**
+   *   （`_Component43.jsx:2846-3005`）：`读基线 → Be 发送 → 写 _pendingAttempt → 起生成确认`。
    *
-   * ⚠️ **为什么是注入而不是在 `core` 里写 store**：源版这段**直接 `updateNodeData`**，
-   *    而本仓 `core` 不得写 store（原则 1）⇒ 与 `holdAccount` / `releaseAccount` 同法，
-   *    由 `state` 注入。
-   * ⚠️ **时序**：必须在 `releaseAccount` **之前**调用（源把写入放在 `finally` 之前/之内、
-   *    释放之后没有别的写入）⇒ 调用方在 `try` 里、`await site.send(...)` 之后立刻调。
-   * @param input `ok=false` 时 `message` 是**原文**（原则 6）
+   * ⚠️ **为什么是注入而不是在 `core` 里做**：源版这段**直接读页面 ＋ 写 store**
+   *    （`getURL` / 基线探测 / `updateNodeData` / `kt(...)`），而本仓 `core` 既不写 store
+   *    也不碰宿主（原则 1）⇒ 与 `holdAccount` / `releaseAccount` 同法，由 `state` 注入
+   *    （实现见 `state/sendWithConfirm.ts` —— 三条发送路**共用一份**，判据 C1）。
+   *
+   * ⚠️ **时序**：整段包裹在 `holdAccount` 与 `releaseAccount` **之间**（源同：写在 `finally` 释放之前）。
+   * ⚠️ **实现必须自己调 `send()`** —— 它要在**发送之前**读基线（发完再读会把已经到达的回复吞掉，
+   *    源 `sendPayload:2846-2861` 的注释就是这个约束）。
+   * ⚠️ 缺省 ⇒ 调用方直发（见下方调用点的 `??`）。
    */
-  onSent?: (input: {
+  onSend?: (input: {
     accountId: string;
     payload: Parameters<AnySitePort['send']>[1];
     /** 源 `sendPayload` 的第三个入参 `me`（**与报文里的 `sourceNodeId` 不是同一个东西**） */
     sourceNodeId: string | null;
-    ok: boolean;
-    message: string;
-  }) => void | Promise<void>;
+    /** ★ 真正的发送（`site.send`）—— 实现**必须**调它，且要在读基线之后 */
+    send: () => Promise<Result<SendResult>>;
+  }) => Promise<Result<SendResult>>;
 }
 
 /**
@@ -241,20 +244,17 @@ async function sendViaWeb(
     const res = await (async () => {
       if (!deps.holdAccount(account.id, input.sourceNodeId ?? null)) return null;
       try {
-        const r = await site.send(account, payload);
-        // ★ 源在 `sendPayload` 里、`Be` 返回后**立刻**做这件事（成功 `:2907-2913` / 失败 `:2935-2941`）：
-        //   把「待归属尝试」写到节点上（出片认领 + `conversationId`）。
-        //   ⚠️ 放在 `finally` 的释放**之前** —— 与源同序（源的写入在 `finally` 内、释放动作之前）。
-        if (deps.onSent) {
-          await deps.onSent({
-            accountId: account.id,
-            payload,
-            sourceNodeId: input.sourceNodeId ?? null,
-            ok: r.ok,
-            message: r.ok ? '' : r.message,
-          });
-        }
-        return r;
+        // ★★ 源 `sendPayload` 的**发送半**（`:2846-3005`：读基线 → 发送 → 写 `_pendingAttempt` → 起生成确认）
+        //    收在注入实现里（`state/sendWithConfirm`，三条发送路共用一份）；未注入 ⇒ 直发。
+        const send = (): Promise<Result<SendResult>> => site.send(account, payload);
+        return deps.onSend
+          ? await deps.onSend({
+              accountId: account.id,
+              payload,
+              sourceNodeId: input.sourceNodeId ?? null,
+              send,
+            })
+          : await send();
       } finally {
         deps.releaseAccount(account.id);
       }

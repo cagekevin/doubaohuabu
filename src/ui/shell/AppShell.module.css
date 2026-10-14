@@ -10,9 +10,41 @@
 }
 
 .mainArea {
+  /* ★ `pageParked`（后台页停靠态）是绝对定位 ⇒ 这里必须成为它的定位祖先 */
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * ★★ **两个互斥界面**（首页 / 豆包后台）的页面容器 —— 由 `AppShell` 二选一
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/** 页面行（`mainArea` 的 flex 项）：中栏 + **该页自己的**侧栏 */
+.pageRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+/** 首页切走：整体隐藏（画布**没有 guest** ⇒ 可安全 `display:none`；重新显示时 ReactFlow 自会重测） */
+.pageHidden {
+  display: none;
+}
+
+/**
+ * 后台页切走：★ **不能 `display:none`** —— `<webview>` 的 guest 视口一塌就回不来
+ * （见 `BackendView.module.css` 的 `.viewHidden` 注释），且 `findWebview` 是 DOM 查找
+ * ⇒ 只**停靠**：出流 + 0 尺寸，DOM 仍在（`.viewHidden .webviews` 那两条 `!important` 撑住视口）。
+ */
+.pageParked {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 /**

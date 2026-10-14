@@ -176,61 +176,64 @@ export function ApiSettings({ onClose }: ApiSettingsProps) {
       .map((p) => <ProviderOption key={p.id} provider={p} configs={configs} />);
 
   return (
-    <Modal open onClose={onClose} title={API_SETTINGS_TEXT.title}>
+    <Modal open onClose={onClose} title={API_SETTINGS_TEXT.title} className={styles.panel}>
       <p className={styles.sub}>{API_SETTINGS_TEXT.sub}</p>
 
-      <div className={styles.sectionTitle}>{API_SETTINGS_TEXT.channelSection}</div>
+      {/* ★ 通道配置整块 = 原版 `.api-channel-config` 卡片（标题 + 4 行 + 今日额度，源 207-281） */}
+      <div className={styles.channelConfig}>
+        <div className={styles.sectionTitle}>{API_SETTINGS_TEXT.channelSection}</div>
 
-      <Row label={API_SETTINGS_TEXT.imageChannel}>
-        <select
-          className={styles.input}
-          value={setup.imageProviderId ?? ''}
-          onChange={(e) => void apiOps.saveSetup({ imageProviderId: e.target.value || null })}
-        >
-          <option value="">{API_SETTINGS_TEXT.autoOption}</option>
-          {providerOptions('image')}
-        </select>
-      </Row>
+        <Row label={API_SETTINGS_TEXT.imageChannel}>
+          <select
+            className={styles.input}
+            value={setup.imageProviderId ?? ''}
+            onChange={(e) => void apiOps.saveSetup({ imageProviderId: e.target.value || null })}
+          >
+            <option value="">{API_SETTINGS_TEXT.autoOption}</option>
+            {providerOptions('image')}
+          </select>
+        </Row>
 
-      <Row label={API_SETTINGS_TEXT.videoChannel}>
-        <select
-          className={styles.input}
-          value={setup.videoProviderId ?? ''}
-          onChange={(e) => void apiOps.saveSetup({ videoProviderId: e.target.value || null })}
-        >
-          <option value="">{API_SETTINGS_TEXT.autoOption}</option>
-          {providerOptions('video')}
-        </select>
-      </Row>
+        <Row label={API_SETTINGS_TEXT.videoChannel}>
+          <select
+            className={styles.input}
+            value={setup.videoProviderId ?? ''}
+            onChange={(e) => void apiOps.saveSetup({ videoProviderId: e.target.value || null })}
+          >
+            <option value="">{API_SETTINGS_TEXT.autoOption}</option>
+            {providerOptions('video')}
+          </select>
+        </Row>
 
-      <Row label={API_SETTINGS_TEXT.fallbackChannel}>
-        <select
-          className={styles.input}
-          value={setup.fallbackProviderId ?? ''}
-          onChange={(e) => void apiOps.saveSetup({ fallbackProviderId: e.target.value || null })}
-        >
-          <option value="">{API_SETTINGS_TEXT.noFallback}</option>
-          {providerOptions()}
-        </select>
-      </Row>
+        <Row label={API_SETTINGS_TEXT.fallbackChannel}>
+          <select
+            className={styles.input}
+            value={setup.fallbackProviderId ?? ''}
+            onChange={(e) => void apiOps.saveSetup({ fallbackProviderId: e.target.value || null })}
+          >
+            <option value="">{API_SETTINGS_TEXT.noFallback}</option>
+            {providerOptions()}
+          </select>
+        </Row>
 
-      <Row label={API_SETTINGS_TEXT.concurrency}>
-        <input
-          className={styles.input}
-          type="number"
-          min={1}
-          max={20}
-          value={setup.concurrency || DEFAULT_API_CONCURRENCY}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) void apiOps.saveSetup({ concurrency: n });
-          }}
-        />
-      </Row>
+        <Row label={API_SETTINGS_TEXT.concurrency}>
+          <input
+            className={styles.input}
+            type="number"
+            min={1}
+            max={20}
+            value={setup.concurrency || DEFAULT_API_CONCURRENCY}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n)) void apiOps.saveSetup({ concurrency: n });
+            }}
+          />
+        </Row>
 
-      <div className={styles.usage}>
-        {API_SETTINGS_TEXT.usageLabel} <b>{todayUsage.image || 0}</b> {API_SETTINGS_TEXT.usageMid}{' '}
-        <b>{todayUsage.video || 0}</b>
+        <div className={styles.usage}>
+          {API_SETTINGS_TEXT.usageLabel} <b>{todayUsage.image || 0}</b> {API_SETTINGS_TEXT.usageMid}{' '}
+          <b>{todayUsage.video || 0}</b>
+        </div>
       </div>
 
       {providers.length === 0 ? (

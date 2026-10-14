@@ -153,7 +153,10 @@ export function createLovartSite(host: HostPort): SitePort {
         const href = raw?.href ?? '';
         // ⚠️ 不再内联正则：改走真源 `lovartPageKind`（含**域校验**，此前缺 ⇒ 非 lovart 域也判）
         const pageKind = lovartPageKind(href);
-        return ok({ usable: true, loggedIn: !!href, pageKind });
+        // ★ 登录判据 = **停在站点内容页**（画布 / 广场）—— 未登录访问这两处会被重定向到登录页（那是 `other`）。
+        //   ⚠️ 源无此探针（本仓自造）；原写 `loggedIn: !!href` 恒真 ⇒ 会话过期测不出。
+        const onContent = pageKind !== PAGE_KINDS.OTHER;
+        return ok({ usable: onContent, loggedIn: onContent, pageKind });
       } catch (e) {
         return err('page-error', toMessage(e), e);
       }

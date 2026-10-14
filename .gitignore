@@ -15,6 +15,9 @@ docs/豆包画布原版参考/outputs/
 .env.*
 !.env.example
 
+# ── 截图产物（docs/mockup 预览截图，脚本生成）──
+.shots/
+
 # ── 日志（仅 npm 侧；勿用 *.log —— leveldb fixture 有 000014.log / LOG.old）──
 npm-debug.log*
 yarn-error.log*

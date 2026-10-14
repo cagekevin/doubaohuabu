@@ -61,9 +61,9 @@ import { accountSendFeedback, collectAccountNodeInputs } from '@/core/rules/acco
 import { buildAccountNodePayload, toSitePayload } from '@/core/rules/payload';
 import { withBackendPage } from '@/core/usecases/sendToSite';
 import { sendToSiteDeps } from './sendDeps';
-import { ACCOUNT_NODE_TEXT, GEN_CONFIRM_TEXT } from '@/constants/text';
-// ★ 「生成确认」的**粗筛**（原 `Ge`）—— 决定"发送前要不要读基线 / 发送后要不要起自动确认"
-import { needsGenerationConfirm } from '@/core/rules/genConfirm';
+import { ACCOUNT_NODE_TEXT } from '@/constants/text';
+// ★ 「发送 ＋ 生成确认」的共享实现（源 `sendPayload` 的发送半）—— 三条发送路**同一份**
+import { prepareConfirm, startConfirmAfterSend, type SendConfirmDeps } from './sendWithConfirm';
 // ★ 自动值守的**纯决策**（原 `_Component26` 的 `Ee` 取值半）—— 定时与 IO 在本文件（编排层）
 import {
   advanceAutoWatch,
@@ -106,15 +106,6 @@ export interface AccountOpsController {
    * @returns 是否已登录（同时已把 `status` 写成 `已登录` / `未登录`）
    */
   probeLogin(accountId: string): Promise<boolean>;
-  /**
-   * ★★ **对「还没入名册」的待建账号探一次登录**（原 `$P.jsx:199-249` 的 `pe` 轮询）
-   *
-   * 登录弹窗用它**轮询自动完成登录**：源版每 2s 读一次 webview 的 cookie；
-   * 本仓受 `docs/过程.md` #5（cookie 前端一律不碰）约束 ⇒ 走 `SitePort.probe`（同义、不同机制）。
-   * @param account `buildPendingAccount` 产出的那个**未入册**账号（只用到 `id`/`type`/`partition`）
-   * @returns 是否已登录（失败 ⇒ `false`，**不建号**）
-   */
-  probeLoginOf(account: Account): Promise<boolean>;
   /**
    * ★ **导出账号数据**（原 `PP.jsx:36-94`）
    * @param accountIds UI 已勾选的账号 id（空 ⇒ `failed`，转发源版 `请至少选择一个账号`）
@@ -544,8 +535,6 @@ export function createAccountOps(
   /**
    * 对一个账号跑一次**登录态探针**（原 `SitePort.probe`）
    *
-   * ★ **判据 C1**：`probeLogin`（已入册的账号）与 `probeLoginOf`（**还没入册**的待建账号）
-   *   共用这一处 —— 登录弹窗要在建号**之前**轮询"登录好了没"，用的必须是**同一条判据**。
    * ⚠️ 失败**原样上报**（原则 6），并返回 `Err` ⇒ 调用方**不改状态**（缺证据就别下结论）。
    */
   const probeAccountLogin = async (account: Account): Promise<Result<boolean>> => {
@@ -563,23 +552,15 @@ export function createAccountOps(
     return ok(r.value.loggedIn);
   };
 
-  return {
+  /** ★ 「发送 ＋ 生成确认」的共享依赖（源 `sendPayload` 的发送半）—— 三条发送路**同一份** */
+  const sendConfirmDeps: SendConfirmDeps = {
+    store,
+    ports,
+    autoConfirm: deps.autoConfirm,
+    ...(deps.pendingAttempt ? { pendingAttempt: deps.pendingAttempt } : {}),
+  };
 
-    /**
-     * ★ **对「还没入名册」的待建账号探一次登录**（原 `$P.jsx:199-249` 的 `pe` 轮询）
-     *
-     * 源版每 2s 读一次 `<webview>` 的 **cookie** 判断登录（`session.cookies.get({})`）。
-     * ⚠️ 那条路在本仓**走不通**：`docs/过程.md` #5「**cookie 由后端管理，前端一律不碰**」是
-     *   `AccountPort` 契约里写死的红线（端口里明确禁止新增读 cookie 的方法）
-     *   ⇒ 本仓改用**同义的 `SitePort.probe`**（本项目为"判登录态"专门建的能力，
-     *   `probeLogin` 走的就是它）—— 行为一致（页面就绪 ⇒ 判登录），机制不同（不碰 cookie）。
-     * ⚠️ 探针失败 ⇒ `false`（**不建号**）：登录弹窗靠它决定"自动完成登录"，判错会建出一个
-     *   实际没登录的账号 —— 宁可让用户点「完成登录」。
-     */
-    async probeLoginOf(account) {
-      const r = await probeAccountLogin(account);
-      return r.ok ? r.value : false;
-    },
+  return {
 
     async removeAccount(accountId) {
       const account = store.useStore.getState().accounts.find((a) => a.id === accountId);
@@ -754,15 +735,6 @@ export function createAccountOps(
       // ③ 进行中（原 `:321-324`）
       s.setNodeSendState(nodeId, { status: 'sending', msg: ACCOUNT_NODE_TEXT.filling });
 
-      // ★ 「这条发送需不需要**后台生成确认**」的粗筛（原 `Ge`，`_Component43.jsx:2838`）——
-      //   它同时决定「发送**前**要不要读基线」与「发送后要不要起自动确认」。
-      const needsConfirm = needsGenerationConfirm({
-        autoSend: sitePayload.autoSend,
-        imageCount: sitePayload.images.length,
-        params: sitePayload.params,
-        text: sitePayload.text,
-      });
-
       // ④ 占号 → 备好后台页 → 跑 → **无论成败释放**（原 `vr` 的租约；与 `pullResult` 同一套 deps）
       const r = await withBackendPage(
         sendToSiteDeps(store, ports),
@@ -775,44 +747,24 @@ export function createAccountOps(
           nodeId,
         },
         async (ctx) => {
-          // ★ **发送前**取基线（原 `sendPayload:2846-2861`）：先读当前地址，再读两条计数
-          let beforeUrl = '';
-          let baseline: { confirm: number; submit: number } | null = null;
-          if (needsConfirm) {
-            const href = ports.backendPage.hrefOf(ctx.account);
-            beforeUrl = href.ok ? href.value : '';
-            baseline = await deps.autoConfirm.readBaselines({
-              account: ctx.account,
-              webContentsId: ctx.page.webContentsId,
-            });
-          }
+          // ★★ 源 `sendPayload` 的**发送半**（`:2838-3005`：读基线 → 发送 → 起生成确认）——
+          //    与 `usecases/generate` / `batchSend` **共用一份**（判据 C1）。
+          //    ⚠️ **基线必须在发送之前读**（源 `:2846-2861`）：发完再读会把已经到达的回复吞掉。
+          const prepped = await prepareConfirm(sendConfirmDeps, {
+            account: ctx.account,
+            payload: sitePayload,
+          });
           const sent = await ctx.site.send(ctx.account, sitePayload);
-
-          // ★ **发送后起自动确认**（原 `sendPayload:2975-3005`）—— 判据 `ge.ok && ge.autoClicked && Ge`
-          if (sent.ok && needsConfirm && sent.value.autoClicked) {
-            if (!baseline) {
-              // 源 `:2988-2996`：基线没取到 ⇒ **暂停自动确认**（避免误发），只挂 warn 通知
-              log.warn(`[accountOps] 账号=${account.id} 发送前未取得有效回复基线 → 暂停自动确认`);
-              store.useStore.getState().setNodeNotice(nodeId, {
-                level: 'warn',
-                code: 'generation-confirm',
-                accountId: account.id,
-                title: GEN_CONFIRM_TEXT.titleWaiting,
-                text: GEN_CONFIRM_TEXT.noBaseline,
-              });
-            } else {
-              // ⚠️ **fire-and-forget**（源 `kt(...)` 不 await）—— 它自己申请独立租约、跑完自释放
-              deps.autoConfirm.start({
-                accountId: account.id,
-                nodeId,
-                baselineCount: baseline.confirm,
-                submitBaselineCount: baseline.submit,
-                beforeUrl,
-                ownText: sitePayload.text,
-                runtimeLeaseId: ctx.page.leaseId,
-              });
-            }
-          }
+          // ★ 发送后起自动确认（判据 `sent.ok && autoClicked && 需要确认` —— 由共享实现判）
+          startConfirmAfterSend(sendConfirmDeps, {
+            account: ctx.account,
+            payload: sitePayload,
+            nodeId,
+            prepped,
+            sent,
+            // ⚠️ 本条路**有**发送链租约（`withBackendPage` 给的）⇒ 传下去（源 `ve.runtimeLeaseId`）
+            runtimeLeaseId: ctx.page.leaseId,
+          });
           return sent;
         },
       );

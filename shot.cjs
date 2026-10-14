@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
 const OUT = path.resolve(ROOT, process.argv[2] || '.shots');
 

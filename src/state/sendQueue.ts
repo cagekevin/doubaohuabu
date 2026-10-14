@@ -45,6 +45,8 @@ import { clearFinishedQueue, planCancel, planRetry, resolveSendMode } from '@/co
 import { planQueueDispatch, type DispatchDecision, type PickAutoResult } from '@/core/rules/sendQueueDispatch';
 import { planQueueSettlement } from '@/core/rules/sendQueueSettle';
 import { createSendPipeline } from './batchSend';
+import type { AutoConfirmController } from './autoConfirm';
+import type { PendingAttemptController } from './pendingAttempt';
 import type { AppStore } from './store';
 import type { Ports, StoragePort } from '@/core/ports';
 import { LS_SENDQUEUE_POS } from '@/stable/contracts/keys';
@@ -127,9 +129,19 @@ function nodesForFingerprint(
   });
 }
 
-export function createSendQueueController(store: AppStore, ports: Ports): SendQueueController {
+export function createSendQueueController(
+  store: AppStore,
+  ports: Ports,
+  /**
+   * ★ **「生成确认」控制器**（原 `kt` / `autoConfirm`）—— 单例，由 `container` 注入
+   * ⚠️ 队列发的是**视频**（`prepare` 走 `buildVideoPayload`）⇒ 同样要起生成确认（源 `Ge` 对视频成立）。
+   */
+  autoConfirm: AutoConfirmController,
+  /** ★ 待归属尝试写入器（原 `sendPayload` 的两处写入）—— 与批量发送**同一个**单例 */
+  pendingAttempt?: PendingAttemptController,
+): SendQueueController {
   // ★ 与批量发送**共用同一套**发送管道（判据 C1：不写第二份 `prepare`）
-  const pipeline = createSendPipeline(store, ports);
+  const pipeline = createSendPipeline(store, ports, autoConfirm, pendingAttempt);
 
   /** 指纹缓存（原模块级 `Map IS`）—— 入队时写、结算成功时更新 */
   const fingerprints = new Map<string, { fp: string; at: number }>();

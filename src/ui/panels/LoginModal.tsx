@@ -10,7 +10,7 @@
  *   | 会话准备 | `:49-90` | lovart ⇒ `ensureLovartContainer`；否则 `ensureFingerprint` → `preloadUrl` |
  *   | 登录页 | `:17` | `SP`/`NP`/`CP`/`EP`/`jP`（**站点首页**，不是会话页） |
  *   | **建号** | `:102-156` | `addAccount({ id, type, partition, fingerprint, status:'已登录', addedAt })` |
- *   | 自动检测 | `:199-249` | 每 **2s** 探一次；已登录 ⇒ 自动 `se()` |
+ *   | 完成登录 | `:261-263` | ★ **人工触发**：源 `:199-249` 的「2s 轮询 cookie ⇒ 自动 `se()`」**不落**（本仓不碰 cookie，判不准会误建号） |
  *   | 收尾 | `:91-101` | 把 webview 卸掉 → **1.5s 后**关弹窗 |
  *   | 自定义网站 | `:269-284` / `:187-198` | 网址输入行 + 「进入」 |
  *   | tapnow 验证链接 | `:316-328` / `:157-186` | 粘贴链接 + 「确认进入」 |
@@ -22,12 +22,8 @@
  *   本组件就是那条路：`buildPendingAccount` 算出一个**没入名册**的身份，
  *   登录成功后由 `addAccount` **一次性**入册。
  *
- * ⚠️ **两处如实差异（都因本仓既有的架构约束，不是偷懒）**：
- *   ① **自动检测的机制**：源版每 2s 读 `<webview>` 的 **cookie**（`session.cookies.get({})`）。
- *      本仓 `AccountPort` 的契约里写死了「**cookie 由后端管理，前端一律不碰**」（`docs/过程.md` #5）
- *      ⇒ 改用**同义的 `SitePort.probe`**（`accountOps.probeLoginOf`）—— 行为一致、机制不同。
- *   ② **载入失败事件**：源版挂 React 的 `onLoadCommit`（`nativeEvent.errorCode`）；
- *      本仓用 ref + `addEventListener('did-fail-load')`（同一份字段，Electron 的标准事件名）。
+ * ⚠️ **如实差异**：源版挂 React 的 `onLoadCommit`（`nativeEvent.errorCode`）收载入失败；
+ *   本仓用 ref + `addEventListener('did-fail-load')`（同一份字段，Electron 的标准事件名）。
  *
  * ⚠️ 原则 1：本组件**不写 store**（建号走 `addAccount` action；会话准备走 `accountOps`）
  * ⚠️ 弹窗外壳 / 关闭钮 / 遮罩一律走 `ui/common/PanelShell`（2026-10-12 口径：
@@ -47,8 +43,6 @@ import { capsOf, needsSessionPrep } from '@/core/rules/siteCaps';
 import { ACCOUNT_STATUS, type SiteType } from '@/stable/model/account';
 import styles from './LoginModal.module.css';
 
-/** 自动检测的间隔（ms）—— 原 `$P.jsx:242` 的 `setInterval(pe, 2000)` */
-const LOGIN_POLL_MS = 2000;
 /** 建号后到关窗的延迟（ms）—— 原 `$P.jsx:98-100` 的 `setTimeout(() => e(), 1500)` */
 const CLOSE_DELAY_MS = 1500;
 /** tapnow 验证链接打开后的静置（ms）—— 原 `$P.jsx:172-176` 的 `setTimeout(…, 1500)` */
@@ -171,19 +165,7 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
     window.setTimeout(onClose, CLOSE_DELAY_MS);
   }, [addAccount, onClose, pending, type, url]);
 
-  // ③ 自动检测登录（原 `$P.jsx:199-249` 的 `pe` + `:228-249` 的轮询）
-  //    ⚠️ 机制差异见文件头①：源读 cookie，本仓走 `SitePort.probe`
-  useEffect(() => {
-    if (!ready || loadError || closed) return;
-    const timer = window.setInterval(() => {
-      void accountOps.probeLoginOf(pending).then((loggedIn) => {
-        if (loggedIn) finish();
-      });
-    }, LOGIN_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [ready, loadError, closed, accountOps, pending, finish]);
-
-  // ④ 载入失败（原 `$P.jsx:285-301` 的 `onLoadCommit` / `onDomReady`）
+  // ③ 载入失败（原 `$P.jsx:285-301` 的 `onLoadCommit` / `onDomReady`）
   useEffect(() => {
     const el = webviewRef.current;
     if (!el || closed) return;

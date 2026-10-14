@@ -49,7 +49,19 @@ export interface SiteSendPayload {
   text: string;
   /** ★ **参考图引用**（`{label, dataUrl}`）—— 保留 `label`，见下方 `normalizeImages` / `RefImageRef` */
   images: readonly RefImageRef[];
+  /** 站点参数（原报文 `content.params`）—— **Phase 2c**（`applyGenParams`）读它 */
   params: Record<string, unknown>;
+  /**
+   * ★ **生成参数**（原报文 `content.genParams`，**视频报文独有**）—— 供 **Dola「30s 强开」闸**读。
+   *
+   * ⚠️ **它与 `params` 是两个消费方，不能合并**（源就是分开读的）：
+   *   · **强开闸** `Mt`（`_Component43.jsx:759`）= **`me.genParams || me.params`**；
+   *   · **Phase 2c** `Be`（`:1055`）= **`me.params`**。
+   *   ⇒ 若把 `genParams` 并进 `params`，Phase 2c 会在**视频路径**上多跑一次（`collectGenParams`
+   *      只认 `duration` 是数字 ⇒ 视频的 `{duration}` 会让它非空）—— 那偏离源。
+   * ⚠️ 缺省 ⇒ 消费方**回落 `params`**（源那句 `||`）。
+   */
+  genParams?: Record<string, unknown>;
   autoSend: boolean;
   source: SendSource;
 }
@@ -108,6 +120,8 @@ export function toSitePayload<C extends Record<string, unknown>>(
     text: wire.content.text,
     images: normalizeImages(wire.content.images),
     params: wire.content.params,
+    // ★ 生成参数（视频报文有；账号节点报文没有 ⇒ 消费方回落 `params`，源 `Mt` 的 `||`）
+    ...(wire.content.genParams === undefined ? {} : { genParams: wire.content.genParams }),
     autoSend: wire.autoSend,
     source: wire.source,
   };
@@ -142,6 +156,11 @@ export interface WirePayload<C extends Record<string, unknown>> {
     images: unknown[];
     texts: unknown[];
     params: Record<string, unknown>;
+    /**
+     * ★ **生成参数**（**视频报文 `TL` 独有**）—— Dola 强开闸读它（源 `Mt` 的 `me.genParams`）。
+     * 图片报文对应的是 `imageParams`（给后端读，不经 `SiteSendPayload`）。
+     */
+    genParams?: Record<string, unknown>;
     /** ⚠️ 图片/视频报文恒为 `true`；账号节点报文由调用方决定（原 `$L` 的 `s`） */
     autoSend: boolean;
   };

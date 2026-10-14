@@ -882,7 +882,7 @@ export const NODE_EDIT_TEXT = {
  * `wait-countdown` 37-64,763-767 与 `switch-status`）
  *
  * ⚠️ `switch-status` 的**原因文案**在此（`be` 会把它写进 `nodeSwitches.reason`）；
- *   它那块 UI（`CL.jsx` 的行渲染）仍未落。
+ *   它那块 UI = `TextNode` 的 `switch-status`（生产者 = `state/sendWatch.performSwitch`）。
  */
 export const NODE_STATUS_TEXT = {
   /**

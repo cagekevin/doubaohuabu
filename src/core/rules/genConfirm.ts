@@ -14,27 +14,49 @@
 /**
  * 「这条发送需不需要后台生成确认」的**粗筛**（原 `Ge`，`:2838`）
  *
- * 逐字对源：
- *   `autoSend && images.length > 0 || genParams.model || genParams.duration
- *    || params.model || params.duration || /视频生成|duration\s*=/i.test(text)`
+ * 逐字对源（`:2838` 的六个子句，**顺序即语义**）：
+ *   ```
+ *   Q.autoSend && !Q.imageParams && (
+ *        images.length > 0
+ *     || (Q.genParams) != null && !!Q.genParams.model
+ *     || (Q.genParams) != null && !!Q.genParams.duration
+ *     || (Q.params)    != null && !!Q.params.model
+ *     || (Q.params)    != null && !!Q.params.duration
+ *     || /视频生成|duration\s*=/i.test(Q.text || '')
+ *   )
+ *   ```
  *
- * ⚠️ 源另有一个 `!Q.imageParams` 子句 —— **本仓的账号节点报文没有该字段**
- *   （`buildAccountNodePayload` 不产 `imageParams`；它是**图生成**通道的字段，
- *   且 `toSitePayload` 也不带）⇒ 该子句在此**恒真**，故不落（不留假判据）。
+ * ⚠️ `!Q.imageParams` 子句（**文生图不做生成确认**）—— 源判的是报文里的 `imageParams`
+ *   字段；本仓 `SiteSendPayload` **不带它**（它只给后端读）⇒ 用**同源的标记**
+ *   `source === 'canvas-image-gen'` 代替（`PL` 是**唯一**产 `imageParams` 的报文，
+ *   见 `payload.ts`）。由调用方算好传 `isImageGen`。
+ * ⚠️ 源是 `!!` **真值**判定（`duration: 0` 不算）—— 照抄，别改成 `!= null`。
  */
 export function needsGenerationConfirm(input: {
   autoSend: boolean;
+  /**
+   * ★ 是否**文生图**通道（源 `!Q.imageParams`）—— 由调用方按 `payload.source === 'canvas-image-gen'` 给。
+   * 缺省 `false`（= 不是文生图 ⇒ 该子句放行）。
+   */
+  isImageGen?: boolean;
   /** `Q.images.length` */
   imageCount: number;
-  /** 源分别看 `genParams` 与 `params`；本仓 `toSitePayload` 只留 `params` ⇒ 合成一份 */
+  /** 源 `Q.params`（站点参数：账号节点报文有 `{aspectRatio,duration,model}`） */
   params: Record<string, unknown> | null | undefined;
+  /**
+   * ★ 源 `Q.genParams`（**视频报文独有**：`{duration, model}`）。
+   * ⚠️ 缺了它 ⇒ 视频发送**认不出"要生成"** ⇒ 生成确认永不触发（源读的就是这个字段）。
+   */
+  genParams?: Record<string, unknown> | null;
   /** `Q.text` */
   text: string;
 }): boolean {
   if (!input.autoSend) return false;
+  if (input.isImageGen === true) return false;
   const p = input.params ?? {};
-  // ⚠️ 源是 `!!` 真值判定（`duration: 0` 不算）—— 照抄，别改成 `!= null`
-  if (input.imageCount > 0 || p.model || p.duration) return true;
+  const g = input.genParams ?? {};
+  if (input.imageCount > 0 || g.model || g.duration) return true;
+  if (p.model || p.duration) return true;
   return /视频生成|duration\s*=/i.test(input.text || '');
 }
 

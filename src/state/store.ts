@@ -270,10 +270,25 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       // ★ nodeStatus：节点状态族（`TD-16-93` 数据层 —— 通知 / 等待 / 换号 / 计时器 / 自动检测开关）
       ...createNodeStatusSlice({
         now: () => ports.clock.now(),
-        // ★ 自动视频检测开关（原 `autoVideoDetect`，键 `doubao-auto-video-detect`）
+        /**
+         * ★ 自动视频检测开关（原 `autoVideoDetect`，键 `doubao-auto-video-detect`）
+         *
+         * ★★ **默认值 = 开**（逐字对源 `jT`，`shared.js:26650-26661`）：
+         *   ```js
+         *   const e = localStorage.getItem('doubao-auto-video-detect');
+         *   if (e === null) { return true; }      // ← 键不存在 ⇒ 开
+         *   else { return e === '1'; }
+         *   // catch ⇒ return true
+         *   ```
+         * ⚠️ 此前本仓写成 `kind === 'ok' && value === '1'` ⇒ **键不存在时是「关」**（与源相反）。
+         *   后果：`postSendDetect.notifySent` 第一句就是 `if (!autoVideoDetect) return;`
+         *   ⇒ **默认状态下视频发完不启动检测** ⇒ 出片永不落节点（节点一直「生成中」到 30 分钟窗口自愈）。
+         */
         readAutoDetect: () => {
           const r = PERSIST[LS_AUTO_VIDEO_DETECT].read(ports.storage);
-          return r.kind === 'ok' && r.value === '1';
+          // 读不到 / 损坏 ⇒ **开**（源 `if (e === null) return true` 与 `catch { return true }`）
+          if (r.kind !== 'ok') return true;
+          return r.value === '1';
         },
         writeAutoDetect: (on: boolean) => {
           PERSIST[LS_AUTO_VIDEO_DETECT].write(ports.storage, on ? '1' : '0');

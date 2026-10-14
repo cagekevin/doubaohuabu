@@ -36,7 +36,13 @@ import { hash32 } from '@/lib/hash';
 import { stripHtml } from '@/lib/text';
 // ★ 原图尺寸（原 `Lc` 的 `<img>` 半）—— 量不到 ⇒ `0`（与 `Pu` 的 `200×160` 兜底不是一回事）
 import { measureNaturalSize } from '@/lib/readDroppedFile';
-import { GEN_POLL_MS, GEN_SCAN_MIN_SIDE, GEN_SEND_GRACE_MS, GEN_WM_DIRECT_TIMEOUT_MS } from '@/constants';
+import {
+  GEN_POLL_MS,
+  GEN_SCAN_MIN_SIDE,
+  GEN_SEND_GRACE_MS,
+  GEN_WM_DIRECT_TIMEOUT_MS,
+  PAGE_TIMEOUT_LONG_MS,
+} from '@/constants';
 // ★ 出片轮询的**纯判定**（有效性滤网 / 去重键 / 基线 / 结束三档 / 近重复窗口 / 跨会话去重表 —— 原 `DR` 的各段）
 import {
   countRecurringAsset,
@@ -61,7 +67,7 @@ import { attachImagesPhase2 } from './attachPhase2';
 import {
   ATTACH_FINGERPRINT_SCRIPT,
   buildClickSendScript,
-  COMPOSER_LIST_SRC,
+  LOGIN_STATE_SCRIPT,
   READ_INPUT_STATE_SCRIPT,
   WATERMARK_FREE_DIRECT_SCRIPT,
 } from './scripts';
@@ -106,6 +112,8 @@ import {
 import { requireWebview, webviewEval, webviewEvalSafe } from '../shared/webview';
 import { runProbe } from '../shared/waits';
 import { buildResultScanScript } from '../shared/scanScripts';
+// ★ `Lc` 的**首选**取图路（原 `mp.jsx`）—— 页内取图（带页面会话 + 命中浏览器缓存）
+import { buildFetchImageScript } from '../shared/fetchImageInPage';
 
 /** 点击发送的结果（原 `Zl` 返回 `{ok, clicked, tag, strategy}`） */
 interface ClickResult {
@@ -132,6 +140,20 @@ interface ResultScanItem {
  *   （`{minSide: Jk}`，`:36427`），不是用 `Xk` 自己的默认值 96。
  */
 const RESULT_SCAN = buildResultScanScript(GEN_SCAN_MIN_SIDE);
+
+/**
+ * **Phase 3b 点发送**的三步参数（原 `_Component43.jsx:1238-1264` 的字面量）
+ *
+ * ① 点前等待 `800ms`（`:1239-1241`）—— 页面刚切完「视频生成」模式，发送钮可能还没就绪；
+ * ② **最多 3 次**（`:1242`）；
+ * ③ 第 N 次前再等 `N × 800ms`（`:1244-1246`）。
+ *
+ * ⚠️ 缺 ①②③ ⇒ 只点一次且立刻点 ⇒ 按钮未就绪时"点了个别的/没点到"，
+ *   而流程仍按成功往下走（节点挂上「生成中」而实际没提交）。
+ */
+const CLICK_SEND_PRE_MS = 800;
+const CLICK_SEND_ATTEMPTS = 3;
+const CLICK_SEND_RETRY_MS = 800;
 
 /**
  * 占位图判定（原 `Nk`，`:25776`）—— 判定住 `core/rules/dedupe`（SSOT），此处只**注入感知哈希**
@@ -176,15 +198,50 @@ async function sampleOnce(partition: string): Promise<Result<ResultScanItem[]>> 
 }
 
 /**
- * 取回一张扫描图的内容（原 `Lc`，`:36481`）
+ * **页内取图**（原 `Lc` 的**第一路**：`Xn(account)` → `executeJavaScript(mp)`，`shared.js:23875-23898`）
  *
- * `data:` 直接可用；`http(s):` 需经宿主带 cookie 取回（CORS 拦不住主进程）。
+ * ★ 它跑在**豆包页面里** ⇒ 带着**页面自己的会话**（cookie / referer），且那张图
+ *   **已经显示在页面上**（HTTP 缓存里有，源用 `cache:'force-cache'` 直接命中）。
+ * ⚠️ 视图未挂载 ⇒ 立刻失败（源 `if (!s || typeof s.executeJavaScript != 'function') return {ok:false,error:'Lovart 页面就绪'}`）。
+ * ⚠️ 脚本自己的 `{ok:false,error}` **原样转发**（源 `a.error` —— 两路都失败时要用它）。
  */
-async function fetchScanImage(host: HostPort, item: ResultScanItem): Promise<Result<string>> {
+async function fetchScanImageInPage(partition: string, url: string): Promise<Result<string>> {
+  let view;
+  try {
+    view = requireWebview(partition);
+  } catch (e) {
+    return err('page-error', toMessage(e), e);
+  }
+  const r = await runProbe<{ ok?: boolean; dataUrl?: string; error?: string }>(
+    view,
+    buildFetchImageScript(url),
+    PAGE_TIMEOUT_LONG_MS,
+  );
+  if (!r.ok) return err('page-error', r.error);
+  const v = r.value;
+  if (v?.ok === true && typeof v.dataUrl === 'string' && v.dataUrl.length > 0) return ok(v.dataUrl);
+  return err('unknown', v?.error ?? SITE_SCAN_TEXT.rawResultFailed);
+}
+
+/**
+ * 取回一张扫描图的内容（原 `Lc`，`:23838`）—— ★ **两路，顺序照源**：
+ *   ① **页内取图**（`fetchScanImageInPage`，原 `mp.jsx`）—— 带页面会话 + 命中浏览器缓存 ⇒ **首选**；
+ *   ② **主进程下载**（原 `e$`，`host.media.imageFetchDataUrl`）—— 裸 `fetch`，**无 cookie / 无 referer /
+ *      无 cache**，只有 ① 拿不到时才走。
+ * ⚠️ 两路都失败 ⇒ 报**页内那条的原文**（源 `a && a.error || l && l.error || '页面内提取失败'`）。
+ */
+async function fetchScanImage(
+  host: HostPort,
+  partition: string,
+  item: ResultScanItem,
+): Promise<Result<string>> {
   if (item.kind === 'data') return ok(item.url);
+  const inPage = await fetchScanImageInPage(partition, item.url);
+  if (inPage.ok) return inPage;
+  // ① 失败 ⇒ 回落 ②（源同：页内失败才走主进程）
   const fetched = await host.media.imageFetchDataUrl(item.url);
-  if (!fetched.ok) return fetched; // ★ 转发原始错误
-  if (!fetched.value) return err('unknown', DOUBAO_TEXT.imageFetchFailed(item.url.slice(0, 80)));
+  if (!fetched.ok) return err(fetched.reason, `${inPage.message} / ${fetched.message}`);
+  if (!fetched.value) return err('unknown', inPage.message);
   return ok(fetched.value);
 }
 
@@ -323,7 +380,10 @@ export function createDoubaoSite(
       //   发送前装（`Mt`）／发送后 3s 清（`zt`）。清理**必须**走 `finally`（M4「作用域即配对」）：
       //   写成"每个出口记得清"必然有人漏；而漏了会让残留配置劫持**下一次非强开**的发送
       //   （`JP` 的 `cfg()` 只按"`duration>=16` ＋ 未过期"判，不认那一次是不是强开）。
-      const force30s = await enableDolaForce30s(view, account.type, payload.params);
+      // ★★ **闸的入参照源 `Mt`**（`:759` 的 `me.genParams || me.params`）：视频报文的时长/模型在
+      //   `content.genParams` 里（`content.params` 恒 `{}`）⇒ 只读 `params` 会让强开**永不成立**。
+      const forceParams = payload.genParams ?? payload.params;
+      const force30s = await enableDolaForce30s(view, account.type, forceParams);
       try {
         // ⓪ **文本填入**（原 `Be` 的 Phase 1，`_Component43.jsx:851-887`）—— ★ 源顺序：
         //   **文本 → 图 → 点发送**。源逐字：`In(text).trim()`（HTML 实体/标签归一，本仓 = `stripHtml`）
@@ -427,7 +487,7 @@ export function createDoubaoSite(
         //   ⚠️ 它只**尽力**：面板没停在「视频生成」模式时 `ok:false` **属正常** —— 网络层（`JP`）兜底
         //      （源也把它整体包在 `try/catch` 里，失败只记诊断串）。
         //   ⚠️ 位置照源：在 `autoSend` 分流**之前**（源的 `if (me.autoSend)` 在它之后）。
-        if (isDolaForceTarget(account.type, payload.params)) {
+        if (isDolaForceTarget(account.type, forceParams)) {
           await runDolaForcePanelUi(view);
         }
 
@@ -462,20 +522,35 @@ export function createDoubaoSite(
           return err('precheck-fail', ATTACH_PRECHECK_TEXT.blocked(issues)); // 源 `:1298-1301`
         }
 
-        // ⑥ 点发送（四级降级，全在脚本内；原 Phase 3b `:1264-1294` 的点击段）
-        let click: ClickResult | null;
-        try {
-          click = (await webviewEval(view, buildClickSendScript())) as ClickResult;
-        } catch (e) {
-          return err('send-stuck', toMessage(e), e);
+        // ⑥ 点发送（四级降级，全在脚本内；原 Phase 3b `:1238-1264`）
+        //   ★ **逐条对源的三步**（本仓此前只点一次、且没有点前等待 —— 这正是"没发出去却报成功"的来源）：
+        //     ① 点前 `sleep(800)`（源 `:1239-1241`）；
+        //     ② **最多 3 次**（源 `:1242-1261`），第 N 次前再 `sleep(N × 800)`；
+        //     ③ 判据只认脚本的 `ok`（源 `:1251` 的 `if (Te && Te.ok)`）。
+        await sleep(CLICK_SEND_PRE_MS);
+        let click: ClickResult | null = null;
+        for (let attempt = 0; attempt < CLICK_SEND_ATTEMPTS; attempt += 1) {
+          if (attempt > 0) await sleep(attempt * CLICK_SEND_RETRY_MS);
+          try {
+            const r = (await webviewEval(view, buildClickSendScript())) as ClickResult;
+            if (r?.ok) {
+              click = r;
+              break;
+            }
+            // 源 `:1256`：`⚠ 自动点击失败 (尝试 N/3): <reason>`
+            log.warn(
+              `[doubao] Phase3b 第 ${attempt + 1}/${CLICK_SEND_ATTEMPTS} 次未命中（strategy=${r?.strategy ?? 'none'}）`,
+            );
+          } catch (e) {
+            log.warn(`[doubao] Phase3b 第 ${attempt + 1}/${CLICK_SEND_ATTEMPTS} 次点击异常：`, e);
+          }
         }
-        if (!click?.ok || !click.clicked) {
-          // ★ 原样透传脚本返回的错误（原则 6）
-          return err(
-            'send-stuck',
-            click?.error ?? DOUBAO_TEXT.sendButtonNotFound(click?.strategy ?? 'none'),
-          );
+        if (!click) {
+          // 源 `:1262-1264`：3 次都没点成 ⇒ **明确报"没点到"**（绝不假装发出去了）
+          return err('send-stuck', DOUBAO_TEXT.sendButtonNotFound('none'));
         }
+        // ★ 留痕：**点到了什么** —— 「没点成」与「点成了但没提交」的唯一分界
+        diag(`Phase3b 点发送：命中=${click.tag ?? '?'} 策略=${click.strategy ?? 'none'}`);
 
         sentSessions.add(sessionId);
 
@@ -489,6 +564,10 @@ export function createDoubaoSite(
             accountName: account.name,
             key: sessionId,
           });
+          // ★ 留痕：**结果 + 取图失败原因**（0 结果时必须能区分"页面没新图"与"取图全失败"）
+          diag(
+            `Phase4 等结果：${endReason} 出图 ${results.length} 张${failures.length > 0 ? ` 取图失败 ${failures.length} 条：${failures[0]?.slice(0, 160) ?? ''}` : ''}`,
+          );
 
           // ★ 全部失败且无结果 ⇒ 如实报错（不伪装成 timeout）
           if (results.length === 0 && failures.length > 0) {
@@ -548,11 +627,17 @@ export function createDoubaoSite(
         return err('page-error', toMessage(e), e);
       }
       try {
-        const raw = (await webviewEval(
-          view,
-          `({ href: location.href, hasInput: !!document.querySelector('${COMPOSER_LIST_SRC}') })`,
-        )) as { href?: string; hasInput?: boolean } | null;
-        return ok({ usable: !!raw?.hasInput, loggedIn: !!raw?.href, pageKind: 'other' });
+        // ★ 判据见 `scripts.ts` 的 `LOGIN_STATE_SCRIPT`：源读 cookie，本仓改 DOM 负向信号
+        //   （有输入框 ∧ 不在登录页 ∧ 无登录入口）—— `!!location.href` **恒真**，不能当登录判据。
+        const raw = (await webviewEval(view, LOGIN_STATE_SCRIPT)) as {
+          href?: string;
+          hasComposer?: boolean;
+          onLoginUrl?: boolean;
+          hasLoginCta?: boolean;
+        } | null;
+        const hasComposer = raw?.hasComposer === true;
+        const loggedIn = hasComposer && raw?.onLoginUrl !== true && raw?.hasLoginCta !== true;
+        return ok({ usable: hasComposer, loggedIn, pageKind: 'other' });
       } catch (e) {
         return err('page-error', toMessage(e), e);
       }
@@ -704,8 +789,10 @@ async function pollResults(
         // ④ 无水印直链（原 `:36471-36491`）：先问页内 `QM` 换更清晰的**原图**；拿不到 / 取回失败 ⇒ 回落扫描 URL
         const direct = await lookupWatermarkFreeDirect(partition, item.url);
         const target = direct ? { ...item, url: direct } : item;
-        let fetched = await fetchScanImage(host, target);
-        if (!fetched.ok && target.url !== item.url) fetched = await fetchScanImage(host, item);
+        let fetched = await fetchScanImage(host, partition, target);
+        if (!fetched.ok && target.url !== item.url) {
+          fetched = await fetchScanImage(host, partition, item);
+        }
         if (!fetched.ok) {
           failures.push(fetched.message);
           continue;

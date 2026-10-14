@@ -37,7 +37,7 @@ import type {
 import { AUTO_WATCH_IDLE_BACKOFF_MS, AUTO_WATCH_INTERVAL_MS, TAPNOW_MIN_SIDE } from '@/constants';
 import { GALLERY_TEXT, SEND_TEXT, SITE_CAP_TEXT, TAPNOW_TEXT } from '@/constants/text';
 import { err, ok, type Result } from '@/core/model/result';
-import { canvasIdFromHref } from '@/core/rules/scanChain';
+import { PAGE_KINDS, canvasIdFromHref } from '@/core/rules/scanChain';
 // ★ 「已在库过滤」（原 `wp`/`wP` 的 `haveUrls`/`seen`）＋ 画布 DOM 那半的 `Yh` 清洗 —— 都走 `scanClean`
 import { cleanScannedImages, excludeSeenImages } from '@/core/rules/scanClean';
 // ★ 单档归一 + **逐张落盘**（`normalizeAttempt` 在 `site/shared/materializeScan.ts`，两档共用 —— 判据 C1）
@@ -227,7 +227,11 @@ export function createTapnowSite(host: HostPort): SitePort {
       if (!href) return err('page-error', TAPNOW_TEXT.pageNotFound);
 
       // ⚠️ 页面类型判定用**站点自己的** `n0`（不是 Lovart 那套）
-      return ok({ usable: true, loggedIn: true, pageKind: tapnowPageKind(href) });
+      // ★ 登录判据 = **停在站点内容页**（画布 / 广场）—— 未登录访问这两处会被重定向到登录页（那是 `other`）。
+      //   ⚠️ 源无此探针（本仓自造）；原写 `loggedIn: true` 硬编码 ⇒ 会话过期测不出。
+      const pageKind = tapnowPageKind(href);
+      const onContent = pageKind !== PAGE_KINDS.OTHER;
+      return ok({ usable: onContent, loggedIn: onContent, pageKind });
     },
   };
 }

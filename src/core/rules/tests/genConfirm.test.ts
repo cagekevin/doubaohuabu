@@ -8,17 +8,29 @@ describe('needsGenerationConfirm（原 `Ge`）', () => {
     expect(needsGenerationConfirm({ ...base, autoSend: false, params: { model: 'seedance-2.5' } })).toBe(false);
   });
 
+  it('★ 文生图通道 ⇒ false（源 `!Q.imageParams` 子句）—— 带图 / 有参数都不算', () => {
+    expect(needsGenerationConfirm({ ...base, isImageGen: true, imageCount: 2 })).toBe(false);
+    expect(needsGenerationConfirm({ ...base, isImageGen: true, genParams: { duration: 30 } })).toBe(false);
+    expect(needsGenerationConfirm({ ...base, isImageGen: true, text: '视频生成 x' })).toBe(false);
+  });
+
   it('带图 ⇒ true', () => {
     expect(needsGenerationConfirm({ ...base, imageCount: 1 })).toBe(true);
   });
 
-  it('params.model / params.duration ⇒ true', () => {
+  it('★ `genParams.model` / `genParams.duration` ⇒ true（**视频报文**的参数在这里）', () => {
+    expect(needsGenerationConfirm({ ...base, genParams: { model: 'seedance-2.5' } })).toBe(true);
+    expect(needsGenerationConfirm({ ...base, genParams: { duration: 30 } })).toBe(true);
+  });
+
+  it('params.model / params.duration ⇒ true（**账号节点报文**的参数在这里）', () => {
     expect(needsGenerationConfirm({ ...base, params: { model: 'seedance-2.5' } })).toBe(true);
     expect(needsGenerationConfirm({ ...base, params: { duration: 10 } })).toBe(true);
   });
 
-  it('★ `duration: 0` 不算（源是 `!!dt.duration` 真值判定）', () => {
+  it('★ `duration: 0` 不算（源是 `!!dt.duration` 真值判定）—— 两个字段都是', () => {
     expect(needsGenerationConfirm({ ...base, params: { duration: 0 } })).toBe(false);
+    expect(needsGenerationConfirm({ ...base, genParams: { duration: 0 } })).toBe(false);
   });
 
   it('正文含「视频生成」/ `duration=` ⇒ true（大小写不敏感）', () => {

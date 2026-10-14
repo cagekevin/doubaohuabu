@@ -287,7 +287,7 @@ export function createContainer(): Container {
   return {
     store,
     ports,
-    gen: createGenController(store, ports, sendWatch, postSendDetect, dolaMedia, pendingAttempt),
+    gen: createGenController(store, ports, sendWatch, postSendDetect, dolaMedia, pendingAttempt, autoConfirm),
     analyze: createAnalyzeController(store, ports),
     accountOps: createAccountOps(store, ports, {
       // ⚠️ 与下面 `capture` 同法：**运行环境在组合根读**，`state` 层不碰 `document`（TD-16-54 的教训）
@@ -301,7 +301,7 @@ export function createContainer(): Container {
       autoConfirm,
       pendingAttempt,
     }),
-    batchSend: createBatchSendController(store, ports, pendingAttempt),
+    batchSend: createBatchSendController(store, ports, autoConfirm, pendingAttempt),
     capture: createCaptureController(store, ports, {
       // ⚠️ 运行环境在这里读（`container` 是组合根）—— `state` 层不碰 `window`
       dpr: () => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
@@ -327,7 +327,7 @@ export function createContainer(): Container {
       }, VIDEO_BACKFILL_DELAY_MS);
     },
     sendQueue: (() => {
-      const c = createSendQueueController(store, ports);
+      const c = createSendQueueController(store, ports, autoConfirm, pendingAttempt);
       /**
        * ★ **启动队列的泵**（原 `TS` 在进入队列工作台时被调一次）
        * ⚠️ 只在**一次性**的装配处启动 —— 泵自己靠 `schedule()` 的 50ms 节流自触发，

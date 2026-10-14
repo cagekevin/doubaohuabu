@@ -84,65 +84,145 @@ const COMPOSER_LOOKUP_SRC = COMPOSER_SELECTORS.map(
  */
 export const COMPOSER_LIST_SRC = [...COMPOSER_SELECTORS, '[contenteditable]'].join(', ');
 
-/** 生成「定位发送按钮并点击」脚本；返回 `{ok, clicked, tag, strategy}` */
+// ─────────────────────────────────────────────────────────────────────────────
+// ★ **登录态探针**（原 `$P.jsx:216-224` 的 `pe` 判据 —— 本仓改 DOM 版）
+//
+// ⚠️ 源判据 =「**当前 URL 不像登录页** ∧ **存在会话类 cookie**」（`$P.jsx:217-224`）。
+//    本仓 `AccountPort` **契约明令不读 cookie**（`host.port.ts:506-508`）⇒ 改用
+//    **DOM 负向信号**：未登录时豆包渲染「登录」入口按钮，登录后消失。
+//    ⇒ `loggedIn = 有输入框 ∧ 不在登录页 ∧ 无登录入口`。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 未登录信号：页面上**可见**的「登录」入口（短文本按钮 / 链接） */
+const LOGIN_CTA_CHECK_SRC = `(function(){
+  var btns = document.querySelectorAll('button, a, [role="button"]');
+  for (var i = 0; i < btns.length; i++) {
+    var el = btns[i];
+    var t = (el.textContent || '').replace(/\\s+/g, '');
+    if (!t || t.length > 6) continue;
+    if (!/^(登录|立即登录|去登录|登录\\/注册|注册\\/登录)$/.test(t)) continue;
+    var r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return true;
+  }
+  return false;
+})()`;
+
+/** 登录态探针：返回 `{ href, hasComposer, onLoginUrl, hasLoginCta }` */
+export const LOGIN_STATE_SCRIPT = `(function(){
+  var href = location.href || '';
+  return {
+    href: href,
+    hasComposer: !!document.querySelector('${COMPOSER_LIST_SRC}'),
+    onLoginUrl: /(login|passport|sso|auth|oauth)/i.test(href),
+    hasLoginCta: ${LOGIN_CTA_CHECK_SRC}
+  };
+})()`;
+
+/**
+ * 生成「定位发送按钮并点击」脚本（原 `Zl`，`shared.js:37118-37222` —— **四级降级**）
+ *
+ * ⚠️ **逐条对源**，两处本仓既定收口：
+ *   ① 「主输入框」候选引 `COMPOSER_LOOKUP_SRC` / `COMPOSER_LIST_SRC`（`TD-05-14`：探针 / 各页内脚本同一判据）；
+ *   ② 返回值 `clicked` 用**布尔**（源是 className 串 —— 空串会被调用方 `!click.clicked` 误判成失败）。
+ *
+ * ★★ **必须保留源那一步「拆到内层 button」**：
+ *   策略 1 命中的 `.send-btn-wrapper` 是**外层 DIV** —— 直接点它**不会**触发内层按钮的 handler
+ *   ⇒ 表现成「发送没点、文字留在输入框」（本仓此前正是漏了这一步）。
+ */
 export function buildClickSendScript(): string {
   return `(() => {
-  const EX_NEAR = /${EXCLUDE_NEAR}/i;
-  const EX_PAGE = /${EXCLUDE_PAGE}/i;
+  try {
+    var candidates = [];
 
-  const clickable = el => el && (el.offsetParent !== null || el.getClientRects().length > 0);
-
-  // 级 1：类名精确
-  const SEL1 = '.send-btn-wrapper, button.send-btn-wrapper, [class*="send-btn"], [class*="chat-send"], [class*="submit-btn"], [class*="msg-send"], [class*="input-send"]';
-  const l1 = [...document.querySelectorAll(SEL1)].filter(clickable);
-  if (l1.length) return fire(l1[0], 1, 'class-exact');
-
-  // 级 2：输入框邻近
-  const inputs = [...document.querySelectorAll('${COMPOSER_LIST_SRC}')].filter(clickable);
-  for (const inp of inputs) {
-    const wrap = inp.closest('.semi-input-wrapper') || inp.parentElement;
-    const cands = [...(wrap ? wrap.querySelectorAll('button, [role="button"]') : [])].filter(clickable);
-    const near = cands.find(b => !EX_NEAR.test(String(b.className || '') + (b.getAttribute('aria-label') || '')));
-    if (near) return fire(near, 2, 'input-adjacent');
-    const sib = inp.nextElementSibling;
-    if (sib && /BUTTON/.test(sib.tagName) && clickable(sib)) return fire(sib, 2, 'input-sibling');
-  }
-
-  // 级 3：全页扫描
-  const all = [...document.querySelectorAll('button, [role="button"], [tabindex]')].filter(clickable);
-  for (const b of all) {
-    const sig = String(b.className || '') + (b.getAttribute('aria-label') || '') + (b.textContent || '');
-    if (EX_PAGE.test(sig)) continue;
-    const svg = b.querySelector('svg');
-    const hasArrow = !!svg && /arrow-up|send-icon|M5 |↑|▲/.test(svg.outerHTML || '');
-    const hasSendText = /发送|submit|^send$/i.test(String(b.textContent || '').trim());
-    if (hasArrow || hasSendText) return fire(b, 3, 'page-scan');
-  }
-
-  // 级 4：兜底（输入容器内倒序找小尺寸可点击元素）
-  for (const inp of inputs) {
-    const wrap = inp.closest('.semi-input-wrapper') || inp.parentElement;
-    if (!wrap) continue;
-    const small = [...wrap.querySelectorAll('button, [role="button"], [tabindex]')]
-      .filter(clickable)
-      .filter(el => { const r = el.getBoundingClientRect(); return r.width < 80 && r.height < 80; });
-    if (small.length) return fire(small[small.length - 1], 4, 'fallback-small');
-  }
-
-  return { ok: false, clicked: false, strategy: 'none' };
-
-  function fire(el, level, strategy) {
-    // 原实现：派发**完整鼠标序列**（pointerdown → pointerup → click()）
-    try {
-      const r = el.getBoundingClientRect();
-      const opt = { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
-      el.dispatchEvent(new PointerEvent('pointerdown', opt));
-      el.dispatchEvent(new PointerEvent('pointerup', opt));
-      el.click();
-      return { ok: true, clicked: true, tag: el.tagName, strategy: strategy, level: level };
-    } catch (e) {
-      return { ok: false, clicked: false, strategy: strategy, error: String(e && e.message || e) };
+    // ── 策略1：按类名精确匹配（覆盖已知豆包版本） ──
+    var byClass = document.querySelectorAll(
+      '.send-btn-wrapper, button.send-btn-wrapper, ' +
+      '[class*="send-btn"], [class*="chat-send"], [class*="submit-btn"], ' +
+      '[class*="msg-send"], [class*="input-send"]'
+    );
+    for (var ci = 0; ci < byClass.length; ci++) {
+      if (byClass[ci].offsetHeight > 0) candidates.push(byClass[ci]);
     }
+
+    // ── 策略2：输入框右侧/下方的按钮（按位置特征） ──
+    if (candidates.length === 0) {
+      var textarea = ${COMPOSER_LOOKUP_SRC};
+      if (textarea) {
+        var wrapper = textarea.closest('.semi-input-wrapper') || textarea.parentElement || textarea.parentNode;
+        if (wrapper) {
+          var nearbyBtns = wrapper.querySelectorAll('button, [role="button"], [tabindex="0"], span[class*="btn"], div[class*="btn"]');
+          for (var ni = 0; ni < nearbyBtns.length; ni++) {
+            var nb = nearbyBtns[ni];
+            if (nb === textarea || nb.contains(textarea)) continue;
+            if (nb.offsetHeight > 0 && nb.offsetWidth > 0) {
+              // 排除明显的非发送按钮（下拉箭头、清除、附件等）
+              var nbc = (nb.className || '').toString();
+              if (/${EXCLUDE_NEAR}/i.test(nbc)) continue;
+              candidates.push(nb);
+            }
+          }
+        }
+        // 也检查输入框的下一个兄弟元素（常见布局：textarea + send-btn）
+        var nextSib = textarea.nextElementSibling;
+        if (nextSib && nextSib.offsetHeight > 0) candidates.push(nextSib);
+      }
+    }
+
+    // ── 策略3：全页面扫描含 ↑ / 发送 / submit 特征的按钮 ──
+    if (candidates.length === 0) {
+      var allBtns = document.querySelectorAll('button, [role="button"], [tabindex="0"]');
+      for (var ai = 0; ai < allBtns.length; ai++) {
+        var ab = allBtns[ai];
+        if (ab.offsetHeight === 0 || ab.offsetWidth === 0) continue;
+        var txt = (ab.textContent || ab.innerText || ab.value || '').trim().toLowerCase();
+        var cls = (ab.className || '').toString().toLowerCase();
+        var html = (ab.innerHTML || '').substring(0, 200);
+        // 匹配 ↑ 图标（SVG path 含向上箭头）、发送文本、或 send/submit 类名
+        var hasArrowIcon = /\\u2191|\\u25b2|\\u25b4|arrow-up|up-icon|send-icon|icon-send/i.test(html + ' ' + cls);
+        var hasSendText = /发送|submit|send|\\u53d1\\u9001/.test(txt + ' ' + cls);
+        // 排除明显无关的按钮（导航栏、工具栏等）
+        var isToolbar = /${EXCLUDE_PAGE}/i.test(cls);
+        if ((hasArrowIcon || hasSendText) && !isToolbar) candidates.push(ab);
+      }
+    }
+
+    // ── 策略4：最终兜底 — 找输入区域容器内最后一个可见的小尺寸可点击元素 ──
+    if (candidates.length === 0) {
+      var ta2 = ${COMPOSER_LOOKUP_SRC};
+      if (ta2) {
+        var container = ta2.closest('[class*="input"]') || ta2.closest('[class*="chat"]') || ta2.closest('[class*="editor"]') || ta2.parentElement;
+        if (container) {
+          var allClickable = container.querySelectorAll('button, [role="button"], [tabindex="0"], div, span');
+          for (var li = allClickable.length - 1; li >= 0; li--) {
+            var lastEl = allClickable[li];
+            if (lastEl === ta2 || lastEl.contains(ta2)) continue;
+            if (lastEl.offsetHeight > 0 && lastEl.offsetWidth > 0 && lastEl.offsetWidth < 80 && lastEl.offsetHeight < 80) {
+              candidates.push(lastEl);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // ── 执行点击 ──
+    if (candidates.length === 0) return { ok: false, clicked: false, strategy: 'none' };
+
+    var btn = candidates[0];
+    // ★ 命中容器时**拆到内部 button**（源同款）—— 否则点的是外层 DIV，内层按钮的 handler 不触发
+    var toClick = btn.tagName === 'BUTTON' ? btn : (btn.querySelector('button') || btn);
+
+    // 完整鼠标事件序列（某些框架需要 pointerdown 触发）
+    try {
+      var PE = window.PointerEvent || window.MouseEvent;
+      try { toClick.dispatchEvent(new PE('pointerdown', { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true })); } catch (e) {}
+      try { toClick.dispatchEvent(new PE('pointerup', { bubbles: true, cancelable: true, view: window, button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true })); } catch (e) {}
+    } catch (e) {}
+    toClick.click();
+
+    return { ok: true, clicked: true, tag: toClick.tagName, strategy: candidates.length + '_candidates' };
+  } catch (e) {
+    return { ok: false, clicked: false, strategy: 'exception', error: String(e && e.message || e) };
   }
 })()`;
 }

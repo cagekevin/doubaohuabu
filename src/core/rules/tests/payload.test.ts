@@ -225,4 +225,19 @@ describe('toSitePayload（跨进程报文 → `SitePort.send` 的扁平入参）
     });
     expect(toSitePayload(p).source).toBe('canvas-image-gen');
   });
+
+  it('★ 视频报文 ⇒ 带 `genParams`（Dola 强开闸读它 —— 源 `Mt` 的 `me.genParams || me.params`）', () => {
+    const p = buildVideo({ account: ACC, text: '猫', model: 'seedance-2.5', duration: 30, now: NOW });
+    expect(toSitePayload(p).genParams).toEqual({ duration: 30, model: 'seedance-2.5' });
+  });
+
+  it('★ 账号节点报文 ⇒ **无** `genParams`（源 `$L` 没这个键 ⇒ 闸回落 `params`）', () => {
+    const p = buildAccountNodePayload({
+      account: ACC,
+      texts: ['x'],
+      params: { duration: 30, model: 'seedance-2.5' },
+      now: NOW,
+    });
+    expect(toSitePayload(p).genParams).toBeUndefined();
+  });
 });

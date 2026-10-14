@@ -1,10 +1,27 @@
 /**
  * 「API 服务」面板（原 `_Component46.jsx` 的 `.api-settings-*` / `.api-card` / `.api-row`）
  *
+ * ★★ **真值 = 原版 CSS `index-Dg_Oc7MR.css`**（本仓此前把这一族映射到共享 `PanelShell` 的通用词汇，
+ *   尺寸/内边距/卡片框全丢 ⇒ 观感与原版不一致、且正文滚不动）。这里逐条按真值落回，色值走 token。
+ *
  * ⚠️ 原则 5：色值 / 间距只走 token（`var(--…)`），**不硬编码**。
- * ⚠️ 查 6：按钮 / 输入框 / 空态一律 `composes` `ui/common/shared.module.css` 的真源类，不自造。
+ * ⚠️ 查 6：按钮 / 空态一律 `composes` `ui/common/shared.module.css` 的真源类，不自造。
  */
 
+/**
+ * 模态尺寸（经 `Modal` 的 `className`）—— ★ **模态尺寸归各模态**：
+ *   真源 `.panel` 只给视觉壳、**不设宽高** ⇒ 本模态必须自己给。
+ *   真值 = 原 `.api-settings`：`width:min(680px,92vw)` + `max-height:84vh`。
+ *   ⚠️ 缺 `max-height` 时面板被内容撑高 → 顶出视口、被 `.overlay` 居中裁掉，
+ *     正文的 `overflow: auto` **永远不触发**（表现 = 没有滚动条、底部看不到）。
+ */
+.panel {
+  width: min(680px, 92vw);
+  max-height: 84vh;
+}
+
+/* 原 `.api-settings-sub{ flex:1 1 auto; font-size:12px; color:#64748b }`
+   —— ⚠️ 原版它住**头部**（`title + sub + ✕` 一行）；本仓走 `Modal` 后住正文首行。 */
 .sub {
   margin: 0 0 var(--space-3);
   color: var(--color-text-muted);
@@ -12,12 +29,27 @@
   line-height: var(--line-height-relaxed);
 }
 
+/* 原 `.api-section-title{ font-size:13px; font-weight:700; color:#0f172a; margin-bottom:10px }` */
 .sectionTitle {
   composes: sectionTitle from '../common/shared.module.css';
   /* 仅追加真源未设的属性 */
   margin-bottom: var(--space-2);
 }
 
+/**
+ * 原 `.api-channel-config{ border:1px solid #e3e8ef; border-radius:12px;
+ *    padding:12px 14px; margin-bottom:14px; background:#f6f8fb }`
+ * ★ 通道配置整块是**一张卡片**（本仓此前把它的框整个丢了 ⇒ 与卡片区糊在一起）。
+ */
+.channelConfig {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+/* 原 `.api-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px }` */
 .row {
   display: flex;
   align-items: center;
@@ -25,71 +57,93 @@
   margin-bottom: var(--space-2);
 }
 
+/* 原 `.api-row-label{ flex:0 0 76px; font-size:12px; color:#475569 }` */
 .rowLabel {
-  flex: none;
-  width: 84px;
+  flex: 0 0 76px;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
 
+/* 原 `.api-input{ flex:1 1 auto; min-width:0; height:30px; … }`
+   ⚠️ 高度/圆角/内边距归共享真源 `.field`（本地覆盖会被真源盖掉，见 `PanelShell` 头注） */
 .input {
   composes: field from '../common/shared.module.css';
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
+/* 原 `.api-usage{ margin-top:10px; font-size:12px; color:#475569 }` */
 .usage {
-  margin: var(--space-2) 0 var(--space-3);
+  margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
 
+/* 原 `.api-settings-empty{ padding:32px 0; text-align:center; color:#94a3b8; font-size:13px }` */
 .empty {
   composes: empty isInline from '../common/shared.module.css';
 }
 
 /* ── provider 卡片 ── */
 
+/* 原 `.api-card{ border:1px solid #e8ecf1; border-radius:12px; padding:12px 14px;
+      margin-bottom:12px; background:#fbfcfe }`
+   ⚠️ **不再 `composes: panel`** —— 那是"面板壳"的词汇（raised 底 + 面板圆角），
+   而原版这张是**内嵌卡片**（sunken 底 + 12px 圆角）⇒ 两者不是同一个东西。 */
 .card {
-  composes: panel from '../common/shared.module.css';
-  /* 仅追加真源未设的属性 */
-  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
+/* 原 `.api-card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px }`
+   ⚠️ **不再 `composes: panelHead`** —— 那是"面板头"（带下边框 + 加粗）；原版卡片头**没有下边框**。 */
 .cardHead {
-  composes: panelHead from '../common/shared.module.css';
-  /* 仅追加真源未设的属性 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: var(--space-2);
 }
 
+/* 原 `.api-enable{ display:inline-flex; align-items:center; gap:8px; cursor:pointer }` */
 .enable {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   cursor: pointer;
 }
-
 
+/* 原 `.api-caps{ font-size:11px; color:#94a3b8 }` */
 .caps {
   flex: none;
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
 }
 
+/* 原 `.api-key-hint-row{ flex:1 1 auto; display:flex; align-items:center; gap:8px; min-width:0 }` */
 .keyRow {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
 }
 
+/* 原 `.api-key-hint{ font-size:12px; color:#059669; background:#ecfdf5;
+      border:1px solid #a7f3d0; border-radius:6px; padding:3px 8px }` */
 .keyHint {
-  flex: none;
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  flex: 0 0 auto;
+  padding: 3px var(--space-2);
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
 }
 
+/* 原 `.api-card-foot{ display:flex; align-items:center; gap:8px; margin-top:10px }` */
 .cardFoot {
   display: flex;
   align-items: center;
@@ -105,6 +159,7 @@
   composes: btn btnSm from '../common/shared.module.css';
 }
 
+/* 原 `.api-test-result{ font-size:12px }` + `.ok{color:#059669}` / `.bad{color:#dc2626}` */
 .testOk {
   color: var(--color-success-text);
   font-size: var(--font-size-sm);

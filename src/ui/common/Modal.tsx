@@ -32,9 +32,26 @@ export interface ModalProps {
   footer?: ReactNode;
   /** 点遮罩是否关闭，默认 true */
   closeOnMask?: boolean;
+  /**
+   * 面板尺寸类 —— ★ **模态尺寸归各模态**（真源 `.panel` 只给视觉壳，不设宽高，见
+   * `shared.module.css` 的注释）⇒ 需要滚动 / 定宽的模态必须自己给。
+   * ⚠️ 缺它时面板由内容撑高 ⇒ 顶出视口、被 `.overlay` 居中裁掉，正文的 `overflow:auto`
+   *   **永远不触发**（表现 = 没有滚动条、底部看不到）。
+   */
+  className?: string;
 }
 
-export function Modal({ open, onClose, title, meta, actions, children, footer, closeOnMask = true }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  meta,
+  actions,
+  children,
+  footer,
+  closeOnMask = true,
+  className,
+}: ModalProps) {
   if (!open) return null;
 
   /*
@@ -53,6 +70,7 @@ export function Modal({ open, onClose, title, meta, actions, children, footer, c
       meta={meta}
       actions={actions}
       footer={footer}
+      className={className}
       role="dialog"
       ariaModal
     >

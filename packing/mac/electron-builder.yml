@@ -50,14 +50,23 @@ mac:
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
+  # 只出 dmg（安装用）。zip 是 electron-updater 自动更新用的，本机安装用不到。
+  # 只打本机架构（arm64）；x64 在 Apple Silicon 上纯属多余。
+  # 需要 Intel 版 / zip 时用 CLI 覆盖：--arch=x64 / --target=zip
   target:
     - target: dmg
-      arch: [x64, arm64]
-    - target: zip
-      arch: [x64, arm64]
+      arch: [arm64]
 
 dmg:
   artifactName: '${productName}-${version}-${arch}.${ext}'
+  # 不生成 .blockmap / latest-mac.yml —— 那是 electron-updater 差分更新用的，
+  # 本机安装不需要（省掉对 ~123MB dmg 的块哈希计算）。
+  writeUpdateInfo: false
+  # ULFO = lzfse（Apple 压缩），比默认 UDZO(zlib) 快很多，压缩率相近。
+  format: ULFO
+  # 图标大小：electron-builder 默认 80（偏小）。放大到 160 撑满窗口背景（540×380，
+  # 两图标中心间距 280，仍不拥挤）。
+  iconSize: 160
   contents:
     - x: 130
       y: 220

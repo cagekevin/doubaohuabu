@@ -139,8 +139,11 @@ export function createGptSite(host: HostPort): SitePort {
       }
       try {
         const raw = asRecord(await webviewEval(view, GPT_COMPOSER_PROBE_SCRIPT));
-        const href = typeof raw.href === 'string' ? raw.href : '';
-        return ok({ usable: raw.hasComposer === true, loggedIn: !!href, pageKind: 'other' });
+        // ★ 登录判据 = **有输入框**（源 `sO` 的输入框探针就是登录信号：未登录时 GPT 只渲染登录页，没有输入框）。
+        //   ⚠️ 原写 `loggedIn: !!href`（`href = location.href`）⇒ **恒真** ⇒ 探针永远报「已登录」，
+        //      会话过期也测不出（「检测登录」那颗钮等于失效）。
+        const hasComposer = raw.hasComposer === true;
+        return ok({ usable: hasComposer, loggedIn: hasComposer, pageKind: 'other' });
       } catch (e: unknown) {
         return err('page-error', e instanceof Error ? e.message : String(e), e);
       }

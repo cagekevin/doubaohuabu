@@ -46,6 +46,9 @@ import { resolveStyles } from '@/core/rules/style';
 import { makeRecipe } from '@/core/rules/recipe';
 import { BATCH_SEND_TEXT } from '@/constants/text';
 import type { PendingAttemptController } from './pendingAttempt';
+import type { AutoConfirmController } from './autoConfirm';
+// ★ 「发送 ＋ 生成确认」的共享实现（源 `sendPayload` 的发送半）—— 三条发送路**同一份**
+import { sendWithConfirm, type SendConfirmDeps } from './sendWithConfirm';
 import {
   runBatchSend,
   type BatchCallbacks,
@@ -81,9 +84,18 @@ export interface SendPipeline {
 export function createSendPipeline(
   store: AppStore,
   ports: Ports,
+  /** ★ **「生成确认」控制器**（原 `kt` / `autoConfirm`）—— 单例，由 `container` 注入 */
+  autoConfirm: AutoConfirmController,
   /** ★ 待归属尝试写入器（原 `sendPayload` 的两处写入）—— 单例，由 `container` 注入 */
   pendingAttempt?: PendingAttemptController,
 ): SendPipeline {
+  /** ★ 「发送 ＋ 生成确认」的共享依赖（源 `sendPayload` 的发送半）—— 三条发送路**同一份** */
+  const sendConfirmDeps: SendConfirmDeps = {
+    store,
+    ports,
+    autoConfirm,
+    ...(pendingAttempt ? { pendingAttempt } : {}),
+  };
 
   const prepare: PrepareSendFn = (nodeId, opts) => {
     const s = store.useStore.getState();
@@ -218,29 +230,20 @@ export function createSendPipeline(
     //   `payload.text` / `payload.images` 恒为 `undefined`（`payload.images.length` 会**直接抛**）。
     //   组装器从 `core/rules/payload.toSitePayload` 取（与 `usecases/generate` 同一份，判据 C1）。
     const sitePayload = toSitePayload(operation as WirePayload<Record<string, unknown>>);
-    const res = await site.send(account, sitePayload);
-    // ★ **发送结束 ⇒ 写「待归属尝试」**（原 `sendPayload` 里 `Be` 返回后那两处，`:2907-2913` / `:2935-2941`）
-    //   ⚠️ 这条路的 `sourceNodeId` 是**真节点 id**（`prepare` 传的是 `node.id`）⇒ 与源同：会真的写。
-    //   ⚠️ `TransportFn` 的 `operation` 声明成 `unknown` ⇒ 这里只取一个字段（不做整对象断言）
+    // ⚠️ `TransportFn` 的 `operation` 声明成 `unknown` ⇒ 这里只取一个字段（不做整对象断言）
     const opNodeId = (operation as { sourceNodeId?: unknown }).sourceNodeId;
     const pendingNodeId = typeof opNodeId === 'string' ? opNodeId : '';
-    if (pendingNodeId && pendingAttempt) {
-      if (res.ok) {
-        await pendingAttempt.recordSent({
-          nodeId: pendingNodeId,
-          accountId: account.id,
-          prompt: sitePayload.text,
-          payloadParams: sitePayload.params,
-        });
-      } else {
-        pendingAttempt.recordFailed({
-          nodeId: pendingNodeId,
-          accountId: account.id,
-          prompt: sitePayload.text,
-          note: res.message,
-        });
-      }
-    }
+
+    // ★★ 源 `sendPayload` 的**发送半**（`:2838-3005`：读基线 → 发送 → 写 `_pendingAttempt` → 起生成确认）
+    //    —— 与 `usecases/generate` / `accountOps` **共用一份**（判据 C1）。
+    //    ⚠️ 这条路的 `sourceNodeId` 是**真节点 id**（`prepare` 传的是 `node.id`）⇒ 与源同：会真的写。
+    const res = await sendWithConfirm(sendConfirmDeps, {
+      account,
+      payload: sitePayload,
+      nodeId: pendingNodeId || null,
+      send: () => site.send(account, sitePayload),
+    });
+
     if (!res.ok) {
       // 与源同：失败先发 `error`（带原文），再返回结果 —— 两条路都给到调用方
       opts?.onProgress?.({ type: 'error', note: res.message });
@@ -259,10 +262,12 @@ export function createSendPipeline(
 export function createBatchSendController(
   store: AppStore,
   ports: Ports,
+  /** ★ **「生成确认」控制器**（原 `kt` / `autoConfirm`）—— 单例，由 `container` 注入 */
+  autoConfirm: AutoConfirmController,
   pendingAttempt?: PendingAttemptController,
 ): BatchSendController {
   // ★ 管道与发送队列**共用同一套**（见 `createSendPipeline` 的头注释）
-  const { prepare, transport } = createSendPipeline(store, ports, pendingAttempt);
+  const { prepare, transport } = createSendPipeline(store, ports, autoConfirm, pendingAttempt);
 
 
   return {

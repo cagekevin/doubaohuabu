@@ -18,6 +18,9 @@ import type { SendWatchController } from './sendWatch';
 import type { PostSendDetectController } from './postSendDetect';
 import type { DolaMediaController } from './dolaMedia';
 import type { PendingAttemptController } from './pendingAttempt';
+import type { AutoConfirmController } from './autoConfirm';
+// ★ 「发送 ＋ 生成确认」的共享实现（源 `sendPayload` 的发送半）—— 三条发送路**同一份**
+import { sendWithConfirm, type SendConfirmDeps } from './sendWithConfirm';
 import { countUsable } from '@/core/rules/accountPool';
 import { busyIdsOf } from '@/core/rules/accountBusy';
 import { resolveApiProviderId } from '@/core/rules/apiProvider';
@@ -61,6 +64,11 @@ export function createGenController(
   dolaMedia?: DolaMediaController,
   /** ★ 待归属尝试写入器（原 `sendPayload` 的两处写入）—— 单例，由 `container` 注入 */
   pendingAttempt?: PendingAttemptController,
+  /**
+   * ★ **「生成确认」控制器**（原 `kt` / `autoConfirm`）—— 单例，由 `container` 注入。
+   * ⚠️ 缺省 ⇒ **不挂 `onSend`**（发送照旧，只是**不起生成确认**）—— 只给"只发不确认"的调用方留口。
+   */
+  autoConfirm?: AutoConfirmController,
 ): GenController {
   /**
    * 尝试 id 的自增段（原 `O$` 的模块级计数器 `Oy`）
@@ -69,6 +77,14 @@ export function createGenController(
    *    模块级可变状态会**跨测试文件泄漏**。
    */
   let attemptSeq = 0;
+
+  /**
+   * ★★ 「发送 ＋ 生成确认」的共享依赖（源 `sendPayload` 的发送半）—— 三条发送路**同一份**
+   *   （`state/sendWithConfirm.ts`）。缺 `autoConfirm` ⇒ 不挂 `onSend`（发送照旧，只是不起确认）。
+   */
+  const confirmDeps: SendConfirmDeps | null = autoConfirm
+    ? { store, ports, autoConfirm, ...(pendingAttempt ? { pendingAttempt } : {}) }
+    : null;
 
   const deps: GenDeps = {
     // `sites` / `backendPage` / `holdAccount` / `releaseAccount` 走**唯一组装点**（`./sendDeps`）
@@ -89,28 +105,31 @@ export function createGenController(
     // ★ TD-02-16：选号必须**实时**知道哪些账号在忙（用例跨重试多次选号）
     busyIds: () => busyIdsOf(store.useStore.getState().accountBusy, ports.clock.now()),
     /**
-     * ★ **发送结束 ⇒ 写「待归属尝试」**（原 `sendPayload` 里 `Be` 返回后那两处，`:2907-2913` / `:2935-2941`）
+     * ★★ **发送半**（原 `sendPayload`，`_Component43.jsx:2838-3005`）——
+     *   `读基线 → 发送 → 写 _pendingAttempt → 起生成确认`。
+     *   收在 `state/sendWithConfirm`（三条发送路**共用一份**，判据 C1）。
      *
-     * ⚠️ **只对 `genvideo` 写**：源在这条路上传的 `sourceNodeId` 就是**真节点 id**；而网页文生图
-     *    那条传的是 `'imggen:' + key`（`shared.js:42921`）⇒ 源 `updateNodeData` 找不到节点 ⇒ **空写**
-     *    （⚠️ 但它**仍会 push 一次撤销快照** —— 那处怪癖照实不复制）。
+     * ⚠️ `writeAttempt`：源对**网页文生图**传的 `sourceNodeId` 是 `'imggen:' + key`
+     *    （`shared.js:42921`）⇒ `updateNodeData` 找不到节点 ⇒ **空写**；本仓那两处传的是真节点 id
+     *    ⇒ 只对 `genvideo` 写（与源等价）。
      */
-    onSent: async ({ accountId, payload, sourceNodeId, ok, message }) => {
-      const nodeId = sourceNodeId ?? '';
-      if (!nodeId) return;
-      const node = store.useStore.getState().nodes.find((n) => n.id === nodeId);
-      if (!node || node.type !== 'genvideo') return;
-      if (ok) {
-        await pendingAttempt?.recordSent({
-          nodeId,
-          accountId,
-          prompt: payload.text,
-          payloadParams: payload.params,
-        });
-      } else {
-        pendingAttempt?.recordFailed({ nodeId, accountId, prompt: payload.text, note: message });
-      }
-    },
+    onSend: confirmDeps
+      ? async ({ accountId, payload, sourceNodeId, send }) => {
+          const nodeId = sourceNodeId ?? '';
+          const st = store.useStore.getState();
+          const account = st.accounts.find((a) => a.id === accountId);
+          // 账号在"选号"与"发送"之间被删 ⇒ 直发（不因缺上下文漏发）
+          if (!account) return send();
+          const node = nodeId ? st.nodes.find((n) => n.id === nodeId) : undefined;
+          return sendWithConfirm(confirmDeps, {
+            account,
+            payload,
+            nodeId: nodeId || null,
+            send,
+            writeAttempt: node?.type === 'genvideo',
+          });
+        }
+      : undefined,
   };
 
   return {

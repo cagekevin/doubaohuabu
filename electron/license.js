@@ -34,7 +34,7 @@ const { handle } = require('./ipc');
 // 公钥仅用于「验证」激活码；配对的私钥**不在客户端**，离线保存在仓库外
 // `豆包画布/签发工具/`（与该目录的 `issue-code.cjs` 一起用）。
 // ⚠️ 换私钥必须同步改本行并**重新打包分发** —— 旧包的公钥验不过新码。
-const PUBLIC_KEY_SPKI = 'MCowBQYDK2VwAyEAZV+d+qmUpul0oTjuOP9zzcjowKhNZh2t+NsFK5qt2ME=';
+const PUBLIC_KEY_SPKI = 'MCowBQYDK2VwAyEAe8TRvOAbh6m4nkcgXFMo3/wzwONAc6p5gTeRRlrm/aE=';
 const SALT = 'p0Z5zCsRnTlwpaKJjnnkkg==';
 const HMAC_SECRET = 'i/UJRBkqWpwgUFGrcPGRvZ2Z8YI3K3RGzSl4ioPlUig=';
 const LICENSE_VERSION = 1;

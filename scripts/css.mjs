@@ -19,6 +19,10 @@
  *   show <类名>       一个类的全貌：定义 · composes 链 · 谁 compose 它 · 哪个 TSX 用 · **最终生效声明**
  *   rename <旧> <新>  语义改名：一次改三处（CSS 定义 + 所有 composes 引用 + 所有 styles.X）；默认 dry-run，加 --write 落地
  *   stats             总览：文件 / 类 / composes 边 + 逐族类数
+ *   export            导出**真机 CSS 三件套**到 docs/mockup/spec/：
+ *                        ui-real.css  浏览器可直接 <link> 的 CSS（module.css 去作用域化，类名 = 真机类名）
+ *                        UI-CSS.md    人读索引（类 · 声明数 · composes 链 · TSX 消费者）
+ *                        ui-css.json  机器可读全量（供 mockup / 后续界面复用）
  *   help              本帮助
  *
  * 全局开关：`--json`（机器可读）· `--top N`（列表截断，默认 50）· `--changed`（只看 git 改动的文件）
@@ -738,11 +742,237 @@ function show() {
   return undefined;
 }
 
+// ─────────────────────────── export：导出真机 CSS ───────────────────────────
+
+/** 真源 `ui/common/shared.module.css` —— **不加前缀**：它的类（`.btn` / `.field` …）是全仓唯一的族名 */
+const SHARED_FILE = 'src/ui/common/shared.module.css';
+/** 全局 CSS（非 module）：原样拼在产物最前，顺序即加载顺序 */
+const GLOBAL_FILES = ['src/styles/reset.css', 'src/styles/tokens.css', 'src/styles/theme.css'];
+/** ReactFlow 官方样式（画布容器 / 连线 / 控件的基础布局）—— 存在才拼 */
+const XYFLOW_FILE = 'node_modules/@xyflow/react/dist/style.css';
+const OUT_DIR = path.join(ROOT, 'docs/mockup/spec');
+
+/**
+ * 每个 module.css 的作用域前缀 —— **默认取文件名**，重名时加目录（`nodes/shared` → `nodesShared`）。
+ * 真源例外（无前缀）：它就是要被全仓 composes 的共享族。
+ */
+const prefixes = (() => {
+  const byBase = new Map();
+  for (const { rel: f } of cssAbs) {
+    const base = path.basename(f, '.module.css');
+    byBase.set(base, [...(byBase.get(base) ?? []), f]);
+  }
+  const out = new Map();
+  for (const { rel: f } of cssAbs) {
+    if (f === SHARED_FILE) {
+      out.set(f, '');
+      continue;
+    }
+    const base = path.basename(f, '.module.css');
+    const dir = path.basename(path.dirname(path.join(ROOT, f)));
+    const dup = byBase.get(base).length > 1;
+    out.set(f, dup ? `${dir}${base[0].toUpperCase()}${base.slice(1)}-` : `${base}-`);
+  }
+  return out;
+})();
+
+/** `.cls` → `.{pre}cls`；`:global(…)` 内部**保持原名**（它作用在 React 控制不到的 DOM 上） */
+function scopeSelector(sel, pre) {
+  if (!pre) return sel.replace(/:global\(([^)]*)\)/g, '$1');
+  const holes = [];
+  const masked = sel.replace(/:global\(([^)]*)\)/g, (_, inner) => {
+    holes.push(inner);
+    return ` ${holes.length - 1} `;
+  });
+  const scoped = masked.replace(/\.([A-Za-z_][\w-]*)/g, (_, c) => `.${pre}${c}`);
+  return scoped.replace(/ (\d+) /g, (_, i) => holes[Number(i)]);
+}
+
+/** 去 Modules 化后的 class 名（供 HTML / 清单用） */
+const scoped = (file, cls) => `${prefixes.get(file) ?? ''}${cls}`;
+
+/** composes 目标 → 目标文件的 scoped 类名 */
+function scopedComposes(file, rec) {
+  return rec.composes.flatMap((c) => {
+    const tf = resolveFrom(file, c.from);
+    return c.names.map((n) => ({ name: scoped(tf, n), from: tf }));
+  });
+}
+
+/** 真机 CSS（浏览器可直接消费）：全局 CSS 原样 + 每个 module.css 作用域化后拼接 */
+function buildRealCss() {
+  const chunks = [
+    '/* ════════════════════════════════════════════════════════════════════════',
+    '   ui-real.css —— 真机 CSS 全量导出（**脚本产物，勿手改**）',
+    '',
+    // ⚠️ 注释里**不许出现 `*/`**：`src/**/*.css` 中的 `*/` 会提前闭合本注释块，
+    //    把紧随其后的 reset（`*, *::before, *::after{box-sizing:border-box}`）整段吞掉。
+    '   生成：`npm run css -- export`（真源 = src 下全部 .css）',
+    '',
+    '   为什么它能直接给 mockup 用：',
+    '     · token 全部原样搬（reset → tokens → theme），改 token 这里同步变；',
+    '     · module.css 只做一件事：把 CSS Modules 的**作用域**换成可读前缀 `<文件>-`；',
+    '     · 真源 `common/shared.module.css` **不加前缀**（它就是要被全仓 composes 的共享族）；',
+    '     · `composes` 已删 —— 浏览器不认它；HTML 里把祖先类**一并写上**即等价于真机。',
+    '       （真机 TSX 写 `styles.x`，产出 class 里也会带上 composes 来的祖先类）',
+    '   ════════════════════════════════════════════════════════════════════════ */',
+  ];
+  for (const g of GLOBAL_FILES) {
+    const abs = path.join(ROOT, g);
+    chunks.push(`\n/* ── ${g}（全局 · 原样）── */\n${fs.readFileSync(abs, 'utf8').trimEnd()}`);
+  }
+  if (fs.existsSync(path.join(ROOT, XYFLOW_FILE))) {
+    chunks.push(`\n/* ── ${XYFLOW_FILE}（ReactFlow 官方 · 原样）── */\n${fs.readFileSync(path.join(ROOT, XYFLOW_FILE), 'utf8').trimEnd()}`);
+  }
+  for (const { abs, rel: f } of cssAbs) {
+    const pre = prefixes.get(f);
+    const root = postcss.parse(fs.readFileSync(abs, 'utf8'), { from: abs });
+    const kfNames = new Set();
+    root.walkAtRules((at) => {
+      if (at.name !== 'keyframes') return;
+      kfNames.add(at.params.trim());
+      at.params = `${pre}${at.params.trim()}`;
+    });
+    root.walkRules((r) => {
+      r.selector = scopeSelector(r.selector, pre);
+    });
+    root.walkDecls((d) => {
+      if (d.prop === 'composes') {
+        d.remove();
+        return;
+      }
+      if (kfNames.size && /^animation(-name)?$/.test(d.prop)) {
+        for (const n of kfNames) d.value = d.value.replace(new RegExp(`\\b${n}\\b`, 'g'), `${pre}${n}`);
+      }
+    });
+    chunks.push(`\n/* ── ${f} · 前缀 ${pre || '（无 · 真源）'} ── */\n${root.toString().trimEnd()}`);
+  }
+  return `${chunks.join('\n')}\n`;
+}
+
+/** 人读索引：按区分组，每文件一张类表（声明全文在 ui-real.css，这里只给坐标） */
+function buildMd() {
+  const groups = new Map();
+  for (const { rel: f } of cssAbs) {
+    const zone = f.split('/').slice(0, 3).join('/');
+    groups.set(zone, [...(groups.get(zone) ?? []), f]);
+  }
+  const out = [
+    '# 真机 CSS 索引（**脚本产物 · 勿手改**）',
+    '',
+    '> 生成：`npm run css -- export`　真源：`src/**/*.css`',
+    '> **声明全文在 `ui-real.css`** —— 本文件只给坐标（哪个类 · 在哪行 · composes 谁 · 谁用它）。',
+    '> 类名一律是**去 Modules 化后**的名字：`<文件>-<类>`（真源 `shared` 无前缀）。',
+    '> 写 mockup HTML 时：`class` 里**把 composes 祖先类一并写上**（真机 TSX 产出的 class 也是这样）。',
+    '',
+    '## 全局 CSS（原样搬，非 module）',
+    '',
+    ...GLOBAL_FILES.map((g) => `- \`${g}\``),
+    '',
+  ];
+  let clsN = 0;
+  for (const [zone, files] of [...groups].sort((a, b) => a[0].localeCompare(b[0]))) {
+    out.push(`## ${zone}`, '');
+    for (const f of files.sort()) {
+      const pre = prefixes.get(f);
+      const map = index.get(f);
+      const consumers = [
+        ...new Set([...used].filter(([k]) => k.startsWith(`${f}#`)).flatMap(([, v]) => [...v])),
+      ];
+      out.push(
+        `### \`${f}\` — 前缀 \`${pre || '（无 · 真源）'}\` · ${map.size} 类`,
+        '',
+        consumers.length ? `消费者：${consumers.map((c) => `\`${c}\``).join(' · ')}` : '消费者：**（无 —— 未被 TSX 引用）**',
+        '',
+        '| class | 行 | 声明 | composes | 用它的 TSX |',
+        '|---|---|---|---|---|',
+      );
+      const variantOnly = [...known.get(f)].filter((c) => !map.has(c)).sort();
+      for (const [cls, rec] of [...map].sort((a, b) => a[1].line - b[1].line)) {
+        clsN += 1;
+        const comp = scopedComposes(f, rec);
+        const users = [...(used.get(`${f}#${cls}`) ?? [])];
+        out.push(
+          `| \`${scoped(f, cls)}\` | ${rec.line} | ${rec.props.size} | ${comp.length ? comp.map((c) => `\`${c.name}\``).join(' ') : '—'} | ${users.length ? users.map((u) => `\`${path.basename(u)}\``).join(' ') : '—'} |`,
+        );
+      }
+      out.push('');
+      if (variantOnly.length) {
+        out.push(`只有变体规则（无基础声明）：${variantOnly.map((c) => `\`${scoped(f, c)}\``).join(' · ')}`, '');
+      }
+    }
+  }
+  out.unshift(`（共 ${clsN} 个基础类 · ${cssAbs.length} 个 module.css）\n`);
+  return `${out.join('\n')}\n`;
+}
+
+/** 机器可读全量：给 mockup 之外还要复用这份数据的工具 / 后续界面用 */
+function buildJson() {
+  return {
+    globalFiles: GLOBAL_FILES,
+    files: cssAbs
+      .map(({ rel: f }) => f)
+      .sort()
+      .map((f) => ({
+        file: f,
+        prefix: prefixes.get(f),
+        consumers: [...new Set([...used].filter(([k]) => k.startsWith(`${f}#`)).flatMap(([, v]) => [...v]))].sort(),
+        classes: [...index.get(f)]
+          .sort((a, b) => a[1].line - b[1].line)
+          .map(([cls, rec]) => ({
+            name: cls,
+            scoped: scoped(f, cls),
+            line: rec.line,
+            decls: Object.fromEntries(rec.decls),
+            composes: scopedComposes(f, rec).map((c) => c.name),
+            usedBy: [...(used.get(`${f}#${cls}`) ?? [])].sort(),
+          })),
+        variantOnly: [...known.get(f)].filter((c) => !index.get(f).has(c)).sort().map((c) => scoped(f, c)),
+      })),
+  };
+}
+
+/**
+ * `export` —— 导出真机 CSS 三件套到 `docs/mockup/spec/`
+ *
+ * ★ 它架的是「mockup ↔ 真机」的桥：mockup 用的类名与 token **就是真机的**，
+ *   所以设计定稿后，样式改动可以直接回套，不存在"重新翻译一遍"。
+ */
+function exportCmd() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const css = buildRealCss();
+  // 自检：产物必须留住 reset 的全局 box-sizing
+  // （曾因**头注释里出现 `*/`** 提前闭合注释块，把整段 reset 吞掉 ⇒ 全站 padding 变外加宽）
+  let boxOk = false;
+  postcss.parse(css, { from: 'ui-real.css' }).walkRules((r) => {
+    if (r.selector === '*, *::before, *::after' || r.selector.replace(/\s/g, '') === '*,*::before,*::after') {
+      r.walkDecls('box-sizing', () => { boxOk = true; });
+    }
+  });
+  if (!boxOk) {
+    console.error('❌ 产物自检失败：reset 的全局 `box-sizing` 丢失 —— 检查头注释里是否有 `*/`');
+    process.exit(2);
+  }
+  const md = buildMd();
+  const data = buildJson();
+  fs.writeFileSync(path.join(OUT_DIR, 'ui-real.css'), css);
+  fs.writeFileSync(path.join(OUT_DIR, 'UI-CSS.md'), md);
+  fs.writeFileSync(path.join(OUT_DIR, 'ui-css.json'), `${JSON.stringify(data, null, 2)}\n`);
+  const total = data.files.reduce((n, f) => n + f.classes.length, 0);
+  if (json) return { out: rel(OUT_DIR), files: data.files.length, classes: total };
+  head(`export · 真机 CSS → ${rel(OUT_DIR)}`);
+  console.log(`   ui-real.css   ${css.split('\n').length} 行（全局 ${GLOBAL_FILES.length} + module ${cssAbs.length}）`);
+  console.log(`   UI-CSS.md     ${md.split('\n').length} 行（${total} 个基础类）`);
+  console.log(`   ui-css.json   ${data.files.length} 个文件`);
+  console.log('   前缀规则：`<文件>-<类>`；真源 common/shared 无前缀。写 HTML 时把 composes 祖先类一并写上。');
+  return undefined;
+}
+
 function help() {
   console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('*/')[0].replace(/^#!.*\n/, ''));
 }
 
-const CMDS = { check, show, rename, stats, help };
+const CMDS = { check, show, rename, stats, export: exportCmd, help };
 const fn = CMDS[cmd];
 if (!fn) {
   console.error(`未知命令：${cmd}\n`);

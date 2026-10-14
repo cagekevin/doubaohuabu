@@ -76,6 +76,13 @@ interface PixelBox {
 /** 8 向缩放 handle（源 `['nw','n','ne','w','e','sw','s','se']`） */
 type Handle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se';
 const HANDLES: readonly Handle[] = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+/**
+ * 方向 → CSS Modules 键（`.handleNw` / `.handleN` / …）
+ *
+ * ⚠️ **不能拼 `handle${h}`** —— 那样得到的是小写 `handlenw`，而 CSS 里是驼峰 `handleNw`
+ *   ⇒ `styles[...]` 恒为 `undefined` ⇒ 8 个手柄**全部丢失定位**（全叠在框左上角、光标也不变）。
+ */
+const handleClass = (h: Handle): string => `handle${h.charAt(0).toUpperCase()}${h.slice(1)}`;
 /** 拖动模式：`move` 或含方向的 handle */
 type DragMode = 'move' | Handle;
 
@@ -114,6 +121,12 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
   const viewportRef = useRef<HTMLDivElement>(null); // 原 `J`
   const canvasRef = useRef<HTMLCanvasElement>(null); // 原 `se`（编辑画布）
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null); // 原 `ke`（原始图）
+  /**
+   * 已加载的原图（原 `V.current`）—— ★ **可见 canvas 的那一笔由下面的 effect 画**：
+   *   canvas 由 `loaded` 门控（源 `G3.jsx:976` 同），onload 时它**还没挂载**
+   *   （`canvasRef.current === null`）⇒ 那时画 = 永远画不上（编辑器全空）。
+   */
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const undoStackRef = useRef<HTMLCanvasElement[]>([]); // 原 `pe`
   const strokeRef = useRef<{ active: boolean; last: { x: number; y: number } | null }>({
     active: false,
@@ -162,14 +175,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
       const src = createCanvas(w, h);
       src.getContext('2d')?.drawImage(img, 0, 0);
       sourceCanvasRef.current = src;
-      const cv = canvasRef.current;
-      if (cv) {
-        cv.width = w;
-        cv.height = h;
-        const ctx = cv.getContext('2d');
-        ctx?.clearRect(0, 0, w, h);
-        ctx?.drawImage(img, 0, 0);
-      }
+      imageRef.current = img;
       undoStackRef.current = [];
       setCanUndo(false);
       setFaces([]);
@@ -187,6 +193,27 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
       cancelled = true;
     };
   }, [imgRef, fitView]);
+
+  // ── 把原图画进**可见 canvas**（原 `G3.jsx:105-121`）──
+  //   ★ 必须住 effect：canvas 由 `loaded` 门控，onload 那一刻它还没挂载
+  //     ⇒ 在 onload 里画等于永远不画（编辑器全空、裁剪框/手柄也就建在空图上）。
+  //   ⚠️ 依赖**只有 `loaded`**：加 `size` 会在「应用裁剪」（`setSize`）时用**原图**把裁好的画布盖回去。
+  useEffect(() => {
+    if (!loaded) return;
+    const cv = canvasRef.current;
+    const img = imageRef.current;
+    if (!cv || !img) return;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (cv.width !== w || cv.height !== h) {
+      cv.width = w;
+      cv.height = h;
+    }
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+  }, [loaded]);
 
   /** 客户区坐标 → 图片坐标（原 `ut`，`G3.jsx:275-288`） */
   const toImagePos = useCallback(
@@ -853,7 +880,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
                           >
                             {HANDLES.map((h) => (
                               <span
-                                className={`${styles.handle} ${styles[`handle${h}` as keyof typeof styles]}`}
+                                className={`${styles.handle} ${styles[handleClass(h) as keyof typeof styles]}`}
                                 onPointerDown={(e) => onFacePointerDown(e, i, h)}
                                 key={h}
                               />
@@ -880,7 +907,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
                       <div className={styles.cropGrid} />
                       {HANDLES.map((h) => (
                         <span
-                          className={`${styles.handle} ${styles[`handle${h}` as keyof typeof styles]}`}
+                          className={`${styles.handle} ${styles[handleClass(h) as keyof typeof styles]}`}
                           onPointerDown={(e) => onCropPointerDown(e, h)}
                           key={h}
                         />

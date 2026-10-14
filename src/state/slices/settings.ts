@@ -80,7 +80,13 @@ export function createSettingsSlice(
     setApiSetup: (apiSetup) => set({ apiSetup }),
 
     upsertApiJob: (job) => {
-      // ★ 键是 `jobId`（后端事件字段名）—— 用 `id` 会让所有任务塌成一条
+      // ★ 缺 `jobId` ⇒ **不写**（`TD-07-19`）。
+      //   ⚠️ 键是 `jobId`（后端事件字段名）—— 用 `id` 会让所有任务塌成一条；
+      //      而**没有** `jobId` 时会落成 `apiJobs['undefined']` 这条**假记录**。
+      //   ⚠️ 事件来自宿主（按不可信处理：`applyApiJobEvent` 的第一句就是
+      //      `if (!event || !event.jobId) return null;`，源 `shared.js:30719`）⇒
+      //      「缺键不写」必须在**唯一写入点**堵死，不靠调用方记得先判。
+      if (!job || !job.jobId) return;
       set({ apiJobs: { ...get().apiJobs, [job.jobId]: job } });
     },
 
