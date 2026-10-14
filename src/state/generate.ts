@@ -179,8 +179,12 @@ export function createGenController(
             .filter((u) => !!u)
         : [];
 
-      // 标记「生成中」（写入由 state 负责）
-      store.useStore.getState().patchNodeData(nodeId, { generating: true });
+      // 标记「生成中」—— ★ **只有 `imggen`**：源里 `generating` 只服务文生图
+      //   （写 `_Component45:740` · 读 `ZL.jsx:230/256` · 清 `shared.js:27277`）；
+      //   `genvideo` 的「生成中」由 `m`（`apiJob`/`_pendingAttempt`）推导，**不写这个布尔**。
+      if (node.type === 'imggen') {
+        store.useStore.getState().patchNodeData(nodeId, { generating: true });
+      }
 
       /** `genvideo` 分支的数据（`sendGenVideo` 在这个分支里被调；提到外面会丢类型收窄） */
       const videoData = node.type === 'genvideo' ? node.data : undefined;

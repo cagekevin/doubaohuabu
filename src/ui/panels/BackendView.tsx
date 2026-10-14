@@ -266,8 +266,10 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
 
   /** ★ 「无水印资源」面板开合（原 `_Component43` 的「无水印资源（N）」按钮 `Ie(v => !v)` toggle） */
   const [watermarkOpen, setWatermarkOpen] = useState(false);
-  /** 无水印视频条数（「无水印资源（N）」按钮的 N，原 `ce.length`） */
-  const watermarkCount = useStore((s) => s.videoShares.length);
+  /** ★ 出图条**拖拽中** ⇒ 给 `.webviews` 容器加落点高亮（原 `.nip-drop-active`，`_Component26.jsx:261`） */
+  const [newImagesDropActive, setNewImagesDropActive] = useState(false);
+  /** 无水印资源条数（「无水印资源（N）」按钮的 N，原 `ce.length` = **CDP 捕获列表**长度） */
+  const watermarkCount = useStore((s) => s.dolaMediaItems.length);
 
   /**
    * 「刷新」—— 原 `_Component43.jsx:3235-3245`：`const ee = te(o); if (ee) ee.reload()`
@@ -411,7 +413,11 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
 
       {/* ★ 这个**字面量类**不是装饰：`adapters/site/shared/webview.ts` 的 `findWebview` 靠它定位容器
           （`WEBVIEWS_HOST_CLASS` = SSOT）。2026-10-11 前这里只挂 CSS-module 哈希类 ⇒ 定位恒失效。 */}
-      <div className={`${WEBVIEWS_HOST_CLASS} ${styles.webviews}`}>
+      <div
+        className={`${WEBVIEWS_HOST_CLASS} ${styles.webviews}${
+          newImagesDropActive ? ` ${styles.webviewsDropActive}` : ''
+        }`}
+      >
         {mounted.map((a) => (
           <AccountWebview
             key={a.id}
@@ -474,7 +480,9 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
         ★ 位置照源：在 **webviews 之后**（它靠"把图拖进后台页面"交互，源就把它摆在 webview 下方）；
         条件 = `t && c.length>0 && Ke?.type ∈ {lovart, tapnow, other}`。
       */}
-      {visible && loggedIn.length > 0 && NEW_IMAGES_SITES.includes(active?.type ?? '') && <NewImagesPanel />}
+      {visible && loggedIn.length > 0 && NEW_IMAGES_SITES.includes(active?.type ?? '') && (
+        <NewImagesPanel onDropActiveChange={setNewImagesDropActive} />
+      )}
     </div>
   );
 }

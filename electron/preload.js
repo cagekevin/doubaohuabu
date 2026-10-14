@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // 真实宿主平台：preload 运行于主窗口上下文，process.platform 100% 准确，不受任何指纹
 // 伪装 preload 影响。指纹模块 detectHostOS() 优先采用它，避免在渲染进程里读「被改写过的
-// navigator」而误判平台（见 src/lib/fingerprint.js）。
+// navigator」而误判平台（真源 = src/constants/fingerprint.ts + src/adapters/host/shared/env.ts）。
 function hostOSFromPlatform() {
   const p = (typeof process !== 'undefined' && process.platform) || '';
   if (p === 'win32') return 'windows';

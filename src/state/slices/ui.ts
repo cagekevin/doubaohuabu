@@ -11,6 +11,7 @@ import type { BackendErrorKind } from '@/constants/failure';
 import type { ToastLevel } from '@/constants/text';
 // ⚠️ 形状真源在用例层（`sendQueue.ts`）—— state 依赖 core 是允许方向
 import type { NodeSendState } from '@/core/usecases/sendQueue';
+import type { DolaMediaItem } from '@/core/ports/host.port';
 import {
   LS_NEWIMAGES_AUTOCAP,
   LS_NEWIMAGES_CURRENT_ONLY,
@@ -20,7 +21,8 @@ import {
 import type { CanvasDefaults } from '@/stable/contracts/lsValues';
 
 /** 默认 toast 时长（ms） */
-const TOAST_DURATION_MS = 3000;
+/** toast 默认停留（ms）—— 源 `showToast(n, r = 'info', s = 2600, o = null)`（`shared.js:30542`） */
+const TOAST_DURATION_MS = 2600;
 
 /**
  * 本片负责持久化的**布尔开关**（原 `zd(key,'0') === '1'` / `Fd(key, v?'1':'0')`）
@@ -135,6 +137,14 @@ export interface UiSlice {
    */
   lastSentAccountId: string | null;
   /**
+   * ★ **CDP 捕获到的最新一批媒体**（原 `_Component43.jsx` 的 `ce`，`:128` 的 `useState([])`；
+   *   每次推送 `oe(ve.items)` **整体替换**）—— 消费者 = 「无水印资源」面板 ＋ 它的计数徽标。
+   *
+   * ⚠️ **内存态、不落盘**（源即组件局部 state）；⚠️ 与 `videoShares` **不是一回事**：
+   *   后者是**持久化的分享记录**（真实样本字段），源里只用于检测播种（`_Component43.jsx:531`）。
+   */
+  dolaMediaItems: DolaMediaItem[];
+  /**
    * ★ **「按关键词拆分」弹窗**（原 `splitKeywordModal` shared.js:26776 / 28535-28546）
    *
    * ⚠️ **为什么它住 store 而不是组件局部 state**：弹窗由**画布节点内**的按钮打开，
@@ -157,6 +167,21 @@ export interface UiSlice {
   splitPresetPicker: { sourceNodeId: string; keywords: string[] } | null;
   openSplitPresetPicker: (sourceNodeId: string, keywords: readonly string[]) => void;
   closeSplitPresetPicker: () => void;
+  /**
+   * ★ **一次性「把画布定位到某批节点」请求**（原 `fitViewAction`，`_Component42.jsx:516-536`）
+   *
+   * 【为什么它住 store，而不是回调】发起方是**画布之外的浮层**（`SendQueuePanel` 的「查看」按钮，
+   *   `z3.jsx:80-89`），而 `fitView` 只住在 `CanvasHost`（`useReactFlow()`）——
+   *   两者是 `AppShell` 里的**兄弟**（`AppShell.tsx:126-129`），没有父子回调可走
+   *   ⇒ 与 `splitKeywordModal` **同法**：**store 只带请求数据，视图能力仍归 `ui`**
+   *   （由 `CanvasHost` 消费后自己调 `fitView`；`state` 里没有任何视图调用）。
+   * ⚠️ `seq` 保证「同一批 id 连点两次」也各触发一次（只有 `ids` 相同 ⇒ effect 不会重跑）。
+   */
+  focusNodesRequest: { ids: string[]; seq: number } | null;
+  /** 请求把画布定位到这些节点（源 `z3.jsx:80-89` 的 `fitViewAction([nodeId])`；**空数组 ⇒ 不写**） */
+  requestFocusNodes: (ids: readonly string[]) => void;
+  /** 消费后清空（由 `CanvasHost` 调，与 `requestFocusNodes` 成对 —— 防重复触发） */
+  clearFocusNodesRequest: () => void;
 
   /**
    * ★ **生成面板打开的节点**（原 `genPanelNodeId` / `imggenPanelNodeId`，
@@ -252,6 +277,8 @@ export interface UiSlice {
   setActiveAccountId: (id: string | null) => void;
   /** 原 `setLastSentAccount`（`shared.js:30395`）—— 写方只有发送成功路径 */
   setLastSentAccount: (id: string | null) => void;
+  /** 整批替换捕获列表（原 `oe(ve.items)`，`_Component43.jsx:137`）—— 写方 = `state/dolaMedia` */
+  setDolaMediaItems: (items: DolaMediaItem[]) => void;
   /**
    * ★ **节点的发送状态**（原 `nodeSendStates[id]`）
    *
@@ -282,9 +309,12 @@ export function createUiSlice(deps: UiSliceDeps) {
     activeAccountId: null,
     // ★ 原 `lastSentAccountId: null`（**内存态**；真正的初值由发送路径写入）
     lastSentAccountId: null,
+    dolaMediaItems: [],
     splitKeywordModal: null,
     // ★ 「拆分并套用节点预设」（源 `splitPresetPicker: null`，`shared.js:26775`）
     splitPresetPicker: null,
+    // ★ 一次性「定位画布」请求（原 `fitViewAction`）—— 消费方 = `CanvasHost`
+    focusNodesRequest: null,
     genPanelNodeId: null,
     imggenPanelNodeId: null,
     // ★ 图片编辑器（源 `imageEditor: null`，`shared.js` 里的 store 初值）
@@ -330,8 +360,18 @@ export function createUiSlice(deps: UiSliceDeps) {
     // ★ 原 `setLastSentAccount`（`shared.js:30395`：`{ lastSentAccountId: n }`）
     setLastSentAccount: (lastSentAccountId) => set({ lastSentAccountId }),
 
+    setDolaMediaItems: (items) => set({ dolaMediaItems: Array.isArray(items) ? items : [] }),
+
     openSplitKeywordModal: (sourceNodeId) => set({ splitKeywordModal: { sourceNodeId } }),
     closeSplitKeywordModal: () => set({ splitKeywordModal: null }),
+
+    // ★ 定位画布（原 `fitViewAction`）—— store 只带**请求数据**；真正 `fitView` 由 `CanvasHost` 调
+    requestFocusNodes: (ids) => {
+      const list = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x !== '');
+      if (list.length === 0) return;
+      set({ focusNodesRequest: { ids: list, seq: (get().focusNodesRequest?.seq ?? 0) + 1 } });
+    },
+    clearFocusNodesRequest: () => set({ focusNodesRequest: null }),
     // ★ 源 `openSplitPresetPicker(n, r)`（`shared.js:28524-28531`）：`keywords: r || []`
     openSplitPresetPicker: (sourceNodeId, keywords) =>
       set({ splitPresetPicker: { sourceNodeId, keywords: [...keywords] } }),

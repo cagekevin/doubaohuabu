@@ -153,12 +153,11 @@ export interface UnreadRoot {
  *   是两件事），而不是笼统一句"没扫到图片"。由 `core/rules/scanDiag.formatScanDiag`（原 `GT`
  *   `:32453`）拼成一行摘要。
  *
- * ⚠️ **源里 19 个字段，本仓只落 8 个** —— 其余在本仓**零消费者**（它们服务源的诊断弹窗与后端
+ * ⚠️ **源里 19 个字段，本仓落 9 个** —— 其余在本仓**零消费者**（它们服务源的诊断弹窗与后端
  *   `lovartDiag`，本仓两者都没有）⇒ 按 M6「不为将来铺路」不落。逐条：
  *   · `samples` / `csp` / `title` / `readyState` / `visibility` / `href`：源的诊断弹窗 + `gl()` 上报用；
- *   · `svgImgCount` / `videoCount` / `perfTotal`：`GT` **不读**；
- *   · `perfImg`：**本仓没有 perf 取图通道**（源在 `:23058-23078` 会把网络资源也当候选图）⇒
- *     数了就是**撒谎**（"网络图 5" 而 5 张从未进候选）⇒ **不落**，缺口另登记；
+ *   · `svgImgCount` / `videoCount` / `perfTotal`：`GT` **不读**（`perfTotal` 只在源的诊断面板里露脸）；
+ *   · `perfImg`：★ **2026-10-13 落** —— 随 `buildLibraryScanScript` 的 **perf 取图通道**（原 `:23057-23078`）；
  *   · `canvases`：随 BP-14（画布导出的门）落。
  * ⚠️ **源 `GT` 还读 `diag.frames`，那是个死分支**：`hp` **从不写** `p.frames`
  *   （只有 frames 通道的 diag 才带它，见 `:23725`）⇒ 本仓不设该字段。
@@ -174,6 +173,12 @@ export interface ScanDiag {
   imgTotal: number;
   /** 其中**量得到尺寸**的（源 `p.imgUsable++`：有自然尺寸或布局尺寸，`:22986`） */
   imgUsable: number;
+  /**
+   * 网络资源里**当成候选图收下**的（源 `p.perfImg++`，`:23073`）—— 摘要的「网络图 N」档
+   *
+   * ★ **2026-10-13 落**：此前本仓**没有 perf 取图通道** ⇒ 数了就是撒谎（"网络图 5" 而 5 张从未进候选）。
+   */
+  perfImg: number;
   /** 页面上的 `canvas` 数（源 `p.canvasCount += j.length`，`:23082`） */
   canvasCount: number;
   /** 候选 url 总数（源 `p.itemsRaw++`，`:22856` —— 进过滤器**之前**） */

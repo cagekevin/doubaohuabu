@@ -24,7 +24,6 @@ import type { ApiPort } from '@/core/ports/host.port';
 import type {
   ApiBatchResult,
   ApiConfigMap,
-  ApiJobEvent,
   ApiJobStatus,
   ApiProviderMeta,
   ApiSetup,
@@ -34,6 +33,8 @@ import { DEFAULT_API_CONCURRENCY } from '@/constants';
 import { COMMON_TEXT } from '@/constants/text';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { asRecord, isRecord } from '@/lib/object';
+import { isApiJobEvent } from '@/stable/model/gen';
+import { log } from '@/lib/log';
 import { getHostApi, HOST_MISSING } from './host-api';
 
 /**
@@ -110,8 +111,6 @@ function normalizeSetup(raw: unknown): ApiSetup {
 
 export function createElectronApiPort(): ApiPort {
   return {
-    providersList: async () => callOk((api) => api.apiProvidersList(), providersOf),
-
     configGet: async () =>
       callOk((api) => api.apiConfigGet(), (r) => ({
         // ★ 后端 `main.js:3130-3136` **每条 return 都恒带** `providers` + `configs`（`publicOf` 逐 provider）
@@ -180,7 +179,16 @@ export function createElectronApiPort(): ApiPort {
     onJobEvent: (cb) => {
       const api = getHostApi();
       if (!api) return () => undefined;
-      const off = api.onApiJobEvent((payload) => cb(payload as ApiJobEvent));
+      const off = api.onApiJobEvent((payload) => {
+        // ★ **边界收窄**（与拉取侧的 `checkOk` / `need` 同法，fail-closed）—— 推送载荷来自后端、
+        //   属不可信输入；不收窄 ⇒ 形状漂移会**静默变成 `undefined`**（`TD-04-12`）。
+        //   形状不符 ⇒ **丢弃 + 留痕**（不静默、不 cb）
+        if (!isApiJobEvent(payload)) {
+          log.warn('[api] onJobEvent 载荷形状不符，已丢弃:', payload);
+          return;
+        }
+        cb(payload);
+      });
       return typeof off === 'function' ? off : () => undefined;
     },
   };

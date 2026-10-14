@@ -253,7 +253,7 @@ node scripts/99-build-spec.cjs    # 过期 ⇒ exit 1 ＋ 点名该补跑哪个�
 
 | 目录 | 装什么 |
 |---|---|
-| `src/lib` | **纯工具**（不碰宿主）—— 碰 `window`/`document` 的归 `adapters`（原则 4 后半） |
+| `src/lib` | **无状态工具**（不碰**宿主**；Web 标准能力工具归**消费层**，仅「≥2 层共用」才留此）—— 见 `docs/架构与契约定稿.md` 原则 4 后半 |
 | `src/constants` · `src/styles` | 业务常量 / 文案 / 设计 token（SSOT） |
 | `src/stable` | 冻结契约：`contracts`（20 键）· `model`（数据形状）· `protocols` · `migrations` |
 | `src/core` | `model` · `rules`（纯函数）· `usecases`（编排）· `ports`（**零实现**） |

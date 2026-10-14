@@ -165,7 +165,7 @@ describe('toSitePayload（跨进程报文 → `SitePort.send` 的扁平入参）
     const site = toSitePayload(p);
     expect(site).toMatchObject({
       text: p.content.text,
-      images: ['img://a.png'],
+      images: [{ label: '', dataUrl: 'img://a.png' }],
       params: p.content.params,
       autoSend: true,
       source: 'canvas-text-node',
@@ -178,24 +178,27 @@ describe('toSitePayload（跨进程报文 → `SitePort.send` 的扁平入参）
     expect(Object.getOwnPropertyDescriptor(site, brand[0] as symbol)?.value).toBe(true);
   });
 
-  it('★ 图**归一成 `string[]`**：对象取 `dataUrl`（视频/账号节点那条路传的是 `{label,dataUrl}`）', () => {
+  it('★ 图归一成 `RefImageRef[]`：对象取 `{label, dataUrl}`（**label 保留** —— 去重键 `vD` / 后端文件名要用，`TD-16-116`）', () => {
     const p = buildAccountNodePayload({
       account: ACC,
       texts: ['x'],
       images: [{ label: '素材', dataUrl: 'img://b.png' }],
       now: NOW,
     });
-    expect(toSitePayload(p).images).toEqual(['img://b.png']);
+    expect(toSitePayload(p).images).toEqual([{ label: '素材', dataUrl: 'img://b.png' }]);
   });
 
-  it('★ 混装也能收：字符串原样、**空串丢掉**、非法项丢掉（不留 `undefined` 给适配器）', () => {
+  it('★ 混装也能收：字符串原样（label 空串）、**空串丢掉**、非法项丢掉（不留 `undefined` 给适配器）', () => {
     const p = buildAccountNodePayload({
       account: ACC,
       texts: ['x'],
       images: ['img://a.png', '', null, 42, { label: 'no-url' }, { dataUrl: 'img://c.png' }],
       now: NOW,
     });
-    expect(toSitePayload(p).images).toEqual(['img://a.png', 'img://c.png']);
+    expect(toSitePayload(p).images).toEqual([
+      { label: '', dataUrl: 'img://a.png' },
+      { label: '', dataUrl: 'img://c.png' },
+    ]);
   });
 
   it('★ `autoSend` 取**报文顶层**那个（与 `content.autoSend` 同值 —— 源 `$L` 两处都写）', () => {

@@ -53,7 +53,8 @@ import {
 import { withThumb } from '@/stable/protocols/img';
 import { resolveRefMaterial, type RefNodeLike } from '@/core/rules/prompt';
 import { refChipHtml, textToEditorHtml } from '@/core/rules/richText';
-import { editorToText } from '@/lib/editorText';
+import { editorToText } from '@/ui/lib/editorText';
+import { textBeforeCaret } from '@/ui/lib/selection';
 import { NodeShell } from './NodeShell';
 import { NodeTitle } from './NodeTitle';
 import { RefAutocomplete, matchRefTrigger } from './RefAutocomplete';
@@ -158,21 +159,9 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
     if (next !== data.text) patchNodeData(id, { text: next });
   }, [data.text, id, patchNodeData]);
 
-  /** 光标左侧的纯文本（用于 `@` 触发检测） */
-  const textBeforeCaret = (): string => {
-    const el = bodyRef.current;
-    const sel = window.getSelection();
-    if (!el || !sel || sel.rangeCount === 0) return '';
-    const range = sel.getRangeAt(0);
-    if (!el.contains(range.startContainer)) return '';
-    const pre = range.cloneRange();
-    pre.selectNodeContents(el);
-    pre.setEnd(range.startContainer, range.startOffset);
-    return pre.toString();
-  };
-
+  /** `@` 触发检测：拿光标左侧文本（原 `SL`，落点 `lib/selection.ts`） */
   const syncTrigger = (): void => {
-    const hit = matchRefTrigger(textBeforeCaret());
+    const hit = matchRefTrigger(textBeforeCaret(bodyRef.current));
     setRefTrigger(hit ? { query: hit.query, start: hit.start, typed: true } : null);
   };
 

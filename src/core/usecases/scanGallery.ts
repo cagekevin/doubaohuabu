@@ -200,8 +200,10 @@ function toGalleryInput(it: ScannedImage, index: number): LovartImageInput {
  * ⚠️ 成功的那张**不参与 `limit` 截断**（源是提前 return；本仓在截断之后追加 —— 同一结果）。
  * ⚠️ **不发源的「正在导出画布…」**（`:32616`）：那句话在源里发在**门之后**，而本仓的门在适配器里
  *    ⇒ 调用前不知道会不会真的导，发了就会在**非画布页上撒谎**。改为成功后再报（见下）。
- * ⚠️ **不做内容去重**：源那句 `isDuplicate` 在本仓由落库方 `addLovartImages`（按 `dataUrl` 去重）承担
- *    —— 在这里再做一次就是**第二份去重**（判据 C1）。
+ * ⚠️ **这里不重做内容去重**：本仓的逐张内容去重（原 `sm.isDuplicate`）已落在**适配器的落盘处**
+ *    （`adapters/site/shared/materializeScan.ts`）；而画布快照是**单个条目**、且在适配器那道**之后**追加
+ *    ⇒ 在此再判一次就是**第二份去重**（判据 C1）。与**库内已有**条目的重复，仍由落库方
+ *    `addLovartImages`（`dataUrl` 级）兜住。
  */
 async function tryExportCanvas(
   site: SitePort,

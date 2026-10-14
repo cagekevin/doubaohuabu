@@ -12,6 +12,8 @@ import styles from './shared.module.css';
 export interface MenuActionItem {
   key: string;
   label: ReactNode;
+  /** 原生 tooltip（如**禁用原因** —— 源里「打开文件所在位置」就靠它解释为什么灰） */
+  title?: string;
   disabled?: boolean;
   onSelect: () => void;
 }
@@ -89,6 +91,7 @@ export function ContextMenu({ x, y, items, title, onClose }: ContextMenuProps) {
             type="button"
             className={styles.menuItem}
             data-active={i === active}
+            title={it.title}
             disabled={it.disabled}
             role="menuitem"
             onMouseEnter={() => setActive(i)}

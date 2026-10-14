@@ -419,9 +419,9 @@ const GEN_VIDEO_CHANNEL_LABELS: Readonly<Record<string, string>> = {
  *   （原 `YL.jsx:485-530`），并**修正** `gv-meta` 第 2 项（原误用 `aspectRatio`，
  *   源实为 `y` = **执行账号标签** —— 见 `core/rules/genVideo.nodeAccountLabel`）。
  *
- * ⚠️ 仍未落：`gv-dl` / `gv-tl` / `gv-play` / `gv-dur-badge` / `gv-apijob` / `gv-hist-btn` /
- *    `gv-frame-btn`×3（整块，见 TD-16-79）；`gv-waiting` 的**后两态**（`p` = `nodeNotices`
- *    的 `generation-confirm`）**无数据源** —— 见 TD-16-81。
+ * ★ **`gv-waiting` 四态已齐**（2026-10-13）：触发 = 源 `m`（`apiJob` / `_pendingAttempt` 推导，
+ *   `core/rules/genVideo.genVideoWaiting`）；后两态 = `nodeNotices` 的 `generation-confirm`
+ *   （生产者 = `state/autoConfirm`）。
  */
 export const GEN_VIDEO_TEXT = {
   /** 节点标题（原 `YL.jsx`；禁裸字面量 —— 原则 5） */
@@ -448,11 +448,17 @@ export const GEN_VIDEO_TEXT = {
   channelLabels: GEN_VIDEO_CHANNEL_LABELS,
 
   // ── `gv-stage` / `gv-waiting` / `gv-preview-empty` / `gv-media-fallback`（原 485-530）──
-  /** 等待浮层 `aria-label`（原 488；源另一支 `'等待后台确认'` 属**无数据源**的那两态 —— TD-16-81） */
+  /** 等待浮层 `aria-label` —— **无** `generation-confirm`（原 488，逐字） */
   waitingAria: '正在生成',
-  /** 等待文案 —— 已有结果时（原 492 的 `h` 支，逐字） */
+  /** 等待浮层 `aria-label` —— **有** `generation-confirm`（原 488，逐字） */
+  waitingAriaConfirm: '等待后台确认',
+  /** 等待文案 —— 有 `generation-confirm` 且 `level === 'warn'`（原 495，逐字） */
+  waitingConfirmWarn: '后台待确认 · 请到账号页面查看',
+  /** 等待文案 —— 有 `generation-confirm`（非 `warn`）（原 495，逐字） */
+  waitingConfirm: '正在确认后台生成…',
+  /** 等待文案 —— 无 `generation-confirm` 且**已有结果**（原 495 的 `h` 支，逐字） */
   waitingRegenerate: '正在生成新的一条…',
-  /** 等待文案 —— 首次生成时（原 492，逐字） */
+  /** 等待文案 —— 无 `generation-confirm` 且**首次生成**（原 495，逐字） */
   waitingFirst: '正在生成 · 出片后展示在这里',
   /** 空舞台标题（原 498，逐字） */
   stageEmptyTitle: '文生视频 · 在下方输入提示词',
@@ -740,6 +746,18 @@ export const VIDEO_NODE_TEXT = {
   fromChipTitle: (label: string) => `来自：${label}（点击定位到源节点）`,
   /** 源节点已不存在（原 119，逐字） */
   sourceMissing: '源节点已不存在',
+  /**
+   * ★ 节点内**一次性反馈行**（原 `H`，`BL.jsx:56-61` + `:466` 的 `.vn-flash`）
+   *
+   * 源里**节点内**反馈全走它：置串 → **2.2s 后清空**，后一次覆盖前一次。文案逐字。
+   * ⚠️ 复制失败那条**转发生产者的 `message`**（原则 6）—— 源 161 是固定串
+   *    `复制失败，请手动选择文本`，本仓不替生产者造句。
+   */
+  flashMs: 2200,
+  flashRecipeCopied: '配方已复制',
+  flashNoRecipe: '该视频没有配方，无法重跑',
+  flashRerunCreated: '已按配方新建文本框',
+  flashRerunFailed: '新建失败',
   /** 配方 chip（原 341-342：有配方显示摘要，没有显示 `查看配方`） */
   recipeChip: (summary: string) => summary,
   recipeChipNone: '查看配方',
@@ -910,6 +928,10 @@ export const SEND_QUEUE_TEXT = {
   cancelTitle: '取消这一条（不打断其它）',
   retry: '重试',
   retryTitle: '重新排到队尾（会自动占用空闲账号）',
+  /** ★ 「查看」（原 `z3.jsx` 的 `sq-btn ok`）—— 该条已有出片 ⇒ 点它把画布**定位过去** */
+  view: '查看',
+  /** 「查看」的 `title`（原逐字：`定位到画布上的出片结果`） */
+  viewTitle: '定位到画布上的出片结果',
   /** 拖动 `title`（原 196，逐字） */
   dragTitle: '拖动可移动面板位置',
   /** 账号未分配（原 233，逐字） */
@@ -1005,6 +1027,8 @@ export const GALLERY_TEXT = {
   scanPhaseReading: '正在读取当前画布节点…',
   scanPhaseFound: (n: number) => `当前画布含 ${n} 张图`,
   scanPhasePrepare: (n: number) => `准备获取 ${n} 张原图`,
+  /** 批量取图**逐张进度**（原 `vP` 的 `p({message:'已收到 N 张'})`，`shared.js:34049`，逐字） */
+  scanPhaseReceived: (n: number) => `已收到 ${n} 张`,
   /** 没停在画布页（原 `_Component23.jsx:207`，逐字；`warn` 6500） */
   scanNeedCanvas: '请先在 Tapnow 里打开要扫描的画布页（/canvas/…），只抓当前画布',
   /** 找不到该账号的页面（原 `:274` 的 `message` 回落，逐字；`warn` 7000） */
@@ -1468,10 +1492,22 @@ export const IMAGE_EDITOR_TEXT = {
 export const WATERMARK_PANEL_TEXT = {
   /** 面板标题（原 63） */
   title: '无水印资源',
-  /** 计数（原 64-66：`图 N · 视频 N`；本仓只有视频 ⇒ 简化） */
-  count: (n: number) => `视频 ${n}`,
+  /** 计数（原 64-66：`图 N · 视频 N`） */
+  count: (images: number, videos: number) => `图 ${images} · 视频 ${videos}`,
+  /** 「下载到：」（原 68/95 的 `dmp-path-label`） */
+  downloadTo: '下载到：',
+  /** 未配置下载目录时的标（原 71/98 的 `dmp-path-tag`） */
+  defaultDirTag: '系统默认',
+  /** 「更改」（原 74/101） */
+  changePath: '更改',
+  /** 选目录中（原 74/101 的 disabled 文案） */
+  changingPath: '设置中…',
+  /** 「清空」（原 87） */
+  clear: '清空',
   /** 空态（原 105-107） */
   empty: '暂无。在 dola / 豆包 对话中生成或查看内容后，本面板会自动捕获无水印图片与视频。',
+  /** 类型标签「图片」（原 114） */
+  typeImage: '图片',
   /** 类型标签「视频」（原 114） */
   typeVideo: '视频',
   /** 「原链接」（原 123） */
@@ -1480,8 +1516,4 @@ export const WATERMARK_PANEL_TEXT = {
   download: '下载',
   /** 下载中（原 132） */
   downloading: '下载中…',
-  /** 「移除」—— 本仓新增（`removeVideoShare`；源无单条移除，只有「清空」） */
-  remove: '移除',
-  /** 清空（原 87） */
-  clear: '清空',
 } as const;

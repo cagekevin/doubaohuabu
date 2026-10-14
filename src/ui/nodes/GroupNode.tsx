@@ -65,6 +65,9 @@ export function GroupNode({ id, data, selected }: RFNodeProps<'group'>) {
         </button>
       }
       selected={selected}
+      /* 原 `GL.jsx` **没有** `_Component30` ⇒ 组节点不挂 side handle
+         （组的连线锚点是 `_Component37` = `ui/canvas/GroupConnectHandle.tsx`） */
+      handles={false}
       minWidth={GROUP_MIN_W}
       minHeight={GROUP_MIN_H}
       cardTitle={GROUP_NODE_TEXT.headTitle}

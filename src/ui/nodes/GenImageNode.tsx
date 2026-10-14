@@ -31,7 +31,7 @@ import { genImageCurrentUrl, imageApiChipLabel, imageChannelLabel, imageVersionV
 import { stageRatio } from '@/core/rules/genVideo';
 import { countInputs } from '@/core/rules/linkedMaterials';
 import { withThumb } from '@/stable/protocols/img';
-import { formatDateTimeMinute } from '@/lib/time';
+import { formatMonthDayMinute } from '@/lib/time';
 import { NodeShell } from './NodeShell';
 import { AnalyzePrompt } from './AnalyzePrompt';
 import type { RFNodeProps } from './types';
@@ -306,11 +306,11 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
                     />
                     <span className={styles.gvHistMeta}>
                       {/*
-                        ⚠️ 源这里是 `{S(V.ts)}` —— `S` **不在 `ZL.jsx` 的 import 表**（是全局别名，
-                        抽取器也标了 TODO）⇒ 本仓按既有的 `l0` = `formatDateTimeMinute`（`YYYY-MM-DD HH:mm`）取。
-                        ⚠️ **该映射未确证同一函数**（未登记债）。
+                        ★ 源这里是 `{S(V.ts)}` —— `S` 是 `ZL.jsx:89-98` 的**本地函数**（抽取器把它列进了
+                        「TODO(全局)」catch-all，其实是局部定义）：`MM-DD HH:mm`，**不带年份**
+                        ⇒ 与文生视频历史同形 ⇒ 吃 `formatMonthDayMinute`（`VideoNode`/`GenVideoNode` 同款）。
                       */}
-                      <span className={styles.gvHistRow}>{`#${i + 1} · ${formatDateTimeMinute(view.ts)} · ${view.account}`}</span>
+                      <span className={styles.gvHistRow}>{`#${i + 1} · ${formatMonthDayMinute(view.ts)} · ${view.account}`}</span>
                       <span className={styles.gvHistRow}>{view.ratio}</span>
                       <span className={styles.gvHistPrompt}>{view.prompt}</span>
                     </span>

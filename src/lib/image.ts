@@ -10,7 +10,7 @@
  * ⚠️ 依赖 DOM；`core` 不得直接调它（原则 4）。
  */
 
-import { FACE_MASK_PATTERN_COLOR } from '@/constants/facemask';
+import { FACE_MASK_PATTERN_COLOR, type FaceMaskEffect } from '@/constants/facemask';
 import { clamp } from './math';
 
 /** 临时 canvas 缓存（原 `bS()` 的 `{tmp, tiles}`） */
@@ -152,7 +152,8 @@ export function makeDotGridPattern(
  *   （`ui`）也能直接用（铁律②：`ui` 不得 import `adapters`，但可以 import `lib`）。
  *   ⚠️ **cell（格子尺寸）由调用方传入**（`core/rules/facemask.ts` 的 `maskCellSize` 算）——
  *      `lib` 不碰 `core`（L0 不依赖 L2）。
- * ⚠️ `effect` 只认 `'mosaic' | 'blur' | 'dots' | 'grid'`（`dots`/`grid` 走 pattern 分支）。
+ * ⚠️ `effect` 的类型 = `FaceMaskEffect`（真源 `@/constants/facemask`）；其中 `dots`/`grid`
+ *    走 pattern 分支（`mosaic`/`blur` 各有专门实现）。
  */
 export function drawMaskEffect(
   ctx: CanvasRenderingContext2D,
@@ -161,7 +162,7 @@ export function drawMaskEffect(
   y: number,
   w: number,
   h: number,
-  effect: 'mosaic' | 'blur' | 'dots' | 'grid',
+  effect: FaceMaskEffect,
   cell: number,
   opacity: number,
   st: TmpState,

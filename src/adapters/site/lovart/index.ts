@@ -35,7 +35,7 @@ import { lovartPageKind } from './pageKind';
 import { requireWebview, webviewEval } from '../shared/webview';
 import { runProbe } from '../shared/waits';
 // ★ 单档归一 + **逐张落盘**（`normalizeAttempt` 在 `site/shared/materializeScan.ts`，两档共用 —— 判据 C1）
-import { scanAttemptFromRaw, type ScanAttempt, type ScanAttemptOptions } from '../shared/materializeScan';
+import { scanAttemptFromRaw, scanFetchContext, type ScanAttempt, type ScanAttemptOptions } from '../shared/materializeScan';
 
 /**
  * Lovart 站点地址（原 `_p`，`shared.js:36769`）
@@ -51,8 +51,13 @@ async function tryScan(
   host: HostPort,
   account: Account,
   via: ScanStrategy,
-  attemptOpts: ScanAttemptOptions,
+  opts: ScanOptions,
 ): Promise<ScanAttempt> {
+  // ★ 批量取图的会话上下文（原 `vP` 的实参：account + referer）—— 缺它 ⇒ 远端图取不到（如实计失败）
+  const attemptOpts: ScanAttemptOptions = {
+    ...(opts.seenUrls ? { seenUrls: opts.seenUrls } : {}),
+    fetch: scanFetchContext(account, LOVART_URL, opts.onPhase),
+  };
   let view;
   try {
     view = requireWebview(account.partition);

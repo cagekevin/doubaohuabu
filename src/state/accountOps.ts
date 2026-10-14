@@ -75,7 +75,6 @@ import {
   type AutoWatchProgress,
 } from '@/core/rules/autoWatch';
 import type { Cancel } from '@/core/ports/clock.port';
-import type { NewAccountInput } from '@/core/rules/accountRoster';
 import { ACCOUNT_STATUS, type Account } from '@/stable/model/account';
 import { BACKEND_VIEW_TEXT, SEND_TEXT } from '@/constants/text';
 
@@ -92,11 +91,8 @@ export type AccountTransferResult =
   | { kind: 'imported'; imported: number; skipped: number; restored: number; warnings: string[] };
 
 export interface AccountOpsController {
-  /**
-   * 新增账号（原 `addAccount` 的整体效果）
-   * @returns 新账号 id
-   */
-  addAccount(input: NewAccountInput): string;
+  // ⚠️ 这里**没有** `addAccount` —— 建号走 `store.addAccount`（原子入册，唯一入口）；
+  //   在本控制器上再包一层纯转发＝**第二入口**（已删）。
   /** 移除账号（原 `removeAccount`）：先清会话（best-effort），再删列表 */
   removeAccount(accountId: string): Promise<void>;
   /**
@@ -212,7 +208,7 @@ export interface AccountOpsController {
    *
    * @returns `err` 的 message 已落进节点反馈条（UI 不必再拼一次）；`reason` 原样透传
    */
-  sendAccountNode(nodeId: string): Promise<Result<{ status: 'ok' | 'err'; msg: string }>>;
+  sendAccountNode(nodeId: string): Promise<Result<{ status: 'success' | 'error'; msg: string }>>;
 
   /**
    * ★ **关掉账号节点的反馈条**（原 `OL.jsx:511-519` 的 `account-feedback-close`）
@@ -552,7 +548,6 @@ export function createAccountOps(
   };
 
   return {
-    addAccount: (input) => store.useStore.getState().addAccount(input),
 
     /**
      * ★ **对「还没入名册」的待建账号探一次登录**（原 `$P.jsx:199-249` 的 `pe` 轮询）
@@ -724,7 +719,9 @@ export function createAccountOps(
       const payload = buildAccountNodePayload({
         account: { id: account.id, name: account.name, partition: account.partition },
         texts: inputs.texts.map((t) => t.text),
-        images: inputs.materials.map((m) => m.dataUrl),
+        // ★ 源 `$L:40248-40257`：`materials.map(d => ({ label: d.label || '素材', dataUrl: d.dataUrl }))`
+        //   —— `label` 是去重键 `vD` 与后端文件名的输入，不能丢（`TD-16-116`）
+        images: inputs.materials.map((m) => ({ label: m.label || '素材', dataUrl: m.dataUrl })),
         params: {
           aspectRatio:
             inputs.params.aspectRatio ?? (typeof data.aspectRatio === 'string' ? data.aspectRatio : null),
@@ -835,8 +832,12 @@ export function createAccountOps(
         imagesTotal: r.value.imagesTotal ?? inputs.materials.length,
         autoSend,
         autoClicked: r.value.autoClicked,
+        // ★ Phase 3a 校验回执（原 `ne.precheck`）—— `autoSend=false`（只填入）时可能带
+        //   `pass:false` ⇒ 摘要翻成 `error` + 警告（原 `OL.jsx:340`/`:353-355`；`TD-16-117`）
+        precheck: r.value.precheck ?? null,
+        precheckIssue: r.value.precheckIssue ?? null,
       });
-      store.useStore.getState().setNodeSendState(nodeId, { status: 'success', msg: feedback.msg });
+      store.useStore.getState().setNodeSendState(nodeId, { status: feedback.status, msg: feedback.msg });
       store.useStore.getState().setLastSentAccount(account.id);
       scheduleFeedbackClear(nodeId);
       // ★ **发送后**：按**站点能力**分流（原 `sendPayload` 的 `!nt` / `nt` 两支，`:2943-2970`）

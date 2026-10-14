@@ -104,7 +104,7 @@ function readDevToolsPort(dir) {
 // 注意：只删锁文件，绝不碰 Cookies / Local State 等登录态数据。
 function clearStaleLock(dir) {
   for (const f of ['DevToolsActivePort', 'SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
-    try { fs.rmSync(path.join(dir, f), { force: true }); } catch { /* ignore */ }
+    try { fs.rmSync(path.join(dir, f), { force: true }); } catch { /* 清理临时文件失败可忽略（下次启动会重建） */ }
   }
 }
 
@@ -153,15 +153,33 @@ const sessions = new Map(); // accountId -> { child, dir }
  * @param {string} [url] 初始打开的网址（通常是 Lovart 登录页）
  * @param {{proxy?:string}} [opts] proxy 形如 "http://ip:port"，空则直连
  */
+/**
+ * ★ 同账号「正在拉起」的在飞 promise（accountId → promise）
+ *
+ * 为什么必须有：`sessions` 直到 `spawn` 之后才 `set` —— 快速重复调用会让**两次都走到 spawn**
+ * （`sessions.get` 都为空）⇒ 并发拉起多个 Chrome 抢同一 profile（`SingletonLock` 互斥、登录态错乱）。
+ * 锁的作用域 = 本模块；`finally` 保证无论成功/失败都释放。
+ */
+const pendingEnsure = new Map();
+
+/**
+ * 为某账号拉起「本机真实 Google Chrome」用于登录 Lovart。**带并发锁**（见 `pendingEnsure`）。
+ */
 async function ensureLovartChrome(accountId, url, opts = {}) {
   if (!accountId) return { ok: false, error: 'no-account' };
   const existing = sessions.get(accountId);
   if (existing && existing.child && !existing.child.killed) {
-    // 已开着的登录窗口：仅按需导航，不重复拉起
-    if (url) { try { existing.child; } catch { /* ignore */ } }
+    // 已开着的登录窗口：**不重复拉起**（直接返回 alreadyOpen）
     return { ok: true, alreadyOpen: true };
   }
+  const inflight = pendingEnsure.get(accountId);
+  if (inflight) return inflight;
+  const run = doEnsureLovartChrome(accountId, url, opts).finally(() => pendingEnsure.delete(accountId));
+  pendingEnsure.set(accountId, run);
+  return run;
+}
 
+async function doEnsureLovartChrome(accountId, url, opts = {}) {
   const exe = systemChromePath();
   if (!exe) {
     return { ok: false, error: 'no-chrome', message: '未找到本机 Google Chrome，请先安装后再使用 Lovart。' };
@@ -198,7 +216,7 @@ async function ensureLovartChrome(accountId, url, opts = {}) {
   child.unref();
 
   // 记录本次启动参数签名，供下次判断残留实例是否可安全复用
-  try { fs.writeFileSync(path.join(dir, '.lovart-launch-sig'), LAUNCH_SIG); } catch { /* ignore */ }
+  try { fs.writeFileSync(path.join(dir, '.lovart-launch-sig'), LAUNCH_SIG); } catch { /* 标记文件写入失败可忽略（下次落盘重写） */ }
 
   sessions.set(accountId, { child, dir });
   const onExit = () => { sessions.delete(accountId); };
@@ -214,9 +232,9 @@ async function closeLovartChrome(accountId) {
   if (!entry) return { ok: true, wasOpen: false };
   try {
     if (entry.child && !entry.child.killed) entry.child.kill('SIGTERM');
-  } catch { /* ignore */ }
+  } catch { /* 杀进程幂等（可能已退出） */ }
   // 兜底：确保该 profile 下没有遗留进程
-  try { killChromeForProfile(entry.dir); } catch { /* ignore */ }
+  try { killChromeForProfile(entry.dir); } catch { /* 残留进程清理是 best-effort（失败不影响返回值） */ }
   return { ok: true, wasOpen: true };
 }
 
@@ -305,7 +323,7 @@ async function dumpCookies(accountId) {
     await sleep(250);
   }
   if (!port) {
-    try { child.kill('SIGTERM'); } catch { /* ignore */ }
+    try { child.kill('SIGTERM'); } catch { /* 杀进程幂等（可能已退出） */ }
     return { ok: false, error: 'chrome-no-port', message: '临时 Chrome 未暴露调试端口。' };
   }
 
@@ -320,8 +338,8 @@ async function dumpCookies(accountId) {
     await sleep(250);
   }
   if (!wsUrl) {
-    try { child.kill('SIGTERM'); } catch { /* ignore */ }
-    try { killChromeForProfile(dir); } catch { /* ignore */ }
+    try { child.kill('SIGTERM'); } catch { /* 杀进程幂等（可能已退出） */ }
+    try { killChromeForProfile(dir); } catch { /* 残留进程清理是 best-effort（失败不影响返回值） */ }
     return { ok: false, error: 'chrome-no-page', message: '临时 Chrome 未提供页面调试端点。' };
   }
 
@@ -332,28 +350,28 @@ async function dumpCookies(accountId) {
       ws.on('open', resolve);
       ws.on('error', reject);
     });
-    cleanup = () => { try { ws.close(); } catch { /* ignore */ } };
+    cleanup = () => { try { ws.close(); } catch { /* 关闭 CDP 连接幂等（可能已断） */ } };
 
     const idRef = { n: 1 };
     await cdpRequest(ws, idRef, 'Network.enable');
     const r = await cdpRequest(ws, idRef, 'Network.getAllCookies');
     const cookies = (r && r.cookies) || [];
 
-    try { ws.close(); } catch { /* ignore */ }
-    try { if (!child.killed) child.kill('SIGTERM'); } catch { /* ignore */ }
-    try { killChromeForProfile(dir); } catch { /* ignore */ }
+    try { ws.close(); } catch { /* 关闭 CDP 连接幂等（可能已断） */ }
+    try { if (!child.killed) child.kill('SIGTERM'); } catch { /* 杀进程幂等（可能已退出） */ }
+    try { killChromeForProfile(dir); } catch { /* 残留进程清理是 best-effort（失败不影响返回值） */ }
     return { ok: true, cookies };
   } catch (e) {
-    try { cleanup(); } catch { /* ignore */ }
-    try { if (!child.killed) child.kill('SIGTERM'); } catch { /* ignore */ }
-    try { killChromeForProfile(dir); } catch { /* ignore */ }
+    try { cleanup(); } catch { /* cleanup 已幂等，重复调用可忽略 */ }
+    try { if (!child.killed) child.kill('SIGTERM'); } catch { /* 杀进程幂等（可能已退出） */ }
+    try { killChromeForProfile(dir); } catch { /* 残留进程清理是 best-effort（失败不影响返回值） */ }
     return { ok: false, error: 'dump-failed', message: (e && e.message) || '读取 cookie 失败' };
   }
 }
 
 function removeProfile(accountId) {
   const dir = profileDirFor(accountId);
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* 删 profile 目录失败可忽略（下次启动会重建） */ }
   sessions.delete(accountId);
   return { ok: true };
 }

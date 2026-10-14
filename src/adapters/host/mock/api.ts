@@ -40,8 +40,6 @@ export function createMockApi(): ApiPort {
   };
 
   return {
-    providersList: async () => ok(PROVIDERS.map((p) => ({ ...p }))),
-
     /** 配置原文由主进程持有（mock 没有）⇒ 如实给空表，**不假装**读到了 */
     configGet: async () => ok({ providers: PROVIDERS.map((p) => ({ ...p })), configs: {} }),
 

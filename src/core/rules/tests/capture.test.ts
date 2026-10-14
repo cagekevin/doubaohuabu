@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatClipTime,
   screenshotNodePlacement,
+  SCREENSHOT_NODE_SIZE,
   SCREENSHOT_STACK_MAX,
   toCaptureRect,
 } from '../capture';
@@ -123,5 +124,9 @@ describe('screenshotNodePlacement（原 `addScreenshotMaterial` 28328）', () =>
 
   it('★ 坐标缺失 ⇒ 当 0（不抛）', () => {
     expect(screenshotNodePlacement({ position: { x: 0, y: 0 } }, 0)).toEqual({ x: 360, y: 0 });
+  });
+
+  it('★ 截图节点框 = **220×180**（源 `addScreenshotMaterial` 28343-28344 的字面量锚定）', () => {
+    expect(SCREENSHOT_NODE_SIZE).toEqual({ w: 220, h: 180 });
   });
 });

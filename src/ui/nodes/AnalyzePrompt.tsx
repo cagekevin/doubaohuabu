@@ -1,8 +1,9 @@
 /**
- * 提示词分析（浮动按钮 + `.mpp-*` 结果面板）—— 文生图 / 文生视频节点**共用**
+ * 提示词分析（浮动按钮 + `.mpp-*` 结果面板）—— 文生图 / 素材节点**共用**
  *
- * ★ **判据 C1**：源版在 `ZL.jsx`（文生图）与 `fL.jsx`（文生视频）里**逐字重复**了同一套
+ * ★ **判据 C1**：源版在 `ZL.jsx`（文生图）与 `fL.jsx`（素材）里**逐字重复**了同一套
  *   浮动按钮 + 面板（`gS`/`yS` 调用、徽章四态、三个 tab、复制、调整区）⇒ 抽成共享组件。
+ * ⚠️ **文生视频节点（源 `YL.jsx`）没有这套**（源不碰 `analyzePrompt`）⇒ 不消费本组件。
  *
  * 依据（**逐行回源抄录**，行号均为 `ZL.jsx`）：
  *   | 行为 | 源 | 语义 |
@@ -50,13 +51,6 @@ export interface AnalyzePromptProps {
    *   ⇒ 由本组件出容器、消费者把「前面那颗」传进来，避免两处各画一条 bar。
    */
   leading?: ReactNode;
-  /**
-   * 动作条的落点：
-   *   · `'image'`（默认）—— **贴在图片下沿**（原 `.mat-float-actions` 的 `left:0;bottom:0`）
-   *   · `'above'` —— 浮在容器**上沿之外**（`bottom:100%`）—— 源 `YL.jsx` 没有分析按钮，
-   *     这条是**本仓既有**的落点（`TD-16-80`），保持原样不动
-   */
-  placement?: 'image' | 'above';
 }
 
 export function AnalyzePrompt({
@@ -65,7 +59,6 @@ export function AnalyzePrompt({
   state,
   showButton,
   leading,
-  placement = 'image',
 }: AnalyzePromptProps) {
   const analyze = useAnalyze();
   const hostOps = useHostOps();
@@ -123,7 +116,7 @@ export function AnalyzePrompt({
     <>
       {showButton && (
         // ⚠️ `nodrag nopan` 是 ReactFlow 约定类名（按钮不该拖动节点 / 平移画布）
-        <div className={`${styles.floatActions} ${placement === 'above' ? styles.floatAbove : ''} nodrag nopan`}>
+        <div className={`${styles.floatActions} nodrag nopan`}>
           {leading}
           <button
             type="button"

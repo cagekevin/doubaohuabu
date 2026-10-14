@@ -297,6 +297,12 @@ export function createSendQueueController(store: AppStore, ports: Ports): SendQu
         setState: (e) => {
           s().setNodeSendState(e.nodeId, e);
         },
+        // ★ **配方落 `nodeRecipes`**（原 `PS` 的 `setNodeRecipe`，`shared.js:42385`）—— `prepare`
+        //   产出的 `recipe` 按**源节点 id** 存表；**视频节点**在落库时（`addVideoNode` 的 `d0` 展开）
+        //   把这份配方**拷进**自己的 `data.recipe`（`TD-02-21`）
+        setRecipe: (nodeId, recipe) => {
+          s().setNodeRecipe(nodeId, recipe);
+        },
       });
     } catch (e) {
       failure = e as { message?: string };

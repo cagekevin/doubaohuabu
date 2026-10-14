@@ -88,6 +88,8 @@ const GAP_RIGHT = 40;
 const STACK_STEP = 26;
 /** 纵向最多叠几层（原 28335 的 `Math.min(u, 8)` —— 第 9 张起**与第 8 张重合**） */
 export const SCREENSHOT_STACK_MAX = 8;
+/** 截图素材节点的框（原 `addScreenshotMaterial` 28343-28344 的 `width: 220, height: 180`） */
+export const SCREENSHOT_NODE_SIZE = { w: 220, h: 180 } as const;
 
 /** 截图落点所需的锚点形状（只要这三项） */
 export interface ScreenshotAnchorLike {

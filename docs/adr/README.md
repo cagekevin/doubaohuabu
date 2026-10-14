@@ -137,4 +137,6 @@ node scripts/adr.mjs status <NNNN> --to 已取代 --by <新编号> --note "…"
 <!-- ADR-INDEX:BEGIN（由 node scripts/adr.mjs index --write 生成 · 禁手改） -->
 | # | 标题 | 状态 | 结论一句话 |
 | --- | --- | --- | --- |
+| [0064](ADR-0064-「判定不做」须与「做」同标准取证（禁以未定论支撑）.md) | 「判定不做」须与「做」同标准取证（禁以未定论支撑） | ✅ 生效 | 「判不落／不做／不移植」是零成本高价值判断，也最易掺偷懒 ⇒ 必须与「做」同一套取证（回源 file:line · grep 调用方 · 查后端/端口是否已存在）；禁用另一个「未定论」支撑「不做」（循环论证）；查不出 ⇒ 不许下「不做」。 |
+| [0065](ADR-0065-收窄-stableprotocolsvid.ts（整文件删）.md) | 收窄 stable/protocols/vid.ts（整文件删） | ✅ 生效 | 取『若要收窄则整文件删』的次选：vid:// 全由宿主独占（主进程产生引用 + 注册 handler），前端零解析 ⇒ 前端镜像 4 导出与 PROTOCOL_VID 是第二份真相，删。用户裁定 2026-10-14 |
 <!-- ADR-INDEX:END -->

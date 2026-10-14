@@ -11,7 +11,9 @@
  *   但本仓要求留痕）。
  */
 
+import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
+import { localizeNodeInto } from './localizeOps';
 
 export interface LandVideoInput {
   url: string;
@@ -33,7 +35,7 @@ export interface LandVideoInput {
  * 落一条视频（**唯一写点**）。返回是否真的落了。
  * ⚠️ 幂等由 `addVideoNode` 的 `vid` 去重承担（源同）。
  */
-export function landVideo(store: AppStore, input: LandVideoInput): boolean {
+export function landVideo(store: AppStore, ports: Ports, input: LandVideoInput): boolean {
   const s = store.useStore.getState();
   const { accountId, nodeId } = input;
 
@@ -58,7 +60,7 @@ export function landVideo(store: AppStore, input: LandVideoInput): boolean {
     | null;
 
   // ③ 新建/更新画布视频节点（源 `addVideoNode`）
-  s.addVideoNode({
+  const videoNodeId = s.addVideoNode({
     url: input.url,
     vid: input.vid,
     width: input.width,
@@ -71,6 +73,10 @@ export function landVideo(store: AppStore, input: LandVideoInput): boolean {
     sourceNodeId: nodeId,
     attempt: pending,
   });
+
+  // ③b ★ **落库后立刻本地化**（源 `addVideoNode` 末尾内建 `localizeNodeVideos(q)`，
+  //     `shared.js:28312-28315`）—— 不调 ⇒ 非拉取路径出片**不落盘**（只剩启动 5s 回填兜底）
+  if (videoNodeId) void localizeNodeInto(store, ports, videoNodeId);
 
   // ④ 清 `_pendingAttempt(s)`（源 `updateNodeData`，只清本次用掉的那个账号）
   if (nodeId && (sd?._pendingAttempt || (attempts ? attempts[accountId] : undefined))) {

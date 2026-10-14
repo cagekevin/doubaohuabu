@@ -1,16 +1,15 @@
 /**
  * 选择工具条（原 `.sel-toolbar`）
- * ⚠️ 位置偏离：源版贴着选中节点的包围盒；本工程固定在画布**上中**（不引入视口数学）
+ * ★ 位置：贴**选中包围盒**（原 `se`，`_Component42.jsx:131-152`）—— `left`/`top`/`transform`
+ *   由纯层 `planSelectionAnchor` **内联**给出（源同：`style={se}`）。
  * ⚠️ 原则 5：色值只走 token
  * ⚠️ **查 6（通用件真源表，AGENTS §五）**：按钮 / 浮层壳 / 菜单项一律 `composes`
  *    `ui/common/shared.module.css` 的真源，**禁自造**（与 `AccountPicker` 同法）。
  */
 
 .bar {
+  /* ⚠️ 只定 `position`（相对 `.wrap`，与 `BatchSendPanel` 同法）—— 坐标由内联 style 给 */
   position: absolute;
-  top: var(--space-2);
-  left: 50%;
-  transform: translateX(-50%);
   z-index: var(--z-overlay);
   display: flex;
   align-items: center;

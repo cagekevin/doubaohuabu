@@ -8,18 +8,27 @@
  * ★ **可见性判据（原 130 的 `J`）**：`_ >= 2 || !!H` —— 即「≥2 个非组节点」**或**「选中了
  *   某个组的成员」。⚠️ 于是「只选中组内 1 个成员」时工具条**也会出现**（为的是能点「取消组」）。
  *
- * ⚠️ 位置偏离：源版贴着选中节点的包围盒（`se`，131-160 的视口数学）；本工程固定在画布**上中**
- *   （不引入视口数学，见 `SelectionToolbar.module.css`）。
+ * ★ **2026-10-13 · 落源版视口联动定位**：贴**选中包围盒**（原 `se`，`_Component42.jsx:131-152`）——
+ *   数学在纯层 `planSelectionAnchor`（与「批量发送触发条」**共用一份**）；此前固定在画布**上中**。
  * ⚠️ 原则 1：不写 store —— 只调 `useStore` 暴露的 action。
  * ⚠️ `Escape` 处理走 `ui/common/useEscapeKey`（`原则8/rule-of-three` 只允许它在 `ui/common/`）。
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useReactFlow, useViewport } from '@xyflow/react';
 import { useStore } from '@/state';
 import { SELECT_TOOLBAR_TEXT } from '@/constants/text';
 import { selectedGroupIdOf } from '@/core/rules/group';
 import type { ArrangeMode } from '@/core/rules/arrange';
+import {
+  planSelectionAnchor,
+  SEL_TOOLBAR_EST_H,
+  SEL_TOOLBAR_GAP,
+  SEL_TOOLBAR_MIN_TOP,
+  type SelectionAnchor,
+} from '@/core/rules/panelAnchor';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
+import { log } from '@/lib/log';
 import styles from './SelectionToolbar.module.css';
 
 /** 菜单里的两组模式（原 1513-1553 的顺序：水平四项 / 垂直四项） */
@@ -41,6 +50,31 @@ export function SelectionToolbar() {
   const groupId = selectedGroupIdOf(nodes);
   const visible = nonGroupCount >= 2 || !!groupId;
 
+  // ── 落点（原 `se`，`_Component42.jsx:131-152`）────────────────────────────────
+  const viewport = useViewport();
+  const { getNodesBounds } = useReactFlow();
+  /**
+   * ⚠️ 源是 `{J && se && <div style={se}>}` ⇒ **算不出就不出**（画布未就绪时不画）。
+   * ⚠️ 数学在纯层 `planSelectionAnchor`（与「批量发送触发条」**共用一份** —— 两处源逐行同形，判据 C1）；
+   *    常数照 `_Component42.jsx:141-143`（`vt = 40` · `Dt = 10` · `6`）。
+   */
+  let anchor: SelectionAnchor | null = null;
+  if (visible) {
+    try {
+      const bounds = getNodesBounds(selected.map((n) => n.id));
+      anchor = planSelectionAnchor({
+        bounds,
+        viewport,
+        aboveOffset: SEL_TOOLBAR_GAP,
+        belowOffset: SEL_TOOLBAR_GAP,
+        flipReserve: SEL_TOOLBAR_EST_H + SEL_TOOLBAR_GAP,
+        minTop: SEL_TOOLBAR_MIN_TOP,
+      });
+    } catch (err) {
+      log.warn('[SelectionToolbar] getNodesBounds 失败（画布未就绪？）:', err);
+    }
+  }
+
   const closeMenu = () => setMenuOpen(false);
 
   // 点空白处关闭（原 169-177 的 `mousedown`；`Escape` 那半走 `useEscapeKey`）
@@ -55,7 +89,7 @@ export function SelectionToolbar() {
 
   const onKeyDown = useEscapeKey(menuOpen, closeMenu);
 
-  if (!visible) return null;
+  if (!visible || !anchor) return null;
 
   const runArrange = (mode: ArrangeMode) => {
     arrangeNodes(mode);
@@ -63,7 +97,11 @@ export function SelectionToolbar() {
   };
 
   return (
-    <div className={styles.bar} data-testid="selection-toolbar">
+    <div
+      className={styles.bar}
+      data-testid="selection-toolbar"
+      style={{ left: anchor.left, top: anchor.top, transform: anchor.transform }}
+    >
       <span className={styles.count}>{SELECT_TOOLBAR_TEXT.selected(selected.length)}</span>
       <button
         type="button"

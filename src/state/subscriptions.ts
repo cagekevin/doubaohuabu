@@ -18,6 +18,7 @@
 import type { Ports } from '@/core/ports';
 import type { AppStore } from './store';
 import { applyApiJobEvent } from '@/core/usecases/applyApiJobEvent';
+import { localizeNodeInto } from './localizeOps';
 import type { DolaMediaController } from './dolaMedia';
 
 export interface Subscriptions {
@@ -76,7 +77,7 @@ export function createSubscriptions(
       // ★ 生成图片流（原 `pushImageGenFeed`，`:30733-30739`）—— 源在「落库」那两支里各调一次
       if (decision.feed) st.pushImageGenFeed([decision.feed]);
       if (decision.videoNode) {
-        st.addVideoNode({
+        const videoNodeId = st.addVideoNode({
           url: decision.videoNode.url,
           vid: (decision.videoNode.attempt?.vid as string | undefined) ?? null,
           width: null,
@@ -84,11 +85,16 @@ export function createSubscriptions(
           duration: null,
           poster: null,
           accountId: (decision.videoNode.attempt?.accountId as string | undefined) ?? null,
-          accountName: '',
-          name: '视频',
+          // ★ name / accountName **必须用决策算好的**（源 `shared.js:30775-30776`：
+          //   `o.data && o.data.label || 'API 视频'` · `API · ${n.providerName}`）
+          accountName: decision.videoNode.accountName,
+          name: decision.videoNode.name,
           sourceNodeId: decision.videoNode.sourceNodeId,
           attempt: decision.videoNode.attempt,
         });
+        // ★ 落库后**立刻本地化**（源 `addVideoNode` 末尾内建 `localizeNodeVideos(q)`，
+        //   `shared.js:28312-28315`）—— 同 `state/pullResult` 的时机；`void` 不拖住落库返回
+        if (videoNodeId) void localizeNodeInto(store, ports, videoNodeId);
       }
       if (decision.nodePatch) st.patchNodeData(decision.nodePatch.nodeId, decision.nodePatch.patch);
       if (decision.attachImage) {

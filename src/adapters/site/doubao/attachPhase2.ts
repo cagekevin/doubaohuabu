@@ -19,6 +19,7 @@
 
 import type { ClipboardPort } from '@/core/ports/host.port';
 import { ok, type Result } from '@/core/model/result';
+import type { RefImageRef } from '@/core/rules/payload';
 import { sleep } from '@/lib/async';
 import {
   ATTACH_CDP_CONFIRM_POLLS,
@@ -148,18 +149,16 @@ async function clipboardPasteOne(
  *   ④ **Phase 2b 增量重试**（`:1012-1050`）—— ⚠️ 只重试**剪贴板写入失败**的那些
  *      （源在 `:968` 已把「写入成功」的加进 `nt`，2b 的 `if (nt.has(ot)) continue` 会把它们全跳过）
  *
- * @param images 参考图 `dataUrl` 列表（`img://` 或 `data:`）
+ * @param images 参考图引用（`{label, dataUrl}` —— 源 `me.images` 的形状）
  */
 export async function attachImagesPhase2(
   deps: AttachPhase2Deps,
   view: WebviewElement,
   webContentsId: number,
-  images: readonly string[],
+  images: readonly RefImageRef[],
 ): Promise<Result<AttachPhase2Outcome>> {
-  // ⓪ 去重（原 `:822-843`）—— 本仓 `payload.images` 只有 `dataUrl`（label 在上游 `normalizeImages` 已丢）
-  const { list, dropped } = dedupeReferenceImages(
-    images.map((dataUrl) => ({ dataUrl, label: REFERENCE_IMAGE_LABEL })),
-  );
+  // ⓪ 去重（原 `:822-843`）—— 键 `vD` 吃 `{dataUrl, label}`（label 由 `payload.normalizeImages` 保留）
+  const { list, dropped } = dedupeReferenceImages(images);
   if (list.length === 0) {
     return ok({ attached: 0, total: 0, via: 'none', failed: [], dropped });
   }
@@ -181,7 +180,7 @@ export async function attachImagesPhase2(
   if (webContentsId) {
     const r = await deps.clipboard.attachImages(
       webContentsId,
-      list.map((it) => ({ dataUrl: it.dataUrl, label: it.label })),
+      list.map((it) => ({ dataUrl: it.dataUrl, label: it.label || REFERENCE_IMAGE_LABEL })),
     );
     const errs = r.ok ? (r.value.errors ?? []) : [r.message];
     if (errs.length === 0) {

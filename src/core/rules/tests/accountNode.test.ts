@@ -225,7 +225,7 @@ describe('accountSendFeedback（原 `OL.jsx:339-359` 的摘要三目）', () => 
 
   it('★ 三段齐 ⇒ 用 ` · ` 连（**不带**那句"仅填入"）', () => {
     expect(accountSendFeedback(base)).toEqual({
-      status: 'ok',
+      status: 'success',
       msg: '文本已填 · 图片 3/3 · 已自动发送',
     });
   });
@@ -259,7 +259,7 @@ describe('accountSendFeedback（原 `OL.jsx:339-359` 的摘要三目）', () => 
         autoSend: false,
         autoClicked: false,
       }),
-    ).toEqual({ status: 'ok', msg: '已填入（仅填入，未发送）' });
+    ).toEqual({ status: 'success', msg: '已填入（仅填入，未发送）' });
   });
 
   it('★ `imagesAttached` 为 `null` / `undefined` ⇒ **整段不出现**（源 `!= null` 判据）', () => {
@@ -270,5 +270,31 @@ describe('accountSendFeedback（原 `OL.jsx:339-359` 的摘要三目）', () => 
     expect(accountSendFeedback({ ...base, imagesAttached: 2, imagesTotal: 5 }).msg).toBe(
       '文本已填 · 图片 2/5 · 已自动发送',
     );
+  });
+
+  it('★ `precheck.pass === false` ⇒ 翻成 `error` + 警告后缀（原 `OL.jsx:340`/`:353-355`）', () => {
+    expect(
+      accountSendFeedback({
+        ...base,
+        autoSend: false,
+        autoClicked: false,
+        precheck: { pass: false },
+        precheckIssue: '图序不一致',
+      }),
+    ).toEqual({
+      status: 'error',
+      msg: '文本已填 · 图片 3/3（仅填入，未发送）；⚠ 图序不一致（请人工核对后发送）',
+    });
+  });
+
+  it('★ `precheck.pass === false` 且**无明细** ⇒ 回退兜底文案「发送前校验未通过」', () => {
+    expect(
+      accountSendFeedback({ ...base, autoSend: false, autoClicked: false, precheck: { pass: false } }).msg,
+    ).toBe('文本已填 · 图片 3/3（仅填入，未发送）；⚠ 发送前校验未通过（请人工核对后发送）');
+  });
+
+  it('★ `precheck.pass === true` / 缺 `precheck` ⇒ 仍是成功摘要（不误报）', () => {
+    expect(accountSendFeedback({ ...base, precheck: { pass: true } }).status).toBe('success');
+    expect(accountSendFeedback(base).status).toBe('success');
   });
 });

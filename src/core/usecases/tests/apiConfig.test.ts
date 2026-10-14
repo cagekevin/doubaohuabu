@@ -25,7 +25,6 @@ import type { ApiPort } from '@/core/ports/host.port';
 function makeDeps(over: Partial<ApiPort> = {}) {
   const calls: Array<[string, ...unknown[]]> = [];
   const api: ApiPort = {
-    providersList: async () => ok([]),
     configGet: async () => ok({ providers: [], configs: {} }),
     configSet: async (id, patch) => {
       calls.push(['configSet', id, patch]);

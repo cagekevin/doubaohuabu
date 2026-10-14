@@ -6,12 +6,13 @@
  *   - `dR` shared.js:35641-35675 —— **多行详情**（`提示词：` / `参数：` / `风格：` / `参考图：` / `出片账号：`）
  *   - `io` shared.js:35411-35413 —— 模型 id → 展示名（已在 `prompt.ts` 的 `normalizeModelLabel`）
  *
- * ⚠️ **暂未实现 `oR`（35525-35563，配方对象的构造器）**，原因**如实说明**：
- *   `oR` 产出的是**要落进节点数据的形状**（`{v:1, mediaType, prompt, model, duration, ratio,
- *   styleId, styleName, images[{label,hash}], textRefs[{id,label}], accountId, accountName, createdAt}`），
- *   而 `stable/model/node.ts:114` 现在是 `recipe?: unknown`。
- *   把它变成**类型化形状**属改**冻结契约**（要保证与老数据逐字段一致）⇒ 与 M11 的「配方落盘」同批做，
- *   避免在此处先猜形状。`oR` 还依赖 `aR(dataUrl)`（图片哈希）与 `createdAt`（需注入 `now`）。
+ * ⚠️ **`oR`（35525-35563，配方对象的构造器）已落** —— `makeRecipe` ＋ 图片哈希 `recipeImageHash`（原 `aR`）。
+ *   产出落进节点数据的形状（`{v, mediaType, prompt, model, duration, ratio, styleId, styleName,
+ *   images[{label,hash}], textRefs[{id,label}], accountId, accountName, createdAt}`）。
+ *   ⚠️ `createdAt` 由**调用方注入**（原则 4）· `aR` 是**独立的一份**哈希（不是 `lib/hash.hash32`）。
+ * ⚠️ **`d0`（35576-35706，从源节点派生 `{recipe, sourceLabel}` 给新视频节点）** = `deriveNodeRecipe`。
+ * ⚠️ `stable/model/node.ts` 的 `recipe?: unknown` **有意不收窄**：写入走 `patchNodeData` 的
+ *   `Record<string, unknown>` 通道，读侧由 `readRecipe` 收窄 ⇒ 不动冻结契约。
  *
  * ⚠️ 本模块**不接触** `window`/`document`/`Date`/随机（原则 4）。
  */
@@ -36,6 +37,12 @@ export interface RecipeViewLite {
   model?: unknown;
   duration?: number | null;
   ratio?: string | null;
+  /**
+   * 风格 **id** —— ★ 「按配方重跑」要用它填新节点的 `styleIds`（源 `BL.jsx:176` 的 `it.styleId`）。
+   * 配方里确实存了它（写入端 `state/batchSend` 的 `styleId: styleIds[0] ?? null`）；
+   * 漏读它的症状 = 重跑出来的提示词**丢风格**（TD-16-127）。
+   */
+  styleId?: string | null;
   styleName?: string | null;
   images?: ReadonlyArray<{ label?: string | null }> | null;
   textRefs?: ReadonlyArray<{ id?: string | null; label?: string | null }> | null;
@@ -257,3 +264,142 @@ export function recipeTextNodePosition(
  *   （这里是"配方缺字段"的兜底，那里是"新节点默认"）—— 暂各留一份，同值巧合。
  */
 export const RECIPE_TEXT_FALLBACKS = { duration: 7, ratio: NODE_DEFAULT_RATIO_LABEL } as const;
+
+// ─────────── 配方对象（原 `oR` 35525-35563 ＋ 图片哈希 `aR` 35564-35575）───────────
+
+/** 配方里的一张参考图（原 `oR` 的 `images` 元素） */
+export interface RecipeImageRef {
+  /** 素材名（缺省 `'素材'`） */
+  label: string;
+  /** 源 `aR(dataUrl)` 的 DJB2 短哈希（`h<base36>`）—— 无 `dataUrl` ⇒ 空串 */
+  hash: string;
+}
+
+/** 配方里的一条引用文本（原 `oR` 的 `textRefs` 元素） */
+export interface RecipeTextRef {
+  id: string;
+  label: string;
+}
+
+/** 生成配方（原 `oR` 的产物形状）—— 落进节点 `data.recipe`，由 `readRecipe` 读回 */
+export interface Recipe {
+  /** 版本号（源固定 `1`） */
+  v: 1;
+  mediaType: string;
+  prompt: string;
+  model: string | null;
+  duration: number | null;
+  ratio: string | null;
+  styleId: string | null;
+  styleName: string;
+  images: RecipeImageRef[];
+  textRefs: RecipeTextRef[];
+  accountId: string | null;
+  accountName: string;
+  /** 构造时刻（源 `Date.now()` ⇒ 本仓**由调用方注入**，原则 4） */
+  createdAt: number;
+}
+
+/**
+ * 配方里的图片哈希（原 `aR`，`shared.js:35564-35575`）—— ★ 纯函数
+ *
+ * 逐字：DJB2（种子 `5381`，`n = ((n<<5)+n+charCode)>>>0`）→ `h${n.toString(36)}`；
+ * **只取前 4096 字符**；空串 ⇒ `''`。
+ * ⚠️ 与 `lib/hash.hash32`（FNV-1a）**不是一回事** —— 源为配方单独写了一份，照抄。
+ */
+export function recipeImageHash(dataUrl: unknown): string {
+  const s = String(dataUrl || '');
+  if (!s) return '';
+  let n = 5381;
+  const len = Math.min(s.length, 4096);
+  for (let i = 0; i < len; i += 1) {
+    n = ((n << 5) + n + s.charCodeAt(i)) >>> 0;
+  }
+  return `h${n.toString(36)}`;
+}
+
+export interface MakeRecipeInput {
+  /** 组装后的正文（源 `oR` 的 `body`） */
+  body: unknown;
+  model?: string | null;
+  duration?: number | null;
+  ratio?: string | null;
+  styleId?: string | null;
+  /** 命中风格名 `join('、')`（源 `oR` 的 `styleName`） */
+  styleName?: string;
+  images?: ReadonlyArray<{ label?: unknown; dataUrl?: unknown }>;
+  textRefs?: ReadonlyArray<{ id?: unknown; label?: unknown }>;
+  accountId?: string | null;
+  accountName?: string;
+  /** 缺省 `'video'` */
+  mediaType?: string;
+}
+
+/**
+ * 构造生成配方（原 `oR`，`shared.js:35525-35563`）—— ★ 纯函数
+ *
+ * ⚠️ `createdAt` 由**调用方注入**（`core` 不读 `Date`，原则 4）。
+ * ⚠️ `model` / `ratio` 用 `||`（空串 ⇒ `null`）；`duration` 用 `Number.isFinite`（非数 ⇒ `null`）—— 逐字对源。
+ */
+export function makeRecipe(input: MakeRecipeInput, now: number): Recipe {
+  const num = Number(input.duration);
+  return {
+    v: 1,
+    mediaType: input.mediaType || 'video',
+    prompt: String(input.body ?? '').trim(),
+    model: input.model || null,
+    duration: Number.isFinite(num) ? num : null,
+    ratio: input.ratio || null,
+    styleId: input.styleId || null,
+    styleName: input.styleName || '',
+    images: (input.images ?? []).map((f) => ({
+      label: f && f.label ? String(f.label) : '素材',
+      hash: f && f.dataUrl ? recipeImageHash(f.dataUrl) : '',
+    })),
+    textRefs: (input.textRefs ?? []).map((f) => ({
+      id: f && f.id ? String(f.id) : '',
+      label: f && f.label ? String(f.label) : '',
+    })),
+    accountId: input.accountId || null,
+    accountName: input.accountName || '',
+    createdAt: now,
+  };
+}
+
+/**
+ * 从**源节点**派生要落进新视频节点的两样东西（原 `d0`，`shared.js:35676-35706`）—— ★ 纯函数
+ *
+ * 逐字：
+ *   · `recipe` ← `nodeRecipes[sourceNodeId]`（有才给）
+ *   · `sourceLabel` ← 源节点自己的标签：**`text` 节点** ⇒ 正文（剥标签 + 折空白）**截 12 字**，
+ *     空则 `label || '文本框'`；**其它类型** ⇒ `label || name`（空则不给）
+ *
+ * ⚠️ 与 `provenanceLabel`（原 `fR`）**不是同一个函数**、**不合并**：那个从**视频节点**出发
+ *   （读它的 `gridAnchor`/`sourceNodeId` 再回查源节点），本函数**直接吃源节点 id**；
+ *   且两处 `else` 分支不同（`d0` 用 `name`、`fR` 用 `type`）。
+ */
+export function deriveNodeRecipe(
+  nodes: readonly ProvenanceNodeLike[],
+  nodeRecipes: Record<string, unknown> | null | undefined,
+  sourceNodeId: string | null | undefined,
+): { recipe?: unknown; sourceLabel?: string } {
+  const out: { recipe?: unknown; sourceLabel?: string } = {};
+  if (!sourceNodeId) return out;
+  const r = nodeRecipes ? nodeRecipes[sourceNodeId] : null;
+  if (r) out.recipe = r;
+  const s = nodes.find((n) => n.id === sourceNodeId);
+  if (!s || !s.data) return out;
+  const d = s.data;
+  let label = '';
+  if (s.type === 'text') {
+    const raw = String(d.text || d.prompt || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    label = raw ? truncateText(raw, 12) : String(d.label || '文本框');
+  } else {
+    label = String(d.label || d.name || '');
+  }
+  if (label) out.sourceLabel = label;
+  return out;
+}

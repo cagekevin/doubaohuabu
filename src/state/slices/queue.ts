@@ -63,8 +63,6 @@ export interface QueueSlice {
   setQueueItems: (items: QueueItem[]) => void;
   /** 改**一项**（原 `wr`）—— 找不到该 id ⇒ **原样不动**（不抛） */
   updateQueueItem: (id: string, patch: QueueItemPatch) => void;
-  /** 设并发上限（原 `setAccountConcurrency`） */
-  setAccountConcurrency: (n: unknown) => void;
 
   // ── 排队追问进度（原 `queueProgress` 30436 附近的 `31240` 段）★ `TD-16-103` 的生产者坑位 ──
   /**
@@ -116,11 +114,6 @@ export const createQueueSlice =
       set({ sendQueue: { ...s, items } });
     },
 
-    setAccountConcurrency: (n) => {
-      // 原 30452-30455：`Number.isFinite(r) && r >= 1 ? Math.floor(r) : 1`
-      const r = Number(n);
-      set({ accountConcurrency: Number.isFinite(r) && r >= 1 ? Math.floor(r) : DEFAULT_ACCOUNT_CONCURRENCY });
-    },
 
     // ── 排队追问进度（原 `31240` / `31241-31254` / `31255-31267`）★ `TD-16-103` ──
     queueProgress: {},

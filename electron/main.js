@@ -682,25 +682,28 @@ const APPASSET_MIME = {
 const imagesDir = () => activeProjectStorage ? activeProjectStorage.dirs.images : legacyImagesDir();
 
 // 把一张 dataUrl 写入磁盘，返回 img:// 引用；失败返回原 dataUrl（调用方降级）
+/**
+ * 把 `data:image/...` 内联图落盘 → 返回 `img://<hash>.<ext>` 引用。
+ *
+ * ★ **失败即抛**（**不**降级回内联 base64）—— `§八·五#1`「不得内联 base64」：
+ *   返回原 base64 会把它写进工程 JSON（单张 2~20MB）。
+ *   三个调用点**都已兜底**：`img-save-sync` → 前端 `adapters/host/electron` 的 catch 转 `err`（原则 6）；
+ *   `import-files` → `ipcMain.handle` reject → 前端 catch；`start-file-drag` → 本地 `try/catch` 已就位。
+ */
 function persistImageDataUrl(dataUrl) {
-  try {
-    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl;
-    const m = dataUrl.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
-    if (!m) return dataUrl;
-    const mime = m[1];
-    const buf = Buffer.from(m[2], 'base64');
-    if (!buf || buf.length === 0) return dataUrl;
-    const ext = (mime.split('/')[1] || 'png').replace('svg+xml', 'svg').replace('jpeg', 'jpg');
-    const hash = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
-    const dir = imagesDir();
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, `${hash}.${ext}`);
-    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, buf);
-    return `img://${hash}.${ext}`;
-  } catch (err) {
-    console.error('[img-store] 图片落盘失败:', err && err.message || err);
-    return dataUrl;
-  }
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl;
+  const m = dataUrl.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+  if (!m) return dataUrl;
+  const mime = m[1];
+  const buf = Buffer.from(m[2], 'base64');
+  if (!buf || buf.length === 0) return dataUrl;
+  const ext = (mime.split('/')[1] || 'png').replace('svg+xml', 'svg').replace('jpeg', 'jpg');
+  const hash = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
+  const dir = imagesDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `${hash}.${ext}`);
+  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, buf);
+  return `img://${hash}.${ext}`;
 }
 
 // 缩略图缓存目录：画布/列表显示用的降采样 JPEG，避免每次挂载都解码 2～20MB 原图
@@ -833,8 +836,7 @@ function resolveVideoRef(ref) {
 // preload 文件按 account.id 隔离存放于 userData/fingerprints/，内容与指纹一同落盘，
 // 因此同一账号每次启动命中的是同一份配置（稳定）。
 const { buildFingerprintPreload } = require('./fingerprint-preload');
-// Lovart UA preload 已停用（见 ensure-lovart-container）：改走「零注入」策略，避免 fn.toString() 可探测痕迹。
-// const { buildLovartUAPreload } = require('./lovart-ua-preload');
+// ★ **零注入**：Lovart 容器不挂载任何自定义 preload —— 自定义 UA preload 会留下 fn.toString() 可探测痕迹。
 const dolaMedia = require('./dola-media');
 const lovartFetch = require('./lovart-fetch');
 const lovartScan = require('./lovart-scan');
@@ -1941,7 +1943,7 @@ function findWebviewSessionForUrl(targetUrl) {
     try {
       const h = new URL(targetUrl).hostname.toLowerCase();
       if (h.includes('dola') || h.includes('byteintl')) preferSource = 'dola';
-    } catch (_) { /* ignore */ }
+    } catch (_) { /* URL 非法 ⇒ 用默认来源（doubao） */ }
     const sourceHost = preferSource === 'dola' ? 'dola.com' : 'doubao.com';
     for (const wc of webContents.getAllWebContents()) {
       if (wc === mainWindow.webContents) continue;
@@ -2708,10 +2710,9 @@ function buildCleanChromeUA() {
 // 一旦不一致即被判为伪造环境。Chromium 在 setUserAgent 后会自行按 UA 派生出与引擎完全一致的
 // 客户端提示，无需、也不应手动覆写。仅保留 setUserAgent（去 Electron 标识）。
 
-// 2026-09-21 停用 writeLovartUAPreload（及其依赖的 electron/lovart-ua-preload.js）：
-// 该 preload 通过 Object.defineProperty 改写 navigator.userAgentData / window.chrome /
-// navigator.languages，会留下 fn.toString() 的可探测痕迹，设备信任 SDK 据此判为「环境被篡改」。
-// 改为完全依赖引擎原生指纹（零注入），Lovart 以真实 Chromium 形态呈现。
+// ★ **零注入**：Lovart 容器不挂载任何自定义 preload —— 自定义 UA preload 通过 Object.defineProperty
+// 改写 navigator.userAgentData / window.chrome / navigator.languages，会留下 fn.toString() 的
+// 可探测痕迹，设备信任 SDK 据此判为「环境被篡改」。改为完全依赖引擎原生指纹（零注入）。
 
 ipcMain.handle('ensure-plain-session', async (_e, acc) => {
   try {
@@ -2838,10 +2839,9 @@ ipcMain.handle('ensure-lovart-container', async (_e, acc) => {
     const proxy = (acc && acc.proxy) || '';
     const ses = session.fromPartition(partition);
     const { ua } = await prepareLovartContainer(ses, partition, proxy);
-    // 不再挂载任何自定义 preload（含原 lovart-ua-preload）。该 preload 通过 Object.defineProperty
+    // ★ **零注入**：不挂载任何自定义 preload —— 自定义 UA preload 通过 Object.defineProperty
     // 改写 navigator.userAgentData / window.chrome / navigator.languages，会留下 fn.toString() 的可探测痕迹；
-    // 设备信任 SDK 据此判为「环境被篡改」→ 账号异常。改为完全依赖引擎原生指纹，让 webview 以真实
-    // Chromium 形态呈现（与多开器零注入的做法一致）。
+    // 设备信任 SDK 据此判为「环境被篡改」→ 账号异常。改为完全依赖引擎原生指纹（与多开器零注入的做法一致）。
     const preloadUrl = null;
     console.log('[lovart-container] ready | UA:', ua, '| proxy:', proxy || 'direct', '| partition:', partition, '| preload: none');
     return { ok: true, userAgent: ua, preloadUrl, proxy: normalizeProxy(proxy) || 'direct' };
@@ -2977,7 +2977,7 @@ ipcMain.handle('sync-lovart-session', async (_e, { accountId, partition } = {}) 
           await ses.cookies.remove(url, c.name);
         } catch { /* 个别删除失败不影响整体 */ }
       }
-    } catch { /* ignore */ }
+    } catch { /* 清旧 cookie 是 best-effort（失败仍继续注入新 cookie） */ }
     // 3b) 剔除 Cloudflare 指纹绑定 cookie 后再注入（登录态本身不含 CF cookie，不受影响）
     const CF_COOKIE_RE = /^(cf_clearance|__cf_bm|__cfruid|__cfhostmanager|__cf_cookies|__cfwait|__cfserverzone|cf_chl_[a-z0-9_]+|__cf_chl_[a-z0-9_]+|__cf_chl_[a-z0-9_]+_rc)$/i;
     const cookies = (dump.cookies || []).filter((c) => c && c.name && !CF_COOKIE_RE.test(c.name));

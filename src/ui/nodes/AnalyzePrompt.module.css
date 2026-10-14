@@ -19,17 +19,6 @@
   opacity: 0.92;
 }
 
-/* 浮在容器上沿之外（`YL.jsx` 无分析按钮 ⇒ 这条是本仓既有落点，见组件头注） */
-.floatAbove {
-  left: 50%;
-  bottom: 100%;
-  transform: translateX(-50%);
-  margin-bottom: var(--space-1);
-  padding: 0;
-  background: none;
-  opacity: 1;
-}
-
 .analyzeBtn {
   composes: btn btnSm from '../common/shared.module.css';
   box-shadow: var(--shadow-sm);

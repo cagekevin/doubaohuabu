@@ -15,17 +15,32 @@
  */
 
 import { PHASH_SIZE } from '@/constants/dedupe';
+import { log } from '@/lib/log';
 import { createCanvas, loadImage } from './image';
 
-/** 感知哈希（8×8 aHash → 16 位 hex）；失败返回 `null` */
+/**
+ * 感知哈希（8×8 aHash → 16 位 hex）；**失败返回 `null`**
+ *
+ * ⚠️ **三条失败路径都留痕（原则 6）** —— 此前它们**同返 `null`**、调用方无从区分
+ *   （「没有 DOM 环境」与「图解码不了」被当成同一件事 = 静默失败，`TD-16-11` / `TD-02-10`）。
+ *   返回类型仍是 `string | null`（`core/rules/dedupe` 的 `DedupeDeps.phash` 只关心"有没有哈希"），
+ *   **区分度落在日志上**：谁想查"为什么没去重"看得见原因。
+ */
 export async function perceptualHash(src: string, size: number = PHASH_SIZE): Promise<string | null> {
-  if (!src || typeof document === 'undefined' || typeof Image === 'undefined') return null;
+  if (!src || typeof document === 'undefined' || typeof Image === 'undefined') {
+    // ★ 无 DOM / 空源 —— 与"解码失败"**不是一回事**，分开留痕
+    log.warn('[phash] 无 DOM 环境或空源，感知哈希不可得');
+    return null;
+  }
   try {
     const img = await loadImage(src);
 
     const canvas = createCanvas(size, size);
     const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
+    if (!ctx) {
+      log.warn('[phash] 取 2d 上下文失败，感知哈希不可得');
+      return null;
+    }
 
     ctx.drawImage(img, 0, 0, size, size);
     const data = ctx.getImageData(0, 0, size, size).data;
@@ -47,8 +62,9 @@ export async function perceptualHash(src: string, size: number = PHASH_SIZE): Pr
       if ((gray[i] as number) >= avg) bits |= 1n << BigInt(i);
     }
     return bits.toString(16).padStart(16, '0');
-  } catch {
-    // 解码失败 → 返回 null（与源码一致：`catch { return null }`）
+  } catch (e: unknown) {
+    // ★ 解码失败 —— 与「无 DOM」**分开留痕**（原则 6：不静默；源码是 `catch { return null }`）
+    log.warn('[phash] 解码失败，感知哈希不可得：', e);
     return null;
   }
 }

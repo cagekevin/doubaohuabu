@@ -104,8 +104,8 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
       </div>
 
       {/*
-        ★ 分析提示词（原 179-192）—— 这套按钮 + 面板与生成节点**逐字相同**
-          ⇒ 判据 C1：复用 `ui/nodes/AnalyzePrompt.tsx`（第 3 处消费，仍走同一组件）
+        ★ 分析提示词（原 179-192）—— 这套按钮 + 面板与文生图节点**逐字相同**
+          ⇒ 判据 C1：复用 `ui/nodes/AnalyzePrompt.tsx`（第 2 处消费，仍走同一组件）
 
         ⚠️ **`leading` = 「编辑图片」**：源里 `mat-edit-float` 与 `mat-analyze-float` 是
            **同一个 `.mat-float-actions` 里的兄弟**（`fL.jsx:162-192`）⇒ 动作条由

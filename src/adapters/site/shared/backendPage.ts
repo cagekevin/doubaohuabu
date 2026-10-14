@@ -174,11 +174,6 @@ export function createBackendPage(): BackendPagePort {
       return isLeaseAlive(leases.get(leaseId), Date.now());
     },
 
-    // ★ 后台页租约快照（原 `oT` 25973）—— 表不导出（M6），只此一个读数口
-    leases(): readonly string[] {
-      return leaseSnapshot();
-    },
-
     // ★ 订阅租约快照（原 `sT` 25962）—— **立即用当前快照回调一次**（源 `e(Ck())`）
     subscribeLeases(cb: (accountIds: readonly string[]) => void): () => void {
       leaseSubscribers.add(cb);

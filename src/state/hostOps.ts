@@ -10,13 +10,13 @@
  *   |---|---|---|
  *   | `dragFileOut` | `host.media.startFileDrag` | `NewImagesPanel`（长按拖出到系统） |
  *   | `copyText` | `host.clipboard.writeText` | `VideoNode`（复制配方）· `AnalyzePrompt`（复制提示词） |
- *   | `saveTextFile` | `host.file.saveFile` | `TopBar`（导出工程 JSON） |
  *   | `importFiles` | `host.file.importFiles` | `LibraryPanel`（从文件添加素材） |
  *   | `selectFolder` | `host.file.selectFolder` | `DownloadNode`（选目录） |
  *   | `downloadFile` | `host.file.downloadFile` | `DownloadNode`（批量下载） |
  *   | `downloadFileAs` | `host.file.downloadFileAs` | `GenVideoNode`（`gv-dl` 另存为，2026-10-11） |
  *   | `revealPath` | `host.file.revealPath` | `GenVideoNode`（下载 toast 的「在文件夹中显示」，2026-10-11） |
  *   | `openExternal` | `host.file.openExternal` | `GalleryLightbox`（打开原图） |
+ *   | `getDolaMediaDownloadSettings` · `pickDolaMediaDownloadPath` · `downloadDolaMedia` · `clearDolaMedia` | `host.media.*` | `WatermarkPanel`（无水印资源面板，源 `SD.jsx` 的 4 个专用宿主方法） |
  *
  * ⚠️ 与 `licenseOps` / `sendQueue.readPanelPos` 同法：**只转发 + 归一**，不写第二份业务判据
  *    （业务在 `core/rules` / `usecases`；这些调用都**无编排**，故不包 `core/usecases` ——
@@ -75,9 +75,6 @@ export interface HostOpsController {
   /** 读**系统剪贴板里的图**（原 `window.api.readClipboardImage`，`_Component42.jsx:1252`）—— `Ctrl+V` 的**图片回落**用 */
   readClipboardImage(): Promise<Result<ClipboardImage | null>>;
 
-  /** 系统「另存为」对话框写文本文件（原 `TopBar` 导出工程 —— `host.file.saveFile`） */
-  saveTextFile(content: string): Promise<Result<{ path?: string }>>;
-
   /** 系统「打开文件」对话框选素材（`LibraryPanel` 从文件添加 —— `host.file.importFiles`） */
   importFiles(): Promise<Result<PickedFile[]>>;
 
@@ -120,6 +117,21 @@ export interface HostOpsController {
   /** 用系统默认程序打开外链（`GalleryLightbox` 打开原图 —— `host.file.openExternal`） */
   openExternal(url: string): Promise<Result<void>>;
 
+  // ── 无水印资源面板（`WatermarkPanel` —— `host.media.*`；源 `SD.jsx` 的 4 个专用宿主方法）──
+  /** 读下载设置（源 `getDownloadSettings`，`SD.jsx:22`） */
+  getDolaMediaDownloadSettings(): Promise<Result<{ path?: string; configured?: boolean }>>;
+  /** 选下载目录（源 `pickDownloadPath`，`SD.jsx:48`）；**取消 ⇒ `ok({canceled:true})`**（不是失败） */
+  pickDolaMediaDownloadPath(): Promise<
+    Result<{ path?: string; configured?: boolean; canceled?: boolean }>
+  >;
+  /** 下载一条无水印资源（源 `downloadDolaMedia`，`SD.jsx:136`；走设置目录 + 自动命名） */
+  downloadDolaMedia(
+    url: string,
+    mediaType: 'image' | 'video',
+  ): Promise<Result<{ path?: string; size?: number }>>;
+  /** 清空捕获列表（源 `clearDolaMedia`，`SD.jsx:78-88`；清空后后端会推空列表让面板自动变空） */
+  clearDolaMedia(): Promise<Result<void>>;
+
   // ── 人脸检测 / 遮脸（`FaceMarksLayer` —— `host.media.*`）★ **渲染层本地能力** ──
   /**
    * 人脸检测（原 `qD`）
@@ -150,7 +162,6 @@ export function createHostOps(ports: Ports): HostOpsController {
     copyImage: (img) => ports.host.clipboard.writeImage(img),
     onClipboardImageChanged: (cb) => ports.host.clipboard.onChanged(cb),
     readClipboardImage: () => ports.host.clipboard.readImage(),
-    saveTextFile: (content) => ports.host.file.saveFile(content),
     importFiles: () => ports.host.file.importFiles(),
     selectFolder: () => ports.host.file.selectFolder(),
     downloadFile: (url, fileName) => ports.host.file.downloadFile(url, fileName),
@@ -159,6 +170,11 @@ export function createHostOps(ports: Ports): HostOpsController {
     // ★ 收 `img://` 引用的那个（主进程会先 resolve；与 `revealPath` 收的**不是**同一种东西）
     showInFolder: (ref) => ports.host.media.showInFolder(ref),
     openExternal: (url) => ports.host.file.openExternal(url),
+    // ★ 无水印资源面板（源 `SD.jsx` 的 4 个专用宿主方法）：只转发（无编排、无第二份判据）
+    getDolaMediaDownloadSettings: () => ports.host.media.getDolaMediaDownloadSettings(),
+    pickDolaMediaDownloadPath: () => ports.host.media.pickDolaMediaDownloadPath(),
+    downloadDolaMedia: (url, mediaType) => ports.host.media.downloadDolaMedia(url, mediaType),
+    clearDolaMedia: () => ports.host.media.clearDolaMedia(),
     // ★ 人脸（`TD-16-107`）：**只转发**（无编排、无第二份判据 —— 与上面各方法同法）
     detectFaces: (src) => ports.host.media.detectFaces(src),
     faceDetectStats: () => ports.host.media.faceDetectStats(),

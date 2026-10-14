@@ -15,6 +15,7 @@ const diag = (over: Partial<ScanDiag> = {}): ScanDiag => ({
   shadowCount: 0,
   imgTotal: 0,
   imgUsable: 0,
+  perfImg: 0,
   canvasCount: 0,
   canvases: [],
   itemsRaw: 0,
@@ -35,17 +36,18 @@ describe('formatScanDiag（原 `GT`）', () => {
     expect(formatScanDiag(diag({ docCount: 0 }))).toBe('文档 1 · img 0（可用 0） · 候选 0→0');
   });
 
-  it('★ 档位**顺序即语义**：文档 → iframe → shadowRoot → img → canvas → 候选', () => {
+  it('★ 档位**顺序即语义**：文档 → iframe → shadowRoot → img → 网络图 → canvas → 候选', () => {
     const s = formatScanDiag(
-      diag({ docCount: 3, iframeCount: 2, shadowCount: 5, imgTotal: 32, imgUsable: 4, canvasCount: 1, itemsRaw: 32, itemsKept: 4 }),
+      diag({ docCount: 3, iframeCount: 2, shadowCount: 5, imgTotal: 32, imgUsable: 4, perfImg: 6, canvasCount: 1, itemsRaw: 32, itemsKept: 4 }),
     );
-    expect(s).toBe('文档 3 · iframe 2 · shadowRoot 5 · img 32（可用 4） · canvas 1 · 候选 32→4');
+    expect(s).toBe('文档 3 · iframe 2 · shadowRoot 5 · img 32（可用 4） · 网络图 6 · canvas 1 · 候选 32→4');
   });
 
-  it('★ 「有才出」的四档：为 0 时**整档不出现**', () => {
+  it('★ 「有才出」的五档：为 0 时**整档不出现**', () => {
     const s = formatScanDiag(diag({ iframeCount: 0, shadowCount: 0, canvasCount: 0 }));
     expect(s).not.toContain('iframe');
     expect(s).not.toContain('shadowRoot');
+    expect(s).not.toContain('网络图');
     expect(s).not.toContain('canvas');
   });
 
@@ -59,13 +61,13 @@ describe('formatScanDiag（原 `GT`）', () => {
 });
 
 describe('normalizeScanDiag（页内脚本是运行时数据 ⇒ 必须收窄）', () => {
-  it('★ 八个字段齐全且都是有限数 ⇒ 原样收下', () => {
-    const raw = { docCount: 1, iframeCount: 2, shadowCount: 3, imgTotal: 4, imgUsable: 5, canvasCount: 6, canvases: [], itemsRaw: 7, itemsKept: 8 };
+  it('★ 九个字段齐全且都是有限数 ⇒ 原样收下', () => {
+    const raw = { docCount: 1, iframeCount: 2, shadowCount: 3, imgTotal: 4, imgUsable: 5, perfImg: 9, canvasCount: 6, canvases: [], itemsRaw: 7, itemsKept: 8 };
     expect(normalizeScanDiag(raw)).toEqual(raw);
   });
 
   it('★ **缺任一字段 ⇒ `null`**（不补默认值 —— 补了就是把"没给"伪装成"是 0"）', () => {
-    const full = { docCount: 1, iframeCount: 2, shadowCount: 3, imgTotal: 4, imgUsable: 5, canvasCount: 6, canvases: [], itemsRaw: 7, itemsKept: 8 };
+    const full = { docCount: 1, iframeCount: 2, shadowCount: 3, imgTotal: 4, imgUsable: 5, perfImg: 9, canvasCount: 6, canvases: [], itemsRaw: 7, itemsKept: 8 };
     for (const k of Object.keys(full)) {
       const partial: Record<string, unknown> = { ...full };
       delete partial[k];

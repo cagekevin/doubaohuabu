@@ -22,7 +22,6 @@
     "gate:status": "node scripts/gates-run.mjs status",
     "gate:off": "node scripts/gates-run.mjs off",
     "gate:on": "node scripts/gates-run.mjs on",
-    "spec:ui": "node scripts/ui-spec/extract-ui-inventory.cjs && node scripts/ui-spec/gen-ui-spec.cjs",
     "census:ssot": "node scripts/census-ssot.cjs",
     "css": "node scripts/css.mjs",
     "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File packing/icon.ps1 -Source \"画布网站图标.png\"",

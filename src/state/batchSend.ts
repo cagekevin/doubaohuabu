@@ -29,6 +29,7 @@ import type { AppStore } from './store';
 import type { Ports } from '@/core/ports';
 import { err, ok, type Result } from '@/core/model/result';
 import { busyIdsOf } from '@/core/rules/accountBusy';
+import { BATCH_SENDABLE_TYPES } from '@/core/rules/batchTargets';
 // ★ 名字不再重复（结构约束 M1，`docs/11` §六·六）：跨进程报文 = `WirePayload`；
 //   站点入参 = `SiteSendPayload`（品牌类型，只由 `toSitePayload` 产出）
 import { buildVideoPayload, toSitePayload, type WirePayload } from '@/core/rules/payload';
@@ -41,7 +42,8 @@ import {
 import { collectLinkedTexts } from '@/core/rules/graph';
 import { stripHtml } from '@/lib/text';
 import { resolveSendAccountForChain, type SendAccountChoice } from '@/core/usecases/sendToSite';
-import { stylePrefixOf } from '@/core/rules/style';
+import { resolveStyles } from '@/core/rules/style';
+import { makeRecipe } from '@/core/rules/recipe';
 import type { PendingAttemptController } from './pendingAttempt';
 import {
   runBatchSend,
@@ -57,9 +59,6 @@ export interface BatchSendController {
   /** 供面板判断"能不能发"（选中 ≥2 个可发送节点） */
   canRun(nodeIds: readonly string[]): boolean;
 }
-
-/** 可批量发送的节点类型（原 `$p` 41575：`text` / `genvideo`） */
-const SENDABLE_TYPES: readonly string[] = ['text', 'genvideo'];
 
 /**
  * 发送管道（`prepare` + `transport`）—— ★ **批量发送与发送队列共用同一套**
@@ -90,7 +89,7 @@ export function createSendPipeline(
     const node = s.nodes.find((n) => n.id === nodeId);
     // 原 `jS` 41237-41243：节点不存在或不是 `text`/`genvideo`（`SendFailKind` 里没有 `not-text`
     //   ⇒ 按 `unknown` 报，原文照旧）
-    if (!node || (node.type !== 'text' && node.type !== 'genvideo')) {
+    if (!node || !BATCH_SENDABLE_TYPES.includes(node.type)) {
       return err('unknown', '节点不存在或不是文本框');
     }
     const data = node.data;
@@ -156,25 +155,53 @@ export function createSendPipeline(
     s.clearNodeNotice(nodeId);
     s.clearNodeSwitch(nodeId);
 
-    // ④ 报文（原 `TL` = 本工程的 `buildVideoPayload`，与 `generate.ts` 的网页通道**同源**）
+    // ④ 生成参数 + 风格（源 `jS` 41368-41369 的 `u3` / `nu`）
+    const genModel = node.type === 'genvideo' ? node.data.model : (data.model as string | undefined);
+    const genDuration = node.type === 'genvideo' ? node.data.duration : (data.duration as number | undefined);
+    const genRatio = node.type === 'genvideo' ? node.data.aspectRatio : (data.aspectRatio as string | undefined);
+    // ★ 2026-10-11（TD-07-1）：风格解析收在**纯层** `core/rules/style.resolveStyles`（源 `nu`），
+    //   并传**当前风格表**（源 `nu(styleIds, G.styles)` 也是查 store 的表，不是内置表）
+    const styleIds =
+      (node.type === 'genvideo' ? node.data.styleIds : (data.styleIds as string[] | undefined)) ?? [];
+    const resolvedStyle = resolveStyles(styleIds, store.useStore.getState().styles);
+
+    // ⑤ 报文（原 `TL` = 本工程的 `buildVideoPayload`，与 `generate.ts` 的网页通道**同源**）
     const payload = buildVideoPayload({
       account: { id: choice.account.id, name: choice.account.name, partition: choice.account.partition },
       text: body,
-      model: node.type === 'genvideo' ? node.data.model : (data.model as string | undefined),
-      duration: node.type === 'genvideo' ? node.data.duration : (data.duration as number | undefined),
-      ratio: node.type === 'genvideo' ? node.data.aspectRatio : (data.aspectRatio as string | undefined),
+      model: genModel,
+      duration: genDuration,
+      ratio: genRatio,
       images,
       sourceNodeId: node.id,
-      // ★ 2026-10-11（TD-07-1）：前缀拼接改用**纯层** `core/rules/style.stylePrefixOf`，
-      //   并传**当前风格表**（源 `nu(styleIds, G.styles)` 也是查 store 的表，不是内置表）
-      stylePrefix: stylePrefixOf(
-        (node.type === 'genvideo' ? node.data.styleIds : (data.styleIds as string[] | undefined)) ?? [],
-        store.useStore.getState().styles,
-      ),
+      stylePrefix: resolvedStyle.prefix,
       now: ports.clock.now(),
     });
 
-    return ok({ account: choice.account, site: choice.site, operation: payload });
+    // ⑥ 配方（原 `jS` 41393-41405 的 `oR`）—— ★ 落进节点 `data.recipe`（视频节点的「配方 chip /
+    //   复制配方 / 按配方重跑」读它）。入参逐个对源：`body` = 组装后正文 · `model/duration/ratio`
+    //   = 生成参数 · `styleId` = 首个风格 · `styleName` = 命中风格名 `join('、')` · `images` = 参考图 ·
+    //   `textRefs` = 关联文本 · `mediaType` = `'video'`（源写死）
+    const recipe = makeRecipe(
+      {
+        body,
+        // ⚠️ **原样透传**（不预转 `?? null`）：源 `oR` 对 `undefined` 走 `Number.isFinite` ⇒ `null`，
+        //   对 `null` 走 `Number(null)=0` ⇒ `0` —— 预转会把这个 quirk 抹平
+        model: genModel,
+        duration: genDuration,
+        ratio: genRatio,
+        styleId: styleIds[0] ?? null,
+        styleName: resolvedStyle.names.join('、'),
+        images,
+        textRefs: linked,
+        accountId: choice.account.id,
+        accountName: choice.account.name,
+        mediaType: 'video',
+      },
+      ports.clock.now(),
+    );
+
+    return ok({ account: choice.account, site: choice.site, operation: payload, recipe });
   };
 
   const transport: TransportFn = async ({ account, site, operation }, opts) => {
@@ -240,7 +267,7 @@ export function createBatchSendController(
     canRun(nodeIds) {
       const s = store.useStore.getState();
       const hit = new Set(nodeIds);
-      return s.nodes.filter((n) => hit.has(n.id) && SENDABLE_TYPES.includes(n.type)).length >= 2;
+      return s.nodes.filter((n) => hit.has(n.id) && BATCH_SENDABLE_TYPES.includes(n.type)).length >= 2;
     },
 
     run(nodeIds, cb) {

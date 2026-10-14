@@ -37,8 +37,13 @@ export const EDGE_MARKER = {
   width: 16,
   height: 16,
 } as const;
-/** 切项目后 fitView 延迟（ms） */
-export const FITVIEW_DELAY_MS = 250;
+/** fitView 动画时长（ms，原 `_Component42.jsx:500-515` 的 `duration: 250`） */
+export const FITVIEW_DURATION_MS = 250;
+/**
+ * 「**定位到某批节点**」的动画时长（ms，原 `fitViewAction` 的 `duration: 400`
+ * ＋ `maxZoom: 1`，`_Component42.jsx:519-530`）—— 与上面那次**不是同一档**（源两处值不同）。
+ */
+export const FITVIEW_FOCUS_DURATION_MS = 400;
 
 // ── 批量发送触发条（原 `L3.jsx:20-49` 的视口数学；常量见 `shared.js:42448-42451`）──
 //
@@ -120,6 +125,15 @@ export const GEN_WM_DIRECT_TIMEOUT_MS = 5000;
  */
 export const GEN_CANVAS_EXPORT_TIMEOUT_MS = 25000;
 /**
+ * **批量取图的整体超时**（ms，原 `mP`，`shared.js:33652` ＝ 150000 ＝ 150s）
+ *
+ * ⚠️ 兜的是「`onLovartFetchDone` **永不达**」（后端异常 / 进程挂）——
+ *    源 `vP` 末尾 `setTimeout(() => f({timeout:true}), mP)`（`shared.js:33762-33766`）就是这个。
+ *    缺它 ⇒ Promise **永远悬着** ⇒ 扫描链静默挂起（用户点了扫描，转圈不结束）。
+ * ⚠️ 超时 ⇒ 整批**如实失败**（`reason: 'page-timeout'`），由调用方逐张计失败（不静默）。
+ */
+export const FETCH_IMAGES_TIMEOUT_MS = 150000;
+/**
  * **发送后前 10 秒**内扫到的"新图"一律跳过（原 `IR` 36234）
  *
  * ⚠️ 源 `:36466` 的 `P - h < IR || p0(...) >= 2` 是**同一个 `if` 的两个子句**：
@@ -199,8 +213,6 @@ export const GEN_ATTEMPT_WINDOW_MS = 1500;
 export const PAGE_TIMEOUT_SHORT_MS = 12000;
 /** 页面无响应超时（ms，原 `Vo` 23618） */
 export const PAGE_TIMEOUT_LONG_MS = 25000;
-/** 抓取并发（原 `wR` 35946） */
-export const SCAN_CONCURRENCY = 3;
 /**
  * 发送任务的有效时效（ms，原 `qk` 35734 = 3000000 = 50 分钟）
  * ⚠️ 用途：视频回填匹配时，只认「最近 50 分钟内发过」的任务（原 `Kk` 的第三个过滤条件）

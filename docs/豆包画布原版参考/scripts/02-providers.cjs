@@ -19,6 +19,32 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const vm = require('vm');
+
+/**
+ * 强制按 **CommonJS** 解释地加载一个文件。
+ *
+ * 【为什么需要】`inputs/electron/**` 是**原版未混淆源码**，全是 CJS（`module.exports` / `require`）；
+ *   但本仓根 `package.json` 有 `"type": "module"` ⇒ 那个 `.js` 被当成 ESM ⇒ 直接 `require()` 会抛
+ *   `ReferenceError: require is not defined in ES module scope`，`99-build-spec.cjs` 的新鲜度闸随即卡住。
+ *   ⇒ 用 `vm.compileFunction` 按**普通脚本**编译（不看 `package.json` 的 `type`），并自建 `require`。
+ * 【边界】相对/绝对路径 ⇒ 递归走本函数（同样强制 CJS）；其余（内置模块 / node_modules）⇒ 交回真 `require`。
+ */
+function loadCjs(file) {
+  const mod = { exports: {} };
+  const dirname = path.dirname(file);
+  const localRequire = (spec) => {
+    if (spec.startsWith('.') || path.isAbsolute(spec)) {
+      const resolved = path.resolve(dirname, spec);
+      return loadCjs(fs.existsSync(resolved) ? resolved : `${resolved}.js`);
+    }
+    return require(spec);
+  };
+  localRequire.resolve = (spec) => spec;
+  const fn = vm.compileFunction(fs.readFileSync(file, 'utf8'), ['exports', 'require', 'module', '__filename', '__dirname'], { filename: file });
+  fn(mod.exports, localRequire, mod, file, dirname);
+  return mod.exports;
+}
 
 const ROOT = path.resolve(__dirname, '..');
 const API_DIR = path.join(ROOT, 'inputs', 'electron', 'api');
@@ -61,9 +87,9 @@ function extractEndpoints(fn) {
   return [...set];
 }
 
-// require provider（纯数据 + 纯函数模块，安全）
+// 加载 provider（纯数据 + 纯函数模块，安全；⚠️ 必须走 `loadCjs`，见其头注）
 function extractProvider(file) {
-  const adapter = require(file);
+  const adapter = loadCjs(file);
   return {
     id: adapter.id,
     name: adapter.name,

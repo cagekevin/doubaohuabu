@@ -75,7 +75,6 @@ function makeApi(script: Array<{ ok: true } | { reason: Parameters<typeof err>[0
     return step;
   };
   const api: ApiPort = {
-    providersList: async () => ok([]),
     configGet: async () => ok({ providers: [], configs: {} }),
     configSet: async () => ok({ config: {} }),
     configSetKey: async () => ok({}),

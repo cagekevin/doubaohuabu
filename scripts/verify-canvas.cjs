@@ -14,8 +14,7 @@ const path = require('node:path');
 // playwright 已是本工程 devDependency ⇒ 用**裸模块名**解析。
 // ⚠️ 原先指向兄弟目录 `逆向专用/node_modules/playwright` —— 那个目录**会话中途消失过一次**，
 //    导致全部验证脚本当场瘫痪（`MODULE_NOT_FOUND`）⇒ 不再依赖工程外路径。
-const PW = process.env.PW_PATH || 'playwright';
-const { chromium } = require(PW);
+const { launchBrowser } = require('./_pw.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
@@ -80,7 +79,7 @@ const project = [
   const url = `http://127.0.0.1:${server.address().port}/index.html`;
   console.log('serving:', url);
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
   await page.addInitScript((p) => {
@@ -120,11 +119,77 @@ const project = [
       minimap: !!document.querySelector('.react-flow__minimap'),
       controls: !!document.querySelector('.react-flow__controls'),
       background: !!document.querySelector('.react-flow__background'),
+      /**
+       * ★ 端口数（按节点类型）—— ReactFlow 的 `Handle` 恒带
+       *   `react-flow__handle-left`（target）/ `-right`（source）⇒ 可数。
+       *   判据 = 源：`WL.jsx:149` 下载节点 `<_Component30 source={false}/>`（仅 target）·
+       *   `GL.jsx` 组节点**无** `_Component30` · `fL.jsx` / `BL.jsx` 及其余节点全挂。
+       */
+      handles: (() => {
+        const h = {};
+        document.querySelectorAll('.react-flow__node').forEach((n) => {
+          let t = '';
+          for (const c of n.classList) {
+            const m = /^react-flow__node-(.+)$/.exec(c);
+            if (m) t = m[1];
+          }
+          if (!t) return;
+          h[t] = {
+            target: n.querySelectorAll('.react-flow__handle-left').length,
+            source: n.querySelectorAll('.react-flow__handle-right').length,
+          };
+        });
+        return h;
+      })(),
     };
   });
 
   const expected = ['account', 'download', 'genvideo', 'group', 'imggen', 'material', 'text', 'video'];
   const appErrors = events.filter((e) => !isNoise(e[1]));
+
+  /** 期望端口：下载 = 仅 target · 组 = 无 · 其余 6 类 = target + source */
+  const expectedHandles = Object.fromEntries(
+    expected.map((t) =>
+      t === 'download'
+        ? [t, { target: 1, source: 0 }]
+        : t === 'group'
+          ? [t, { target: 0, source: 0 }]
+          : [t, { target: 1, source: 1 }],
+    ),
+  );
+  // ⚠️ 逐键比对（**不能** `JSON.stringify` 整对象 —— 键序随渲染顺序变，与判据无关）
+  const handlesOk =
+    Object.keys(rendered.handles).length === expected.length &&
+    expected.every((t) => {
+      const a = rendered.handles[t];
+      const e = expectedHandles[t];
+      return !!a && a.target === e.target && a.source === e.source;
+    });
+
+  // ── ⑧ 选择工具条的**视口联动定位**（原 `se`，`_Component42.jsx:131-152`）──
+  // ⚠️ 必须用**真实鼠标**（同 verify-del 的坑：合成事件绕过 React / ReactFlow 的指针处理）。
+  // ⚠️ 点**节点头部**（n-text 正文是 `contentEditable`，点中心会把焦点交给编辑器 ⇒ 选不中）。
+  //    第二个用 **Shift** 加选（`multiSelectionKeyCode={['Shift','Meta']}`）。
+  const headClick = async (id, shift) => {
+    const b = await page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox();
+    if (!b) return;
+    if (shift) await page.keyboard.down('Shift');
+    await page.mouse.click(b.x + b.width / 2, b.y + 10);
+    if (shift) await page.keyboard.up('Shift');
+    await new Promise((r) => setTimeout(r, 300));
+  };
+  await headClick('n-text', false);
+  await headClick('n-genvideo', true);
+  /** 工具条的内联 style（原 `style={se}`）—— `left/top` 必须是 **px**（视口坐标），不是 CSS 的 `50%` */
+  const toolbar = await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="selection-toolbar"]');
+    return el ? { left: el.style.left, top: el.style.top, transform: el.style.transform } : null;
+  });
+  const anchorOk =
+    !!toolbar &&
+    /px$/.test(toolbar.left) &&
+    /px$/.test(toolbar.top) &&
+    toolbar.transform.startsWith('translate(-50%');
 
   console.log('\n════════ W13 判据 ════════');
   const checks = [
@@ -134,6 +199,8 @@ const project = [
     ['④ 节点数 = 8', rendered.nodeCount === 8, `实际 ${rendered.nodeCount}`],
     ['⑤ 边渲染', rendered.edgeCount === 1, `实际 ${rendered.edgeCount}`],
     ['⑥ Background / Controls / MiniMap 就位', rendered.background && rendered.controls && rendered.minimap, JSON.stringify({ bg: rendered.background, ctrl: rendered.controls, mini: rendered.minimap })],
+    ['⑦ ★ 端口按源配置（下载仅 target · 组无 · 其余全挂）', handlesOk, JSON.stringify(rendered.handles)],
+    ['⑧ ★ 选择工具条视口联动定位（内联 left/top/transform）', anchorOk, JSON.stringify(toolbar)],
   ];
   let pass = true;
   for (const [name, ok, detail] of checks) {

@@ -74,6 +74,50 @@ export function defaultNodeData<T extends NodeType>(type: T): NodeDataOf<T> {
   return JSON.parse(JSON.stringify(d)) as NodeDataOf<T>;
 }
 
+/**
+ * 建**生成类**节点时**沿用画布上「上一个同类节点」的设置**（原 `addGenVideo` 29496 / `addGenImage` 29536）
+ *
+ * 源逐字：`[...nodes].reverse().find(n => n.type === X)` 取**最后一个同类节点**，
+ * 把它 `data` 里的设置按「真值才沿用」合并进新节点（`u.X || 兜底`）。
+ *
+ * ⚠️ 返回的是**要覆盖 `defaultNodeData` 的 patch**（由调用方 `{...defaultNodeData, ...本函数, ...显式patch}` 合并）。
+ *
+ * ⚠️ 与源的两处**有意差异**（都是本仓既有裁定，不在本函数内改）：
+ *   ① 兜底值取本仓 `defaultNodeData`（比例 = `NODE_DEFAULT_RATIO_LABEL` 4:3，源是 `16:9`/`1:1`，用户裁定）；
+ *   ② 源还叠一层 `canvasDefaults`（`d.ratio`/`d.duration`/`d.model`）—— 本仓那一层在**读侧**
+ *      （`GenPanel.tsx` 的 `data.X || canvasDefaults.X || 兜底`），此处**不重复**。
+ *
+ * ⚠️ 字段清单**逐字对源**：
+ *   · 共有：`aspectRatio`（真值）· `sendAccount`（真值）· `styleIds`（数组即沿用，浅拷贝）
+ *   · `genvideo`：`duration`（真值）· `model`（**非 `undefined`/`null` 即沿用**，可含空串）· `channel`（真值才**加键**）
+ *   · `imggen`：`channel`（真值）· `imageCount`（真值）· `igModel`（真值才**加键**）· `igResolution`（真值）
+ */
+export function inheritGenNodeData(
+  type: 'genvideo' | 'imggen',
+  nodes: readonly { type: string; data?: unknown }[],
+): Record<string, unknown> {
+  const prev = [...nodes].reverse().find((n) => n.type === type);
+  const raw = prev?.data;
+  const u: Record<string, unknown> =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const out: Record<string, unknown> = {};
+  if (u.aspectRatio) out.aspectRatio = u.aspectRatio;
+  if (u.sendAccount) out.sendAccount = u.sendAccount;
+  if (Array.isArray(u.styleIds)) out.styleIds = [...u.styleIds];
+  if (type === 'genvideo') {
+    if (u.duration) out.duration = u.duration;
+    // 源 `u.model !== undefined && u.model !== null ? u.model : d.model || null`
+    if (u.model !== undefined && u.model !== null) out.model = u.model;
+    if (u.channel) out.channel = u.channel;
+  } else {
+    if (u.channel) out.channel = u.channel;
+    if (u.imageCount) out.imageCount = u.imageCount;
+    if (u.igModel) out.igModel = u.igModel;
+    if (u.igResolution) out.igResolution = u.igResolution;
+  }
+  return out;
+}
+
 /** 组节点的固定 zIndex（原 31577） */
 export const GROUP_NODE_Z_INDEX = GROUP_Z_INDEX;
 

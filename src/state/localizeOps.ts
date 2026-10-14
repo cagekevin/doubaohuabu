@@ -31,8 +31,9 @@ import { log } from '@/lib/log';
 
 /** 视频本地化控制器 */
 export interface LocalizeOpsController {
-  /** 本地化**单个**节点（写完 `url` / `resultUrl` 后立刻调 —— 源 3 处调用点都是这个时机） */
-  localizeNode(nodeId: string): Promise<void>;
+  // ⚠️ 这里**没有** `localizeNode` —— 本地化单个节点的唯一入口是**导出的** `localizeNodeInto`
+  //   （它的 3 个消费者都在 `state/**` 内部、本就持有 `store` / `ports`，无需再经控制器注入）。
+  //   控制器上再挂一个 `localizeNode` ＝ 同一动作的**第二入口**（已删）。
   /** **全量**回填（源 `backfillLocalVideos` 31055；启动 5s 后调一次） */
   backfill(): Promise<void>;
 }
@@ -74,7 +75,6 @@ export async function localizeNodeInto(
 
 export function createLocalizeOps(store: AppStore, ports: Ports): LocalizeOpsController {
   return {
-    localizeNode: (nodeId) => runNode(store, ports, nodeId),
     backfill: async () => {
       applyOutcome(
         store,

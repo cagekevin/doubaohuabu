@@ -150,7 +150,7 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
       if (accountId) satisfiedAt.set(accountId, now);
 
       try {
-        landVideo(store, {
+        landVideo(store, ports, {
           url: item.url,
           // ⚠️ 源在视频支里 `vid` 用的**就是 url**（`addVideoNode({ vid: Y.url })`，`:305/311`）
           vid: item.url,
@@ -171,9 +171,13 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
 
   /** 图像支（原 `:154-231` + `ingestImageGenCdp` `:27454-27499`）—— CDP 推送图像 → 下载 → 落点 */
   const ingestImageGenCdp = async (job: CdpJob, url: string): Promise<void> => {
-    // ① 下载（原 `ingestImageGenCdp` 的 `imageFetchDataUrl`，`:27466-27480`；失败静默 —— 源 `try{}catch{}` 吞）
+    // ① 下载（原 `ingestImageGenCdp` 的 `imageFetchDataUrl`，`:27466-27480`）—— 源是 `try{}catch{}` 空吞；
+    //   本仓**留痕不吞**（原则 6），失败原样记但不中断
     const fetched = await ports.host.media.imageFetchDataUrl(url);
-    if (!fetched.ok || !fetched.value) return;
+    if (!fetched.ok || !fetched.value) {
+      log.warn('[dolaMedia] 图像回流取图失败：', fetched);
+      return;
+    }
 
     // ② 落点（原 `:27489-27498`）—— key 由作业 id 取回；**释放占用在 `addImageGenResult` 内部**
     //   （原 `:27440-27444`，此处不再另写一份）
@@ -226,6 +230,8 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
 
     handle(event) {
       if (!event || !Array.isArray(event.items)) return;
+      // ★ 整批替换「无水印资源」面板的捕获列表（原 `oe(ve.items)`，`_Component43.jsx:137`）
+      st().setDolaMediaItems(event.items);
       handleImages(event.items);
       handleVideos(event.items);
     },

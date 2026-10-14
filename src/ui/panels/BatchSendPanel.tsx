@@ -38,6 +38,8 @@ import {
   BS_TRIGGER_OFFSET_Y,
 } from '@/constants';
 import { BATCH_SEND_TEXT } from '@/constants/text';
+import { planSelectionAnchor } from '@/core/rules/panelAnchor';
+import { BATCH_SENDABLE_TYPES } from '@/core/rules/batchTargets';
 import { log } from '@/lib/log';
 import styles from './BatchSendPanel.module.css';
 import shared from '@/ui/common/shared.module.css';
@@ -64,7 +66,7 @@ export function BatchSendPanel() {
   /** 入队要节点名（与批量列表同口径）⇒ 从 store 取一次全量，再按 id 找 */
   const allNodes = useStore((s) => s.nodes);
   const targetIds = useMemo(
-    () => nodes.filter((n) => n.selected && (n.type === 'text' || n.type === 'genvideo')).map((n) => n.id),
+    () => nodes.filter((n) => n.selected && BATCH_SENDABLE_TYPES.includes(n.type)).map((n) => n.id),
     [nodes],
   );
 
@@ -74,27 +76,17 @@ export function BatchSendPanel() {
   const { getNodesBounds } = useReactFlow();
 
   /**
-   * ★ 触发条落点（原 `L3.jsx:20-49`，**逐行**）—— 相对 `.wrap`/`.react-flow` 原点的视口坐标。
+   * ★ 触发条落点（原 `L3.jsx:20-49`）—— 贴**选中包围盒**、相对 `.wrap` 原点的视口坐标。
    *
-   * 源逐行：
-   * ```js
-   * if (r.length < 2) return null;                       // r = 选中的 text/genvideo
-   * const S = e.filter(R => R.selected);
-   * if (S.length < 2) return null;                       // 选中总数 < 2 也不出
-   * let E; try { E = n(S); } catch { return null; }
-   * const P = t.zoom || 1;
-   * const j = (E.x + E.width / 2) * P + t.x;             // 中心 X
-   * const I = E.y * P + t.y;                             // 上边 Y
-   * const z = (E.y + E.height) * P + t.y;                // 下边 Y
-   * const O = I - Xd - Yd - Jd >= R3;                    // 上方放得下吗
-   * return { left: j, top: O ? I - Xd - Yd - Jd : z + Xd + Yd + Jd,
-   *          transform: O ? 'translate(-50%, -100%)' : 'translate(-50%, 0)' };
-   * ```
+   * ⚠️ 数学在纯层 `planSelectionAnchor`（与「选择工具条」**共用一份** —— 两处源逐行同形，判据 C1）；
+   *    常数照 `L3.jsx`：`aboveOffset` / `belowOffset` / `flipReserve` **三者同值**
+   *    （`BS_TRIGGER_MARGIN_X + BS_TRIGGER_OFFSET_Y + BS_TRIGGER_GAP`）。
    * ⚠️ 源的 `catch {}` 是**空吞**（ReactFlow 实例未就绪时会抛）—— 本实现**留痕**（原则 6），
    *    语义等价（失败 ⇒ 不出触发条，不重试）。
    */
   const triggerPos = useMemo(() => {
-    if (targetIds.length < 2) return null;
+    // ★ 判据走 **state 层唯一入口**（`batchSend.canRun`）—— 不在此内联重写「≥2 个可发送」
+    if (!batch.canRun(targetIds)) return null;
     const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
     if (selectedIds.length < 2) return null;
     let bounds: { x: number; y: number; width: number; height: number };
@@ -104,18 +96,16 @@ export function BatchSendPanel() {
       log.warn('[BatchSendPanel] getNodesBounds 失败（画布未就绪？）:', err);
       return null;
     }
-    const zoom = viewport.zoom || 1;
-    const centerX = (bounds.x + bounds.width / 2) * zoom + viewport.x;
-    const topY = bounds.y * zoom + viewport.y;
-    const bottomY = (bounds.y + bounds.height) * zoom + viewport.y;
     const offset = BS_TRIGGER_MARGIN_X + BS_TRIGGER_OFFSET_Y + BS_TRIGGER_GAP;
-    const above = topY - offset >= BS_TRIGGER_MIN_TOP;
-    return {
-      left: centerX,
-      top: above ? topY - offset : bottomY + offset,
-      transform: above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
-    };
-  }, [nodes, targetIds, viewport, getNodesBounds]);
+    return planSelectionAnchor({
+      bounds,
+      viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom || 1 },
+      aboveOffset: offset,
+      belowOffset: offset,
+      flipReserve: offset,
+      minTop: BS_TRIGGER_MIN_TOP,
+    });
+  }, [nodes, targetIds, viewport, getNodesBounds, batch]);
 
   const abortAll = (): void => {
     abortedRef.current = true;

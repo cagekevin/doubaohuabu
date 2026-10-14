@@ -56,6 +56,19 @@
   background: var(--color-surface-sunken);
 }
 
+/*
+ * ★ **出图条拖拽落点高亮**（原 `.nip-drop-active`，`_Component26.jsx:261`）
+ *
+ * ⚠️ 源是给 `.doubao-view-webviews` 挂**全局**类；本仓不开全局类 —— 由 `NewImagesPanel` 经
+ *   `onDropActiveChange` 把「按下中」交给本组件，在这里加 CSS-modules 类（同容器、无跨层问题）。
+ * ⚠️ **源样式真值不可得**（原版 CSS `index-Dg_Oc7MR.css` 未入库）⇒ 按语义**自拟**（同 `.nip-ghost` 先例），
+ *   全走 token；待人工核对视觉。
+ */
+.webviewsDropActive {
+  outline: 2px solid var(--color-action-primary);
+  outline-offset: -2px;
+}
+
 /* 空态（原 `.doubao-empty-hint`）—— 复用共享真源 `.empty`，只补它撑满剩余高度 */
 .emptyHint {
   composes: empty from '../common/shared.module.css';

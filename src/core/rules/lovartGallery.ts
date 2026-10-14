@@ -253,8 +253,10 @@ const SMALL_SIDE = 512;
  *
  * 三条**或**起来的判据（逐字对齐）：① 有尺寸但**最大边 < `minSide`**（默认 **96**）；
  * ② **没有尺寸**但文件 **>0 且 <2KB**；③ 文件 **>0 且 <4KB** **且** 最大边 **<512**。
- * ⚠️ 空条目 ⇒ **直接算垃圾**。⚠️ 源版**有 4 处调用方**（清理 + 三个筛选点）⇒ 是**共享谓词**，
- *   落在纯层可测；那三处将来直接复用。
+ * ⚠️ 空条目 ⇒ **直接算垃圾**。★ **调用方**：源版 4 处（清理动作 + 三个筛选点
+ *   `shared.js:32625/32681/34000`）⇒ 本仓已接进扫描落库链（`adapters/site/shared/materializeScan.ts`
+ *   的远端取图段，`TD-16-141`）；清理族那两个 action（`purgeLovartJunk` / `purgeLovartByScope`）
+ *   源里**同为 0 调用**。
  */
 export function isLovartJunk(
   item: Pick<LovartImage, 'natW' | 'natH' | 'sizeBytes'> | null | undefined,

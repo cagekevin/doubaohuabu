@@ -38,10 +38,12 @@ import { exactHashFromDataUrl, hammingDistance, hashFromImgRef } from '@/lib/has
  *   - `isPlaceholder`（原 `Nk`，`:25776`）**已接** —— 出片轮询取回后先过它
  *     （`adapters/site/doubao` 的 `toGenResult`，感知哈希注入 `lib/phash.perceptualHash`）
  *     ⇒ **豆包默认占位图不入结果**。
- *   - `isDuplicate`（原 `sm`，`:25787`）**仍无生产消费者**：源里 `sm` 有 **3 个**调用点
- *     （`wp` `:32508` · `wP` `:33799` · `NR` `:36081`，**都在画廊 / 素材扫描链**，
- *     入参带 `allowedScopes`/`maxCanvases`/`haveHashes`），本仓那条链的去重由
- *     `addLovartImages` 按 `dataUrl` 承担 ⇒ **两条链尚未逐条对齐**（见 `docs/过程.md` §14）。
+ *   - `isDuplicate`（原 `sm`，`:25787`）**已接**（2026-10-14，`TD-16-11`）：落在扫描链的**逐张落盘处**
+ *     （`adapters/site/shared/materializeScan.ts` 的 `materializeScannedImages`），对**同一轮内**的
+ *     重复与**近重复**生效 —— 源那 3 个调用点（`wp` `:32508` · `wP` `:33799` · `NR` `:36081`）都在
+ *     画廊 / 素材扫描链，本处即其落点。
+ *     ⚠️ **与「已有」条目的重复不由它管**（源 `h0` 的 `exact` 种子那半）：本仓由
+ *     `excludeSeenImages`（URL 级）＋ 落库方 `addLovartImages`（`dataUrl` 级）承担。
  */
 export interface DedupeState {
   /** 精确哈希（SHA-1 前 16 位） */

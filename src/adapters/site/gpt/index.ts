@@ -75,7 +75,7 @@ export function createGptSite(host: HostPort): SitePort {
         const wcId = view.getWebContentsId?.() ?? 0;
         if (!wcId) return err('page-error', GPT_TEXT.attachUnsupported);
 
-        const images = payload.images.map((ref) => ({ dataUrl: ref }));
+        const images = payload.images.map((ref) => ({ dataUrl: ref.dataUrl, label: ref.label }));
         let last: { ok: boolean; error?: string; errors?: string[] } | null = null;
         for (let i = 0; i < ATTACH_RETRIES && !(last?.ok === true); i += 1) {
           const r = await host.clipboard.attachImages(wcId, images);

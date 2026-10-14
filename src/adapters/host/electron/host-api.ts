@@ -57,7 +57,16 @@ export function normalize<T>(raw: unknown, opts: BoundaryOpts = {}): Result<T> {
   if (raw && typeof raw === 'object') {
     const r = raw as { ok?: unknown; error?: unknown };
     if (r.ok === false) {
-      return err('unknown', typeof r.error === 'string' ? r.error : JSON.stringify(r.error ?? ''));
+      // ★ 与 `checkOk` 同口径：优先 `message`（用户可读原文），退回 `error`（码）—— TD-13-15
+      const m = (raw as { message?: unknown }).message;
+      return err(
+        'unknown',
+        typeof m === 'string' && m
+          ? m
+          : typeof r.error === 'string'
+            ? r.error
+            : JSON.stringify(r.error ?? ''),
+      );
     }
   }
   // ★ `TD-04-10`：过了 `ok` 判定还要过**业务字段**守卫（缺字段 ⇒ 如实报错，不 `as T`）
@@ -95,7 +104,12 @@ export function checkOk<T = Record<string, unknown>>(
   const v = raw as { ok?: unknown; error?: unknown };
   if (typeof v.ok !== 'boolean') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
   if (v.ok !== true) {
-    return err(reason, typeof v.error === 'string' ? v.error : fallback);
+    // ★ 后端两种错误形态：`{error:'码'}`（码即文案）与 `{error:'码', message:'用户可读原文'}`
+    //   ⇒ **优先 `message`（原文）**，退回 `error`（码），再退回 `fallback`（TD-13-15）
+    const m = (raw as { message?: unknown }).message;
+    const msg =
+      typeof m === 'string' && m ? m : typeof v.error === 'string' && v.error ? v.error : fallback;
+    return err(reason, msg);
   }
   // ★ `TD-04-10`：`ok:true` 之后再过一层**业务字段**守卫（后端把 `machineCode` 改名成 `code`
   //   这类漂移，在此**当场报错**，而不是让调用方 `typeof … === 'string' ? … : ''` 静默兜成空值）

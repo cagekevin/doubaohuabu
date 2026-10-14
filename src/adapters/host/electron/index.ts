@@ -13,20 +13,40 @@
 import type {
   DetectedVideo,
   DolaMediaEvent,
+  FetchImagesItem,
+  FetchImagesProgress,
+  FetchImagesRequest,
+  FetchImagesResult,
   FilePort,
   HostPort,
   LicensePort,
   PickedFile,
 } from '@/core/ports/host.port';
 import { err, ok, toMessage, type Result } from '@/core/model/result';
+import { log } from '@/lib/log';
+import { FETCH_IMAGES_TIMEOUT_MS } from '@/constants';
+import { COMMON_TEXT } from '@/constants/text';
+import { isRecord } from '@/lib/object';
 import { createElectronProjectPort } from './project';
 import { createElectronSessionPorts } from './session';
 import { createElectronApiPort } from './api';
 import { getHostApi, guard, normalize, checkOk, HOST_MISSING } from './host-api';
 import { facePortFns } from '@/adapters/media/facePort';
+import { createWindowLifecycle } from '../shared/lifecycle';
 
 // 转出给上层（bootstrap 判断是否在 Electron 宿主里）
 export { getHostApi, HOST_MISSING } from './host-api';
+
+/**
+ * `DolaMediaEvent` 的形状谓词 —— **推送边界收窄**
+ *
+ * ★ 与 `stable/model/gen.ts` 的 `isApiJobEvent` **同法**（形状与谓词同源）；本类型没有独立的
+ *   形状文件（它声明在 `core/ports/host.port.ts`，而**端口只放类型、不放值**）⇒ 收在唯一
+ *   消费它的边界文件内。`TD-04-12`
+ */
+function isDolaMediaEvent(v: unknown): v is DolaMediaEvent {
+  return !!v && typeof v === 'object' && Array.isArray((v as { items?: unknown }).items);
+}
 
 const createFile = (): FilePort => ({
   importFiles: async (): Promise<Result<PickedFile[]>> => {
@@ -34,12 +54,6 @@ const createFile = (): FilePort => ({
     if (!r.ok) return r;
     const list = Array.isArray(r.value) ? (r.value as PickedFile[]) : [];
     return ok(list);
-  },
-
-  saveFile: async (content: string) => {
-    const r = await guard((api) => api.saveFile(content));
-    // ⚠️ 与 `downloadFileAs` 同口径：主进程确实返回 `size`（见 `host.port.ts` 的注释）
-    return r.ok ? normalize<{ path?: string; size?: number }>(r.value) : r;
   },
 
   loadFile: async () => {
@@ -100,6 +114,7 @@ export function createElectronHost(): HostPort {
     // ★ 真实宿主平台（来自 preload 的 `process.platform`，**不读 navigator**）
     //   ⚠️ **如实传宿主报的值**，**不编默认 OS** —— 兜底归 `host/shared/env.readHostOs`（母体 M5 · TD-16-10）
     os: api?.hostOS,
+    lifecycle: createWindowLifecycle(),
     file: createFile(),
     clipboard,
     project: createElectronProjectPort(),
@@ -126,6 +141,92 @@ export function createElectronHost(): HostPort {
         const r = await guard((a) => a.imageFetchDataUrl(url));
         if (!r.ok) return r;
         return ok(typeof r.value === 'string' ? r.value : null);
+      },
+      /**
+       * ★ **批量取图**（原 `vP`，`shared.js:33677`）—— 主进程 `lovart-fetch-images`
+       *
+       * ⚠️ 顺序**照抄源**（`shared.js:33708-33744`）：**先订阅 item/done、再提交** ——
+       *   否则最早那几张会在订阅前推完 ⇒ 永久漏掉（表现为"取回 N 张但少了几张"）。
+       * ⚠️ 过滤键用 **`accountId`**（源 `p.accountId === e.id`），**不用 `jobId`** ——
+       *   `jobId` 要等提交返回才有，而事件可能在返回前就到（竞态）。
+       * ⚠️ 收齐后才 `resolve`：把「批量 + 流式推送」收敛成一个 Promise ⇒ 端口只有类型、
+       *   调用方无需自己订阅（订阅只归 `state/subscriptions.ts`，原则 2）。
+       */
+      fetchImages: (req: FetchImagesRequest, onProgress?: (p: FetchImagesProgress) => void) => {
+        const a = getHostApi();
+        if (!a) return Promise.resolve(err('unknown', HOST_MISSING));
+        return new Promise<Result<FetchImagesResult>>((resolve) => {
+          const items: FetchImagesItem[] = [];
+          const failures: { url: string; error: string }[] = [];
+          const skipped: { url: string; reason: string }[] = [];
+          let okCount = 0;
+          let failCount = 0;
+          let skipCount = 0;
+          let doneCount = 0;
+          let total = 0;
+          let settled = false;
+          let offItem: (() => void) | null = null;
+          let offDone: (() => void) | null = null;
+          /** 整体超时计时器（源 `vP` 的 `mP`）—— 收尾时必须清掉，否则悬着一个 timer */
+          let timer: ReturnType<typeof setTimeout> | null = null;
+          const finish = (r: Result<FetchImagesResult>): void => {
+            if (settled) return;
+            settled = true;
+            if (timer !== null) clearTimeout(timer);
+            offItem?.();
+            offDone?.();
+            resolve(r);
+          };
+
+          // ① **先订阅**（源顺序）—— 按 `accountId` 过滤本账号的推送
+          offItem = a.onLovartFetchItem((payload) => {
+            const p = payload as Record<string, unknown> | null;
+            if (!p || p.accountId !== req.accountId) return;
+            if (typeof p.total === 'number') total = p.total;
+            doneCount += 1;
+            if (p.skipped) {
+              skipCount += 1;
+              skipped.push({ url: String(p.url ?? ''), reason: String(p.reason ?? '无效图') });
+            } else if (p.failed) {
+              failCount += 1;
+              failures.push({ url: String(p.url ?? ''), error: String(p.error ?? '失败') });
+            } else if (isRecord(p.item)) {
+              okCount += 1;
+              items.push(p.item as unknown as FetchImagesItem);
+            }
+            onProgress?.({ done: doneCount, total, okCount, failCount, skipCount });
+          });
+          offDone = a.onLovartFetchDone((payload) => {
+            const p = payload as Record<string, unknown> | null;
+            if (!p || p.accountId !== req.accountId) return;
+            finish(ok({ items, okCount, failCount, skipCount, failures, skipped }));
+          });
+
+          // ② **再提交**（`jobId` 只作后端引用，不作过滤键）
+          a.lovartFetchImages({
+            accountId: req.accountId,
+            partition: req.partition ?? '',
+            referer: req.referer ?? '',
+            urls: [...req.urls],
+            limit: req.limit ?? req.urls.length,
+          })
+            .then((r) => {
+              const res = r as Record<string, unknown> | null;
+              if (!res || res.ok !== true) {
+                // 后端**每条 return 都带 `ok`** ⇒ fail-closed（TD-04-5）
+                finish(err('page-error', String(res?.error ?? '批量取图提交失败')));
+              }
+              // 提交成功 ⇒ 等 `done` 事件收尾
+            })
+            .catch((e) => finish(err('unknown', toMessage(e))));
+
+          // ③ **整体超时兜底**（源 `vP` 末尾的 `setTimeout(() => f({timeout:true}), mP)`，
+          //    `shared.js:33762-33766`）—— `done` 事件**永不达**时（后端异常 / 进程挂），
+          //    Promise 不能永远悬着：否则扫描链**静默挂起**（用户点了扫描，转圈不结束）
+          timer = setTimeout(() => {
+            finish(err('page-timeout', COMMON_TEXT.fetchImagesTimeout));
+          }, FETCH_IMAGES_TIMEOUT_MS);
+        });
       },
       captureRect: async (rect) => {
         const r = await guard((a) => a.captureRect(rect));
@@ -155,11 +256,18 @@ export function createElectronHost(): HostPort {
         const videos = Array.isArray(c.value.videos) ? (c.value.videos as DetectedVideo[]) : [];
         return ok({ videos });
       },
-      // ★ 订阅型（与 `api.ts` 的 `onJobEvent` 同法）—— 返回取消函数
+      // ★ 订阅型（与 `api.ts` 的 `onJobEvent` 同法）—— 返回取消函数；**边界收窄**（`TD-04-12`）
       onDolaMedia: (cb) => {
         const a = getHostApi();
         if (!a) return () => undefined;
-        const off = a.onDolaMedia((payload) => cb(payload as DolaMediaEvent));
+        const off = a.onDolaMedia((payload) => {
+          // 推送载荷来自后端（不可信）⇒ 边界收窄；形状不符 ⇒ **丢弃 + 留痕**（不静默、不 cb）
+          if (!isDolaMediaEvent(payload)) {
+            log.warn('[host] onDolaMedia 载荷形状不符，已丢弃:', payload);
+            return;
+          }
+          cb(payload);
+        });
         return typeof off === 'function' ? off : () => undefined;
       },
       attachDolaDebugger: async (webContentsId: number) => {
@@ -194,6 +302,57 @@ export function createElectronHost(): HostPort {
           reason: 'page-error',
           fallback: 'dola-duration-diag 失败',
         });
+        if (!c.ok) return c;
+        return ok(undefined);
+      },
+
+      // ── 无水印资源面板（原 `SD.jsx` 的 4 个专用宿主方法）──
+      getDolaMediaDownloadSettings: async () => {
+        const r = await guard((a) => a.getDownloadSettings());
+        if (!r.ok) return r;
+        // ★ 后端 `get-download-settings` 恒返 `{ok, path, configured}`（`main.js:2104`）⇒ fail-closed
+        const c = checkOk<{ path?: unknown; configured?: unknown }>(r.value, {
+          fallback: '读取下载设置失败',
+        });
+        if (!c.ok) return c;
+        return ok({
+          ...(typeof c.value.path === 'string' ? { path: c.value.path } : {}),
+          ...(typeof c.value.configured === 'boolean' ? { configured: c.value.configured } : {}),
+        });
+      },
+      pickDolaMediaDownloadPath: async () => {
+        const r = await guard((a) => a.pickDownloadPath());
+        if (!r.ok) return r;
+        // ⚠️ **先判取消**：后端取消是 `{ok:false, canceled:true}`，而 `checkOk` 见到 `ok:false` 会判失败
+        //   —— 取消是**如实结果**（用户主动关掉对话框），不是错误（与 `pickStorage` 同口径）
+        if (isRecord(r.value) && (r.value as { canceled?: unknown }).canceled === true) {
+          return ok({ canceled: true });
+        }
+        const c = checkOk<{ path?: unknown; configured?: unknown }>(r.value, {
+          fallback: '选择下载目录失败',
+        });
+        if (!c.ok) return c;
+        return ok({
+          ...(typeof c.value.path === 'string' ? { path: c.value.path } : {}),
+          ...(typeof c.value.configured === 'boolean' ? { configured: c.value.configured } : {}),
+        });
+      },
+      downloadDolaMedia: async (url: string, mediaType: 'image' | 'video') => {
+        const r = await guard((a) => a.downloadDolaMedia(url, mediaType));
+        if (!r.ok) return r;
+        // ★ 后端 `dola-media-download` 成功分支带 `ok:true`、失败 `{ok:false, error}` ⇒ fail-closed（TD-04-5）
+        const c = checkOk<{ path?: unknown; size?: unknown }>(r.value, { fallback: '下载失败' });
+        if (!c.ok) return c;
+        return ok({
+          ...(typeof c.value.path === 'string' ? { path: c.value.path } : {}),
+          ...(typeof c.value.size === 'number' ? { size: c.value.size } : {}),
+        });
+      },
+      clearDolaMedia: async () => {
+        const r = await guard((a) => a.clearDolaMedia());
+        if (!r.ok) return r;
+        // ★ 后端 `dola-media-clear` 恒返 `{ok:true}`（`main.js:2027-2030`）⇒ fail-closed
+        const c = checkOk(r.value, { fallback: '清空失败' });
         if (!c.ok) return c;
         return ok(undefined);
       },

@@ -12,12 +12,11 @@
  *   | `.tg-lightbox-foot`（四个按钮） | `<Modal>` 的 `footer` |
  *   | 全局 `keydown`：`Esc` / `←` / `→` | `Esc` 由 **`<Modal>`** 处理（`原则8/rule-of-three` 只允许它住 `ui/common/`）；`←`/`→` 在本组件挂**全局** `keydown`（源版同法） |
  *
- * ⚠️ **两处未落（如实标注，判据 B4）**：
- *   ① `勾选此图`（原 580-584）—— ★ **2026-10-11 更正（TD-09-3）**：此前给的理由是
- *      「选择态的用途（「添加到画布」）**尚未落地**」—— **该理由已不成立**：`GalleryPanel` 的
- *      选择态 + 「添加到画布 (N)」**均已落**（见其文件头）。⇒ 本按钮**仍不落**，但真因是
- *      「**lightbox 未接选择态**」（**待接线**），**不是**"选择态未落地"；
- *   ② `ao()`（原 126：去掉 URL 上的追踪参数）—— 本工程直接开 `sourceUrl` 原文。
+ * ⚠️ **一处未落（如实标注，判据 B4）**：
+ *   · `ao()`（原 126：去掉 URL 上的追踪参数）—— 本工程直接开 `sourceUrl` 原文。
+ * ★ **`勾选此图`（原 580-584）已落**：它走 `GalleryLightboxProps` 的受控 `checked` / `onToggle`，
+ *   选择态真源在 `GalleryPanel`（面板以 `checked={selected.has(id)}` ＋ `onToggle={toggle}` 传入，
+ *   `GalleryPanel.tsx:413-418`）。
  * ⚠️ **原则 1**：本组件只调 `useHostOps()`（`openExternal`）与 store 的 `pushToast`
  *    —— `ui` 不得直持 `Ports`（TD-16-8；`usePorts` 已从 `@/state` 移除）。
  */

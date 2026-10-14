@@ -196,7 +196,7 @@ const adapter = {
   capabilities: ['video', 'image'],
   domains: ['https://www.geeknow.top/v1', 'https://api.manjuapi.com/v1', 'https://grsaiapi.com/v1'],
   auth: { type: 'bearer', keyFields: ['apiKey'] },
-  transientErrorHints: /ECONNRESET|ECONNABORTED|ETIMEDOUT|ESOCKETTIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR/i,
+  transientErrorHints: require('./_shared').TRANSIENT_ERROR_HINTS,
   quotaHints: [
     { re: /生成(?:额度)?未扣除|额度未扣除/, kind: 'quota_not_deducted', advice: '任务未计费，可直接重试' },
     { re: /没额度|需要开通标准套餐|今日视频没额度|今日图片没额度|额度(?:已)?用完/, kind: 'quota_exhausted', advice: '额度已用完或套餐不足，请充值/开通后重试' }

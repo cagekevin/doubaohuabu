@@ -37,12 +37,12 @@ import { GenPanel } from '@/ui/panels/GenPanel';
 import { FaceMaskPanel } from '@/ui/panels/FaceMaskPanel';
 import type { RFCanvasNode } from '@/ui/nodes/types';
 import { InteractiveEdge } from '@/ui/edges/InteractiveEdge';
-import { playChime } from '@/lib/chime';
+import { playChime } from '@/ui/lib/chime';
 import { log } from '@/lib/log';
 import { fitMaterialSize } from '@/core/rules/materialGrid';
 import { readImageFile, readTextFile, stripExtension } from '@/lib/readDroppedFile';
 import { formatClockTime } from '@/lib/time';
-import { DRAG_MIME_MATERIAL, EDGE_CLICK_DEBOUNCE_MS, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
+import { CONNECTION_RADIUS, DRAG_MIME_MATERIAL, EDGE_CLICK_DEBOUNCE_MS, FITVIEW_DURATION_MS, FITVIEW_FOCUS_DURATION_MS, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
 import { CANVAS_TEXT } from '@/constants/text';
 import { CreatePanel, type CreatePanelState } from './CreatePanel';
 import { GroupConnectHandle } from './GroupConnectHandle';
@@ -73,7 +73,7 @@ const MINIMAP_COLOR: Record<string, string> = {
 function Inner() {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
-  /** ★ 只改自己那一半（`setGraph` 会连另一半一起覆盖 ⇒ 见 `canvas.ts` 的 `setNodes` 注释） */
+  /** ★ 只改自己那一半（整图覆盖会让两个回调互相踩 ⇒ 见 `canvas.ts` 的 `setNodes` 注释） */
   const setNodes = useStore((s) => s.setNodes);
   const setEdges = useStore((s) => s.setEdges);
   /** ★ 非订阅式读取（事件回调里要读「当前值」时用 —— 原版 `t()` 的对应物） */
@@ -117,6 +117,9 @@ function Inner() {
   const closeImageEditor = useStore((s) => s.closeImageEditor);
   const replaceMaterialImage = useStore((s) => s.replaceMaterialImage);
   const replaceImageGenImage = useStore((s) => s.replaceImageGenImage);
+  /** ★ 一次性「定位画布」请求（原 `fitViewAction`；发起方 = `SendQueuePanel` 的「查看」按钮） */
+  const focusNodesRequest = useStore((s) => s.focusNodesRequest);
+  const clearFocusNodesRequest = useStore((s) => s.clearFocusNodesRequest);
 
   const { fitView, screenToFlowPosition } = useReactFlow();
   /** 当前工程 id（原 `b`）—— 切项目后要自适应视图 */
@@ -155,7 +158,7 @@ function Inner() {
        *
        * ⚠️ **顺序：先应用其余变更、再删除**。反过来的话会拿**闭包里的旧 `nodes`**
        *    去 `applyNodeChanges` ⇒ 把刚删掉的节点又"复活"回来。
-       *    （`zustand` 的 `set` 是同步的 ⇒ `removeNodes` 读到的已是 `setGraph` 之后的状态。）
+       *    （`zustand` 的 `set` 是同步的 ⇒ `removeNodes` 读到的已是**写入之后**的状态。）
        */
       const removed: string[] = [];
       const rest: NodeChange<RFCanvasNode>[] = [];
@@ -557,13 +560,40 @@ function Inner() {
     if (!activeId) return;
     const t = window.setTimeout(() => {
       try {
-        void fitView({ padding: 0.25, duration: 250 }).catch(warnFitViewFailed);
+        void fitView({ padding: 0.25, duration: FITVIEW_DURATION_MS }).catch(warnFitViewFailed);
       } catch (err) {
         warnFitViewFailed(err);
       }
     }, 150);
     return () => window.clearTimeout(t);
   }, [activeId, fitView]);
+
+  /**
+   * ★ **消费「定位到某批节点」请求**（原 `fitViewAction`，`_Component42.jsx:516-536`）
+   *
+   * 源：`setTimeout(…, 80)` → `fitView({ nodes: ids.map(id => ({ id })), padding: 0.2, duration: 400, maxZoom: 1 })`。
+   * ⚠️ **视图能力只在这一处** —— `state` 里没有任何视图调用，store 那侧只有**请求数据**
+   *   （`requestFocusNodes`；与 `splitKeywordModal` 同法）。
+   * ⚠️ 消费后**立即清空**（`clearFocusNodesRequest`）—— 否则下次挂载会重放同一次定位。
+   */
+  useEffect(() => {
+    if (!focusNodesRequest) return;
+    const ids = focusNodesRequest.ids;
+    const t = window.setTimeout(() => {
+      try {
+        void fitView({
+          nodes: ids.map((id) => ({ id })),
+          padding: 0.2,
+          duration: FITVIEW_FOCUS_DURATION_MS,
+          maxZoom: 1,
+        }).catch(warnFitViewFailed);
+      } catch (err) {
+        warnFitViewFailed(err);
+      }
+      clearFocusNodesRequest();
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [focusNodesRequest, fitView, clearFocusNodesRequest]);
 
   const empty = nodes.length === 0;
   /** 节点右键菜单（原 `Y`）—— 见 `NodeContextMenu.tsx` */
@@ -775,8 +805,9 @@ function Inner() {
    * `nt({x: clientX, y: clientY, flowPos: screenToFlow(…), mode:'context', hasSelection})`。
    * ⚠️ 源用**原始类名**（`.create-panel`）做守卫；本仓 CSS Modules **类名被哈希**了
    * ⇒ 改用 `CreatePanel` 自带的 `data-testid`（同一含义，见 `CreatePanel.tsx`）。
-   * ⚠️ `.node-ctx-menu` 那半**暂不落** —— 那张菜单本身还没实现（**TD-16-94**），
-   *    等它落地时把这条守卫一起补上。
+   * ⚠️ 源的 `.node-ctx-menu` 守卫**已由 `[role="menu"]` 承担** —— 节点右键菜单（`NodeContextMenu`）
+   *    走共享件 `ui/common/ContextMenu`，它的根就是 `role="menu"`（`ContextMenu.tsx:83`）
+   *    ⇒ 点菜单内部不会再弹建节点浮层（`TD-16-94` 已结）。
    */
   const onPaneContextMenu = useCallback(
     // ⚠️ ReactFlow 的 `onPaneContextMenu` 与 React 的 `onContextMenu` **事件类型不同**
@@ -787,7 +818,8 @@ function Inner() {
         target instanceof Element &&
         (target.closest('.react-flow__node') ||
           target.closest('[data-testid="create-panel"]') ||
-          target.closest('[data-testid="node-ctx-menu"]'))
+          // ★ 任何右键菜单内部 ⇒ 不算"点了画布空白"（菜单统一走共享件 ⇒ 判据 = 它的 `role`）
+          target.closest('[role="menu"]'))
       ) {
         return;
       }
@@ -900,10 +932,10 @@ function Inner() {
         panOnDrag
         selectionMode={SelectionMode.Partial}
         zoomOnDoubleClick={false}
-        connectionRadius={60}
+        connectionRadius={CONNECTION_RADIUS}
         multiSelectionKeyCode={['Shift', 'Meta']}
         fitView
-        fitViewOptions={{ padding: 0.25, duration: 250 }}
+        fitViewOptions={{ padding: 0.25, duration: FITVIEW_DURATION_MS }}
         proOptions={{ hideAttribution: false }}
       >
         <Background variant={BackgroundVariant.Lines} gap={GRID_SIZE} size={1} style={{ opacity: GRID_OPACITY }} />

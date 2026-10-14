@@ -78,9 +78,10 @@ export interface AccountNodeInputs {
  * S({ status: 'ok', msg: he });
  * ```
  *
- * ⚠️ 源这里还有一档 `precheck && !precheck.pass` ⇒ `status:'err'` + `precheckWarn(issue)`；
- *   本仓**不可达**（校验不过时 `send` 直接返回 `err`，见 `adapters/site/doubao`）⇒ 不落那一支
- *   （判据 B5：不留没有生产者的分支）。
+ * ★ 源 `:340` 还有一档：`precheck && !precheck.pass` ⇒ `status:'err'` + `precheckWarn(issue)`。
+ *   ⚠️ 它**可达**（不是死分支）—— `autoSend=false`（只填入）时 `site.send` 照走 `ok` 但带
+ *   `precheck.pass=false`（硬闸只设在 `autoSend` 分支，见 `adapters/site/doubao/index.ts:428`）
+ *   ⇒ 本函数负责把这一支翻成 `error`。
  * ⚠️ 摘要里的三段与那句 `（仅填入，未发送）` 都是**用户可见文案** ⇒ 取 `ACCOUNT_NODE_TEXT`（原则 5）。
  */
 export interface AccountSendFeedbackInput {
@@ -94,10 +95,17 @@ export interface AccountSendFeedbackInput {
   autoSend: boolean;
   /** 有没有**真的点到**发送按钮（原 `ne.autoClicked`） */
   autoClicked?: boolean;
+  /**
+   * ★ **Phase 3a 校验回执**（原 `ne.precheck`）—— 只读 `pass`。
+   *    `autoSend=false` 时 `site.send` 照走 `ok` 但带 `pass:false`（见本文件头注）。
+   */
+  precheck?: { pass: boolean } | null;
+  /** 校验明细（原 `ne.precheckIssue`）—— 缺省时回退 `precheckFallback` */
+  precheckIssue?: string | null;
 }
 
 export function accountSendFeedback(input: AccountSendFeedbackInput): {
-  status: 'ok';
+  status: 'success' | 'error';
   msg: string;
 } {
   const autoSent = input.autoSend && !!input.autoClicked;
@@ -110,7 +118,14 @@ export function accountSendFeedback(input: AccountSendFeedbackInput): {
   const msg = parts.length
     ? parts.join(' · ') + (autoSent ? '' : ACCOUNT_NODE_TEXT.filledOnly)
     : ACCOUNT_NODE_TEXT.filledNoText;
-  return { status: 'ok', msg };
+  // ★ 原 `OL.jsx:340`：`precheck && !precheck.pass` ⇒ 带告警（明细缺省回退那句兜底文案）
+  const issue =
+    input.precheck && !input.precheck.pass
+      ? input.precheckIssue || ACCOUNT_NODE_TEXT.precheckFallback
+      : null;
+  return issue
+    ? { status: 'error', msg: msg + ACCOUNT_NODE_TEXT.precheckWarn(issue) }
+    : { status: 'success', msg };
 }
 
 /** 本模块只读节点的这几个字段（保持入参最小） */

@@ -22,7 +22,10 @@
  *    `if (v && Ee.canvasId !== v) continue`（`v` = 当前画布 id）。但 `canvasId` **从未被写进画廊**
  *    —— 源版 `addLovartImages`（29267-29278）只写 10 个字段，**没有 `canvasId`**
  *    ⇒ 只要 `v` 非空，**所有 Tapnow 图都会被滤掉**。本实现**逐字照抄**该判据（测试锁住），
- *    并保留 `canvasId` 作为**可选**字段（将来若某条写入路径带上它，判据立刻按预期工作）。
+ *    并保留 `canvasId` 作为**可选**字段。
+ * ⚠️ **这不是本仓缺写入方**：Tapnow 画布链（`scanCanvas` / `peekCanvas` / `tapnowCanvasNodes`）
+ *    **已落**（`docs/plan/14:161`，2026-10-12）；源里同样**不把 `canvasId` 写进画廊条目**
+ *    ⇒ 这条分支**源里即恒不生效**（源版怪癖，不是缺口）。
  */
 
 import type { Account, SiteType } from '@/stable/model/account';

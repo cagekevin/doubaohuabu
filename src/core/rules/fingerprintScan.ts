@@ -21,8 +21,10 @@
  * ⚠️ **三处容易写错、已用测试锁住**：**(a)** `totalPairs` 是**组合数**而非"实际比出的对数"
  *   （0 撞车时它仍然很大）；**(b)** 空串与 `null` **都不算取值**（`!== '' && != null`）——
  *   于是"两边都没填"**不算命中**；**(c)** 分级判据用的是**命中数 / 维度总数**（`h = Jl.length`），
- *   而"全命中"是**先判**的（否则 `1.0` 也会落进 `>= 0.7` 的 `warn`）。
+ *   而"全命中"是**先判**的（否则 `1.0` 也会落进 `warn` 档）。
  */
+
+import { FINGERPRINT_WARN_RATIO } from '@/constants';
 
 /** 一条维度（原 `Jl` 的元素） */
 export interface FingerprintDimension {
@@ -146,7 +148,7 @@ export function scanFingerprintCollisions(
       // 分级（原 34330-34335）—— ⚠️ **全命中先判**，否则 1.0 会落进 warn
       let level: FingerprintPair['level'] | 'ok' = 'ok';
       if (matched.length === total) level = 'critical';
-      else if (matched.length / total >= 0.7) level = 'warn';
+      else if (matched.length / total >= FINGERPRINT_WARN_RATIO) level = 'warn';
 
       if (level !== 'ok') {
         pairs.push({

@@ -2,7 +2,7 @@
  * 持久化调度（**何时存**）
  *
  * 依据：docs/11 §6.5 审计错位 6 的修正
- *   - 本文件：订阅 + **防抖 600ms** + `beforeunload` flush + 把错误写进 store
+ *   - 本文件：订阅 + **防抖 600ms** + `beforeunload` flush（★ 经 `LifecyclePort`，**不直挂 `window`**）+ 把错误写进 store
  *   - `core/usecases/persistProject`：**怎么存**（序列化 + 外置 + 写键）
  *
  * ⚠️ 原则 1：本文件在 `state/` 层，**是唯一**把持久化错误写进 store 的地方
@@ -11,6 +11,7 @@
 
 import type { ClockPort } from '@/core/ports/clock.port';
 import type { Cancel } from '@/core/ports/clock.port';
+import type { LifecyclePort } from '@/core/ports/host.port';
 import type { Preset, Project } from '@/stable/model/project';
 import type { Account, AccountGroup, PoolStrategy } from '@/stable/model/account';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
@@ -64,6 +65,8 @@ export interface PersistSnapshot {
 
 export interface PersistControllerDeps {
   clock: ClockPort;
+  /** 窗口生命周期（原 `window.beforeunload`）—— 由 `adapters/host` 实现，本层不直挂 `window` */
+  lifecycle: LifecyclePort;
   /** 落盘依赖（由 container 组装；含 storage + migrationCtx + 备份/快照） */
   persist: PersistDeps;
   /** 取当前要存的数据（**读取**由 state 提供，本模块不 import store） */
@@ -201,9 +204,9 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
     if (timer) flush();
   };
 
-  if (typeof window !== 'undefined') {
-    window.addEventListener('beforeunload', onBeforeUnload);
-  }
+  // ★ 走**生命周期端口**（原 `window.addEventListener('beforeunload', …)`）——
+  //   `state` 层不直挂 `window`：宿主访问收在 `adapters/host/shared/lifecycle`（原则 4 后半）
+  const offBeforeUnload = deps.lifecycle.onBeforeUnload(onBeforeUnload);
 
   return {
     schedule,
@@ -216,7 +219,7 @@ export function createPersistController(deps: PersistControllerDeps): PersistCon
     dispose: () => {
       if (timer) timer();
       timer = null;
-      if (typeof window !== 'undefined') window.removeEventListener('beforeunload', onBeforeUnload);
+      offBeforeUnload();
     },
   };
 }

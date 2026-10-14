@@ -61,8 +61,8 @@ export interface ProviderTestResult {
 export interface ApiOpsController {
   /** 面板挂载时拉一次：provider + 配置 + 通道设置 + 用量（原 `loadApiSetup` + `refreshApiConfig`） */
   load(): Promise<void>;
-  /** 只刷 provider 配置（原 `refreshApiConfig`；保存 / 切换启用后调用） */
-  refreshConfig(): Promise<void>;
+  // ⚠️ 这里**没有** `refreshConfig` —— 它只在控制器**内部**用（保存 / 切换启用 / `load` 三段回调），
+  //   面板从不单独调它 ⇒ 对外暴露＝多余公开面（已收窄）。
   /** 保存通道设置（原 `saveApiSetup` 30594-30623） */
   saveSetup(patch: Partial<ApiSetup>): Promise<void>;
   /**
@@ -150,8 +150,6 @@ export function createApiOps(store: AppStore, ports: Ports): ApiOpsController {
       s.setApiSetup(r.value.setup);
       s.setApiUsage(r.value.usage);
     },
-
-    refreshConfig,
 
     saveSetup: async (patch) => {
       const s = store.useStore.getState();

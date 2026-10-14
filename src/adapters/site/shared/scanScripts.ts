@@ -9,7 +9,7 @@
  *   | 扫描器 | 原实现 | 用途 | 判据 |
  *   |---|---|---|---|
  *   | `buildResultScanScript` | `Xk` 35949-36035 | **等生成结果** | 只扫 `img`；`minSide` 默认 **96**；输出 `{url,kind,w,h}` |
- *   | `buildLibraryScanScript` | `hp` 22663-23233 | **抓素材** | 扫 `img`/`srcset`/`video.poster`/`svg`/CSS `background`；打**作用域**标签；画布内 <140px 丢弃 |
+ *   | `buildLibraryScanScript` | `hp` 22663-23233 | **抓素材** | 扫 `img`/`srcset`/`video.poster`/`svg`/CSS `background` ＋ **perf 网络资源**；打**作用域**标签；画布内 <140px 丢弃 |
  *
  * ⚠️ 但两者**共用**「收集所有根（document + iframe + shadowRoot，≤4 层）」——
  *    那一步是**探测重复** ⇒ 抽成 `COLLECT_ROOTS_SRC`（唯一实现）。
@@ -17,6 +17,8 @@
  * ⚠️ **原则 6**：收集过程中读不到的 frame/root **一律记录并上报**（`unread[]`），
  *    **不许静默 catch**（那会让调用方以为"页面就这些图"）。
  */
+
+import { CANVAS_ICON_MAX_HEIGHT } from '@/constants';
 
 /** 最小边长（结果扫描默认；原 `Xk` 的 `e && e.minSide || 96`） */
 export const RESULT_SCAN_MIN_SIDE = 96;
@@ -114,8 +116,20 @@ const SCOPE_HINTS = {
   feed: ['feed', 'plaza', 'recommend', 'for-you', 'trending', 'popular', 'gallery-grid', 'discover'],
 };
 
-/** 画布内小于此高度的图视为图标（原 `hp` 22857） */
-const CANVAS_ICON_MAX_H = 140;
+// ── perf（网络资源）通道的判据（原 `hp:22700` ＋ `:23062-23072`）────────────────────
+
+/** 「像图片」的 URL（原 `hp:22700` 的 `d`） */
+const PERF_IMG_RE = /\.(png|jpe?g|webp|gif|avif|bmp|tiff?|heic|heif)(\?|#|$)/i;
+/** **明确不是图**的 URL（原 `:23062` 的内联正则） */
+const PERF_SKIP_RE = /\.(js|mjs|css|json|html?|xml|txt|map|wasm|woff2?|ttf|otf|eot)(\?|#|$)/i;
+/** `initiatorType` 里**明确不是图**的（原 `:23066`） */
+const PERF_SKIP_INITIATORS = ['script', 'xmlhttprequest', 'fetch', 'beacon'];
+/** `initiatorType` 白名单（原 `:23070` 的 `D`；含空串） */
+const PERF_LIKELY_INITIATORS = ['img', 'image', 'css', 'link', 'video', 'input', ''];
+/** 白名单档的**最小体积**（原 `:23071` 的 `8192`） */
+const PERF_MIN_BYTES = 8192;
+/** 过小 ⇒ 占位 / 图标（原 `:23072` 的 `< 2048`） */
+const PERF_MIN_USABLE_BYTES = 2048;
 
 /**
  * **素材抓取扫描**（原 `hp` 22663-23233）—— 扫多种源，打**作用域**标签
@@ -126,7 +140,13 @@ export function buildLibraryScanScript(): string {
   return `(() => {
 ${COLLECT_ROOTS_SRC}
   const HINTS = ${JSON.stringify(SCOPE_HINTS)};
-  const ICON_H = ${CANVAS_ICON_MAX_H};
+  const ICON_H = ${CANVAS_ICON_MAX_HEIGHT};
+  const PERF_IMG_RE = ${PERF_IMG_RE};
+  const PERF_SKIP_RE = ${PERF_SKIP_RE};
+  const PERF_SKIP_INIT = ${JSON.stringify(PERF_SKIP_INITIATORS)};
+  const PERF_LIKELY_INIT = ${JSON.stringify(PERF_LIKELY_INITIATORS)};
+  const PERF_MIN_BYTES = ${PERF_MIN_BYTES};
+  const PERF_MIN_USABLE = ${PERF_MIN_USABLE_BYTES};
   const scopeCache = new WeakMap();
 
   function scopeOf(el) {
@@ -160,6 +180,7 @@ ${COLLECT_ROOTS_SRC}
     shadowCount: collected.shadowCount,
     imgTotal: 0,
     imgUsable: 0,
+    perfImg: 0,
     canvasCount: 0,
     canvases: [],
     itemsRaw: 0,
@@ -211,6 +232,33 @@ ${COLLECT_ROOTS_SRC}
   // 直接遍历已收集的根（iframe / shadowRoot 已在 collectRoots 里穿透）
   for (const root of collected.roots) {
     walk(root);
+    // ★ 原 23057-23079：**网络资源通道** —— DOM 里没有、但已被网络加载的图**也当候选**
+    //   （只扫 DOM 会漏掉"靠网络加载、不在 DOM 里"的图；diag.perfImg 也因此才有可诚实上报的计数）
+    //   ⚠️ 源**按 root 各读一次**：defaultView 缺（shadowRoot）时**回落到全局 performance**
+    //      ⇒ 同一批条目会被**重复计数**（push 靠 seen 去重，但 perfImg 会计大）。源如此，照抄。
+    let perf = [];
+    try {
+      const win = root.defaultView || null;
+      perf = (win && win.performance ? win.performance.getEntriesByType('resource') : performance.getEntriesByType('resource')) || [];
+    } catch (e) {
+      collected.unread.push({ kind: 'perf-query', why: String((e && e.message) || e) });
+    }
+    for (const pe of perf) {
+      if (!pe || !pe.name) continue;
+      if (PERF_SKIP_RE.test(pe.name)) continue;
+      const it = String(pe.initiatorType || '').toLowerCase();
+      if (PERF_SKIP_INIT.indexOf(it) >= 0) continue;
+      const size = pe.decodedBodySize || pe.transferSize || 0;
+      const likely = PERF_LIKELY_INIT.indexOf(it) >= 0;
+      if (PERF_IMG_RE.test(pe.name) || (likely && size >= PERF_MIN_BYTES)) {
+        // 原 23072：!(R > 0) || !(R < 2048) —— 体积**未知**（0）放行；已知过小则丢
+        if (!(size > 0) || !(size < PERF_MIN_USABLE)) {
+          diag.perfImg++;
+          // ⚠️ 无元素 ⇒ push 的 scope 落 site（源 b 缺 scope 时也是 t.SITE，:22863）
+          push(pe.name, null, pe.width || 0, pe.height || 0);
+        }
+      }
+    }
     // 原 23082-23097 的 p.canvasCount += j.length / p.canvases.push({w,h,dw,dh}) —— 与遍历同一轮
     let cs = [];
     try { cs = root.querySelectorAll('canvas'); } catch (e) { collected.unread.push({ kind: 'canvas-query', why: String((e && e.message) || e) }); }

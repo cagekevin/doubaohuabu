@@ -13,7 +13,7 @@
  * ⚠️ 未设置尺寸的节点返回 `undefined` ⇒ `NodeShell` **不写 inline 尺寸**（保持按内容自适应）。
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   useStore as useFlowStore,
   useUpdateNodeInternals,
@@ -23,7 +23,8 @@ import {
   NODE_AREA_FIXED_BASE_SIZE,
   computeSizeSync,
   parseAspect,
-  type SizeSyncMode,
+  type SizeSync,
+  type SizeSyncOptions,
 } from '@/core/rules/nodeSize';
 
 /** 当前节点在 ReactFlow store 里的宽度（未设置 ⇒ `undefined`） */
@@ -42,11 +43,35 @@ export function useNodeHeight(id: string): number | string | undefined {
   });
 }
 
-export interface SizeSyncOptions {
-  mode?: SizeSyncMode;
-  defaultWidth?: number;
-  defaultHeight?: number;
-  baseSize?: number;
+/**
+ * 把目标尺寸写回 ReactFlow store（`setNodes` 是**唯一画布写入点**）+ 让 ReactFlow 重算端口位置。
+ *
+ * ⚠️ **收口点**（判据 C1）：`useSizeSync`（按 `aspectRatio` **声明式**同步）与 `VideoNode` 的
+ *    「按真实宽高比自适应」（原 `ct`，**实测式**调一次）**写的是同一件事** ⇒ 共用本写入，
+ *    不各写一份（两者判据不同、算法不同，但**写入动作**只有一份）。
+ */
+export function useNodeBoxWriter(): (id: string, box: SizeSync) => void {
+  const nodes = useStore((s) => s.nodes);
+  const setNodes = useStore((s) => s.setNodes);
+  const updateNodeInternals = useUpdateNodeInternals();
+  return useCallback(
+    (id, box) => {
+      setNodes(
+        nodes.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                width: box.width,
+                height: box.height,
+                style: { ...(x.style ?? {}), width: box.width, height: box.height },
+              }
+            : x,
+        ),
+      );
+      updateNodeInternals(id);
+    },
+    [nodes, setNodes, updateNodeInternals],
+  );
 }
 
 /**
@@ -64,8 +89,7 @@ export function useSizeSync(
   opts: SizeSyncOptions = {},
 ): number | null {
   const nodes = useStore((s) => s.nodes);
-  const setNodes = useStore((s) => s.setNodes);
-  const updateNodeInternals = useUpdateNodeInternals();
+  const writeNodeBox = useNodeBoxWriter();
 
   const mode = opts.mode ?? 'width-fixed';
   const defaultWidth = opts.defaultWidth ?? 420;
@@ -88,13 +112,8 @@ export function useSizeSync(
     const curW = Number(n.style?.width ?? n.width ?? NaN);
     const curH = Number(n.style?.height ?? n.height ?? NaN);
     if (curW === w && curH === h) return;
-    setNodes(
-      nodes.map((x) =>
-        x.id === id ? { ...x, width: w, height: h, style: { ...(x.style ?? {}), width: w, height: h } } : x,
-      ),
-    );
-    updateNodeInternals(id);
-  }, [id, ratio, mode, defaultWidth, defaultHeight, baseSize, nodes, setNodes, updateNodeInternals]);
+    writeNodeBox(id, { width: w, height: h });
+  }, [id, ratio, mode, defaultWidth, defaultHeight, baseSize, nodes, writeNodeBox]);
 
   return ratio;
 }

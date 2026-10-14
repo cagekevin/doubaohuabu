@@ -395,7 +395,7 @@ export function createDoubaoSite(
             liveCount = typeof fp.count === 'number' ? fp.count : 0;
             const sigs = Array.isArray(fp.sigs) ? fp.sigs : [];
             sigCount = sigs.length;
-            order = compareImageOrder(sigs, payload.images);
+            order = compareImageOrder(sigs, payload.images.map((it) => it.dataUrl));
           }
           diag(`Phase3a 图序=${order} 期望=${expected} 页内元素=${liveCount} 指纹=${sigCount}`);
         }

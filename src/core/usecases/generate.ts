@@ -20,7 +20,7 @@ import { decideByReason } from '@/core/rules/failure';
 import { FAIL_LABEL, type SendFailKind } from '@/constants/failure';
 import { pickAccount } from '@/core/rules/accountPool';
 import { buildImagePayload, buildVideoPayload, toSitePayload } from '@/core/rules/payload';
-import { clampImageCount } from '@/core/rules/prompt';
+import { applyStylePrefix, clampImageCount } from '@/core/rules/prompt';
 import type { ApiBatchResult, GenResult } from '@/stable/model/gen';
 import { API_VIDEO_RESOLUTION, API_VIDEO_WATERMARK, BATCH_RATIOS } from '@/constants/models';
 import { ACCOUNT_PICK_TEXT, API_TEXT, SEND_TEXT } from '@/constants/text';
@@ -306,7 +306,8 @@ export async function generateImage(deps: GenDeps, input: ImageGenInput): Promis
     const base = {
       providerId: input.providerId ?? null,
       kind: 'image' as const,
-      prompt: stylePrefix ? `${stylePrefix}${body}` : body,
+      // ★ 前缀拼接收在纯层 `applyStylePrefix`（本行原为内联副本 —— 判据 C1：能一种的别搞两种）
+      prompt: applyStylePrefix(body, stylePrefix),
       params: { ratio: input.ratio },
       nodeId: input.sourceNodeId ?? null,
       refSources: [...(input.images ?? [])],

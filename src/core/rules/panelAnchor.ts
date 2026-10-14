@@ -1,5 +1,12 @@
 /**
- * 生成面板的**锚定定位**（原 `Z3_1.jsx:60-90` 的 `useLayoutEffect`，TD-16-89）
+ * 画布浮层的**锚定定位**（纯数学，可单测）
+ *
+ * 两处源、**两种形态**（判据不同 ⇒ **不合并**，见各函数头注）：
+ *   · `planGenPanelAnchor` —— 贴**单个节点**、返回**绝对** `left/top`（生成面板，原 `Z3_1.jsx:60-90`，TD-16-89）
+ *   · `planSelectionAnchor` —— 贴**选中包围盒**、靠 `translate` 居中（选择工具条 ＋ 批量发送触发条）
+ *
+ * ---
+ * ## `planGenPanelAnchor`（原 `Z3_1.jsx:60-90` 的 `useLayoutEffect`，TD-16-89）
  *
  * 源（逐行抄录，`t` = 面板对应的节点，`p/h/m` = viewport 的 x/y/zoom）：
  * ```js
@@ -91,4 +98,74 @@ export function planGenPanelAnchor(input: PanelAnchorInput): PanelAnchor | null 
   if (top < Fe) top = Fe;
   left = Math.max(Fe, Math.min(left, win.innerWidth - panelW - Fe));
   return { left, top };
+}
+
+// ─────────────────────── 贴「选中包围盒」的浮层锚定（两处源、**逐行同形**）───────────────────────
+
+/**
+ * 选择工具条的**高度估算**（原 `_Component42.jsx:141` 的 `vt = 40`）
+ *
+ * ⚠️ 它只进**翻转判据**（"上方放得下吗"），**不进** `top` —— 因为 `translate(-50%, -100%)`
+ *   会把这 40px 自己吃掉。
+ */
+export const SEL_TOOLBAR_EST_H = 40;
+/** 浮层与包围盒的间距（原 `_Component42.jsx:142` 的 `Dt = 10`） */
+export const SEL_TOOLBAR_GAP = 10;
+/** 上边最小留白（原 `_Component42.jsx:143` 的 `6`） */
+export const SEL_TOOLBAR_MIN_TOP = 6;
+
+/** 贴包围盒的浮层锚定入参（原 `_Component42.jsx:136-143` / `L3.jsx:20-49`） */
+export interface SelectionAnchorInput {
+  /** 选中节点的**包围盒**（画布坐标；原 `getNodesBounds(selected)`） */
+  bounds: { x: number; y: number; width: number; height: number };
+  /** viewport（原 `M` = `transform[0..2]`） */
+  viewport: { x: number; y: number; zoom: number };
+  /** 放**上方**时 `top` 相对包围盒上边再上移多少 */
+  aboveOffset: number;
+  /** 放**下方**时 `top` 相对包围盒下边再下移多少 */
+  belowOffset: number;
+  /** 判"上方放得下"时的**预留量**（工具条 = 高度 + 间距） */
+  flipReserve: number;
+  /** 上边最小留白 */
+  minTop: number;
+}
+
+/** 贴包围盒的锚定结果（源 `se` 的三字段，直接摊成内联 style） */
+export interface SelectionAnchor {
+  left: number;
+  top: number;
+  transform: string;
+}
+
+/**
+ * 「选中包围盒 → 屏幕坐标 + 上下翻转」（原 `L3.jsx:20-49` ＋ `_Component42.jsx:131-152`）
+ *
+ * ★ **两处源逐行同形**，只有常数不同 ⇒ 收成这一份（判据 C1）：
+ * ```js
+ * const left    = (B.x + B.width / 2) * zoom + vp.x;   // 中心 X
+ * const topY    = B.y * zoom + vp.y;                   // 上边 Y
+ * const bottomY = (B.y + B.height) * zoom + vp.y;      // 下边 Y
+ * const above   = topY - flipReserve >= minTop;        // 上方放得下吗
+ * return { left, top: above ? topY - aboveOffset : bottomY + belowOffset,
+ *          transform: above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)' };
+ * ```
+ *
+ * ⚠️ **常数两处不同，照各自源**（**不统一** —— 那是各自的几何，不是同一件事的两份）：
+ *   · **选择工具条**（`_Component42.jsx:141-143`）：`aboveOffset = belowOffset = Dt(10)` ·
+ *     `flipReserve = vt(40) + Dt(10) = 50` · `minTop = 6`。
+ *   · **批量发送触发条**（`L3.jsx`）：三者都取 `BS_TRIGGER_MARGIN_X + BS_TRIGGER_OFFSET_Y + BS_TRIGGER_GAP` ·
+ *     `minTop = BS_TRIGGER_MIN_TOP`。
+ * ⚠️ 原则 4：`bounds` / `viewport` 由调用方注入（本函数不读 DOM、不读 xyflow）。
+ */
+export function planSelectionAnchor(input: SelectionAnchorInput): SelectionAnchor {
+  const { bounds, viewport, aboveOffset, belowOffset, flipReserve, minTop } = input;
+  const left = (bounds.x + bounds.width / 2) * viewport.zoom + viewport.x;
+  const topY = bounds.y * viewport.zoom + viewport.y;
+  const bottomY = (bounds.y + bounds.height) * viewport.zoom + viewport.y;
+  const above = topY - flipReserve >= minTop;
+  return {
+    left,
+    top: above ? topY - aboveOffset : bottomY + belowOffset,
+    transform: above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+  };
 }

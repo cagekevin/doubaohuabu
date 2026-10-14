@@ -28,7 +28,7 @@ const adapter = {
   domains: [BASE],
   // 鉴权形态仍是「密钥型」，但请求头用 Token（与 Bearer 区分，仅声明用途，真实头由 buildSubmit 生成）
   auth: { type: 'bearer', keyFields: ['apiKey'] },
-  transientErrorHints: /ECONNRESET|ECONNABORTED|ETIMEDOUT|ESOCKETTIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR/i,
+  transientErrorHints: require('./_shared').TRANSIENT_ERROR_HINTS,
   quotaHints: [
     { re: /余额不足|额度不足|quota|insufficient/i, kind: 'quota_exhausted', advice: 'Vidu 额度/余额不足，请充值后重试' }
   ],

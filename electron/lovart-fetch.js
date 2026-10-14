@@ -113,7 +113,7 @@ function headerProfiles(referer) {
   const full = { accept: ACCEPT_IMG, 'accept-language': ACCEPT_LANG };
   if (referer) {
     full.referer = referer;
-    try { full.origin = new URL(referer).origin; } catch (e) { /* ignore */ }
+    try { full.origin = new URL(referer).origin; } catch (e) { /* referer 非法 ⇒ 不带 origin 头（其余头照发） */ }
   }
   full['sec-fetch-dest'] = 'image';
   full['sec-fetch-mode'] = 'no-cors';

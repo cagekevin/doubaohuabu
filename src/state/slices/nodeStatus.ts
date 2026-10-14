@@ -24,26 +24,6 @@ export interface NodeStatusSliceDeps {
   writeAutoDetect(on: boolean): void;
 }
 
-/**
- * 发送后检测的**调试面板数据**（原 `setDetectDebugInfo` 的载荷，`_Component43.jsx:1327-1343` 的 `Ae`）
- *
- * ⚠️ `status` 是**用户可见文案** ⇒ 值由**调用方**从 `constants/text.ts` 取（`state` 不编文案）。
- */
-export interface DetectDebugInfo {
-  lastPollAt: number;
-  accountsTotal: number;
-  projectAccounts: number;
-  webviewsReady: number;
-  sentAccounts: number;
-  baselineCount: number;
-  apiOk: boolean;
-  videosTotal: number;
-  videosReady: number;
-  newVideos: number;
-  lastError: string | null;
-  status: string;
-}
-
 export interface NodeStatusSlice {
   // ── state ──
   nodeNotices: Record<string, NodeNotice>;
@@ -56,11 +36,9 @@ export interface NodeStatusSlice {
   nodeTimers: Record<string, number>;
   /** 节点 → 入队时刻（ms；`postSendDetect` 判定何时转成正式计时） */
   nodePendingTimers: Record<string, number>;
-  // ── 发送后检测（原 `autoVideoDetect` / `setDetectDebugInfo`）──
+  // ── 发送后检测（原 `autoVideoDetect`）──
   /** 自动视频检测开关（原 `autoVideoDetect`；持久化于 `doubao-auto-video-detect`） */
   autoVideoDetect: boolean;
-  /** 检测调试面板数据（`null` = 从未跑过） */
-  detectDebugInfo: DetectDebugInfo | null;
 
   // ── 通知（原 `setNodeNotice`/`clearNodeNotice` 31206-31239）──
   setNodeNotice: (nodeId: string, notice: Omit<NodeNotice, 'at'>) => void;
@@ -79,12 +57,6 @@ export interface NodeStatusSlice {
   setNodePendingTimer: (nodeId: string, at: number | null) => void;
   /** 转成正式计时后清除待启动登记（原 `removeNodePendingTimer(id)`） */
   removeNodePendingTimer: (nodeId: string) => void;
-  // ── 检测调试 ──
-  /**
-   * 合并写调试数据（原 `Ae(patch)`：源每次都带一套默认值再覆盖 patch）
-   * ⚠️ 只做「合并 + 落 store」；`status` 文案由调用方从 `constants/text.ts` 给。
-   */
-  setDetectDebugInfo: (patch: Partial<DetectDebugInfo>) => void;
   /** 切自动检测开关（原 `setAutoVideoDetect`）—— **先写盘再改状态** */
   setAutoVideoDetect: (on: boolean) => void;
 }
@@ -98,7 +70,6 @@ export function createNodeStatusSlice(deps: NodeStatusSliceDeps) {
     nodePendingTimers: {},
     // ★ 初值**读盘**（原 `autoVideoDetect: jT()` —— 键 `doubao-auto-video-detect`）
     autoVideoDetect: deps.readAutoDetect(),
-    detectDebugInfo: null,
 
     setNodeNotice: (nodeId, notice) => {
       if (!nodeId) return;
@@ -170,27 +141,6 @@ export function createNodeStatusSlice(deps: NodeStatusSliceDeps) {
       const next = { ...get().nodePendingTimers };
       delete next[nodeId];
       set({ nodePendingTimers: next });
-    },
-
-    // 原 `Ae(patch)`（`_Component43.jsx:1327-1343`）：**每次都带一套默认值再覆盖 patch**
-    setDetectDebugInfo: (patch) => {
-      set({
-        detectDebugInfo: {
-          lastPollAt: deps.now(),
-          accountsTotal: 0,
-          projectAccounts: 1,
-          webviewsReady: 1,
-          sentAccounts: 1,
-          baselineCount: 0,
-          apiOk: false,
-          videosTotal: 0,
-          videosReady: 0,
-          newVideos: 0,
-          lastError: null,
-          status: '',
-          ...patch,
-        },
-      });
     },
 
     // 原 `setAutoVideoDetect`：**先写盘再改状态**（同 `setViewHeadCollapsed`）

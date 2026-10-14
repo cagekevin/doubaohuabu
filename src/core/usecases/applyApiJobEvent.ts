@@ -38,9 +38,8 @@ export interface ApiJobNodePatch {
 }
 
 export interface ApiJobDecision {
-  /** ★ **总是**要回灌的任务快照键（源版第一件事：`apiJobs[jobId] = n`） */
-  jobId: string;
-  job: ApiJobEvent;
+  // ⚠️ 这里**没有** `jobId` / `job` —— 任务快照的回灌由**落点直接用事件本身**做
+  //   （`state/subscriptions` 的 `upsertApiJob(job)`，在调本函数**之前**）⇒ 决策不必把它带回来。
   /** 落资源库的图片（原 `addToLibrary`） */
   library: Array<{ name: string; dataUrl: string }>;
   /** 新建视频节点（原 `addVideoNode`） */
@@ -124,7 +123,7 @@ export function applyApiJobEvent(input: ApiJobDecisionInput): ApiJobDecision | n
   // ① 源：`if (!n || !n.jobId) return;`
   if (!event || !event.jobId) return null;
 
-  const decision: ApiJobDecision = { jobId: event.jobId, job: event, library: [] };
+  const decision: ApiJobDecision = { library: [] };
 
   const nodeId = event.nodeId;
 

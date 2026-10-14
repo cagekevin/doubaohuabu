@@ -74,12 +74,10 @@ describe('applyApiJobEvent · 前置分支', () => {
     expect(applyApiJobEvent(input(ev({ jobId: '' })))).toBeNull();
   });
 
-  it('任何事件都会带上任务快照（源版第一件事就是回灌 apiJobs）', () => {
-    const e = ev({ jobId: 'j1', status: 'running' });
-    const d = applyApiJobEvent(input(e));
-    expect(d?.jobId).toBe('j1');
-    expect(d?.job).toBe(e);
+  it('运行中（无落点动作）⇒ 空壳决策（library 空 · 无 videoNode）', () => {
+    const d = applyApiJobEvent(input(ev({ jobId: 'j1', status: 'running' })));
     expect(d?.library).toEqual([]);
+    expect(d?.videoNode).toBeUndefined();
   });
 });
 
@@ -136,9 +134,8 @@ describe('applyApiJobEvent · 无节点来源（源 30719-30745）', () => {
 });
 
 describe('applyApiJobEvent · 有节点来源', () => {
-  it('★ 节点不存在 ⇒ 只记快照，不落任何东西（源 30751-30753）', () => {
+  it('★ 节点不存在 ⇒ 无落点动作（源 30751-30753）', () => {
     const d = applyApiJobEvent(input(ev({ jobId: 'j1', nodeId: 'nope' }), [imgNode('ig_1')]));
-    expect(d?.jobId).toBe('j1');
     expect(d?.nodePatch).toBeUndefined();
     expect(d?.library).toEqual([]);
   });

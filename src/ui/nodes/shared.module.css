@@ -1054,6 +1054,20 @@
   cursor: help;
 }
 
+/* 原 `.vn-flash` —— 节点内一次性反馈行（2.2s 自动消失，见 `VIDEO_NODE_TEXT.flashMs`） */
+.videoFlash {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-2);
+  z-index: var(--z-overlay);
+  padding: var(--space-half) var(--space-2);
+  color: var(--color-surface-raised);
+  font-size: var(--font-size-xs);
+  background: var(--color-text-strong);
+  border-radius: var(--radius-full);
+  transform: translateX(-50%);
+}
+
 .videoBody {
   position: relative;
   flex: 1;

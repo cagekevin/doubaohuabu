@@ -667,7 +667,7 @@ async function attemptFallbackFetch(label, fetcher, url, source, budgetMs) {
   } catch (error) {
     return { url: '', hardStop: false, error: `${label}: ${errText(error)} (${Date.now() - started}ms)` };
   } finally {
-    try { controller.abort(); } catch (_) { /* ignore */ }
+    try { controller.abort(); } catch (_) { /* abort 幂等（可能已中止或已结束） */ }
   }
 }
 
@@ -1198,7 +1198,7 @@ function initDolaMediaCapture({ getMainWindow }) {
         if (host === 'doubao.com' || host === 'dola.com') attachGuestDebugger(wc);
       }
     } catch (_) {
-      /* ignore */
+      /* 诊断增强：挂调试器失败不影响主流程 */
     }
   }, 1500);
   console.log(

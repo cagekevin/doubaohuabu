@@ -31,8 +31,6 @@ import {
 export interface GallerySlice {
   /** `accountId → 图片列表`（原 26787 的 `lovartGalleries: ET()`） */
   lovartGalleries: LovartGalleries;
-  /** 整体替换（给"删账号时清池"这类外部编排用） */
-  setLovartGalleries: (galleries: LovartGalleries) => void;
   /** 加图（原 29243）@returns 真正新增的条数 */
   addLovartImages: (accountId: string, items: readonly LovartImageInput[]) => number;
   /** 按 **id** 删（原 29296） */
@@ -75,7 +73,6 @@ export const createGallerySlice =
     return {
       lovartGalleries: {},
 
-      setLovartGalleries: (galleries) => set({ lovartGalleries: galleries }),
 
       addLovartImages: (accountId, items) => {
         const cur = get().lovartGalleries;

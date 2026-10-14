@@ -78,6 +78,26 @@ export interface ApiJobEvent {
   usedFallback: boolean;
 }
 
+/**
+ * `ApiJobEvent` 的类型谓词 —— ★ **推送边界的唯一收窄入口**
+ *
+ * ★ 为什么在这里：**形状与谓词同源**（同 `core/model/license.ts` 的 `isLicenseStatusKind`）。
+ * ⚠️ 推送载荷来自后端、属**不可信输入** —— 拉取侧（invoke 返回值）已统一走 `checkOk`/`need`
+ *    fail-closed；推送侧若不收窄，形状漂移会**静默变成 `undefined`**（`TD-04-12`）。
+ * ⚠️ 只判**恒带且可判**的字段（`jobId` / `kind` / `status` / `results`）；可选字段不参与，
+ *    不冒充必需。
+ */
+export function isApiJobEvent(v: unknown): v is ApiJobEvent {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.jobId === 'string' &&
+    (r.kind === 'image' || r.kind === 'video') &&
+    typeof r.status === 'string' &&
+    Array.isArray(r.results)
+  );
+}
+
 /** 批量提交结果（原 `job-manager.js:443-462` 的 `submitBatch`） */
 export interface ApiBatchResult {
   /** 与 `matrix` 逐位对应；提交失败处为 `null` */

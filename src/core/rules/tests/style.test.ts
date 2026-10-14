@@ -13,6 +13,7 @@ import {
   planAddStyle,
   planRemoveStyle,
   planUpdateStyle,
+  resolveStyles,
   styleCoverGradient,
   stylePrefixOf,
   UNNAMED_STYLE,
@@ -130,5 +131,29 @@ describe('defaultStyles（原 `resetStyles`）', () => {
     expect(out).not.toBe(DEFAULT_STYLE_PRESETS);
     out[0]!.name = '改过了';
     expect(DEFAULT_STYLE_PRESETS[0]!.name).not.toBe('改过了');
+  });
+});
+
+describe('resolveStyles（原 `nu` 全量 —— `prefix` ＋ `names`）', () => {
+  const styles = [sty('a', '国风', '国风插画，'), sty('b', '扁平', '扁平矢量')];
+
+  it('★ `prefix` 与 `stylePrefixOf` **同一份**（后者只是委托）', () => {
+    expect(resolveStyles(['a', 'b'], styles).prefix).toBe(stylePrefixOf(['a', 'b'], styles));
+    expect(resolveStyles(['a'], styles).prefix).toBe('国风插画，');
+  });
+
+  it('★ `names` = **命中风格**的 `name`（供配方 `styleName` 用 `、` 连）', () => {
+    expect(resolveStyles(['a', 'b'], styles).names).toEqual(['国风', '扁平']);
+    expect(resolveStyles(['a', 'b'], styles).names.join('、')).toBe('国风、扁平');
+  });
+
+  it('★ 未命中的 id ⇒ **既不进 prefix 也不进 names**', () => {
+    expect(resolveStyles(['nope', 'a'], styles)).toEqual({ prefix: '国风插画，', names: ['国风'] });
+  });
+
+  it('★ 空表 / 全未命中 ⇒ `{prefix:空, names:[]}`', () => {
+    expect(resolveStyles([], styles)).toEqual({ prefix: '', names: [] });
+    expect(resolveStyles(null, null)).toEqual({ prefix: '', names: [] });
+    expect(resolveStyles(['nope'], styles)).toEqual({ prefix: '', names: [] });
   });
 });

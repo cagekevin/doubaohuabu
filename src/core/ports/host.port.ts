@@ -36,7 +36,6 @@ export type { LicenseStatus, LicenseStatusKind } from '@/core/model/license';
 /** 文件导入 / 保存 / 下载 */
 export interface FilePort {
   importFiles(): Promise<Result<PickedFile[]>>;
-  saveFile(content: string): Promise<Result<{ path?: string }>>;
   loadFile(): Promise<Result<{ name: string; content: string } | null>>;
   selectFolder(): Promise<Result<string | null>>;
   /**
@@ -223,6 +222,54 @@ export interface DolaMediaEvent {
   items: DolaMediaItem[];
 }
 
+/**
+ * ★ **批量取图**的请求（原 `vP` 的入参，`shared.js:33677`；后端 `lovart-fetch-images`）
+ *
+ * ⚠️ `partition` 是**会话隔离键**（`Account.partition`）—— 主进程据此
+ *   `session.fromPartition(partition).fetch` ⇒ **带上该账号的 cookie**。
+ * ⚠️ `referer` 由**站点适配器**给（Lovart = `https://www.lovart.ai/`，
+ *   Tapnow = `https://app.tapnow.media/`，原 `shared.js:34090`）—— 冒充站内请求，过 CDN 防盗链。
+ */
+export interface FetchImagesRequest {
+  accountId: string;
+  partition?: string;
+  referer?: string;
+  urls: readonly string[];
+  /** 上限（后端夹在 1–200，默认 80） */
+  limit?: number;
+}
+
+/** 成功取回的一张图（原 `lovart-fetch.js` 推的 `item`） */
+export interface FetchImagesItem {
+  name: string;
+  /** 内联 base64（`data:image/…;base64,…`） */
+  dataUrl: string;
+  sizeBytes?: number;
+  natW?: number;
+  natH?: number;
+  sourceUrl: string;
+  source?: string;
+}
+
+/** 批量取图的**进度回执**（原 `vP` 的 `p({phase:'working', …})`） */
+export interface FetchImagesProgress {
+  done: number;
+  total: number;
+  okCount: number;
+  failCount: number;
+  skipCount: number;
+}
+
+/** 整批取回的汇总（`items` 只含**成功**的图；失败 / 跳过各带原因） */
+export interface FetchImagesResult {
+  items: FetchImagesItem[];
+  okCount: number;
+  failCount: number;
+  skipCount: number;
+  failures: { url: string; error: string }[];
+  skipped: { url: string; reason: string }[];
+}
+
 export interface MediaPort {
   /**
    * 图片落盘 → `img://` 引用（⚠️ `sendSync`，**同步**；供持久化链路直接使用）
@@ -243,6 +290,26 @@ export interface MediaPort {
    */
 
   imageFetchDataUrl(url: string): Promise<Result<string | null>>;
+  /**
+   * ★ **批量取图**（原 `vP`，`shared.js:33677`；后端 `electron/lovart-fetch.js`）
+   *
+   * 【为什么必须有它 —— 而不是用 `imageFetchDataUrl`】两者都是主进程下载，但取到的**不是同一批图**：
+   *   · `imageFetchDataUrl`（`main.js:1165`）是**裸 `fetch`**（假 UA、**无 cookie**）——
+   *     它服务的是**文生图后台通道 CDP 抓的临时签名直链**（那些直链公开、不需要会话）。
+   *   · `fetchImages` 走 `session.fromPartition(partition).fetch` ⇒ **带上账号 webview 的 cookie**——
+   *     站点 CDN 的图（Lovart / Tapnow）**必须**靠它才取得到。
+   *   ⇒ 扫描链的图**归它**；拿 `imageFetchDataUrl` 去取会**静默取不到「需登录态」的图**（BP-34）。
+   *
+   * ⚠️ 源里它是「页内取图（`mp`/`pP`）失败后」的兜底；本仓**没有页内取图档** ⇒ 它就是主路径。
+   * ⚠️ **进度走 `onProgress` 回调参数**（不新开全局订阅）：它是一次请求的**流式回执**，
+   *    不是「宿主事件 → store」的转发（后者才归 `state/subscriptions.ts`，原则 2）。
+   * ⚠️ 后端要求**先订阅 item/done、再提交**（源顺序，`shared.js:33708-33744`）—— 实现照抄，否则漏最早的事件。
+   * @returns 收齐整批后的汇总（`items` 只含**成功取回**的图）
+   */
+  fetchImages(
+    req: FetchImagesRequest,
+    onProgress?: (p: FetchImagesProgress) => void,
+  ): Promise<Result<FetchImagesResult>>;
   captureRect(rect: CaptureRect): Promise<Result<string | null>>;
   showInFolder(ref: string): Promise<Result<void>>;
   /**
@@ -340,6 +407,44 @@ export interface MediaPort {
    * ⚠️ 源在 **`dom-ready`（延迟 600ms）** 与 **`did-navigate`** 两处调（`_Component25.jsx:144/169`）。
    */
   injectDolaDurationMain(webContentsId: number): Promise<Result<void>>;
+
+  // ── 无水印资源面板（原 `SD.jsx` 的 4 个专用宿主方法）──
+  /**
+   * ★ **读「无水印资源」下载设置**（原 `window.api.getDownloadSettings`，`SD.jsx:22`）
+   *
+   * ⚠️ 后端 `get-download-settings`（`main.js:2104`）恒返
+   *   `{ok:true, path, configured, configuredPath}` —— `path` = **生效目录**（未配置时 = 系统默认下载目录）。
+   */
+  getDolaMediaDownloadSettings(): Promise<Result<{ path?: string; configured?: boolean }>>;
+  /**
+   * ★ **选「无水印资源」下载目录**（原 `window.api.pickDownloadPath`，`SD.jsx:48/73`）
+   *
+   * ⚠️ 后端 `pick-download-path`（`main.js:2115`）：成功 `{ok:true, path, configured}` ·
+   *   用户取消 `{ok:false, canceled:true}` · 无窗 `{ok:false, error:'no_window'}`。
+   *   **取消是如实结果**（与 `ProjectPort.pickStorage` 同形）⇒ 调用方**不得**据此报错。
+   */
+  pickDolaMediaDownloadPath(): Promise<
+    Result<{ path?: string; configured?: boolean; canceled?: boolean }>
+  >;
+  /**
+   * ★ **下载一条「无水印资源」**（原 `window.api.downloadDolaMedia`，`SD.jsx:136`）
+   *
+   * ⚠️ **与 `FilePort.downloadFile` 不是一件事**（不是重复、不得合并）：后端 `dola-media-download`
+   *   （`main.js:2137`）走**用户设置目录**（`getEffectiveDownloadDir`）＋ **自动编号命名**
+   *   （`nextAutoFilePath` ⇒ `video_01.mp4` / `image_01.png`），并**按来源 webview 的 session 下载**
+   *   （带 cookie 过防盗链）；`download-file` 是通用「指定路径 / 另存为」下载。源面板走的是前者。
+   */
+  downloadDolaMedia(
+    url: string,
+    mediaType: 'image' | 'video',
+  ): Promise<Result<{ path?: string; size?: number }>>;
+  /**
+   * ★ **清空 CDP 捕获列表**（原 `window.api.clearDolaMedia`，`SD.jsx:78-88`）
+   *
+   * ⚠️ 后端 `dola-media-clear`（`main.js:2027`）→ `clearDolaMediaItems()`（`dola-media.js:1213`）
+   *   清空后**会 `emit()` 推一次空列表** ⇒ 面板经既有 `onDolaMedia` 通道自动变空（无需本地清）。
+   */
+  clearDolaMedia(): Promise<Result<void>>;
 
   // ── 人脸检测 / 遮脸（★ **渲染层本地能力**，与上面各方法**不同源**：不走 IPC）──
   /**
@@ -495,8 +600,6 @@ export interface LicensePort {
  *   | `api-job-event`（推送） | `publicSnapshot` = `ApiJobEvent`（字段名是 **`jobId`**） |
  */
 export interface ApiPort {
-  /** provider 元信息（**脱敏**：只有 `hasKey` / `keyHint`） */
-  providersList(): Promise<Result<ApiProviderMeta[]>>;
   /** 配置原文 + provider 元信息（后端**一次**返回两者） */
   configGet(): Promise<Result<{ providers: ApiProviderMeta[]; configs: ApiConfigMap }>>;
   configSet(providerId: string, patch: unknown): Promise<Result<{ config: unknown }>>;
@@ -537,10 +640,25 @@ export interface ApiPort {
   onJobEvent(cb: (snap: ApiJobEvent) => void): Unsubscribe;
 }
 
+/**
+ * 窗口生命周期（原 `window.beforeunload`）
+ *
+ * ⚠️ **为什么它是端口**：`state/persist.ts` 要「页面卸载时立即落盘」，而 `state` 层
+ *    **不得直挂 `window`**（与 `subscriptions.ts` 的「宿主事件订阅唯一写入点」同精神）
+ *    ⇒ 宿主访问收进 `adapters/host`（原则 4 后半）。
+ */
+export interface LifecyclePort {
+  /**
+   * 订阅「页面即将卸载」（原 `window.addEventListener('beforeunload', …)`）
+   * @returns 取消订阅（原 `removeEventListener`）
+   */
+  onBeforeUnload(cb: () => void): Unsubscribe;
+}
+
 // ─────────────────────────── 端口主体 ───────────────────────────
 
 /**
- * ⚠️ 如实说明：对外是 1 个端口，内部 **8 个子接口**（docs/11 §4.1 审计 B4）
+ * ⚠️ 如实说明：对外是 1 个端口，内部 **9 个子接口**（docs/11 §4.1 审计 B4）
  * 目的：用例只依赖它需要的那一组（接口隔离），而不是 83 个方法的全集
  */
 export interface HostPort {
@@ -558,6 +676,8 @@ export interface HostPort {
   readonly account: AccountPort;
   readonly license: LicensePort;
   readonly api: ApiPort;
+  /** 窗口生命周期（原 `window.beforeunload`）—— 消费方 `state/persist.ts` */
+  readonly lifecycle: LifecyclePort;
 }
 
 // ─────────────────────────── 附属类型 ───────────────────────────

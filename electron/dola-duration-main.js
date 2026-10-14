@@ -276,7 +276,7 @@
           try {
             const ap = typeof probeAbility.ability_param === "string" ? JSON.parse(probeAbility.ability_param) : probeAbility.ability_param;
             probeModel = (ap && ap.model) || "";
-          } catch (e) { /* ignore */ }
+          } catch (e) { /* 参数非 JSON ⇒ 探测模型留空（只影响诊断日志） */ }
         }
         logDurationDiag(`generation-request path=${pathname} isCompletion=${isVideoCompletionUrl(requestUrl)} model=${probeModel}`);
       } catch (e) {

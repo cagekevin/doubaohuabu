@@ -59,21 +59,46 @@ export function normalizeStylePrefix(prefix: unknown): string {
  *   ```
  *
  * ⚠️ 与源逐字：**未命中的 id 跳过**（`l` 为空 / `prefix` 为空 ⇒ 不进 `parts`）；空表 ⇒ `''`。
- * ⚠️ 源的 `names` 无人消费 ⇒ **不落**（判据 B5）。
  */
+
+/** 风格解析的产物（原 `nu` 的返回形状）—— `prefix` 供发送报文 · `names` 供**配方**的 `styleName` */
+export interface ResolvedStyles {
+  prefix: string;
+  names: string[];
+}
+
+/**
+ * 解析风格（原 `nu`，`shared.js:41147-41178`）—— ★ 纯函数
+ *
+ * 逐字：命中（`id` 在表里 **且** 有 `prefix`）才收；`prefix` 逐条 trim + 去尾标点，
+ * `names` 收**命中风格的 `name`**；命中为空 ⇒ `{prefix:'', names:[]}`。
+ * ⚠️ 配方 `oR` 的 `styleName` = `names.join('、')` ⇒ `names` **有真消费者**（不再是死件）。
+ */
+export function resolveStyles(
+  ids: readonly string[] | null | undefined,
+  styles: readonly StylePreset[] | null | undefined,
+): ResolvedStyles {
+  const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  if (!list.length) return { prefix: '', names: [] };
+  const byId = new Map((styles ?? []).map((s) => [s.id, s]));
+  const parts: string[] = [];
+  const names: string[] = [];
+  for (const id of list) {
+    const hit = byId.get(id);
+    if (hit && hit.prefix) {
+      parts.push(String(hit.prefix).trim().replace(/[，,]+$/, ''));
+      names.push(hit.name);
+    }
+  }
+  return parts.length ? { prefix: `${parts.join('，')}，`, names } : { prefix: '', names: [] };
+}
+
+/** 风格前缀（原 `nu` 的 `prefix`）—— 委托 `resolveStyles`（判据 C1：风格解析只一份） */
 export function stylePrefixOf(
   ids: readonly string[] | null | undefined,
   styles: readonly StylePreset[] | null | undefined,
 ): string {
-  const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
-  if (!list.length) return '';
-  const byId = new Map((styles ?? []).map((s) => [s.id, s]));
-  const parts: string[] = [];
-  for (const id of list) {
-    const hit = byId.get(id);
-    if (hit && hit.prefix) parts.push(String(hit.prefix).trim().replace(/[，,]+$/, ''));
-  }
-  return parts.length ? `${parts.join('，')}，` : '';
+  return resolveStyles(ids, styles).prefix;
 }
 
 /**

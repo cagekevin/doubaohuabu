@@ -5,8 +5,9 @@
  *    类像素值（缩略图边长 72px 等）与源版一致 —— 与 `GalleryCard`(20px) / `GenPanel`(14px) 同例。
  * ⚠️ 原版 `.nip-ghost`（拖拽幽灵）**已落**（2026-10-11 随「拖出到系统」接通）—— 见文件末 `.ghost`，
  *    样式**源版不可得** ⇒ 按语义自拟 + 全走 token。
- * ⛔ `.nip-drop-active`（落点高亮）**仍不造**：它要给**跨层容器**（`.doubao-view-webviews`）挂**全局**类，
- *    而本仓只有 CSS Modules（无全局类样式先例）⇒ 不为此开全局 CSS 例外；且其源样式亦不可得。
+ * ★ `.nip-drop-active`（落点高亮）**已落** —— 见 `BackendView.module.css` 的 `.webviewsDropActive`：
+ *    面板经 `onDropActiveChange` 把「按下中」交给 `BackendView`（面板与 `.webviews` 容器同在它下）
+ *    ⇒ **不需要全局类**；源样式真值同样不可得 ⇒ 视觉自拟（token）。
  */
 
 .wrap {

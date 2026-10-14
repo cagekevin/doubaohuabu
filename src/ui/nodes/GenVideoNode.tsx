@@ -26,16 +26,14 @@
  *     弹层走 `createPortal` 到 `document.body`，打开时给缺海报的历次出片**懒生成**（`lib/videoPoster.ts`）。
  *     ⇒ **`YL.jsx` 的全部功能块至此落齐**（原 TD-16-79 可结）。
  *
- * ⚠️ 「生成中」在本仓 = **`data.generating`**（`state/generate.ts` 写入；`GenImageNode` 已用）。
- *    源 `genvideo` 用的是 `apiJob`/`_pendingAttempt` 推导的 `m`（`YL.jsx:43-58`，含 **30 分钟窗口**），
- *    而 `apiJob` 在本仓**未 patch 到节点**、`_pendingAttempt(s)` **无生产者**（启动即清）
- *    ⇒ 照搬 `m` 会得到**恒假**的假功能。取舍已登记 —— **TD-16-81**
- *    （源 `imggen` 的 `gv-waiting` 用的恰是 `data.generating`，见 `docs/12` §1.8 —— 本仓两节点统一到它）。
- *
- * ⚠️ `gv-waiting` **后两态**（`p` = `nodeNotices[id].code === 'generation-confirm'`）**无数据源** —— TD-16-81。
+ * ★ **2026-10-13 · `gv-waiting` 四态齐（TD-16-81 结）**：
+ *    · **触发 = 源 `m`**（`core/rules/genVideo.genVideoWaiting`）—— `apiJob` running ∨ 待归属尝试 ∧ 30 分钟窗口。
+ *      此前本仓用 `data.generating` 布尔（2026-10-11 的临时取舍，理由是"`m` 的输入无生产者"）；
+ *      该前提**已不成立**（`apiJob` 经 `applyApiJobEvent.nodePatch` patch 进节点、`_pendingAttempt` 由
+ *      `state/pendingAttempt` 写）⇒ 回到源判据。⚠️ 源里 `generating` 只服务 **imggen**（写 `_Component45:740`）。
+ *    · **后两态**（`p` = `nodeNotices[id]` 的 `generation-confirm`）—— 生产者 = `state/autoConfirm`。
  * ⚠️ 已知差异（均已登记）：`gv-play.is-playing`/`gv-dur-real`/`gv-apijob-<status>` 状态类未输出（**TD-16-87**）·
- *    历史版本弹层样式无源 CSS（**TD-16-92**）· 三帧新素材节点用默认尺寸（**TD-16-91**）·
- *    `gv-waiting` 四态只落两态（**TD-16-81**）。
+ *    历史版本弹层样式无源 CSS（**TD-16-92**）· 三帧新素材节点用默认尺寸（**TD-16-91**）。
  * ⚠️ 源的 `<video>` 带 `crossOrigin="anonymous"`（供三帧取帧的 canvas 不污染）—— 本刀**照抄**（同一后端）。
  * ⚠️ 源另有两个**状态类**（`gv-play.is-playing` / `gv-dur-real`）**未输出**（mockup 无样式）—— **TD-16-87**。
  * ⚠️ `_pendingAttempt` / `_pendingAttempts` / 未完成 `apiJob` 由**启动归位清理**
@@ -66,6 +64,9 @@ import {
   framePlacement,
   frameSeekSeconds,
   genVideoDownloadName,
+  genVideoWaiting,
+  genVideoWaitingAria,
+  genVideoWaitingText,
   hasRealDuration,
   hasResult,
   nodeAccountLabel,
@@ -82,12 +83,19 @@ import { asRecord } from '@/lib/object';
 import { formatMonthDayMinute } from '@/lib/time';
 import { createCanvas } from '@/lib/image';
 import { clamp } from '@/lib/math';
-import { generateVideoPoster } from '@/lib/videoPoster';
+import { generateVideoPoster } from '@/ui/lib/videoPoster';
 import { withThumb } from '@/stable/protocols/img';
 import { NodeShell } from './NodeShell';
-import { AnalyzePrompt } from './AnalyzePrompt';
 import type { RFNodeProps } from './types';
 import styles from './shared.module.css';
+
+/**
+ * `gv-waiting` 的心跳间隔（ms）
+ *
+ * ⚠️ 只为推进 `m` 的 **30 分钟窗口**（`m` 里唯一随时间翻的条件）—— 比 `TextNode` 的 250ms 倒计时**粗得多**，
+ *    因为它不显示秒数、只需在窗口过期时翻一次。
+ */
+const GEN_VIDEO_WAITING_TICK_MS = 5000;
 
 export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
   const nodes = useStore((s) => s.nodes);
@@ -114,8 +122,28 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
 
   /** 有结果（原 `h` = `!!resultUrl || !!resultPoster`） */
   const produced = hasResult(data);
-  /** 生成中（原 `m` 在本仓的等价物；见文件头 ⚠️） */
-  const generating = !!data.generating;
+
+  // ── `gv-waiting`（原 `m` + `p`，`YL.jsx:43-67,488-497`）────────────────────────
+  /**
+   * `p`（原 33-41）：`nodeNotices[id]` 里 **`code === 'generation-confirm'`** 的那条，否则 `null`。
+   * 生产者 = `state/autoConfirm`（后台要求二次确认时挂的 warn / info 通知）。
+   */
+  const notice = useStore((s) => {
+    const n = s.nodeNotices[id];
+    return n && n.code === 'generation-confirm' ? n : null;
+  });
+  /**
+   * 时钟进 state（⚠️ 渲染期禁 `Date.now()`）—— **只在真会变时走心跳**：
+   * `m` 里唯一随时间翻的只有「30 分钟窗口」，故 `waiting` 为假时**不挂定时器**。
+   */
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  /** 生成中（原 `m`，`core/rules/genVideo.genVideoWaiting`） */
+  const waiting = genVideoWaiting(data, nowMs);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), GEN_VIDEO_WAITING_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [waiting]);
   /** 计划时长（原 `w = d.duration || ES`）—— 兜底吃 SSOT（原 `ES = 5`） */
   const plannedDuration = data.duration || DEFAULT_VIDEO_DURATION;
   /** 海报缩略图（原 `Xt(d.resultPoster, 480)`） */
@@ -466,16 +494,18 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         ⚠️ **2026-10-12 对齐源**：此前舞台之上多印一行 `（空提示词）`（源卡片**没有**这行）。
       */}
       <div className={styles.gvStage} style={{ aspectRatio: stageRatio(data.aspectRatio) }}>
-        {generating && (
-          <div className={styles.gvWaiting} aria-label={GEN_VIDEO_TEXT.waitingAria}>
+        {waiting && (
+          <div
+            className={styles.gvWaiting}
+            aria-label={genVideoWaitingAria(notice)}
+            title={notice?.text || undefined}
+          >
             <div className={styles.gvwDots}>
               <span />
               <span />
               <span />
             </div>
-            <div className={styles.gvwText}>
-              {produced ? GEN_VIDEO_TEXT.waitingRegenerate : GEN_VIDEO_TEXT.waitingFirst}
-            </div>
+            <div className={styles.gvwText}>{genVideoWaitingText(notice, produced)}</div>
           </div>
         )}
         {produced ? (
@@ -641,19 +671,6 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
           </button>
         </div>
       ) : null}
-      {/*
-        ★ 提示词分析（共享组件 `AnalyzePrompt`）
-        ⚠️ **本仓既有、源 `YL.jsx` 里没有**（§1.7 的 44 条文案中无「分析提示词」；那套属 `ZL.jsx`/`fL.jsx`）
-          —— 条件保持本仓原样（`!!resultUrl`），**本刀不动它**；是否保留待裁定，见 TD-16-80。
-      */}
-      <AnalyzePrompt
-        nodeId={id}
-        imageUrl={data.resultUrl}
-        state={data.analyzePrompt ?? null}
-        showButton={!!data.resultUrl}
-        /* ⚠️ 源 `YL.jsx` **没有**分析按钮 ⇒ 保留本仓既有的「浮在节点上方」落点（TD-16-80） */
-        placement="above"
-      />
       </NodeShell>
       {/* `gv-hist-pop`（原 585-620）：历史版本弹层（portal 到 body，按按钮位置定位） */}
       {histOpen && attempts.length > 0

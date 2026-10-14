@@ -259,13 +259,16 @@ export function renumberRefs(
   const byN = new Map(list.map((r) => [r.n, r]));
 
   // ① 正文里**实际出现**的编号，按首次出现顺序
-  const order: number[] = [];
+  // ★ `order` 承载**已过滤的条目本身**（不是编号）—— 过滤的产物随手带走：
+  //   下游不必再 `byN.get` 查一次，也就**不需要**"查不到"的防御分支
+  const order: ParsedRef[] = [];
   const seen = new Set<number>();
   for (const m of src.matchAll(createRefMarkRe())) {
     const n = Number(m[1]);
-    if (byN.has(n) && !seen.has(n)) {
+    const hit = byN.get(n);
+    if (hit && !seen.has(n)) {
       seen.add(n);
-      order.push(n);
+      order.push(hit);
     }
   }
 
@@ -273,11 +276,11 @@ export function renumberRefs(
   let changed = false;
   const remap = new Map<number, number>();
   const nextRefs: ParsedRef[] = [];
-  order.forEach((oldN, i) => {
+  order.forEach((hit, i) => {
     const newN = i + 1;
-    const hit = byN.get(oldN);
-    // 防御性分支：`order` 已用 `byN.has(n)` 过滤 ⇒ 不可达（保留以防将来改动漏掉过滤）
-    if (!hit) return;
+    const oldN = hit.n;
+    // ⚠️ 这里**没有**"查不到"的防御分支 —— `order` 里的条目**天生**来自 `byN`（见上方收集段），
+    //    前提随数据一起传下来了
     remap.set(oldN, newN);
     if (oldN !== newN) changed = true;
     nextRefs.push({ ...hit, n: newN });

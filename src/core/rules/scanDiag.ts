@@ -20,6 +20,7 @@ const FIELDS = [
   'shadowCount',
   'imgTotal',
   'imgUsable',
+  'perfImg',
   'canvasCount',
   'itemsRaw',
   'itemsKept',
@@ -89,7 +90,6 @@ export function shouldExportCanvas(diag: ScanDiag | null | undefined): boolean {
  *
  * ⚠️ **源的第一档 `frame N 个` 本仓不落**：它读 `diag.frames`，而 `hp` **从不写**该字段
  *   ⇒ 源里那一档是**死分支**（详见 `ScanDiag` 的注释）。
- * ⚠️ **源的 `网络图 N` 一档本仓也不落**：本仓没有 perf 取图通道 ⇒ 没有可诚实上报的计数。
  */
 export function formatScanDiag(diag: ScanDiag | null | undefined): string {
   if (!diag) return SCAN_DIAG_TEXT.noData;
@@ -99,6 +99,7 @@ export function formatScanDiag(diag: ScanDiag | null | undefined): string {
   if (diag.iframeCount) parts.push(t.iframe(diag.iframeCount));
   if (diag.shadowCount) parts.push(t.shadowRoot(diag.shadowCount));
   parts.push(t.img(diag.imgTotal || 0, diag.imgUsable || 0));
+  if (diag.perfImg) parts.push(t.network(diag.perfImg));
   if (diag.canvasCount) parts.push(t.canvas(diag.canvasCount));
   parts.push(t.candidates(diag.itemsRaw || 0, diag.itemsKept || 0));
   return parts.join(t.separator);

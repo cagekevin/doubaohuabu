@@ -22,8 +22,11 @@
  *   （源 `WR`）的产物写进 `store.queueProgress[itemId]` ⇒ 本组件直接读它喂第三参。
  *   ⚠️ **同日勘误**：原文写「由**发送端的 `onProgress` 回写**」**不成立** —— 回源后**唯一写入方**
  *   是队列泵里的「排队追问」轮询。证据见 `TD-16-103` 的日志 §八。
- * ⚠️ **一处有意省略**：源版点队列项能 `fitViewAction([nodeId])` 把画布定位过去（80-89）。
- *   本工程的 `CanvasHost` 还没暴露 fitView（属另一件事）⇒ **不做**（不做一个没反应的按钮）。
+ * ★ **「查看」定位画布已接**（原 `z3.jsx` 的 `sq-btn ok` → `I(nodeId)` → `store.fitViewAction([nodeId])`，
+ *   `z3.jsx:80-89`）：该节点已有出片（`data.resultUrl || data.resultPoster`）时渲染，点了经
+ *   `state.requestFocusNodes([nodeId])` 请求，由 `CanvasHost`（持有 `useReactFlow().fitView`）消费。
+ *   ⚠️ 面板与画布是 `AppShell` 里的**兄弟** ⇒ 走 store 传**请求数据**（与 `splitKeywordModal` 同法），
+ *   **视图能力仍归 `ui`**。
  * ⚠️ **原则 1 + 铁律 2**：本组件只调 `useSendQueue()` 与 store action，不写 store、**也不持 `Ports`**
  *   —— 面板位置的读写经控制器，`ports.storage` 不进 `ui`（TD-16-8）。
  */
@@ -85,6 +88,8 @@ export function SendQueuePanel() {
    */
   const poolStrategy = useStore((s) => s.poolStrategy);
   const setPoolStrategy = useStore((s) => s.setPoolStrategy);
+  /** ★ 「查看」→ 请求把画布定位到该出片节点（原 `I` → `store.fitViewAction([nodeId])`，`z3.jsx:80-89`） */
+  const requestFocusNodes = useStore((s) => s.requestFocusNodes);
 
   const items = useMemo(() => queue?.items ?? [], [queue]);
   const paused = !!queue?.paused;
@@ -252,6 +257,10 @@ export function SendQueuePanel() {
           <div className={styles.list}>
             {items.map((it, idx) => {
                 const node = nodeById.get(it.nodeId);
+                // ★ 该节点是否已有出片（原 `ke` = `H.data.resultUrl || H.data.resultPoster`）——
+                //   决定「查看」渲不渲染（源同判据）
+                const d = node?.data as { resultUrl?: unknown; resultPoster?: unknown } | undefined;
+                const hasResult = !!(d?.resultUrl || d?.resultPoster);
                 // ★ 后台进度（源 `A.queueProgress[item.id]`）—— 由 `state/sendQueue` 的 `runQueuePing` 写（`TD-16-103`）
                 const progress: GenReplyLite | null = queueProgress[it.id] ?? null;
                 const g = resolveGenProgress(
@@ -291,6 +300,17 @@ export function SendQueuePanel() {
                       </div>
                     )}
                     <div className={styles.acts}>
+                      {/* ★ 「查看」（原 `z3.jsx` 的 `sq-btn ok`）—— 有出片才渲染；点了把画布定位过去 */}
+                      {hasResult ? (
+                        <button
+                          type="button"
+                          className={styles.btn}
+                          title={SEND_QUEUE_TEXT.viewTitle}
+                          onClick={() => requestFocusNodes([it.nodeId])}
+                        >
+                          {SEND_QUEUE_TEXT.view}
+                        </button>
+                      ) : null}
                       {it.status === 'waiting' || it.status === 'sending' ? (
                         <button
                           type="button"

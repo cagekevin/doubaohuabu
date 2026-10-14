@@ -53,10 +53,6 @@
   object-fit: cover;
 }
 
-.noPoster {
-  color: var(--color-text-faint);
-}
-
 .meta {
   flex: 1;
   display: flex;
@@ -67,13 +63,6 @@
 
 .type {
   color: var(--color-text-muted);
-}
-
-.account {
-  color: var(--color-text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .link {
@@ -87,27 +76,32 @@
   flex-shrink: 0;
 }
 
-.downloadBtn {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-action-primary);
-  border-radius: var(--radius-sm);
-  background: var(--color-action-primary);
-  color: var(--color-text-on-brand);
-  cursor: pointer;
-  font: inherit;
+/* 「下载到：」那一行（原 `SD.jsx` 的 `.dmp-path-row` / `.dmp-path-label` / `.dmp-path` / `.dmp-path-tag`）
+   —— 按钮不在这里自造：走真源 `shared.btn / btnGhost / btnSm`。 */
+.pathRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
-.downloadBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.pathLabel {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
-.removeBtn {
+.pathText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pathTag {
+  flex-shrink: 0;
   padding: 0 var(--space-1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
+  color: var(--color-text-faint);
 }

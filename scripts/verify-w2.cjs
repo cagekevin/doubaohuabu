@@ -14,8 +14,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // playwright 已是本工程 devDependency ⇒ 用**裸模块名**解析（不再依赖工程外路径，见 verify-canvas 注释）
-const PW = process.env.PW_PATH || 'playwright';
-const { chromium } = require(PW);
+const { launchBrowser } = require('./_pw.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
@@ -76,7 +75,7 @@ function readSample(name) {
   const url = `http://127.0.0.1:${server.address().port}/index.html`;
   console.log('serving:', url);
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
   // ★ 页面脚本执行**之前**注入真实样本

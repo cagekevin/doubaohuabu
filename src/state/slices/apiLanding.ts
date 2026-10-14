@@ -25,6 +25,7 @@ import { GEN_HISTORY_KEY } from '@/stable/model/node';
 import type { LibraryItem } from '@/stable/model/project';
 import type { ApiJobAttempt } from '@/stable/model/gen';
 import { appendGenHistoryAttempt, patchGenHistoryAttempt } from '@/core/rules/genHistory';
+import { deriveNodeRecipe } from '@/core/rules/recipe';
 import {
   IMAGE_GEN_RESULT_LIMIT,
   VIDEO_GRID_COLS,
@@ -94,17 +95,6 @@ export interface AddImageGenResultInput {
   natH?: number;
 }
 
-/** 图像回流落点结果（原 `addImageGenResult` 的返回，`:27448-27452`） */
-export interface AddImageGenResultOutcome {
-  ok: boolean;
-  /** `no-data` / `duplicate-key` / `placeholder`（原 `:27364` / `:27373` / `:27382`） */
-  error?: 'no-data' | 'duplicate-key' | 'placeholder';
-  /** 已收满（`duplicate-key` 分支亦带 `true`） */
-  satisfied?: boolean;
-  /** 资源库是否真的进了（原 `p`；`addToLibrary` 抛错 ⇒ `false`） */
-  added?: boolean;
-}
-
 /**
  * 视频结果落画布的入参（原 `addVideoNode` 28009-28018 的解构）
  *
@@ -165,15 +155,13 @@ export interface ApiLandingActions {
    * ④ 落资源库 ⑤ 进生成图片流 ⑥ 按 `imageGenKeyNode[key]` 反查节点落图 ⑦ 计数（收满判定）
    * ⑧ 收满 ⇒ 释放占用 ⑨ toast。
    */
-  addImageGenResult: (input: AddImageGenResultInput) => AddImageGenResultOutcome;
+  addImageGenResult: (input: AddImageGenResultInput) => void;
   /**
    * ★ **生成图片流入表**（原 `pushImageGenFeed`，`:27132-27161`）
    *
    * 去重 + 倒序插到最前 + 上限 `IMAGE_GEN_FEED_LIMIT`（80）。
    */
   pushImageGenFeed: (items: readonly ImageGenFeedInput[]) => void;
-  /** ★ **清空生成图片流**（原 `clearImageGenFeed`，`:27163-27167`） */
-  clearImageGenFeed: () => void;
   /**
    * ★ **落资源库**（原 `addToLibrary` 27101）
    *
@@ -207,6 +195,8 @@ export interface ApiLandingActions {
 interface ApiLandingReadable {
   nodes: CanvasNode[];
   library: LibraryItem[];
+  /** 节点配方表（原 `nodeRecipes`）—— `addVideoNode` 的 `d0` 展开要读它 */
+  nodeRecipes: Record<string, unknown>;
   imageGenKeyParams: ImageGenKeyParams;
   imageGenDeliveredKeys: ImageGenDeliveredKeys;
   imageGenKeyNode: ImageGenKeyNodes;
@@ -329,7 +319,7 @@ export function createApiLandingActions(
     addImageGenResult: (input) => {
       // ① 空 `dataUrl` ⇒ `no-data`（原 `:27361-27366`）
       const dataUrl = input?.dataUrl;
-      if (!dataUrl) return { ok: false, error: 'no-data' };
+      if (!dataUrl) return;
 
       const s = get();
       const key = input.key || null;
@@ -338,15 +328,12 @@ export function createApiLandingActions(
 
       // ② 已收满 ⇒ `duplicate-key`（原 `:27370-27376`）
       //   ⚠️ 判据走纯层（`isImageGenSatisfied`），**不在此重写一份 `got >= target`**
-      if (isImageGenSatisfied(s.imageGenDeliveredKeys, s.imageGenKeyTarget, key)) {
-        return { ok: false, error: 'duplicate-key', satisfied: true };
-      }
+      if (isImageGenSatisfied(s.imageGenDeliveredKeys, s.imageGenKeyTarget, key)) return;
 
       // ③ 占位图 ⇒ `placeholder`（原 `:27377-27385`）
-      if (isPlaceholderDataUrl(dataUrl)) return { ok: false, error: 'placeholder' };
+      if (isPlaceholderDataUrl(dataUrl)) return;
 
-      // ④ 落资源库（原 `:27386-27400`）—— 源 `try/catch` ⇒ 失败只记 `added=false`，**不中断**
-      let added = true;
+      // ④ 落资源库（原 `:27386-27400`）—— 源是 `try/catch` 空吞；本仓**留痕不吞**（原则 6），但不中断
       try {
         get().addToLibrary([
           {
@@ -355,8 +342,8 @@ export function createApiLandingActions(
             ...(input.natW && input.natH ? { natW: input.natW, natH: input.natH } : {}),
           },
         ]);
-      } catch {
-        added = false;
+      } catch (e: unknown) {
+        log.warn('[apiLanding] 落资源库失败：', e);
       }
 
       // ⑤ 进生成图片流（原 `:27401-27408`）
@@ -411,7 +398,6 @@ export function createApiLandingActions(
         log.warn('[apiLanding] 出图提示失败');
       }
 
-      return { ok: true, added, satisfied };
     },
 
     pushImageGenFeed: (items) => {
@@ -424,10 +410,6 @@ export function createApiLandingActions(
       // `null` = 源里的 `return {}`（空入参 / 全被去重）⇒ 不写
       if (!next) return;
       set({ imageGenFeed: next });
-    },
-
-    clearImageGenFeed: () => {
-      set({ imageGenFeed: [] });
     },
 
     addToLibrary: (items) => {
@@ -510,6 +492,12 @@ export function createApiLandingActions(
 
       const sourceNode = sourceNodeId ? s.nodes.find((n) => n.id === sourceNodeId) : null;
 
+      // ★ **原 `d0`（`shared.js:35676-35706`）**：配方 ← `nodeRecipes[源节点]`；来源标签 ← 源节点自身。
+      //   ⚠️ `input.recipe` / `input.sourceLabel` 是外部注入口（本仓调用方不传）⇒ 缺省时才派生
+      const derived = deriveNodeRecipe(s.nodes, s.nodeRecipes, sourceNodeId);
+      const finalRecipe = recipe ?? derived.recipe;
+      const finalLabel = sourceLabel ?? derived.sourceLabel ?? null;
+
       // ③ `genvideo` 源节点分支（源 28050-28111）—— 更新它，不新建
       if (sourceNode && sourceNode.type === 'genvideo') {
         const prevData = sourceNode.data as Record<string, unknown>;
@@ -535,8 +523,9 @@ export function createApiLandingActions(
         data.resultPoster = poster || null;
         data.resultVid = vid || null;
         data.resultAt = deps.now();
-        // ★ BP-08：视频走异步出片 ⇒ 出片即清「生成中」（本仓 genvideo 用 `generating` 布尔，源用 `apiJob`/`_pendingAttempt` 推导）
-        data.generating = false;
+        // ⚠️ **不写 `generating`**：源里那个布尔只服务 `imggen`（清 `shared.js:27277`）；
+        //    `genvideo` 的「生成中」由 `m` 推导（`core/rules/genVideo.genVideoWaiting`）
+        //    ⇒ 出片后下面一清 `_pendingAttempt(s)`，`m` 自然为假。
 
         // `_pendingAttempt(s)` 清理（原 28091-28101）
         const hadPending = !!prevData._pendingAttempt;
@@ -676,8 +665,8 @@ export function createApiLandingActions(
           gridAnchor,
           gridSlot: slot,
           gridPos: pos,
-          ...(recipe ? { recipe } : {}),
-          ...(sourceLabel ? { sourceLabel } : {}),
+          ...(finalRecipe ? { recipe: finalRecipe } : {}),
+          ...(finalLabel ? { sourceLabel: finalLabel } : {}),
           ...(attempt ? { genHistory: { v: 1, attempts: [attempt] } } : {}),
         },
       } as CanvasNode;

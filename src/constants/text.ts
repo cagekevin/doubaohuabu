@@ -56,6 +56,11 @@ export const COMMON_TEXT = {
    */
   unknownReason: '未知错误',
   /**
+   * 批量取图整体超时的原文（源 `vP` 的超时兜底**无文案** —— 它只回 `{timeout:true}`；
+   * 本仓 `Result` 需要一条 message，故在此立唯一真源）
+   */
+  fetchImagesTimeout: '取图超时：150 秒内未收到完成事件',
+  /**
    * ★ **2026-10-11 收口（判据 C1）**：下载相关的 4 句**同时出现在**文生视频（`YL.jsx:363,370,391,392`）
    *   与文生图（`ZL.jsx:120,127,148,149`）**两个域**、且**逐字相同** ⇒ 收到 `COMMON_TEXT`（跨域复用）。
    *   各节点自己的「下载」按钮文案仍留在各自域（`GEN_VIDEO_TEXT.download` / `GEN_IMAGE_TEXT.download`）。
@@ -467,12 +472,10 @@ export const LIBRARY_TEXT = {
  *
  * ⚠️ **分级文案（ok/critical/warn）不在这里**（2026-10-10，`TD-02-1` 删掉了本文件的松散副本）。
  *
- * ★ `core/rules/fingerprint.ts` 的 `COLLISION_LEVEL_LABEL` **整文件 0 生产消费**
- *   （只有 `tests/fingerprint.test.ts` 引它）⇒ **别把它当"要用就去 import 的真源"**
- *   （照做会给一个死文件造出第一个消费者）。
- *   **指纹诊断的活真源是 `core/rules/fingerprintDiagnosis.ts`**（段标签 / 4 个伪装状态 label，
- *   已被 `ui/panels/AccountPanel.tsx:46` + `state/accountOps.ts:35` 消费）。
- *   ⚠️ `fingerprint.ts` / `COLLISION_LEVEL_LABEL` 自身的归属（删 or 接线）见「未接线／死代码批」那笔债。
+ * ★ **两个活真源**：**指纹诊断** = `core/rules/fingerprintDiagnosis.ts`（段标签 / 4 个伪装状态 label，
+ *   已被 `ui/panels/AccountPanel.tsx:46` + `state/accountOps.ts:35` 消费）；
+ *   **撞车体检** = `core/rules/fingerprintScan.ts`（`FINGERPRINT_DIMENSIONS` +
+ *   `scanFingerprintCollisions`，被 `ui/panels/AccountPanel.tsx` + `ui/panels/FingerprintScanPanel.tsx` 消费）。
  */
 export const FINGERPRINT_TEXT = {
   title: '跨账号指纹关联扫描',
@@ -486,7 +489,7 @@ export const FINGERPRINT_TEXT = {
  *   是两件事）。摘要逐档顺序即语义，**逐字对源**。
  *
  * ⚠️ 源 `GT` 的第一档 `frame N 个` **不在本表**：它读 `diag.frames`，而 `hp` 从不写该字段
- *   ⇒ 源里是死分支（见 `core/ports/site.port.ScanDiag`）。源的 `网络图 N` 同样不落（本仓无 perf 取图通道）。
+ *   ⇒ 源里是死分支（见 `core/ports/site.port.ScanDiag`）。
  */
 export const SCAN_DIAG_TEXT = {
   /** 没有诊断数据（原 `GT` 的第一句 `:32455`） */
@@ -501,6 +504,8 @@ export const SCAN_DIAG_TEXT = {
   shadowRoot: (n: number) => `shadowRoot ${n}`,
   /** 原 `:32468` */
   img: (total: number, usable: number) => `img ${total}（可用 ${usable}）`,
+  /** 原 `:32470` —— 网络资源里当候选图收下的张数 */
+  network: (n: number) => `网络图 ${n}`,
   /** 原 `:32473` */
   canvas: (n: number) => `canvas ${n}`,
   /** 原 `:32475` —— 候选进过滤器 → 过滤后留下 */
@@ -615,22 +620,6 @@ export const SIDE_TEXT = {
   toggleAccounts: '展开/收起账号栏',
   toggleLibrary: '展开/收起资源栏',
   apiService: 'API 服务',
-} as const;
-
-/** 生成面板 */
-export const GEN_TEXT = {
-  model: '生成模型',
-  duration: (cur: number, min: number, max: number) => `视频时长：${cur} 秒（${min}–${max} 秒可调）`,
-  generate: '生成',
-  regenerate: '重新生成',
-  batch: '批量出片',
-  batchHint: '同一提示词 + 服务商，按 16:9 / 9:16 / 1:1 三个比例各出一片',
-  viaApi: '走 API 通道生成',
-  accountAvailable: '可用',
-  accountUnavailable: '不可用',
-  resolution: '图片分辨率',
-  ratio: '画面比例',
-  count: '生成数量',
 } as const;
 
 /**
@@ -859,35 +848,6 @@ export const NODE_STATUS_TEXT = {
   /** 兜底档（源 `m.state` 既非 `done` 也非 `failed` ⇒ 走它） */
   switchSwitching: (toName?: string) =>
     `🔁 额度受限，正在切换账号${toName ? `：${toName}` : ''}…`,
-} as const;
-
-/**
- * **发送后检测**（原 `it` / `postSendDetect`）的用户可见文案
- *
- * ⚠️ 源里全是**内联字面量**（`setDetectDebugInfo({status: '…'})`）⇒ 收口于此（判据 C1）。
- * ⚠️ `failedNotReady` 的「豆包后台」是**源原文**（dola 也走同一句），不改写。
- */
-export const DETECT_TEXT = {
-  /** 默认状态（原 `_Component43.jsx:1337`） */
-  running: '发送后检测中…',
-  /** 本仓补（源用占位账号名「豆包」兜底，不报错） */
-  failedNoAccount: '检测失败：账号不存在',
-  /** 原 `:1475` */
-  failedNoView: '检测失败：后台视图未初始化',
-  /** 原 `:1486` */
-  failedNotReady: '检测失败：豆包后台未就绪',
-  /** 原 `:1501` */
-  failedNav: '检测失败：无法导航到创作空间页',
-  /** 原 `:1571` */
-  failedRetry: '检测失败，稍后重试…',
-  /** 首轮（原 `:1638`：`Ce > 0 ? 已添加 N 个新视频 : 检测中…（等待新视频生成）`） */
-  firstRound: (n: number) => (n > 0 ? `✅ 已添加 ${n} 个新视频` : '检测中…（等待新视频生成）'),
-  /** 后续轮（原 `:1686`） */
-  round: (n: number) => (n > 0 ? `✅ 已添加 ${n} 个新视频，继续检测…` : '等待新视频生成…'),
-  /** 异常结束（原 `:1700`） */
-  errorEnded: '检测异常已结束',
-  /** 正常结束（源只 `console.log`，无 UI 文案；本仓给调试面板一个终态） */
-  ended: '检测已结束',
 } as const;
 
 /**

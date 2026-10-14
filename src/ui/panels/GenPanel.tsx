@@ -75,7 +75,8 @@ import {
 import { clampImageCount } from '@/core/rules/prompt';
 import { countRefChips, parseRefChips, refsToChipMarks, renumberRefs } from '@/core/rules/refs';
 import { gpRefChipHtml, textToGpEditorHtml } from '@/core/rules/richText';
-import { gpEditorToText } from '@/lib/editorText';
+import { gpEditorToText } from '@/ui/lib/editorText';
+import { textBeforeCaret } from '@/ui/lib/selection';
 import { stripHtml } from '@/lib/text';
 import type { StylePreset } from '@/constants/stylePresets';
 import { StyleLibraryModal } from './StyleLibraryModal';
@@ -394,21 +395,9 @@ export function GenPanel() {
     window.setTimeout(() => setAutoMatchState(null), AUTO_MATCH_TEXT.resetMs);
   };
 
-  /** 光标左侧的纯文本（`@` 触发检测） */
-  const textBeforeCaret = (): string => {
-    const el = promptRef.current;
-    const sel = window.getSelection();
-    if (!el || !sel || sel.rangeCount === 0) return '';
-    const range = sel.getRangeAt(0);
-    if (!el.contains(range.startContainer)) return '';
-    const pre = range.cloneRange();
-    pre.selectNodeContents(el);
-    pre.setEnd(range.startContainer, range.startOffset);
-    return pre.toString();
-  };
-
+  /** `@` 触发检测：拿光标左侧文本（原 `SL`，落点 `lib/selection.ts`） */
   const syncTrigger = (): void => {
-    const hit = matchRefTrigger(textBeforeCaret());
+    const hit = matchRefTrigger(textBeforeCaret(promptRef.current));
     setRefTrigger(hit ? { query: hit.query, start: hit.start, typed: true } : null);
   };
 

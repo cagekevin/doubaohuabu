@@ -56,7 +56,7 @@ const adapter = {
   domains: [BASE],
   // 声明需要 access_key + secret_key；真实 JWT 在 buildSubmit/buildPoll 内自签，密钥明文永不过桥
   auth: { type: 'klingJwt', keyFields: ['apiKey', 'secretKey'] },
-  transientErrorHints: /ECONNRESET|ECONNABORTED|ETIMEDOUT|ESOCKETTIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR/i,
+  transientErrorHints: require('./_shared').TRANSIENT_ERROR_HINTS,
   quotaHints: [
     { re: /余额不足|额度不足|quota|insufficient/i, kind: 'quota_exhausted', advice: '可灵额度/余额不足，请充值后重试' }
   ],

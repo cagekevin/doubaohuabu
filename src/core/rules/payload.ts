@@ -48,29 +48,49 @@ export interface SiteSendPayload {
    */
   readonly [SITE]: true;
   text: string;
-  /** ★ **归一成 `string[]`**（`img://` 引用）—— 见下方 `normalizeImages` */
-  images: readonly string[];
+  /** ★ **参考图引用**（`{label, dataUrl}`）—— 保留 `label`，见下方 `normalizeImages` / `RefImageRef` */
+  images: readonly RefImageRef[];
   params: Record<string, unknown>;
   autoSend: boolean;
   source: SendSource;
 }
 
 /**
+ * 一张参考图引用（源 `$L` / `state/batchSend` 的 `{label, dataUrl}` 元素）
+ *
+ * ⚠️ **`label` 不是装饰**（源两处读它）：
+ *   · 去重键 `vD`（`shared.js:38638-38642`）= `dataUrl 前 80 字 :: label`；
+ *   · 后端拼**临时文件名**（`electron/main.js:1426` 的 `img.label || 'image'`）。
+ *   ⇒ 丢掉它会让去重键失真、附件文件名全同。
+ */
+export interface RefImageRef {
+  /** 素材标签（源 `$L` 的 `d.label || '素材'`；无标签的通道 ⇒ 空串，由下游兜底） */
+  label: string;
+  /** `img://` 或 `data:` 地址 */
+  dataUrl: string;
+}
+
+/**
  * 图引用归一（**「能一种的别搞两种」**）
  *
  * 报文里 `content.images` 是**有意宽**的（`unknown[]`）：图片通道传 `string[]`、
- * 视频/账号节点传 `{label, dataUrl}[]`（`state/batchSend` 的 `prepare` 就产出后者）。
- * 而 `site.send` 侧只认 `img://` 字符串（适配器 `ref => ({ dataUrl: ref })`）
- * ⇒ 在此**收成一份**：字符串原样留、对象取 `dataUrl`、其余丢掉（空串也无意义）。
+ * 视频/账号节点传 `{label, dataUrl}[]`（`state/batchSend` / `accountOps` 都产出后者）。
+ * ⇒ 在此**收成一份** `RefImageRef[]`：字符串原样留（无标签 ⇒ 空串）、对象取
+ *   `{label, dataUrl}`、其余丢掉（空串也无意义）。
+ *
+ * ⚠️ **`label` 必须留**（源 `_Component43` 的 `Be` 读它做去重键 `vD` + 后端文件名）——
+ *    此前这里把它抹成 `string[]`，是 `TD-16-116` 的根因。
  */
-function normalizeImages(images: readonly unknown[]): string[] {
-  const out: string[] = [];
+function normalizeImages(images: readonly unknown[]): RefImageRef[] {
+  const out: RefImageRef[] = [];
   for (const it of images) {
     if (typeof it === 'string') {
-      if (it) out.push(it);
+      if (it) out.push({ dataUrl: it, label: '' });
       continue;
     }
-    if (isRecord(it) && typeof it.dataUrl === 'string' && it.dataUrl) out.push(it.dataUrl);
+    if (isRecord(it) && typeof it.dataUrl === 'string' && it.dataUrl) {
+      out.push({ dataUrl: it.dataUrl, label: typeof it.label === 'string' ? it.label : '' });
+    }
   }
   return out;
 }

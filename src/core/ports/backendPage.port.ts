@@ -81,7 +81,7 @@ export interface BackendPagePort {
    * 当时写的是"`BackendView` **为每个账号都渲染 `<webview>`** ⇒ `isMounted` 恒 `true`（假判据）"——
    *   现在 `BackendView` **只挂 `mounted`**（`autoStart ∪ 租约快照`）⇒ **挂载集合是真的**，
    *   那条理由不再成立。**但 `isMounted` 仍不该存在**：挂载集合只有一个消费者（`BackendView` 自己的渲染），
-   *   页面层要它没有意义；"谁还活着"由 **`leases()` 快照**表达（表不导出 ⇒ M6），
+   *   页面层要它没有意义；"谁还活着"由 **`subscribeLeases`** 的信号表达（表不导出 ⇒ M6），
    *   经 `state/subscriptions.ts` 落到 store 后给 `ui` 读（原则 1/2）。
    */
 
@@ -111,16 +111,6 @@ export interface BackendPagePort {
    * ⚠️ 租约 TTL 到期会由端口自己 `release`（原 `vr` 的 `ttlTimer`）⇒ 本方法届时返 `false`。
    */
   isAlive(leaseId: string): boolean;
-
-  /**
-   * ★ **后台页租约快照**（原 `oT`，`shared.js:25973` = `Array.from(Jn.keys())`）
-   *
-   * 语义 = **「哪些账号的后台页『还活着』」**（记录建立于取租约；末条释放后还有 **drain 宽限**
-   *   `K$ = 1500ms`）——**不是**「当下谁持有租约」。
-   * 唯一消费者 = 后台视图的**挂载集合**（源 `mounted = autoStart ∪ 快照`，`_Component43.jsx:37-46`）。
-   * ⚠️ 表（原 `Jn`）**不导出**（M6）⇒ 只能经本方法与 `subscribeLeases` 读。
-   */
-  leases(): readonly string[];
 
   /**
    * ★ **订阅租约快照**（原 `sT`，`shared.js:25962`）

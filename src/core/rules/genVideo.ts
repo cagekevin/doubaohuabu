@@ -16,6 +16,8 @@
  *   | `seekSeconds` | `ze`+`Qe` | 196-200 | 拖动时间线 → 目标秒数 |
  *   | `genVideoDownloadName` | `Ve` | 357 | 下载文件名（`<名>_<ts>.<ext>`） |
  *   | `apiJobLabel` | - | 561-563 | `gv-apijob` 状态条文案 |
+ *   | `genVideoWaiting` | `m` | 43-67 | `gv-waiting` 的**触发**（`apiJob` running ∨ 待归属尝试 ∧ 30 分钟窗口） |
+ *   | `genVideoWaitingAria` / `genVideoWaitingText` | - | 488/495 | `gv-waiting` 的 `aria-label` / **四态**文案 |
  *   | `frameTargetRatio` | `ct` | 266-274 | 取帧裁切的**目标比例**（6 档 + `auto`） |
  *   | `frameSeekSeconds` | `Ve` | 212-213 | 三帧各自 seek 到的秒数 |
  *   | `frameCrop` | `wt`/`At`/`_t`/`Mt` | 275-288 | 居中裁切框 + 输出尺寸 |
@@ -32,6 +34,7 @@ import { clamp } from '@/lib/math';
 import type { Account } from '@/stable/model/account';
 import { GEN_VIDEO_LABEL } from '@/stable/model/node';
 import { UNGROUPED } from './accountPick';
+import type { NodeNotice } from './nodeStatus';
 
 /**
  * `gv-stage` 的 `aspect-ratio`（原 `v`，`YL.jsx:64-75`）
@@ -191,6 +194,81 @@ export function apiJobLabel(apiJob: unknown): string | null {
     default:
       return '';
   }
+}
+
+/**
+ * 「生成中」判定（原 `m`，`YL.jsx:43-67`）
+ *
+ * 三档（逐字对源）：
+ *   ① `apiJob.status ∈ {queued, submitting, running}` ⇒ **true**（API 通道正在跑）
+ *   ② 否则收集 `_pendingAttempt` ＋ `_pendingAttempts`（**按账号分槽**）里 `status === 'pending'` 的尝试
+ *   ③ 有结果（`h`）**且** `resultAt` ⇒ 只认「`at` **晚于** `resultAt`」的（= 正在生成**新的一条**）；
+ *      无结果 ⇒ 只认「`at` 在 **30 分钟**内」的
+ *
+ * ★ **为什么是它（而不是 `generating` 布尔）**：源 `genvideo` 用的就是 `m`；
+ *   源里 `generating` 只服务 **imggen**（写 `_Component45:740` · 读 `ZL.jsx:230/256` · 清 `shared.js:27277`）。
+ * ⚠️ **30 分钟窗口**（源 `1800000`）是**自愈**机制：尝试长期未归属 ⇒ 超时自动不再显示「生成中」。
+ * ⚠️ 原则 4：`now` 由调用方注入（源 `Date.now()`）。
+ */
+export const GEN_VIDEO_WAITING_WINDOW_MS = 1800000;
+
+/** `m` 用到的节点字段（源 `d` 的子集） */
+export interface GenVideoWaitingData {
+  apiJob?: unknown;
+  _pendingAttempt?: unknown;
+  _pendingAttempts?: unknown;
+  resultUrl?: string;
+  resultPoster?: string;
+  resultAt?: number;
+}
+
+export function genVideoWaiting(data: GenVideoWaitingData, now: number): boolean {
+  const d = asRecord(data);
+  const status = asRecord(d.apiJob).status;
+  if (status === 'queued' || status === 'submitting' || status === 'running') return true;
+
+  /** `status === 'pending'` 的尝试（原 `X`） */
+  const pendings: Record<string, unknown>[] = [];
+  const one = asRecord(d._pendingAttempt);
+  if (one.status === 'pending') pendings.push(one);
+  for (const v of Object.values(asRecord(d._pendingAttempts))) {
+    const re = asRecord(v);
+    if (re.status === 'pending') pendings.push(re);
+  }
+  if (pendings.length === 0) return false;
+
+  /** 在窗口内（原 `re.at && Date.now() - re.at < 1800000`）—— ⚠️ `at` 为 0 / 非数 ⇒ **不算** */
+  const fresh = (re: Record<string, unknown>): boolean => {
+    const at = re.at;
+    return typeof at === 'number' && !!at && now - at < GEN_VIDEO_WAITING_WINDOW_MS;
+  };
+  const h = !!d.resultUrl || !!d.resultPoster;
+  const resultAt = typeof d.resultAt === 'number' ? d.resultAt : 0;
+  // 有结果 + 有 `resultAt` ⇒ 只认「新的一条」；否则认「窗口内任意一条」
+  return h && resultAt
+    ? pendings.some((re) => typeof re.at === 'number' && re.at > resultAt && fresh(re))
+    : pendings.some(fresh);
+}
+
+/**
+ * `gv-waiting` 的 `aria-label`（原 488：`p ? '等待后台确认' : '正在生成'`）
+ *
+ * `notice` = `nodeNotices[id]` 里 **`code === 'generation-confirm'`** 的那条（否则 `null`）。
+ */
+export function genVideoWaitingAria(notice: NodeNotice | null): string {
+  return notice ? GEN_VIDEO_TEXT.waitingAriaConfirm : GEN_VIDEO_TEXT.waitingAria;
+}
+
+/**
+ * `gv-waiting` 的**四态**文案（原 495）
+ *
+ * ⚠️ 顺序即语义：**先判 `notice`**（后台确认中）⇒ 再判 `hasResultFlag`（已有结果 ⇒ 生成新的一条）⇒ 否则首次。
+ */
+export function genVideoWaitingText(notice: NodeNotice | null, hasResultFlag: boolean): string {
+  if (notice) {
+    return notice.level === 'warn' ? GEN_VIDEO_TEXT.waitingConfirmWarn : GEN_VIDEO_TEXT.waitingConfirm;
+  }
+  return hasResultFlag ? GEN_VIDEO_TEXT.waitingRegenerate : GEN_VIDEO_TEXT.waitingFirst;
 }
 
 /**

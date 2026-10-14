@@ -77,16 +77,14 @@ export function faceDetectStats(): FaceDetectStats {
  *    ⇒ 必须走主进程注册的 `appasset://` 特权 scheme（`main.js:652-656, 1060-1098`）。
  */
 function assetBase(): string {
-  try {
-    return typeof location !== 'undefined' && location.protocol === 'file:'
-      // ★ **2026-10-12（`TD-01-7`）**：改吃契约层 `PROTOCOL_APPASSET` —— 此前这里硬编码
-      //   `appasset://`，而 `stable/contracts/schemas.ts:64` 有同名常量却 0 消费（且它自己的
-      //   注释**自称**"前端只在本文件拼这个 URL" ⇒ 声索与实现不符，属 SSOT 第二份）
-      ? `${PROTOCOL_APPASSET}${ASSET_DIR}`
-      : `/${ASSET_DIR}`;
-  } catch {
-    return `/${ASSET_DIR}`;
-  }
+  // ★ **2026-10-12（`TD-01-7`）**：改吃契约层 `PROTOCOL_APPASSET` —— 此前这里硬编码 `appasset://`，
+  //   而 `stable/contracts/schemas.ts:64` 有同名常量却 0 消费（且它自己的注释**自称**"前端只在本
+  //   文件拼这个 URL" ⇒ 声索与实现不符，属 SSOT 第二份）
+  // ⚠️ **没有 try/catch**：`typeof location !== 'undefined'` 已挡住"无 location"，而读
+  //   `location.protocol` 不抛 ⇒ 原先那个 catch 是**恒不可达的防御分支**（降级走三元本身）。
+  return typeof location !== 'undefined' && location.protocol === 'file:'
+    ? `${PROTOCOL_APPASSET}${ASSET_DIR}`
+    : `/${ASSET_DIR}`;
 }
 
 /** 懒加载双检测器（原 `vS` 39483） */

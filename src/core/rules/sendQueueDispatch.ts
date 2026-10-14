@@ -29,8 +29,8 @@
 
 import { SEND_QUEUE_TEXT } from '@/constants/text';
 import type { QueueItem } from './sendQueuePlan';
-// ⚠️ `QueueItemPatch` 住在 `sendQueueOps`（那边先定义的）
-import type { QueueItemPatch, SendMode } from './sendQueueOps';
+// ⚠️ `QueueItemPatch` / `isReadyToStart` 住在 `sendQueueOps`（那边先定义的）
+import { isReadyToStart, type QueueItemPatch, type SendMode } from './sendQueueOps';
 
 /** 池挑账号的结果（原 `Ei` 的返回形状里本模块用到的部分） */
 export type PickAutoResult =
@@ -101,8 +101,9 @@ export function planQueueDispatch(input: {
   }
 
   // 候选：waiting 且 notBefore 已到，按 order 升序（原 42109-42113）
+  // ⚠️ 就绪判据收在纯层 `isReadyToStart`（本文件原为内联副本 —— 判据 C1：能一种的别搞两种）
   const candidates = input.items
-    .filter((h) => h.status === 'waiting' && (!h.notBefore || h.notBefore <= input.now))
+    .filter((h) => isReadyToStart(h, input.now))
     .slice()
     .sort((a, b) => a.order - b.order);
 

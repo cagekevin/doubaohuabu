@@ -190,21 +190,13 @@ export interface GenVideoNodeData extends NodeDataBase {
   linkOrder: string[];
   genHistory?: GenHistory;
   selVer?: number;
-  /** 提示词分析结果（原 `gS`/`yS` 写入；`ZL.jsx:158` 读 `l.analyzePrompt`） */
-  analyzePrompt?: AnalyzePromptState;
   resultUrl?: string;
   resultPoster?: string;
   resultVid?: string;
   resultAt?: number;
-  /**
-   * 「生成中」标记 —— ★ **2026-10-11 补**：`state/generate.ts:91/124/139` 早已对**两种**生成节点
-   *   写入它（真实样本 `doubao-projects.txt` 里也确有 `"generating":false`），
-   *   但此前**只有 `GenImageNodeData` 声明**了它 ⇒ `genvideo` 侧只能靠索引签名读成 `unknown`。
-   *   现在与 `GenImageNodeData.generating`（同文件 226 行）**对齐**。
-   * ⚠️ 源的 `genvideo` 用 `apiJob`/`_pendingAttempt` 推导「生成中」（`YL.jsx:43-58` 的 `m`），
-   *   **不是**这个布尔 —— 而本仓的 `m` 等价物就是它（见 TD-16-81）。
-   */
-  generating?: boolean;
+  // ⚠️ 这里**没有** `generating` —— 它**只属 `imggen`**（见 `GenImageNodeData`）。
+  //   `genvideo` 的生成态真源是 `core/rules/genVideo.genVideoWaiting`（由 `apiJob` / `_pendingAttempt` 推导）；
+  //   真实样本 `doubao-projects.txt` 里 **2 个 `genvideo` 节点都不含该字段**。
   apiJob?: unknown;
   _pendingAttempt?: unknown;
   _pendingAttempts?: unknown;

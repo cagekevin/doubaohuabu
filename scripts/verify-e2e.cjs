@@ -15,8 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // playwright 已是本工程 devDependency ⇒ 用**裸模块名**解析（不再依赖工程外路径，见 verify-canvas 注释）
-const PW = process.env.PW_PATH || 'playwright';
-const { chromium } = require(PW);
+const { launchBrowser } = require('./_pw.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
@@ -99,7 +98,7 @@ const SEED = [
   await new Promise((r) => server.listen(0, r));
   const url = `http://127.0.0.1:${server.address().port}/index.html`;
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
   const page = await ctx.newPage();
 
@@ -178,9 +177,11 @@ const SEED = [
     const hits = (c) => boxes.some((o) => c.x >= o.x - 24 && c.x <= o.x + o.w + 24 && c.y >= o.y - 24 && c.y <= o.y + o.h + 24);
 
     // 在画布区域**网格扫描**找一个真正空白的点
+    // ⚠️ 扫描必须**覆盖到画布边缘的空白带**：节点可能很大（实测拖入的素材节点 604×720，
+    //    把 gx≥0.15 的整片区域占满）⇒ 起步 0.02、步长 0.05（20×20 个候选）
     let free = null;
-    for (let gy = 0.2; gy <= 0.8 && !free; gy += 0.15) {
-      for (let gx = 0.15; gx <= 0.85 && !free; gx += 0.15) {
+    for (let gy = 0.05; gy <= 0.95 && !free; gy += 0.05) {
+      for (let gx = 0.02; gx <= 0.98 && !free; gx += 0.05) {
         const c = { x: paneBox.x + paneBox.w * gx, y: paneBox.y + paneBox.h * gy };
         if (!hits(c)) free = c;
       }
@@ -189,6 +190,9 @@ const SEED = [
       await page.mouse.dblclick(free.x, free.y);
       dbl = true;
       dblAt = `${Math.round(free.x)},${Math.round(free.y)}`;
+    } else {
+      // 诊断（**不改断言**）：找不空白点时把障碍物几何打出来，免得只能猜
+      console.log('空白点自检：画布', JSON.stringify(paneBox), '\n  障碍物', JSON.stringify(boxes));
     }
   }
   await page.waitForTimeout(500);
@@ -196,13 +200,28 @@ const SEED = [
   step('④ 双击空白 → 文本节点 +1', dbl && n2 === n1 + 1, `${n1} → ${n2}${dblAt ? ` @${dblAt}` : '（未找到空白点）'}`);
 
   // ── ⑤ 选中 imggen 节点 → 生成面板出现 ──
-  await page.evaluate(() => {
-    const el = document.querySelector('.react-flow__node-imggen');
-    const r = el?.getBoundingClientRect();
-    if (r) {
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + 5 }));
+  /**
+   * ⚠️ 必须用**真实鼠标**（同 `verify-del` 的坑）：合成 `MouseEvent` 绕过 React 的合成事件
+   *    系统与 ReactFlow 的指针处理 ⇒ 点了没反应。
+   * ⚠️ 还要**避开遮挡**：后建的那个素材节点（604×720）可能盖住 imggen ⇒ 若点落进别人的框里，
+   *    就右移到它露出来的那条带（两框相减的可见区）。
+   */
+  const imgBox = await page.locator('.react-flow__node-imggen').first().boundingBox();
+  if (imgBox) {
+    const covers = await page.evaluate(() =>
+      [...document.querySelectorAll('.react-flow__node')]
+        .filter((e) => !e.classList.contains('react-flow__node-imggen'))
+        .map((e) => {
+          const r = e.getBoundingClientRect();
+          return { x: r.left, y: r.top, w: r.width, h: r.height };
+        }),
+    );
+    let px = imgBox.x + 20;
+    for (const c of covers) {
+      if (px >= c.x - 4 && px <= c.x + c.w + 4) px = Math.max(px, c.x + c.w + 8);
     }
-  });
+    await page.mouse.click(px, imgBox.y + 10);
+  }
   await page.waitForTimeout(400);
   const panelShown = await page.evaluate(() => !!document.querySelector('[data-testid="gen-panel"]'));
   step('⑤ 选中 imggen → 生成面板出现', panelShown);
@@ -222,13 +241,21 @@ const SEED = [
   step('⑥ 触发生成（mock 通道）', genClicked);
 
   // ── ⑦ 导出（应触发下载）──
-  const dl = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
-  await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.includes('导出'));
-    b?.click();
-  });
-  const download = await dl;
-  step('⑦ 导出触发下载', !!download, download ? await download.suggestedFilename() : '未触发');
+  /**
+   * ⚠️ **本步判据已失效（2026-10-13 实测）**：本仓**没有「导出工程」按钮** —— 回源
+   *   `_Component42` / `_Component47` 对「导出工程」**均 0 命中** ⇒ 该按钮**已按源删除**
+   *   （见 `ui/shell/TopBar.tsx` 头注）。页面上那个「导出」是 `AccountPanel` 的**导出账号**
+   *   （0 账号 ⇒ 不下载，点了也不会触发 download 事件）。
+   *   ⇒ 不再是可验判据。**保留本步 + 打印说明**（与 `verify-w4` 判据②「需真实宿主」同一手法），
+   *     免得下一个跑的人误判成"导出坏了"。
+   *   ⚠️ 连带发现：`state/hostOps.ts` 的 `saveTextFile`（唯一消费者就是那个已删按钮）
+   *     现**零生产消费** —— 已随本轮登记。
+   */
+  step(
+    '⑦ 导出触发下载',
+    true,
+    'N/A：本仓无「导出工程」按钮（已按源删除）；见脚本内说明',
+  );
 
   // ── ⑧ 刷新后状态还原 ──
   const beforeReload = await page.evaluate(() => {

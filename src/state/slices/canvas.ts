@@ -25,7 +25,7 @@ import {
   type ConnectRequest,
 } from '@/core/rules/graph';
 import { makeId, makeLibraryId, makeNodeId } from '@/core/rules/project';
-import { defaultNodeData, nodeCreateSize } from '@/core/model/defaults';
+import { defaultNodeData, inheritGenNodeData, nodeCreateSize } from '@/core/model/defaults';
 import { buildMaterialBatch, type MaterialBatchInput } from './materialBatch';
 // ★ API 任务事件的落点（原 `applyApiJobEvent` 写 store 的那几件事）—— **本片的片段**
 //   （与 `materialBatch.ts` 同法：`canvas.ts` 代码行已到 `max-lines` 上限〔⚠️ 该规则已于 2026-10-11 关闭〕）
@@ -40,7 +40,7 @@ import type {
   ImageGenKeyParams,
   ImageGenKeyTargets,
 } from '@/core/rules/imageGenKey';
-import { screenshotNodePlacement } from '@/core/rules/capture';
+import { SCREENSHOT_NODE_SIZE, screenshotNodePlacement } from '@/core/rules/capture';
 import { groupSelectedNodes, releaseDeletedGroupChildren, ungroupNodes as ungroupPure } from '@/core/rules/group';
 import { planArrange, planSelectedGrid, type ArrangeMode } from '@/core/rules/arrange';
 import { splitAuto, splitByKeywords, type SplitFailReason, type SplitPart } from '@/core/rules/splitText';
@@ -166,6 +166,15 @@ export interface CanvasSlice extends ApiLandingActions {
    */
   imageGenKeyParams: ImageGenKeyParams;
   /**
+   * ★ **节点配方表**（原 `nodeRecipes`，`shared.js:30843-30857`）
+   *
+   * `源节点 id` → 该节点**最近一次发送**产出的配方（`oR` 的产物）。生产者 = `setNodeRecipe`
+   * （发送时，原 `PS` 的 `:42385`）；消费者 = `addVideoNode` 的**落库展开**（原 `d0`，把配方
+   * **拷进新视频节点**的 `data.recipe` —— 视频节点的「配方 chip / 复制配方 / 按配方重跑」读它）。
+   * ⚠️ **内存态**（源亦然）：视频节点上那份**副本**才随工程走。
+   */
+  nodeRecipes: Record<string, unknown>;
+  /**
    * ★ **图像生成已交付计数**（原 `imageGenDeliveredKeys`，`shared.js:27226`）
    *
    * `genKey` → `{ts, target, got}`。网页通道 `bindImageGenKey` 初始化 `target`；
@@ -191,7 +200,7 @@ export interface CanvasSlice extends ApiLandingActions {
    * ★ **生成图片流**（原 `imageGenFeed`，`shared.js:27131`）
    *
    * 生产者 = `pushImageGenFeed`（`addImageGenResult` / `applyApiJobEvent`）；
-   * 消费者 = `clearImageGenFeed`。上限 `IMAGE_GEN_FEED_LIMIT`。**内存态**。
+   * 上限 `IMAGE_GEN_FEED_LIMIT`。**内存态**（仅 `pushImageGenFeed` 自读自去重）。
    */
   imageGenFeed: ImageGenFeedItem[];
   /**
@@ -219,12 +228,11 @@ export interface CanvasSlice extends ApiLandingActions {
   undo: UndoStack<CanvasSnapshot>;
 
   // ── actions ──
-  setGraph: (nodes: CanvasNode[], edges: CanvasEdge[]) => void;
   /**
    * ★ **只改节点**（不动 `edges`）
    *
-   * ⚠️ 为什么要它（既有缺陷，2026-10-10 修）：`CanvasHost` 的 `onNodesChange` / `onEdgesChange`
-   *   原本都调 `setGraph(新的那一半, **闭包里的另一半**)` ⇒ 两个回调会**互相用旧值覆盖对方**。
+   * ⚠️ 为什么要它：`CanvasHost` 的 `onNodesChange` / `onEdgesChange` 若**各自整图覆盖**
+   *   （`set({ nodes, edges })`）⇒ 两个回调会**互相用旧值覆盖对方**。
    *   实测后果：删节点后 ReactFlow 报「边变更」，`onEdgesChange` 拿**旧的 `nodes`** 把刚删的
    *   节点**复活**，随后再次删除 ⇒ 撤销栈被压入 `{2 节点, 0 边}` 的坏快照（Ctrl+Z 后**边回不来**）。
    * ⇒ 拆成两个只改自己那一半的 action，**结构上不可能**再互相覆盖（与 `setLibrary` 对称）。
@@ -405,8 +413,7 @@ export interface CanvasSlice extends ApiLandingActions {
    *
    * 几何：放在**视频右侧一列**（`x + 宽 + 40`）、每张下移 **26px**、**最多叠 8 层**
    * （纯层 `screenshotNodePlacement`）。`label` 缺省「截图」。
-   * ⚠️ 源版还把新节点的 `width/height` 设成 **220×180**，而本工程的 `addNode` 不接受节点级尺寸
-   *   ⇒ 用该类型的默认尺寸（**观感差异一处，不假装**）。
+   * 框 = **220×180**（源 `:28343-28344`，走 `SCREENSHOT_NODE_SIZE`）。
    * @returns 新素材节点 id；`dataUrl` 为空 / 找不到源视频 ⇒ `null`
    */
   addScreenshotMaterial: (input: {
@@ -415,6 +422,12 @@ export interface CanvasSlice extends ApiLandingActions {
     label?: string;
     sourceTime?: number;
   }) => string | null;
+  /**
+   * ★ **写 / 清节点配方**（原 `setNodeRecipe`，`shared.js:30844-30857`）
+   *
+   * 逐字：`!nodeId` ⇒ 什么都不做；`recipe` 为**真** ⇒ 设键，为**假** ⇒ 删键（同一 action 两用）。
+   */
+  setNodeRecipe: (nodeId: string, recipe: unknown) => void;
   /**
    * ★ **按配方重跑**（原 `addTextNodeFromRecipe` shared.js:29450-29494）
    *
@@ -664,6 +677,7 @@ export function createCanvasSlice(
     edges: [],
     library: [],
     imageGenKeyParams: {},
+    nodeRecipes: {},
     imageGenDeliveredKeys: {},
     imageGenKeyNode: {},
     imageGenKeyTarget: {},
@@ -674,7 +688,6 @@ export function createCanvasSlice(
     clipboard: null,
     undo: initialUndoStack<CanvasSnapshot>(),
 
-    setGraph: (nodes, edges) => set({ nodes, edges }),
     setNodes: (nodes) => set({ nodes }),
     setEdges: (edges) => set({ edges }),
     setLibrary: (library) => set({ library }),
@@ -836,6 +849,9 @@ export function createCanvasSlice(
         data: {
           ...defaultNodeData(type),
           ...(type === 'text' && s.canvasDefaults ? textDefaultsPatch(s.canvasDefaults) : {}),
+          // ★ 生成类节点**沿用画布上「上一个同类节点」的设置**（源 `addGenVideo` 29496 / `addGenImage` 29536；
+          //   逐字：`u.X || 兜底`）—— `patch` 仍在最后 ⇒ 显式传参优先
+          ...(type === 'genvideo' || type === 'imggen' ? inheritGenNodeData(type, s.nodes) : {}),
           ...patch,
         },
       } as CanvasNode;
@@ -977,12 +993,19 @@ export function createCanvasSlice(
         (n) => n.type === 'material' && (n.data as { sourceVideoId?: string }).sourceVideoId === input.sourceVideoId,
       ).length;
       const pos = screenshotNodePlacement(anchor, count);
-      return get().addNode('material', pos, {
-        label: input.label || '截图',
-        dataUrl: input.dataUrl,
-        sourceVideoId: input.sourceVideoId,
-        ...(input.sourceTime === undefined ? {} : { sourceTime: input.sourceTime }),
-      });
+      return get().addNode(
+        'material',
+        pos,
+        {
+          label: input.label || '截图',
+          dataUrl: input.dataUrl,
+          sourceVideoId: input.sourceVideoId,
+          ...(input.sourceTime === undefined ? {} : { sourceTime: input.sourceTime }),
+        },
+        // ★ 源 `:28343-28344` 把新节点框设成 **220×180**（`addNode` 的默认是「空节点」的 4:3，
+        //   不传就会把截图塞进默认框 —— `TD-16-91`）
+        { w: SCREENSHOT_NODE_SIZE.w, h: SCREENSHOT_NODE_SIZE.h },
+      );
     },
 
     addTextNodeFromRecipe: (input) => {
@@ -1001,6 +1024,15 @@ export function createCanvasSlice(
         styleIds: input.styleId ? [input.styleId] : [],
         linkOrder: [],
       });
+    },
+
+    setNodeRecipe: (nodeId, recipe) => {
+      // 原 `setNodeRecipe`（shared.js:30844-30857）：`!n` ⇒ 返；`r` 真 ⇒ 设键 / 假 ⇒ 删键
+      if (!nodeId) return;
+      const next = { ...(get().nodeRecipes || {}) };
+      if (recipe) next[nodeId] = recipe;
+      else delete next[nodeId];
+      set({ nodeRecipes: next });
     },
 
     replaceMaterialImage: (nodeId, dataUrl, opts = {}) => {

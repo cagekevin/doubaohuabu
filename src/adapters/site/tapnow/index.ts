@@ -44,6 +44,7 @@ import { cleanScannedImages, excludeSeenImages } from '@/core/rules/scanClean';
 import {
   materializeScannedImages,
   scanAttemptFromRaw,
+  scanFetchContext,
   type ScanAttempt,
   type ScanAttemptOptions,
 } from '../shared/materializeScan';
@@ -58,14 +59,22 @@ import { findWebview, webviewEval } from '../shared/webview';
 import { tapnowCurrentCanvasId, tapnowCurrentHref } from './api';
 import { tapnowPageKind } from './pageKind';
 
+/** 批量取图冒充站内请求的 `referer`（原 `wP` 调 `vP` 的实参，`shared.js:34090`，逐字） */
+const TAPNOW_REFERER = 'https://app.tapnow.media/';
+
 /** 跑一档（**不自动重试** —— 重试是上层编排的事） */
 async function tryScan(
   host: HostPort,
   account: Account,
   via: ScanStrategy,
   script: string,
-  attemptOpts: ScanAttemptOptions,
+  opts: ScanOptions,
 ): Promise<ScanAttempt> {
+  // ★ 批量取图的会话上下文（原 `vP` 的实参：account + referer）—— 缺它 ⇒ 远端图取不到（如实计失败）
+  const attemptOpts: ScanAttemptOptions = {
+    ...(opts.seenUrls ? { seenUrls: opts.seenUrls } : {}),
+    fetch: scanFetchContext(account, TAPNOW_REFERER, opts.onPhase),
+  };
   // ⚠️ 与源一致（原 `Xn`）：**找不到页面返回 null 而不是抛**
   const view = findWebview({ id: account.id, partition: account.partition });
   if (!view) return { via, ok: false, error: TAPNOW_TEXT.pageNotFound };
@@ -128,7 +137,8 @@ export function createTapnowSite(host: HostPort): SitePort {
      *   ④ 两半**按归一键合并** → 滤"已在库" → **截断 `limit`**（源 `:33966` 的 `v.slice(0, o)`）→ 逐张落盘
      *
      * ⚠️ 与源的三处差异（如实标注）：
-     *   ① 取的图走**主进程** `imageFetchDataUrl`（`materializeScan` 既有路线），不移植页内脚本 `mp`/`pP`；
+     *   ① 取的图走**主进程批量取图** `HostPort.media.fetchImages`（原 `vP`；带账号 cookie + 进度），
+     *      不移植页内脚本 `mp`/`pP`（本仓没有页内取图档）；
      *   ② 源的 `useDom` 是**入参**（值守那半传 `false`）—— 本仓唯一的调用方（画廊按钮）传的是 `true`
      *      ⇒ **固定走"接口 + DOM 合并"**，不开那个开关（开了也没人用另一档 = 幽灵开关）；
      *   ③ 截断在**落盘之前**（与源一致）—— 与 `scan` 那条链不同（那里 `Yh` 在落盘后）。
@@ -190,13 +200,20 @@ export function createTapnowSite(host: HostPort): SitePort {
       if (picked.length > 0) {
         opts.onPhase?.({ phase: 'working', message: GALLERY_TEXT.scanPhasePrepare(picked.length) });
       }
-      const m = await materializeScannedImages(host, picked, 'api');
+      const m = await materializeScannedImages(
+        host,
+        picked,
+        'api',
+        scanFetchContext(account, TAPNOW_REFERER, opts.onPhase),
+      );
 
+      // 跳过 = 已在库（`fresh.skipped`）+ 宿主批量取图报的占位 / 杂图（`m.skipped`，原 `vP` 的 `S`）
+      const skipped = fresh.skipped + m.skipped;
       opts.onPhase?.({
         phase: 'done',
-        message: GALLERY_TEXT.scanOk(m.items.length, fresh.skipped, m.failed),
+        message: GALLERY_TEXT.scanOk(m.items.length, skipped, m.failed),
       });
-      return ok({ items: m.items, href: undefined, skipped: fresh.skipped, failed: m.failed });
+      return ok({ items: m.items, href: undefined, skipped, failed: m.failed });
     },
 
     async scan(account: Account, opts: ScanOptions): Promise<Result<ScanResult>> {

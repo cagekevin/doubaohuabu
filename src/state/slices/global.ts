@@ -184,9 +184,6 @@ export interface GlobalSlice {
   presets: Preset[];
 
   // ── actions ──
-  setProjects: (projects: Project[]) => void;
-  setActiveId: (id: string | null) => void;
-  setStarted: (v: boolean) => void;
   setSaveError: (e: SaveError | null) => void;
   /**
    * ★ **启动灌入**（`bootstrap/hydrate.ts` 的**唯一写入口**）
@@ -219,7 +216,6 @@ export interface GlobalSlice {
    *   （`addNodePreset` 全仓 0 命中）⇒ 拆分弹窗的「拆分并套用节点预设」即使落了也**无数据可读**。
    */
   addNodePreset: (input: GraphPresetInput) => string;
-  setGroups: (g: AccountGroup[]) => void;
   /**
    * ★ **分组 CRUD**（原 `shared.js:31937-32040`）
    *
@@ -428,9 +424,6 @@ export function createGlobalSlice(
     leasedAccounts: [],
     presets: [],
 
-    setProjects: (projects) => set({ projects }),
-    setActiveId: (activeId) => set({ activeId }),
-    setStarted: (started) => set({ started }),
     setSaveError: (saveError) => set({ saveError }),
     // ★ 启动灌入（唯一入口）—— 与 `hydrate` 原实现**逐字段等价**：
     //   先灌工程/账号族/当前工程，再（有工程时）灌画布四字段。
@@ -460,7 +453,6 @@ export function createGlobalSlice(
       set({ presets: [...get().presets, preset] });
       return preset.id;
     },
-    setGroups: (groups) => set({ groups }),
 
     addGroup: (name) => {
       const r = addGroupPure(get().groups, name, {

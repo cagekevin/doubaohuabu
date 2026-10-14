@@ -27,33 +27,13 @@ import type {
 import { err, ok, type Result } from '@/core/model/result';
 import { createMockApi } from './api';
 import { createMockMedia } from './media';
+import { createWindowLifecycle } from '../shared/lifecycle';
 
 /** 未实现时的统一错误（**不返回假成功**） */
 const notImplemented = (what: string) => err('unknown', `mock: ${what} 未实现（M4 接真实宿主）`);
 
 const createFile = (): FilePort => ({
   importFiles: async (): Promise<Result<PickedFile[]>> => ok([]),
-  /**
-   * mock 的 `saveFile`：**真的触发浏览器下载**（否则开发期无法验证导出链路）。
-   * 真实宿主是「弹保存对话框」，mock 是「Blob 下载」——两者对调用方**同形**。
-   */
-  saveFile: async (content: string) => {
-    try {
-      const blob = new Blob([content], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'project.json';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      return ok({ path: 'project.json' });
-    } catch (e) {
-      // ★ 原样透传（原则 6）
-      return err('unknown', e instanceof Error ? e.message : String(e));
-    }
-  },
   loadFile: async () => ok(null),
   selectFolder: async () => ok(null),
   downloadFile: async () => notImplemented('downloadFile'),
@@ -135,6 +115,7 @@ export function createMockHost(): HostPort {
   return {
     // ★ 真实宿主平台（真实实现来自 preload 的 process.platform；mock 固定 windows）
     os: 'windows',
+    lifecycle: createWindowLifecycle(),
     file: createFile(),
     clipboard: createClipboard(),
     project: createProject(),

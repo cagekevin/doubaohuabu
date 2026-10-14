@@ -20,7 +20,7 @@
 import { useRef, useState } from 'react';
 import { useStore } from '@/state';
 import { Modal } from '@/ui/common/Modal';
-import { compressCoverImage } from '@/lib/compressCover';
+import { compressCoverImage } from '@/ui/lib/compressCover';
 import { STYLE_LIB_TEXT } from '@/constants/text';
 import { normalizeStyleName, normalizeStylePrefix, styleCoverGradient, UNNAMED_STYLE } from '@/core/rules/style';
 import type { StylePreset } from '@/constants/stylePresets';

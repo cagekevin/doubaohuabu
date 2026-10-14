@@ -28,7 +28,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHostOps } from '@/state';
 import { IMAGE_EDITOR_TEXT } from '@/constants/text';
-import { FACE_MASK_EFFECTS, FACE_MASK_EFFECT_LABEL, type FaceMaskEffect } from '@/constants/facemask';
+import {
+  FACE_MASK_DEFAULTS,
+  FACE_MASK_EFFECTS,
+  FACE_MASK_EFFECT_LABEL,
+  type FaceMaskEffect,
+} from '@/constants/facemask';
 import {
   applyCrop,
   cropRatioOf,
@@ -95,7 +100,7 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
   const [notice, setNotice] = useState(''); // 原 `m`
   const [zoom, setZoom] = useState(1); // 原 `v`
   const [offset, setOffset] = useState({ x: 0, y: 0 }); // 原 `b`
-  const [effect, setEffect] = useState<FaceMaskEffect>('mosaic'); // 原 `k`
+  const [effect, setEffect] = useState<FaceMaskEffect>(FACE_MASK_DEFAULTS.effect); // 原 `k`
   const [brushSize, setBrushSize] = useState(BRUSH_DEFAULT_DIAMETER); // 原 `C`
   const [opacity, setOpacity] = useState(1); // 原 `E`
   const [showBoxes, setShowBoxes] = useState(true); // 原 `j`

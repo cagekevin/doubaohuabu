@@ -10,12 +10,12 @@
  */
 
 import { useState } from 'react';
-// ★ 协议规则的真源（冻结契约）；此处 re-export 只为不破坏既有 import 路径
+// ★ 协议规则的**真源**（冻结契约）—— 消费者一律直接引它；本文件也只自用，**不再转出去**
 import { withThumb } from '@/stable/protocols/img';
 import { MATERIAL_NODE_TEXT } from '@/constants/text';
 import styles from './shared.module.css';
 
-export { withThumb };
+
 
 export interface ThumbProps {
   src: string;

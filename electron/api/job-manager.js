@@ -76,7 +76,13 @@ function createJobManager(deps) {
   }
 
   function emit(job) {
-    if (onEvent) { try { onEvent(publicSnapshot(job)); } catch (_) { /* 推送失败不影响引擎 */ } }
+    if (!onEvent) return;
+    try {
+      onEvent(publicSnapshot(job));
+    } catch (err) {
+      // ★ 推送失败不**影响**引擎，但**必须留痕**（原则 6：不静默吞 —— 否则渲染层收不到状态却无迹可查）
+      console.warn('[job-manager] 事件推送失败:', (err && err.message) || err);
+    }
   }
 
   function setStatus(job, status, patch) {
@@ -95,15 +101,25 @@ function createJobManager(deps) {
   function pump() {
     for (const job of jobs.values()) {
       if (job.status !== 'queued') continue;
-      const n = runningCount[job.providerId] || 0;
+      // ★ 槽位按「**进入时**的 providerId」记账 —— `runJob` 命中「额度耗尽 / 鉴权失败」时会把
+      //   `job.providerId` 换成兜底服务商（见下方兜底分支）⇒ 若按 `job.providerId` 的**当前值**释放，
+      //   原 provider 的槽**永不释放**、兜底 provider 计数**变负**（TD-13-6）
+      const slot = job.providerId;
+      const n = runningCount[slot] || 0;
       if (n >= _concurrency) continue;
-      runningCount[job.providerId] = n + 1;
+      runningCount[slot] = n + 1;
       setStatus(job, 'submitting');
       // 异步跑，不 await（pump 由 submit/cancel 触发）
       runJob(job)
-        .catch(() => { /* runJob 内部已终态化 */ })
+        .catch((err) => {
+          // ★ `.catch` 免责（「runJob 内部已终态化」）**不总成立** —— `runJob` 若有路径抛在
+          //   终态化之前，任务会永久卡在 submitting（僵尸，UI 无感知）⇒ 这里**兜底收尾**（TD-13-20）
+          if (job.status !== 'done' && job.status !== 'failed' && job.status !== 'cancelled') {
+            fail(job, 'internal', (err && err.message) || '任务异常终止（内部错误，未终态化）');
+          }
+        })
         .finally(() => {
-          runningCount[job.providerId] = Math.max(0, (runningCount[job.providerId] || 1) - 1);
+          runningCount[slot] = Math.max(0, (runningCount[slot] || 1) - 1);
           pump(); // 空位出来了，看看还有没有排队的
         });
     }

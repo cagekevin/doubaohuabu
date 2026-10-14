@@ -7,8 +7,8 @@
  *
  * ⚠️ **不占租约**（与 `sendWatch` 的一处**有意差异**）：源 `it` 用的是**发送那个 webview**、不申请租约；
  *   检测最长 50 分钟，占租约会把账号**锁死** ⇒ 走 `BackendPagePort.webContentsIdOf`（不占租约）。
- * ⚠️ **原则 1**：只有本文件写 store（`setDetectDebugInfo` / `addVideoShare` / `addVideoNode` / 计时器）。
- * ⚠️ **原则 6**：取数失败**如实记**（源 `Ae({lastError, status: 检测失败，稍后重试…})`）—— 不静默、不编文案。
+ * ⚠️ **原则 1**：只有本文件写 store（`addVideoShare` / `addVideoNode` / 计时器）。
+ * ⚠️ **原则 6**：取数失败**如实记**（一律 `log.warn`，见各处；不静默、不编文案）。
  * ⚠️ **不开自动轮询**（`docs/过程.md` #4）：轮询只在**本函数调用期间**存在，返回即停。
  * ⚠️ **一处如实标注**（未落，不假装）：源 `Z` 里「同一 `vid` 已落过就跳过」由 `addVideoNode`
  *   内部去重承担（本仓同）。
@@ -23,7 +23,6 @@ import type { AppStore } from './store';
 import type { Account } from '@/stable/model/account';
 import type { ImageQuestionContext, SitePort } from '@/core/ports/site.port';
 import type { DetectedVideo } from '@/core/ports/host.port';
-import type { DetectDebugInfo } from './slices/nodeStatus';
 import { matchVideosToNodes, type SendJobRecord } from '@/core/rules/media';
 import {
   classifyFirstRound,
@@ -38,7 +37,6 @@ import {
   DETECT_POLL_MS,
   DETECT_TIMER_FALLBACK_MS,
 } from '@/constants';
-import { DETECT_TEXT } from '@/constants/text';
 import { sleep } from '@/lib/async';
 import { log } from '@/lib/log';
 import { landVideo } from './videoLanding';
@@ -84,7 +82,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
   let seenProject: string | null = null;
 
   const st = () => store.useStore.getState();
-  const patchDebug = (patch: Partial<DetectDebugInfo>): void => st().setDetectDebugInfo(patch);
 
   const ensureSeen = (): Set<string> => {
     const activeId = st().activeId;
@@ -104,7 +101,7 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
   ): boolean => {
     if (!v.key || !v.ready || !v.url) return false;
     try {
-      landVideo(store, {
+      landVideo(store, ports, {
         url: v.url,
         vid: v.key,
         width: v.width ?? null,
@@ -198,22 +195,18 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
 
   const run = async (accountId: string, sourceNodeId: string | null, cancelled: () => boolean): Promise<void> => {
     const account: Account | undefined = st().accounts.find((a) => a.id === accountId);
-    if (!account) {
-      patchDebug({ status: DETECT_TEXT.failedNoAccount });
-      return;
-    }
+    if (!account) return;
     const accountName = account.name || '豆包';
     const site = ports.sites[account.type];
 
     // ① `webContentsId`（**不占租约**）
     const idRes = ports.backendPage.webContentsIdOf(account);
     if (!idRes.ok) {
-      patchDebug({ status: DETECT_TEXT.failedNoView, lastError: idRes.message });
       log.warn('[postSendDetect] 取 webContentsId 失败：', idRes.message);
       return;
     }
     if (!site?.detectVideos) {
-      patchDebug({ status: DETECT_TEXT.failedNoView, lastError: '站点无 detectVideos 能力' });
+      log.warn('[postSendDetect] 站点无 detectVideos 能力：', account.type);
       return;
     }
     const ctx: ImageQuestionContext = { account, webContentsId: idRes.value };
@@ -227,14 +220,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
     let baseline: ReadonlySet<string> = new Set<string>();
     let roundNew = 0;
 
-    patchDebug({
-      status: DETECT_TEXT.running,
-      accountsTotal: st().accounts.length,
-      projectAccounts: 1,
-      webviewsReady: 1,
-      sentAccounts: 1,
-    });
-
     try {
       while (ports.clock.now() - startedAt < DETECT_MAX_MS) {
         if (cancelled()) break;
@@ -245,7 +230,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
 
         const fetched = await site.detectVideos(ctx, [...seenSet]);
         if (!fetched.ok) {
-          patchDebug({ status: DETECT_TEXT.failedRetry, lastError: fetched.message });
           log.warn('[postSendDetect] 取数失败：', fetched.message);
           await sleep(DETECT_POLL_MS);
           continue;
@@ -253,7 +237,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
         if (cancelled()) break;
 
         const videos = fetched.value.videos;
-        const readyCount = videos.filter((v) => v.ready && v.url).length;
         const myJobs = jobs.get(accountId) ?? [];
         const cutoff = detectCutoff(
           myJobs.map((j) => j.sendTime ?? 0),
@@ -271,15 +254,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
             lastProgress = ports.clock.now();
           }
           firstRound = false;
-          patchDebug({
-            apiOk: true,
-            baselineCount: baselineKeys.size,
-            videosTotal: videos.length,
-            videosReady: readyCount,
-            newVideos: roundNew,
-            status: DETECT_TEXT.firstRound(roundNew),
-            lastError: null,
-          });
           await sleep(DETECT_POLL_MS);
           continue;
         }
@@ -298,15 +272,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
           });
         }
 
-        patchDebug({
-          apiOk: true,
-          videosTotal: videos.length,
-          videosReady: readyCount,
-          newVideos: roundNew,
-          status: DETECT_TEXT.round(roundNew),
-          lastError: null,
-        });
-
         // ⑤ 空闲退出（源 `ge` 900000）
         if (emitted && ports.clock.now() - lastProgress > DETECT_IDLE_END_MS) {
           log.info(`[postSendDetect] 账号=${accountId} 15min 无新增，结束检测`);
@@ -315,10 +280,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
         await sleep(DETECT_POLL_MS);
       }
     } catch (e: unknown) {
-      patchDebug({
-        status: DETECT_TEXT.errorEnded,
-        lastError: String((e as Error)?.message ?? e).slice(0, 300),
-      });
       log.warn('[postSendDetect] 异常：', e);
     } finally {
       // ⑥ 把页面站回去（源 `finally` 里 `es(de, La)`）
@@ -327,7 +288,6 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
       } catch (e: unknown) {
         log.warn('[postSendDetect] 还原页面失败：', e);
       }
-      patchDebug({ status: DETECT_TEXT.ended, newVideos: roundNew });
     }
   };
 

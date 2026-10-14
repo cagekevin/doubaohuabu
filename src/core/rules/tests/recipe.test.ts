@@ -7,8 +7,11 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  deriveNodeRecipe,
   formatClock,
+  makeRecipe,
   provenanceLabel,
+  recipeImageHash,
   recipeTextNodePosition,
   snapToGrid,
   readRecipe,
@@ -104,6 +107,13 @@ describe('readRecipe（原 `lR` 35577）', () => {
   it('★ 是对象 ⇒ 原样返回（**不深拷、不归一**）', () => {
     const raw = { prompt: '海边', model: 'seedance-2.5' };
     expect(readRecipe({ recipe: raw })).toBe(raw);
+  });
+
+  it('★ 视图必须暴露 `styleId`（「按配方重跑」靠它 —— 源 `BL.jsx:176`）', () => {
+    // 写入端确实存了它（`state/batchSend` 的 `styleId: styleIds[0] ?? null`）。
+    // 若 `readRecipe` 将来改成"白名单拷贝"而漏掉 `styleId` ⇒ 重跑**静默丢风格**，这条会红。
+    const r = readRecipe({ recipe: { styleId: 'st-1', styleName: '写实' } });
+    expect(r?.styleId).toBe('st-1');
   });
 
   it('⚠️ 数组也算对象（源版判据就是 `typeof === "object"`）⇒ 会被返回', () => {
@@ -262,5 +272,139 @@ describe('recipeTextNodePosition（原 `addTextNodeFromRecipe` 29462-29472）', 
   it('★ **只动 `y`、不动 `x`**（不做"田字格铺开"）', () => {
     const p = recipeTextNodePosition({ position: { x: 777, y: 0 }, height: 0 }, false);
     expect(p.x).toBe(777);
+  });
+});
+
+describe('recipeImageHash（原 `aR` 35564）', () => {
+  it('★ 空串 / 空值 ⇒ 空串（源 `if (!t) return \'\'`）', () => {
+    expect(recipeImageHash('')).toBe('');
+    expect(recipeImageHash(null)).toBe('');
+    expect(recipeImageHash(undefined)).toBe('');
+  });
+
+  it('★ DJB2（种子 5381）→ `h<base36>`：`aR(\'a\')` = `h3t3a`', () => {
+    // 手算：n = (5381<<5) + 5381 + 97 = 177670 ⇒ base36 = `3t3a`
+    expect(recipeImageHash('a')).toBe('h3t3a');
+    expect(recipeImageHash('a')).toBe(recipeImageHash('a')); // 确定性
+    expect(recipeImageHash('a')).not.toBe(recipeImageHash('b'));
+  });
+
+  it('★ 只取**前 4096** 字符（第 4097 位起不影响）', () => {
+    const base = 'x'.repeat(4096);
+    expect(recipeImageHash(`${base}A`)).toBe(recipeImageHash(`${base}B`));
+    expect(recipeImageHash(`${base}A`)).toBe(recipeImageHash(base));
+  });
+});
+
+describe('makeRecipe（原 `oR` 35525）', () => {
+  it('★ 逐字段对源（`v:1` · `prompt` trim · `|| null` · `Number.isFinite`）', () => {
+    expect(
+      makeRecipe(
+        {
+          body: '  正文  ',
+          model: 'm',
+          duration: 5,
+          ratio: '16:9',
+          styleId: 's',
+          styleName: '国风',
+          accountId: 'a',
+          accountName: '账号',
+          mediaType: 'video',
+        },
+        123,
+      ),
+    ).toEqual({
+      v: 1,
+      mediaType: 'video',
+      prompt: '正文',
+      model: 'm',
+      duration: 5,
+      ratio: '16:9',
+      styleId: 's',
+      styleName: '国风',
+      images: [],
+      textRefs: [],
+      accountId: 'a',
+      accountName: '账号',
+      createdAt: 123,
+    });
+  });
+
+  it('★ 缺省：`mediaType` = `video` · `model`/`ratio`/`styleId` 空 ⇒ `null` · `duration` 非数 ⇒ `null`', () => {
+    expect(makeRecipe({ body: '' }, 0)).toEqual({
+      v: 1,
+      mediaType: 'video',
+      prompt: '',
+      model: null,
+      duration: null,
+      ratio: null,
+      styleId: null,
+      styleName: '',
+      images: [],
+      textRefs: [],
+      accountId: null,
+      accountName: '',
+      createdAt: 0,
+    });
+    expect(makeRecipe({ body: 'x', duration: Number.NaN }, 0).duration).toBeNull();
+    // ⚠️ **源 quirk 照抄**：`Number(null)` = `0`（有限）⇒ `null` 入参得 `0`；只有 `undefined`（非数）才得 `null`
+    expect(makeRecipe({ body: 'x', duration: null }, 0).duration).toBe(0);
+    expect(makeRecipe({ body: 'x' }, 0).duration).toBeNull();
+  });
+
+  it('★ `images`：`label` 缺省 `素材` · `hash` = `aR(dataUrl)`（无 `dataUrl` ⇒ 空串）', () => {
+    const r = makeRecipe(
+      { body: 'x', images: [{ label: '甲', dataUrl: 'img://a' }, { dataUrl: 'img://b' }, { label: '丙' }] },
+      0,
+    );
+    expect(r.images).toEqual([
+      { label: '甲', hash: recipeImageHash('img://a') },
+      { label: '素材', hash: recipeImageHash('img://b') },
+      { label: '丙', hash: '' },
+    ]);
+  });
+
+  it('★ `textRefs`：只留 `{id,label}`（其余字段丢）· 缺项 ⇒ 空串', () => {
+    const r = makeRecipe({ body: 'x', textRefs: [{ id: 'n1', label: '文本框' }, {}] }, 0);
+    expect(r.textRefs).toEqual([
+      { id: 'n1', label: '文本框' },
+      { id: '', label: '' },
+    ]);
+  });
+});
+
+describe('deriveNodeRecipe（原 `d0` 35676）', () => {
+  const text = (id: string, data: Record<string, unknown>) => ({ id, type: 'text', data });
+
+  it('★ `recipe` ← `nodeRecipes[源节点]`（无 ⇒ 不给该键）', () => {
+    const rec = { v: 1 };
+    expect(deriveNodeRecipe([], { n1: rec }, 'n1').recipe).toBe(rec);
+    expect(deriveNodeRecipe([], { n1: 1 }, 'nope')).toEqual({});
+    expect(deriveNodeRecipe([], null, 'n1').recipe).toBeUndefined();
+  });
+
+  it('★ `sourceLabel`：`text` 节点 ⇒ 正文剥标签 + 折空白 + **截 12 字**', () => {
+    const nodes = [text('n1', { text: '<b>ABCDEFGHIJKLMNOP</b>' })];
+    expect(deriveNodeRecipe(nodes, null, 'n1').sourceLabel).toBe('ABCDEFGHIJKL…');
+  });
+
+  it('★ `text` 且正文为空 ⇒ `label || 文本框`', () => {
+    expect(deriveNodeRecipe([text('n1', { text: '', label: '甲' })], null, 'n1').sourceLabel).toBe('甲');
+    expect(deriveNodeRecipe([text('n1', {})], null, 'n1').sourceLabel).toBe('文本框');
+  });
+
+  it('★ 非 `text` ⇒ `label || name`（**不是 `type`** —— 与 `provenanceLabel` 的差异点）', () => {
+    expect(
+      deriveNodeRecipe([{ id: 'n1', type: 'genvideo', data: { name: '乙' } }], null, 'n1').sourceLabel,
+    ).toBe('乙');
+    expect(
+      deriveNodeRecipe([{ id: 'n1', type: 'genvideo', data: {} }], null, 'n1').sourceLabel,
+    ).toBeUndefined();
+  });
+
+  it('★ 无 `sourceNodeId` / 找不到节点 ⇒ 不编造（空结果）', () => {
+    expect(deriveNodeRecipe([], { n1: 1 }, null)).toEqual({});
+    expect(deriveNodeRecipe([], { n1: 1 }, '')).toEqual({});
+    expect(deriveNodeRecipe([text('n1', { text: 'x' })], null, 'nope')).toEqual({});
   });
 });

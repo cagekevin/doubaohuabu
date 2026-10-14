@@ -5,7 +5,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { planGenPanelAnchor, PANEL_ANCHOR_MARGIN } from '../panelAnchor';
+import {
+  planGenPanelAnchor,
+  planSelectionAnchor,
+  PANEL_ANCHOR_MARGIN,
+  SEL_TOOLBAR_EST_H,
+  SEL_TOOLBAR_GAP,
+  SEL_TOOLBAR_MIN_TOP,
+} from '../panelAnchor';
 
 const WIN = { innerWidth: 1440, innerHeight: 900 };
 /** 无量测尺寸的节点兜底（原 380×220） */
@@ -84,5 +91,61 @@ describe('planGenPanelAnchor（原 `Z3_1.jsx:63-89`）', () => {
     )!;
     // 屏幕底 = 100 ⇒ top = 112（若用了 width 兜底 220 会是 232）
     expect(a.top).toBe(100 + PANEL_ANCHOR_MARGIN);
+  });
+});
+
+describe('planSelectionAnchor（原 `L3.jsx:20-49` ＋ `_Component42.jsx:131-152`，两处同形）', () => {
+  const bounds = { x: 100, y: 200, width: 400, height: 300 };
+  /** 工具条常数（`_Component42.jsx:141-143`：`vt=40` · `Dt=10` · `6`） */
+  const TOOLBAR = {
+    bounds,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    aboveOffset: SEL_TOOLBAR_GAP,
+    belowOffset: SEL_TOOLBAR_GAP,
+    flipReserve: SEL_TOOLBAR_EST_H + SEL_TOOLBAR_GAP,
+    minTop: SEL_TOOLBAR_MIN_TOP,
+  };
+
+  it('★ `left` = 包围盒中心 x；上方放得下 ⇒ `top` = 上边 − 间距 + `translate(-50%,-100%)`', () => {
+    const a = planSelectionAnchor(TOOLBAR);
+    expect(a.left).toBe(300); // (100 + 400/2) * 1 + 0
+    expect(a.top).toBe(190); // 200 − 10
+    expect(a.transform).toBe('translate(-50%, -100%)');
+  });
+
+  it('★ 上方放不下 ⇒ **翻到下方**（`top` = 下边 + 间距 · `translate(-50%,0)`）', () => {
+    const a = planSelectionAnchor({ ...TOOLBAR, bounds: { ...bounds, y: 40 } });
+    expect(a.top).toBe(350); // (40 + 300) + 10
+    expect(a.transform).toBe('translate(-50%, 0)');
+  });
+
+  it('★ 边界：`上边 − 预留 == minTop` ⇒ 仍算「放得下」（源是 `>=`）', () => {
+    expect(planSelectionAnchor({ ...TOOLBAR, bounds: { ...bounds, y: 56 } }).transform).toBe(
+      'translate(-50%, -100%)',
+    );
+    expect(planSelectionAnchor({ ...TOOLBAR, bounds: { ...bounds, y: 55 } }).transform).toBe(
+      'translate(-50%, 0)',
+    );
+  });
+
+  it('★ viewport 换算（`zoom` + 平移）', () => {
+    const a = planSelectionAnchor({ ...TOOLBAR, viewport: { x: 50, y: 30, zoom: 2 } });
+    expect(a.left).toBe((100 + 200) * 2 + 50); // 650
+    expect(a.top).toBe(200 * 2 + 30 - SEL_TOOLBAR_GAP); // 420
+  });
+
+  it('★ 触发条那档（三者同值）—— 与工具条**只差常数**', () => {
+    const offset = 10 + 40 + 6; // BS_TRIGGER_MARGIN_X + OFFSET_Y + GAP
+    const a = planSelectionAnchor({
+      bounds,
+      viewport: { x: 0, y: 0, zoom: 1 },
+      aboveOffset: offset,
+      belowOffset: offset,
+      flipReserve: offset,
+      minTop: SEL_TOOLBAR_MIN_TOP,
+    });
+    expect(a.left).toBe(300);
+    expect(a.top).toBe(200 - offset); // 144
+    expect(a.transform).toBe('translate(-50%, -100%)');
   });
 });

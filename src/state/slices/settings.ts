@@ -49,7 +49,6 @@ export interface SettingsSlice {
   setApiProviders: (list: ApiProviderMeta[]) => void;
   setApiConfigs: (configs: ApiConfigMap) => void;
   setApiSetup: (setup: ApiSetup) => void;
-  setApiJobs: (jobs: Record<string, ApiJobEvent>) => void;
   /** ★ 事件回灌用：按 `jobId` 覆盖或追加（订阅是**唯一写入点**，见 `state/subscriptions.ts`） */
   upsertApiJob: (job: ApiJobEvent) => void;
   setApiUsage: (usage: ApiUsage) => void;
@@ -79,7 +78,6 @@ export function createSettingsSlice(
     setApiProviders: (apiProvidersMeta) => set({ apiProvidersMeta }),
     setApiConfigs: (apiConfigs) => set({ apiConfigs }),
     setApiSetup: (apiSetup) => set({ apiSetup }),
-    setApiJobs: (apiJobs) => set({ apiJobs }),
 
     upsertApiJob: (job) => {
       // ★ 键是 `jobId`（后端事件字段名）—— 用 `id` 会让所有任务塌成一条

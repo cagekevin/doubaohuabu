@@ -19,8 +19,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PW = process.env.PW_PATH || 'playwright';
-const { chromium } = require(PW);
+const { launchBrowser } = require('./_pw.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
@@ -108,7 +107,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const url = `http://127.0.0.1:${server.address().port}/index.html`;
   console.log('serving:', url);
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
   await page.addInitScript((p) => {
@@ -161,12 +160,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   /**
    * 选中 n-a —— ★ **必须用真实鼠标**，不能用 `dispatchEvent(new MouseEvent(...))`
    *
-   * 踩过的坑：合成 DOM 事件**绕过 React 的合成事件系统与 ReactFlow 的指针处理**
+   * 踩过的坑①：合成 DOM 事件**绕过 React 的合成事件系统与 ReactFlow 的指针处理**
    * ⇒ 实测触发应用异常 `Cannot read properties of null (reading 'document')`
    *   （堆栈落在探针的 `evaluate` 里），并让后续断言不可信。
+   *
+   * 踩过的坑②：**必须点「节点头部」，不能点节点中心** —— 文本节点的正文是
+   * `contentEditable`，点中心会把焦点交给编辑器 ⇒ `Backspace` 变成**删字符**，
+   * ReactFlow 的 `deleteKeyCode` 收不到键（实测：`selected=1` 但
+   * `activeElement.isContentEditable=true`）。这与源版一致（正文可编辑）；
+   * 真实用户用键盘删节点时点的也是头部/框体，不是正在编辑的正文。
    */
-  await page.locator('.react-flow__node[data-id="n-a"]').click();
+  const nA = await page.locator('.react-flow__node[data-id="n-a"]').boundingBox();
+  await page.mouse.click(nA.x + nA.width / 2, nA.y + 10);
   await sleep(400);
+
+  /**
+   * 诊断自检（**不改断言**，只让失败自己说话）：删除不生效时，先分清是
+   *   ① 点选没生效（`selected` = 0）② 焦点被编辑器吃掉（`active` = contentEditable）
+   *   还是 ③ 应用侧 `remove` 没处理。
+   */
+  const selInfo = await page.evaluate(() => ({
+    selected: document.querySelectorAll('.react-flow__node.selected').length,
+    active:
+      (document.activeElement &&
+        (document.activeElement.className || document.activeElement.tagName)) ||
+      '(none)',
+    editable: !!(document.activeElement && document.activeElement.isContentEditable),
+  }));
+  console.log('选中态自检：', JSON.stringify(selInfo));
+
   await page.keyboard.press('Backspace');
   await sleep(1200); // 落盘防抖 600ms + 余量
   const afterDelete = await domCount();

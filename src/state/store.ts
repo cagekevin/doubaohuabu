@@ -16,7 +16,7 @@ import { createGlobalSlice, type GlobalSlice, type GlobalSliceDeps } from './sli
 import { createUiSlice, type UiSlice, type UiFlagKey } from './slices/ui';
 import { PERSIST } from './persistKeys';
 import { LS_AUTO_VIDEO_DETECT, LS_CANVAS_DEFAULTS } from '@/stable/contracts/keys';
-import { makeId } from '@/core/rules/project';
+import { makeId, touchProject } from '@/core/rules/project';
 import { createQueueSlice, type QueueSlice } from './slices/queue';
 import { createGallerySlice, type GallerySlice } from './slices/gallery';
 import { createScanSlice, type ScanSlice } from './slices/scan';
@@ -52,8 +52,8 @@ export type AppState = GlobalSlice &
  *      摘掉 `setState` 后这条路径**结构上不存在**。
  *   ② 非 state 层不得写 store（`ui` / `adapters` / `usecases` / `bootstrap`）。
  *
- * ⚠️ **写 store 的正确姿势**：调**具名 action**（`setProjects` / `setAccounts` /
- *   `setSaveError` / `pushBackendError` / `loadHydrated` …）——
+ * ⚠️ **写 store 的正确姿势**：调**具名 action / 用例**（`loadHydrated` / `openProject` /
+ *   `setSaveError` / `pushBackendError` …）——
  *   它们住在 `state/**`，且都经 `setPartial`（镜像点）。
  */
 export interface AppStoreHook {
@@ -164,7 +164,11 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
         return {
           ...partial,
           projects: s.projects.map((p) =>
-            p.id === s.activeId ? { ...p, data: { ...p.data, nodes, edges, library, videoShares } } : p,
+            p.id === s.activeId
+              ? // ★ 数据变更 ⇒ 触碰 `updatedAt`（原 `persistActive` 29778-29800：保存工程数据时写
+                //   `updatedAt: f`）—— 启动页历史列表的「相对时间」与倒序排序都读它，不更新则永不刷新
+                touchProject({ ...p, data: { ...p.data, nodes, edges, library, videoShares } }, ports.clock.now())
+              : p,
           ),
         } as AppState;
       });
@@ -251,7 +255,7 @@ export function createAppStore(ports: Ports, deps: AppStoreDeps): AppStore {
       ...createStylesSlice({ now: () => ports.clock.now() })(setPartial, getState),
       // ★ faceMask：遮脸族（角标层 / 参数面板 / 检测结果，见 slices/faceMask.ts 头注释）
       ...createFaceMaskSlice()(setPartial, getState),
-      // ★ nodeStatus：节点状态族（`TD-16-93` 数据层 —— 通知 / 等待 / 换号 / 计时器 / 检测调试）
+      // ★ nodeStatus：节点状态族（`TD-16-93` 数据层 —— 通知 / 等待 / 换号 / 计时器 / 自动检测开关）
       ...createNodeStatusSlice({
         now: () => ports.clock.now(),
         // ★ 自动视频检测开关（原 `autoVideoDetect`，键 `doubao-auto-video-detect`）

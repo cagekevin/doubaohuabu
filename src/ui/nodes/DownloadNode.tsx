@@ -124,6 +124,8 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
       title={DOWNLOAD_NODE_TEXT.title}
       meta={targets.length > 0 ? <span className={styles.nodeCount}>{targets.length}</span> : undefined}
       selected={selected}
+      /* 原 `WL.jsx:149` 的 `<_Component30 source={false}/>` ⇒ **仅 target**（只能被连入，不能连出） */
+      handles={{ source: false }}
       minWidth={260}
       minHeight={140}
       testId="download-node"

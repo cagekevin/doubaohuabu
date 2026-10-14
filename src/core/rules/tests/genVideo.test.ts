@@ -13,6 +13,9 @@ import {
   frameSeekSeconds,
   frameTargetRatio,
   genVideoDownloadName,
+  genVideoWaiting,
+  genVideoWaitingAria,
+  genVideoWaitingText,
   hasRealDuration,
   hasResult,
   nodeAccountLabel,
@@ -20,6 +23,7 @@ import {
   stageRatio,
   timelinePercent,
 } from '../genVideo';
+import type { NodeNotice } from '../nodeStatus';
 import type { Account } from '@/stable/model/account';
 
 describe('stageRatio（原 `v`，`YL.jsx:64-75`）', () => {
@@ -201,6 +205,64 @@ describe('apiJobLabel（原 `gv-apijob`，`YL.jsx:561-563`）', () => {
 
   it('★ 未识别的状态 ⇒ **空串**（源仍渲染那个空 `<div>` —— 逐字保留）', () => {
     expect(apiJobLabel({ status: 'weird' })).toBe('');
+  });
+});
+
+describe('genVideoWaiting（原 `m`，`YL.jsx:43-67`）', () => {
+  const NOW = 1_700_000_000_000;
+
+  it('① `apiJob` 三态 ⇒ 真；`done`/`failed`/未识别 ⇒ 落到尝试那两档', () => {
+    expect(genVideoWaiting({ apiJob: { status: 'queued' } }, NOW)).toBe(true);
+    expect(genVideoWaiting({ apiJob: { status: 'submitting' } }, NOW)).toBe(true);
+    expect(genVideoWaiting({ apiJob: { status: 'running' } }, NOW)).toBe(true);
+    expect(genVideoWaiting({ apiJob: { status: 'done' } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ apiJob: { status: 'failed' } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ apiJob: { status: 'weird' } }, NOW)).toBe(false);
+  });
+
+  it('② 只认 `status === \'pending\'`（`_pendingAttempt` ＋ `_pendingAttempts` 分槽）', () => {
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending', at: NOW - 1000 } }, NOW)).toBe(true);
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'failed', at: NOW - 1000 } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ _pendingAttempts: { acc_1: { status: 'pending', at: NOW - 1000 } } }, NOW)).toBe(true);
+    expect(genVideoWaiting({ _pendingAttempts: { acc_1: { status: 'landed', at: NOW - 1000 } } }, NOW)).toBe(false);
+    expect(genVideoWaiting({}, NOW)).toBe(false);
+  });
+
+  it('③ 30 分钟窗口（★ 自愈）：窗口内真 / 到点即假；`at` 为 0 或非数 ⇒ 假', () => {
+    const W = 1_800_000;
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending', at: NOW - W + 1 } }, NOW)).toBe(true);
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending', at: NOW - W } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending', at: NOW - W - 1 } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending', at: 0 } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending' } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ _pendingAttempt: { status: 'pending', at: 'x' } }, NOW)).toBe(false);
+  });
+
+  it('③′ 有结果 + `resultAt` ⇒ **只认比 `resultAt` 晚的**（正在生成新的一条）', () => {
+    const base = { resultUrl: 'vid://a', resultAt: NOW - 5000 };
+    expect(genVideoWaiting({ ...base, _pendingAttempt: { status: 'pending', at: NOW - 9000 } }, NOW)).toBe(false);
+    expect(genVideoWaiting({ ...base, _pendingAttempt: { status: 'pending', at: NOW - 1000 } }, NOW)).toBe(true);
+    // 有结果但**无** `resultAt` ⇒ 退回"窗口内即可"（源同）
+    expect(
+      genVideoWaiting({ resultUrl: 'vid://a', _pendingAttempt: { status: 'pending', at: NOW - 1000 } }, NOW),
+    ).toBe(true);
+  });
+});
+
+describe('genVideoWaitingAria / genVideoWaitingText（原 488/495，四态）', () => {
+  const warn: NodeNotice = { level: 'warn', code: 'generation-confirm', title: 't', text: '等确认', at: 1 };
+  const info: NodeNotice = { ...warn, level: 'info' };
+
+  it('`aria-label` 两态（逐字）', () => {
+    expect(genVideoWaitingAria(null)).toBe('正在生成');
+    expect(genVideoWaitingAria(warn)).toBe('等待后台确认');
+  });
+
+  it('四态文案（逐字；★ 顺序：先 `notice`，再 `hasResult`）', () => {
+    expect(genVideoWaitingText(warn, true)).toBe('后台待确认 · 请到账号页面查看');
+    expect(genVideoWaitingText(info, false)).toBe('正在确认后台生成…');
+    expect(genVideoWaitingText(null, true)).toBe('正在生成新的一条…');
+    expect(genVideoWaitingText(null, false)).toBe('正在生成 · 出片后展示在这里');
   });
 });
 

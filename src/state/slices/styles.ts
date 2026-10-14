@@ -25,8 +25,6 @@ export interface StylesSlice {
   /** 风格表（源 `styles: kT()` —— 缺省由 `hydrate` 灌内置表） */
   styles: StylePreset[];
 
-  /** 整体替换（原 `setStyles`）—— 非数组 ⇒ `[]` */
-  setStyles: (list: StylePreset[]) => void;
   /** 恢复内置表（原 `resetStyles`）—— 注意是**浅拷贝**（不共享内置表对象） */
   resetStyles: () => void;
   /**
@@ -55,8 +53,6 @@ export function createStylesSlice(deps: StylesSliceDeps) {
 
     return {
       styles: [],
-
-      setStyles: (list) => set({ styles: Array.isArray(list) ? list : [] }),
 
       resetStyles: () => set({ styles: defaultStyles() }),
 

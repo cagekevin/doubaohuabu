@@ -186,6 +186,15 @@ export default tseslint.config(
           selector: "Property[key.name='message'] > Literal",
           message: '原则6：usecases 不得自造 message 字面量（只能转发 e.message / 上游 Result）',
         },
+        {
+          // ★ **`err(reason, message)` 的位置参数** —— 上面那条只拦**对象属性**
+          //   （`{message: '…'}` / `err({message: '…'})`），而 `core/model/result.ts` 的
+          //   `err(reason, message, cause?)` 是**位置参数** ⇒ `err('kind', '自造文案')` 此前**漏检**。
+          //   `:nth-child(2)` = 第 2 个实参（⚠️ esquery 的 children **不含 `callee`** ⇒ 实参从 1 数起）。
+          //   ⚠️ 只拦 `Literal`（`e.message` / 上游 Result 是 MemberExpression / CallExpression ⇒ 放行）。
+          selector: "CallExpression[callee.name='err'] > Literal:nth-child(2)",
+          message: '原则6：usecases 不得自造 message 字面量（只能转发 e.message / 上游 Result）',
+        },
       ],
     },
   },

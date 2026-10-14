@@ -19,8 +19,6 @@ import { planRecordScan, type ScanHistoryEntry, type ScanResultLike } from '@/co
 export interface ScanSlice {
   /** 指纹撞车体检的历史（原 26788 的 `scanHistory: fT()`） */
   scanHistory: ScanHistoryEntry[];
-  /** 灌入（`hydrate` 用） */
-  setScanHistory: (entries: ScanHistoryEntry[]) => void;
   /**
    * 记一次扫描（原 30362）
    * @returns 是否真的记了一条（源版的 `recordScan` 无返回值；这里给出来便于调用方决定落盘）
@@ -38,7 +36,6 @@ export const createScanSlice =
   ): ScanSlice => ({
     scanHistory: [],
 
-    setScanHistory: (entries) => set({ scanHistory: entries }),
 
     recordScan: (scan) => {
       const cur = get().scanHistory;

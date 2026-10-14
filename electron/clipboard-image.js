@@ -96,7 +96,7 @@ async function readClipboardBitmap() {
   try {
     const img = typeof clipboard.readImage === 'function' ? clipboard.readImage() : null;
     if (img && !img.isEmpty()) return { buf: img.toPNG(), mime: 'image/png', img };
-  } catch (_) { /* ignore */ }
+  } catch (_) { /* 老 Electron 兼容分支：API 不存在或读取失败 ⇒ 回落主路径 */ }
   return null;
 }
 

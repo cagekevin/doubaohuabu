@@ -46,7 +46,9 @@ export interface NodeShellProps {
   /** 选中态（由 ReactFlow 注入） */
   selected?: boolean;
   /**
-   * 连接点：`true` = 全挂（默认）；对象 = 细分（如下载节点 `{ source: false }` = 仅 target）
+   * 连接点：`true` = 全挂（默认）· `false` = 不挂 · **对象 = 细分**（**省略的那一侧按 `true` 处理**）。
+   *   例：下载节点 `{ source: false }` = **仅 target**（原 `WL.jsx:149` 的 `<_Component30 source={false}/>`）；
+   *   组节点 `false`（原 `GL.jsx` **没有** `_Component30` —— 组的连线锚点是 `_Component37`）。
    */
   handles?: boolean | { target?: boolean; source?: boolean };
   /** 端口尺寸档（`large` 48px / `small` 32px 的命中区，可见圆点 6 / 8px） */
@@ -139,7 +141,12 @@ export function NodeShell({
   children,
 }: NodeShellProps) {
   const id = useNodeId() ?? '';
-  const handleProps = typeof handles === 'object' ? handles : { target: handles, source: handles };
+  // ⚠️ 对象形态**必须补默认 `true`**：否则 `{ source: false }` 会让 `target` 变 `undefined`
+  //    ⇒ **两侧都不渲染**（与上面的契约相反，且静默 —— 没有类型错、没有运行时报错）。
+  const handleProps =
+    typeof handles === 'object'
+      ? { target: true, source: true, ...handles }
+      : { target: handles, source: handles };
   const resizable = minWidth != null || minHeight != null;
 
   // 尺寸订阅（原始值，见 useNodeSize 头注）+ 比例同步

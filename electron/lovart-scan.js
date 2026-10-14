@@ -168,7 +168,7 @@ function initLovartScan({ getMainWindow }) {
         shell.showItemInFolder(diagLogPath);
         return { ok: true, path: diagLogPath };
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* 打开目录是尽力而为（失败仍返回 path） */ }
     return { ok: false, path: diagLogPath };
   });
 

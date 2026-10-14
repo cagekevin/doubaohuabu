@@ -17,8 +17,10 @@
  *   上游文本/素材 → 报文（原 `$L`）→ `withBackendPage`（租约）→ `site.send`；
  *   `site.send` 现在**尊重 `payload.autoSend`**（关 ⇒ **只填不点**，原 `Be` 的 Phase 3）。
  *   反馈条（`sending`/成功摘要/失败原文）+ 4s 自动清 + `err` 时的 ✕ 也一并落地（原 `:509-520`）。
- * ⚠️ 与源的两处差异（如实标注）：① 无 `retrying` 档（本仓传输层没有重试循环）；
- *   ② 源的 `precheck && !precheck.pass` 那档摘要不可达（校验不过时 `send` 直接返回 `err`）。
+ * ⚠️ 与源的一处差异（如实标注）：无 `retrying` 档（本仓传输层没有重试循环）。
+ *   ★ 源的 `precheck && !precheck.pass` 那档摘要**已落**（`accountSendFeedback` 翻成 `error` +
+ *     警告，原 `OL.jsx:340`/`:353-355`）—— `autoSend=false`（只填入）时 `send` 照走 `ok` 但带
+ *     `pass:false`，本节点据此显示成 `err`（`TD-16-117`）。
  */
 
 import { useEffect, useMemo, useState } from 'react';

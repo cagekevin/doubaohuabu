@@ -23,12 +23,11 @@ export const WEBVIEWS_HOST_CLASS = 'doubao-view-webviews';
 /** 自定义协议前缀（原 `img://` / `vid://` / `appasset://`） */
 export const PROTOCOL_IMG = 'img://';
 /**
- * `vid://` —— 视频落盘后的引用（`userData/videos/<name>`）
- * ⚠️ 归属更正（2026-10-10）：`docs/过程.md` §0.9 曾记「前端未使用」并标注 `[待验证]`；
- *    回源 `main.js:1017-1059` 确认**后端已完整实现**（Range→206/416、MIME 按扩展名、CORS），
- *    且 `docs/过程.md #9`「视频必须落盘」⇒ **本轮开始在前端使用**（见 `docs/过程.md` §1.1）。
+ * ⚠️ 这里**没有** `PROTOCOL_VID` —— `vid://` 由**宿主独占**：主进程产生引用
+ *   （`main.js:787` 返回 `{ref: 'vid://<sha1>.mp4'}`）并注册 handler 供给（`main.js:1017-1059`）；
+ *   前端把该引用当**不透明串**渲染，从不自己拼 / 拆它 ⇒ 前端不需要这个常量（曾误判为"前端使用"）。
  */
-export const PROTOCOL_VID = 'vid://';
+
 /**
  * `appasset://` —— ★ **不是前端业务协议**，是主进程**专为 MediaPipe 人脸检测**注册的特权 scheme
  * （`main.js:652-656` 注册 + `main.js:1060-1098` handler）：

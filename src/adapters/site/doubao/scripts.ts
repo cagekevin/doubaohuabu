@@ -107,20 +107,6 @@ export function buildClickSendScript(): string {
 })()`;
 }
 
-/** 生成「深查询穿透 Shadow DOM」脚本（原 `cD` 37266） */
-export const DEEP_QUERY_SCRIPT = `(() => {
-  function deep(sel, root) {
-    root = root || document;
-    const hit = root.querySelector(sel);
-    if (hit) return hit;
-    for (const el of root.querySelectorAll('*')) {
-      if (el.shadowRoot) { const r = deep(sel, el.shadowRoot); if (r) return r; }
-    }
-    return null;
-  }
-  return { ok: true, has: !!deep('[data-input-engine-actionbar-control-key]') };
-})()`;
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 「生成确认」链（原 `kt` / `autoConfirm`，`_Component43.jsx:1738-2052`）
 //

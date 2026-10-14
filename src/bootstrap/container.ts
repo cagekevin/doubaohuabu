@@ -157,6 +157,7 @@ export function createContainer(): Container {
 
   const persist = createPersistController({
     clock,
+    lifecycle: host.lifecycle,
     persist: {
       storage,
       migrationCtx: {

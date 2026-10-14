@@ -31,19 +31,24 @@
  *     ⚠️ 三处**有意差异**见下（登记 `TD-03-13`）；⚠️ `ct` 的「按视频宽高比自适应节点尺寸」**仍未落**（`TD-03-14`）。
  *
  *   · ✅ **「拉取结果」**（原 `BL.jsx:355-382` 的 `vn-pull-chip`）—— **2026-10-12 已落**：
- *     可拉判据走纯层 `pullTargetOf`（原 `xk` + `z$`），动作走 `usePullResult().pull`
- *     （原 `pullResult` 的 `vid` 分支）⇒ 按 vid 拉无水印直链 → 落节点 → 本地化。
- *     ⚠️ 两处有意差异：① **只落 `vid` 分支** —— 原版另一条 `conversationId` 分支
- *        （回对话页 → 登记 `pull:true` → 交给 `postSendDetect`）依赖**发送后监测子系统**
- *        （`docs/19` §4.1，未落）⇒ 只剩 `conversationId` 时按钮**禁用**（判据 B4）；
- *        ② 成功 / 失败走 **`pushToast`**（与 `sourceMissing` 同一映射），**不**复刻源版那个
- *        节点内的 `vn-pull-err` 瞬时行。
- * ⚠️ **仍未落**（原 `BL.jsx`）：`ct` 的自适应尺寸（见上）。
+ *     可拉判据走纯层 `pullTargetOf`（原 `xk` + `z$`），动作走 `usePullResult().pull`。
+ *     ★ **两支都通**（与源 `disabled={!F || z}` 同）：`vid` 支 → 拉无水印直链 → 落节点 → 本地化；
+ *       `conversationId` 支 → 回会话页 + 交 `postSendDetect` ⇒ 二者**任一存在即可点**。
+ *     ⚠️ 一处如实差异：拉取**失败**走 **`pushToast`** —— **不**复刻源版节点内的 `vn-pull-err` 瞬时行。
+ *
+ *   · ✅ **节点内一次性反馈行**（原 `H`，`BL.jsx:56-61` + `:466` 的 `.vn-flash`）—— **2026-10-13 已落**：
+ *     2.2s 自动消失、后一次覆盖前一次（源判据照抄）。源里**节点内**反馈全走它 ⇒ 本仓
+ *     `locateSource` / `copyRecipe` / `pull` / 「按配方重跑」四处**统一走它**
+ *     （此前散成 `pushToast`，且「按配方重跑」那两句**根本没落**）。
+ *   · ✅ **`ct` 的自适应尺寸**（原 `BL.jsx:181-223`）—— **2026-10-13 已落**：`onLoadedMetadata`
+ *     读 `<video>` 的真实宽高 ⇒ 纯层 `core/rules/nodeSize.fitVideoBox`（320 基准 + 460 上限 +
+ *     0.02 容差）⇒ 经 `useNodeBoxWriter` 写节点框（与 `NodeShell` 的 `useSizeSync` **共用**同一写入）。
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCapture, useHostOps, usePullResult, useStore } from '@/state';
 import { useCaptureElement } from '@/ui/common/useCaptureElement';
+import { log } from '@/lib/log';
 import { useReactFlow } from '@xyflow/react';
 import {
   formatClock,
@@ -55,12 +60,14 @@ import {
 import { normalizeModelLabel } from '@/core/rules/prompt';
 import { attemptsOf, attemptStats, attemptStatusLabel, pullTargetOf } from '@/core/rules/genHistory';
 import { seekSeconds, timelinePercent } from '@/core/rules/genVideo';
+import { fitVideoBox } from '@/core/rules/nodeSize';
 import { formatMonthDayMinute } from '@/lib/time';
 import { clamp } from '@/lib/math';
-import { ANALYZE_UI_TEXT, MEDIA_PLAYER_TEXT, VIDEO_NODE_TEXT } from '@/constants/text';
+import { MEDIA_PLAYER_TEXT, VIDEO_NODE_TEXT } from '@/constants/text';
 import { NodeShell } from './NodeShell';
 import { NodeTitle } from './NodeTitle';
 import type { RFNodeProps } from './types';
+import { useNodeBoxWriter } from './useNodeSize';
 import styles from './shared.module.css';
 
 /** 定位源节点时的兜底尺寸（原 122-123 的两个魔法值） */
@@ -86,6 +93,8 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   const patchNodeData = useStore((s) => s.patchNodeData);
   const pushToast = useStore((s) => s.pushToast);
   const addTextNodeFromRecipe = useStore((s) => s.addTextNodeFromRecipe);
+  /** 写节点框（与 `NodeShell` 的 `useSizeSync` **共用**同一写入 —— 判据 C1） */
+  const writeNodeBox = useNodeBoxWriter();
   // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
   const hostOps = useHostOps();
   const { setCenter } = useReactFlow();
@@ -106,6 +115,26 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   useCaptureElement(id, videoRef);
   const [capturing, setCapturing] = useState(false);
 
+  /**
+   * 节点内**一次性反馈行**（原 `H`，`BL.jsx:56-61`）
+   *
+   * ⚠️ 源是「置串 + 2.2s 后清空」：**后一次覆盖前一次**（不排队）—— 照抄。
+   * ⚠️ 卸载时清定时器（源没做；本仓按「组件卸载后不再 setState」补上）。
+   */
+  const [flash, setFlash] = useState('');
+  const flashTimerRef = useRef<number | null>(null);
+  const showFlash = useCallback((msg: string) => {
+    setFlash(msg);
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = window.setTimeout(() => setFlash(''), VIDEO_NODE_TEXT.flashMs);
+  }, []);
+  useEffect(
+    () => () => {
+      if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+    },
+    [],
+  );
+
   const label = data.label || VIDEO_NODE_TEXT.fallbackName;
 
   /** 来源标签（原 49-51 的 `M = fR({data}, nodes)`） */
@@ -122,7 +151,7 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
       const src = nodes.find((n) => n.id === anchor);
       if (!src) {
         // 原 119：`H('源节点已不存在')`
-        pushToast(VIDEO_NODE_TEXT.sourceMissing, undefined, 'warn');
+        showFlash(VIDEO_NODE_TEXT.sourceMissing);
         return;
       }
       const w = src.width ?? FALLBACK_SOURCE_W;
@@ -130,7 +159,7 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
       // ⚠️ 与源一致：**不折算父偏移**（组内节点会偏 —— 源版如此）
       setCenter(src.position.x + w / 2, src.position.y + h / 2, { zoom: 1, duration: 300 });
     },
-    [data, nodes, pushToast, setCenter],
+    [data, nodes, showFlash, setCenter],
   );
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -158,16 +187,16 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   /** 进度百分比（原 `zt`；纯层 `timelinePercent`，与 `gv-tl` **同一份公式**） */
   const percent = timelinePercent(currentTime, duration);
 
-  /** 播放 / 暂停（原 `wt`，`:224-236`）—— ⚠️ `play()` 被拦（自动播放策略）⇒ **静默**（源也 `.catch(()=>{})`） */
+  /** 播放 / 暂停（原 `wt`，`:224-236`）—— ⚠️ `play()` 失败（自动播放策略等）⇒ **留痕不吞**（原则 6） */
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
     if (el.paused) {
       el.play()
         .then(() => setPlaying(true))
-        .catch(() => {
-          // catch-ok: `play()` 被浏览器的自动播放策略拒绝（用户尚未交互）—— 预期内、非错误，源亦静默
-          return undefined;
+        .catch((e: unknown) => {
+          // 源 `wt` 是 `.catch(()=>{})` 空吞；本仓**留痕不吞**（原则 6，与 `GenVideoNode` 同口径）
+          log.warn('[VideoNode] play() 失败：', e);
         });
       return;
     }
@@ -209,11 +238,13 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
     if (!recipe) return;
     const r = await hostOps.copyText(recipeDetailLines(recipe));
     if (r.ok) {
-      pushToast(ANALYZE_UI_TEXT.copied);
+      // 原 159：`H('配方已复制')`
+      showFlash(VIDEO_NODE_TEXT.flashRecipeCopied);
       return;
     }
-    pushToast(`${ANALYZE_UI_TEXT.copyFailed}：${r.message}`, undefined, 'error');
-  }, [recipe, pushToast, hostOps]);
+    // ⚠️ 失败**原样转发生产者的 `message`**（原则 6）—— 源 161 是固定串，本仓不替生产者造句
+    showFlash(r.message);
+  }, [recipe, showFlash, hostOps]);
 
   return (
     <NodeShell
@@ -297,13 +328,13 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
         )}
         {/* 「拉取结果」（原 `BL.jsx:355-382` 的 `vn-pull-chip`）
             ⚠️ 显示判据**照源 `z$`**（无 `url` + 最后一条尝试有 `vid` / `conversationId`）；
-               本工程只落了「按 vid」那条路 ⇒ **只有 `vid` 时可用**，只剩 `conversationId` 时
-               **禁用**（判据 B4：不渲染"点了没反应"的按钮）。 */}
+               两支**都已落**（`vid` → 直链落节点；`conversationId` → 回会话页 + 交 `postSendDetect`）
+               ⇒ 二者**任一存在即可点**（与源 `disabled={!F || z}` 同）。 */}
         {pullTarget && (
           <button
             type="button"
             className={styles.videoChip}
-            disabled={pulling || !pullTarget.vid}
+            disabled={pulling || (!pullTarget.vid && !pullTarget.conversationId)}
             title={VIDEO_NODE_TEXT.pullTitle}
             onClick={(e) => {
               e.stopPropagation();
@@ -312,7 +343,8 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
                 .pull(id)
                 .then((r) => {
                   if (r.ok) {
-                    pushToast(VIDEO_NODE_TEXT.pulled);
+                    // 原 366：`H('已拉取到结果')`
+                    showFlash(VIDEO_NODE_TEXT.pulled);
                     return;
                   }
                   // ⚠️ 失败**原文透传**（原则 6）—— 不在这里造"拉取失败"这类泛化文案
@@ -337,9 +369,18 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
             preload="metadata"
             playsInline
             onLoadedMetadata={(e) => {
+              const v = e.currentTarget;
               // 原 `ct` 的「量时长」半边（`:185` 的 `De(it.duration || 0)`）
-              const d = e.currentTarget.duration;
+              const d = v.duration;
               setDuration(Number.isFinite(d) && d > 0 ? d : 0);
+              // ★ 原 `ct` 的「自适应尺寸」半边（`:187-216`）—— 按**真实宽高比**调节点框
+              //   ⚠️ 容差比较的是 `data` 里**已存**的真实像素（源 `gt` 用 `c/u`），不是节点尺寸
+              const box = fitVideoBox(v.videoWidth, v.videoHeight, data.width, data.height);
+              if (box) {
+                writeNodeBox(id, box);
+                // 真实像素写进 `data`（源 `:212`）—— 面板的 `W×H` 读它
+                patchNodeData(id, { width: v.videoWidth, height: v.videoHeight });
+              }
             }}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
@@ -388,20 +429,30 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
                 type="button"
                 className={styles.videoAct}
                 /*
-                 * ★ **2026-10-11 接通**（原 `addTextNodeFromRecipe`）—— 此前 `disabled` 并写明
-                 *   "未落地"。它会在这个视频节点**正下方**建一个文本框并填入配方。
-                 * ⚠️ 与源一致：**不带 `styleId`** —— 本工程的配方视图（`RecipeViewLite`）只带
-                 *   `styleName`，没有 id（源版从原始 recipe 里取 `styleId`）。
+                 * ★ 「按配方重跑」（原 `addTextNodeFromRecipe`）—— 在这个视频节点**正下方**
+                 *   建一个文本框并填入配方；**逐字对源**（`BL.jsx:170-177`）：带上 `styleId` ——
+                 *   否则新文本框 `styleIds: []`，**风格丢了**。
                  */
                 onClick={() => {
-                  if (!recipe) return;
-                  addTextNodeFromRecipe({
+                  if (!recipe) {
+                    // 原 167：`H('该视频没有配方，无法重跑')`
+                    showFlash(VIDEO_NODE_TEXT.flashNoRecipe);
+                    return;
+                  }
+                  // 原 179：按**返回值**判成败（源 `H(kt ? … : …)`）
+                  const created = addTextNodeFromRecipe({
                     prompt: String(recipe.prompt ?? ''),
                     ...(recipe.model ? { model: String(recipe.model) } : {}),
                     ...(recipe.duration ? { duration: Number(recipe.duration) } : {}),
                     ...(recipe.ratio ? { ratio: String(recipe.ratio) } : {}),
+                    // ★ 逐字对源（`BL.jsx:176` 的 `styleId: it.styleId`）—— 不传 ⇒ 重跑建出的
+                    //   文本框 `styleIds: []`，**风格丢了**
+                    ...(recipe.styleId ? { styleId: String(recipe.styleId) } : {}),
                     anchorNodeId: id,
                   });
+                  showFlash(
+                    created ? VIDEO_NODE_TEXT.flashRerunCreated : VIDEO_NODE_TEXT.flashRerunFailed,
+                  );
                 }}
               >
                 {VIDEO_NODE_TEXT.rerunRecipe}
@@ -523,6 +574,9 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
           </button>
         </div>
       )}
+
+      {/* 节点内一次性反馈行（原 `BL.jsx:466` 的 `.vn-flash`，2.2s 自动消失） */}
+      {flash && <div className={styles.videoFlash}>{flash}</div>}
     </NodeShell>
   );
 }

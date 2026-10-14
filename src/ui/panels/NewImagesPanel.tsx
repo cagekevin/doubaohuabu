@@ -21,7 +21,7 @@
  * ⛔ **未落地的逐条标注（判据 B4/B5，不假装）**：
  *   | 缺 | 源 | 原因 |
  *   |---|---|---|
- *   | `.nip-drop-active` 落点高亮 | 原 258-263 | 它要给**跨层容器**（`.doubao-view-webviews`）挂**全局**类，而本仓只有 CSS Modules ⇒ **不为它开全局 CSS 例外**；其源样式亦不可得。⚠️ 功能不受影响（只少一层视觉提示） |
+ *   | `.nip-drop-active` 落点高亮 | 原 258-263 | ★ **已落**：经 `onDropActiveChange` 回调交给 `BackendView` 给 `.webviews` 容器加 CSS-modules 类（面板与容器同在 `BackendView` 下 ⇒ **不需要全局类**）。⚠️ 源样式真值不可得 ⇒ 视觉**自拟**（token），待人工核对 |
  *
  * ⚠️ **一处刻意的处理**：源版的 toast 是**面板内**的 `.dvl-toast`（3200ms 自动消失），
  *   本工程统一走 store 的 `pushToast`（与 `GalleryPanel` 同法），**时长逐条对源**。
@@ -53,7 +53,20 @@ import type { ScanPhaseEvent } from '@/core/ports/site.port';
 import styles from './NewImagesPanel.module.css';
 import shared from '@/ui/common/shared.module.css';
 
-export function NewImagesPanel() {
+export interface NewImagesPanelProps {
+  /**
+   * ★ **拖拽落点高亮**（原 `.nip-drop-active`，`_Component26.jsx:261`）
+   *
+   * 源用 `document.querySelector('.doubao-view-webviews').classList.add('.nip-drop-active')` ——
+   * 给**跨层容器**挂**全局**类。本仓**不开全局类**（CSS Modules 一条道）：本面板与那个容器
+   * **同在 `BackendView` 之下**（`BackendView.tsx:414` 是容器、`:477` 是本面板）⇒ 由父级给容器加
+   * CSS-modules 类即可（**不需要全局类**）。
+   * ⚠️ 源样式真值不可得（原版 CSS 未入库）⇒ 视觉**自拟**（同 `.nip-ghost` 先例）。
+   */
+  onDropActiveChange?: (on: boolean) => void;
+}
+
+export function NewImagesPanel({ onDropActiveChange }: NewImagesPanelProps = {}) {
   const accounts = useStore((s) => s.accounts);
   const galleries = useStore((s) => s.lovartGalleries);
   const activeAccountId = useStore((s) => s.activeAccountId);
@@ -107,6 +120,13 @@ export function NewImagesPanel() {
   const [ghost, setGhost] = useState<{ x: number; y: number; src: string; name: string } | null>(null);
   /** 是否处于按下态（**它才是挂 window 监听的开关**） */
   const [pressing, setPressing] = useState(false);
+
+  // ★ 落点高亮（原 `_Component26.jsx:261` 的 `.nip-drop-active`）—— 按下期间由父级（`BackendView`）
+  //   给 `.webviews` 容器加高亮类；卸载时如实收回（否则容器会一直亮着）
+  useEffect(() => {
+    onDropActiveChange?.(pressing);
+    return () => onDropActiveChange?.(false);
+  }, [pressing, onDropActiveChange]);
 
   useEffect(() => {
     if (!pressing) return;

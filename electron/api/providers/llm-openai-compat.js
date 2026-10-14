@@ -22,7 +22,7 @@ const adapter = {
   capabilities: ['llm'],
   domains: [BASE],
   auth: { type: 'bearer', keyFields: ['apiKey'] },
-  transientErrorHints: /ECONNRESET|ECONNABORTED|ETIMEDOUT|ESOCKETTIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR/i,
+  transientErrorHints: require('./_shared').TRANSIENT_ERROR_HINTS,
   quotaHints: [
     { re: /insufficient_quota|额度不足|quota|余额不足/i, kind: 'quota_exhausted', advice: 'LLM 额度/余额不足，请充值后重试' }
   ],
