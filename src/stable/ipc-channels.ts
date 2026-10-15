@@ -221,9 +221,11 @@ export const IPC_CHANNELS = {
   'open-lovart-chrome': {
     kind: 'invoke',
     channel: 'open-lovart-chrome',
-    params: [],
+    params: ['{ accountId, url, proxy }'], // 按 handler 签名的**原文**写（解构入参），不另起名
     backendOnly: true,
-    note: '后端独有注册：原版亦然（见上方回源结论）⇒ 保留；渲染层从不调用它',
+    note:
+      '后端独有注册：原版亦然（见上方回源结论）⇒ 保留；渲染层从不调用它。' +
+      '字段面待补（回执形状随 `chrome-cdp` 批次填）；它的"该不该有"另走债务 TD-13-30。',
   },
 } as const satisfies Record<string, ChannelSpec>;
 
