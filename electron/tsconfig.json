@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "后端（宿主壳）类型的唯一执法配置。旗组合 = docs/plan/后端TS迁移/README.md §6 S0 满载档。",
+    "★ 两条与 §6 首选不同的地方（B0-a 实测，见该目录 日志.md）：",
+    "  1. `verbatimModuleSyntax` **必须关**：本目录最近的 package.json 是 \"type\":\"commonjs\" ⇒ 文件按 CJS 处理，",
+    "     开着它时 ESM 语法被拒（TS1295/TS1287）。README §6 S0-6 预置的替代阶梯即此 ⇒ 「@shared 只许类型导入」",
+    "     由 eslint 的 no-restricted-imports（allowTypeImports）承担，仍是机器检查，只是载体换了。",
+    "  2. `moduleResolution` **不用 node10**：TS 6 已弃用（TS5107），靠 ignoreDeprecations 才跑得动 ⇒ 定稿 node16。",
+    "`allowJs` = 混合期的过桥（未转 .js 原样过一遍，不进类型检查）；`checkJs` 的测量归 census 脚本。"
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "node16",
+    "moduleResolution": "node16",
+    "types": ["node"],
+
+    "strict": true,
+    "useUnknownInCatchVariables": true,
+    "strictBuiltinIteratorReturn": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "noErrorTruncation": true,
+
+    "verbatimModuleSyntax": false,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "allowJs": true,
+    "checkJs": false,
+    "noEmitOnError": true,
+    "sourceMap": true,
+    "incremental": true,
+
+    "rootDir": ".",
+    "outDir": "dist",
+    "paths": { "@shared/*": ["../build/shared-types/*"] }
+  },
+  "include": ["**/*"],
+  "exclude": ["node_modules", "dist", "dola-duration-main.js"]
+}

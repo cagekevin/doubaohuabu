@@ -3,6 +3,14 @@ node_modules/
 
 # ── 构建产物 ──
 dist/
+# ── 后端（宿主壳）TS 迁移：生成物 / 备份 / 增量缓存 ──
+#   build/ = 声明层产物（@shared/* 的落点，每次构建重生成）
+#   .migration-backup/ = 迁移脚本改源文件前的自备份（本仓 git 不是安全网，见该目录 弯路.md W1）
+build/
+.migration-backup/
+*.tsbuildinfo
+# ── 迁移任务的证据区（快照 / 黄金样本 / 数据兼容样本）：是证据、不是第二种真源 ──
+docs/plan/后端TS迁移/evidence/
 
 # ── 原版参考 · 脚本产出（inputs/ 与 scripts/ 才是源，outputs/ 一律脚本生成）──
 docs/豆包画布原版参考/outputs/

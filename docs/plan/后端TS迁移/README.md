@@ -2,7 +2,7 @@
 
 > **定位**：把 `electron/**` 从 CommonJS JS 迁到**真 TS**（最严格档 · 收窄 · 无 any 兜底），并让前后端 IPC 契约**机器受检**（消灭人工对账）。
 > **为什么做**：① 契约漂移是本仓**唯一实证过的 bug 类**（剪贴板三 bug · `jobId` vs `id` · `size` vs `bytes` · `pickStorage` 漏 payload）；② **TD-13-26**（electron 零闸：tsconfig/eslint/vitest 三方都不含）的既定解法就是把它拉进类型覆盖。
-> **状态**：待执行（B0-a 未开工）。
+> **状态**：**B0-a 已完成**（地基与旗组合**定稿**；产出见 `日志.md`，弯路见 `弯路.md` W21–W24）。下一批 ＝ B0-b。
 > **粒度**：**执行级** —— 裁决与顺序已写死；凡遇本文没写到的情形，**停下来改本文**，别就地决定。
 > **本目录**：`README.md`（计划 · 本文）· `日志.md`（批次日志）· `弯路.md`（弯路台账）· `scripts/`（任务脚本）。
 
@@ -15,7 +15,7 @@
 | # | 目标 | 判据 |
 |---|---|---|
 | G1 | 编译收口（**最严格档**） | `tsc -p electron --noEmit` 零红（**范围见 1.2**）；B0-b 一次锁死，之后只许改本文留痕 |
-| G2 | 契约机器校验（**名面 ＋ 字段面**） | 真源 ＝ 频道表；渲染层原始面 ＝ 由表**生成**的声明（进 gitignore 的 `build/host-api/`，**prebuild 生成 ⇒ 过期结构上不可能**）；handler 返回型 ＝ 表 `ret`；适配层收窄点编译期受检 |
+| G2 | 契约机器校验（**名面 ＋ 字段面**） | 真源 ＝ 频道表；渲染层原始面 ＝ 由表在**类型层**派生的 mapped type（§5：**无生成器 · 无产物 · 无顺序耦合**）；handler 返回型 ＝ 表 `ret`；适配层收窄点编译期受检 |
 | G3 | 载体数 ＝ 1 | `api/types.js` 的 JSDoc typedef 删副本、改引共享形状；频道名/种类/参数/回执形状**只在表里写一次**；`window-api.d.ts` 不再是手写副本 |
 | G4 | 类型质量 | 显式 `any` ＝ 0 · `@ts-ignore` ＝ 0 · **`any` 泄漏 ＝ 0**（`no-unsafe-*`）· `as` 每批只降不升且每处注依据 · **`!` 禁** |
 | G5 | **行为等价 ＋ 数据兼容** | 模块求值拓扑不变（§7）；**落盘格式与既有文件兼容**（§4.2 样本对照）；转换 commit 零逻辑改动；等价微改逐处留痕；真 bug 走债务／正确性通道 |
@@ -28,7 +28,7 @@
 | `electron/**/*.ts`（已转文件） | 类型（满载档）＋ lint（type-aware） | `typecheck:electron` ＋ eslint（**进 `npm run check`**） |
 | `electron/**/*.js`（未转） | **不检查**（passthrough 过桥） | 登记在 `日志.md` 未转清单；运行期冒烟 |
 | `electron/dola-duration-main.js`（2,190 行） | **永不进程序**（guest 主世界文本注入，不能 `require`） | diag 日志 ＋ 手工域名判定探针 —— **如实：零类型覆盖**，**B5 另立一笔债**（不塞进已销的 TD-13-26） |
-| `build/shared-types/**` · `build/host-api/**` | 生成物（**禁手改**） | prebuild 生成（**过期结构上不可能**） |
+| `build/shared-types/**` | 生成物（**禁手改**）：`@shared/*` 的声明层落点（§5 的 mapped type 方案**没有**第二份产物） | `build:shared` 每次重建（**过期结构上不可能**） |
 | **生成的注入代码**（`fingerprint-preload.js` 产出的账号 preload 字符串模板） | **零类型覆盖**（它是字符串，不是模块） | 与 `dola-duration-main.js` 同判：如实登记，不假装覆盖 |
 | 行为等价 | 只有部分可机器对照 | **黄金样本对照**（§4.2）＋ 冒烟；其余手测清单；**没做的写"未验"** |
 | **数据兼容**（落盘格式） | **只能靠样本对照** | 迁移前录真实样本 → 前后跑同一读写 → diff（§4.2） |
@@ -54,15 +54,15 @@
 
 ⛔ **不许把这张表拆成"三清单 + 断言清单"三份**（那是同一真相三处 —— 本仓母体）。§7 的 C-1/C-2/C-3 就是它的三列。
 
-| # | 断言（待核） | 若被推翻 |
-|---|---|---|
-| A-1 | `api/**` 是"最干净的纯子域"（不 import `electron`） | 批内划分与"可测"边界要改；含 electron 的模块不测 |
-| A-2 | 5 个 providers 的 `buildSubmit`/`parseSubmit`/`parsePoll` 是纯函数 | 测试面缩小 |
-| A-3 | `license.js` 的机器码/验签路径**可注入**（能做样本对照） | 改手工清单，如实标"未验" |
-| A-4 | 各域自注册的 IPC 频道总数（`dola-media` 5 个等） | 表覆盖不完整 ⇒ C2 判据不成立 |
-| A-5 | 28 个文件的 `require` 关系**无环** | 环上模块保留 CJS 形态 |
-| A-6 | 没有"消费方改已转模块的导出值"的写法（§7 I-4） | 那些模块**保留 CJS 形态** |
-| A-7 | guest 注入脚本只有 `dola-duration-main.js` 一个（`fingerprint-preload` 生成物除外，见 1.2） | §3 批次与 §4 地基加特例 |
+| # | 断言（待核） | 若被推翻 | **B0-a 核实**（2026-10-15 · 脚本与证据见 `日志.md` / `evidence/`） |
+|---|---|---|---|
+| A-1 | `api/**` 是"最干净的纯子域"（不 import `electron`） | 批内划分与"可测"边界要改；含 electron 的模块不测 | **基本成立，一处例外**：`api/bridge.js` 顶层 `require('electron')`（另 2 处惰性）⇒ 它**不可单测**；其余 14 个 `api/**` 文件零 `electron` |
+| A-2 | 5 个 providers 的 `buildSubmit`/`parseSubmit`/`parsePoll` 是纯函数 | 测试面缩小 | **成立**（5 个 provider 零 `electron`、零顶层副作用）；注意同形 5 处 `testConnection` 里的**函数内 `require('../http')`** ⇒ 按 C-3 处置 |
+| A-3 | `license.js` 的机器码/验签路径**可注入**（能做样本对照） | 改手工清单，如实标"未验" | **推翻**：导出面只有 `initLicense` / `__setTrustedTimeOverride` ⇒ 验签/机器码**不可注入** ⇒ 走"被推翻"那一档（手工清单 ＋ **未验**，见 `evidence/golden`） |
+| A-4 | 各域自注册的 IPC 频道总数（`dola-media` 5 个等） | 表覆盖不完整 ⇒ C2 判据不成立 | **成立，且抓到 1 处真缺口**：preload **81** 成员（invoke 69 · send 4 · sendSync 2 · on 5 · value 1）、后端 `handle` 70 ＋ `on` 6；三侧对账后 **`open-lovart-chrome` 未暴露**（后端注册、preload 无名面、`src/` 零消费）⇒ B1 必须显式处置它 |
+| A-5 | 28 个文件的 `require` 关系**无环** | 环上模块保留 CJS 形态 | **成立**（两法一致：脚本自建图 0 环 · `depcruise electron` = 67 modules / 0 violations） |
+| A-6 | 没有"消费方改已转模块的导出值"的写法（§7 I-4） | 那些模块**保留 CJS 形态** | **成立**（28 文件该列全空）。⚠️ 脚本口径只认「直接 `require(..).x =`」与「顶层 `const m = require(..)` 后改 `m.x`」；经别名/参数传递的改法**扫不到** |
+| A-7 | guest 注入脚本只有 `dola-duration-main.js` 一个（`fingerprint-preload` 生成物除外，见 1.2） | §3 批次与 §4 地基加特例 | **成立**（`main.js` 只有一处 `readFileSync('dola-duration-main.js')` 注入源；`fingerprint-preload.js` 是产出字符串的**生成器模块**，属 1.2 已登记项） |
 
 ## §3 顺序
 
@@ -74,7 +74,7 @@
 
 | 批次 | 内容 | 完成判据 |
 |---|---|---|
-| **B0-a 试红 spike**（不写业务代码） | ① 最小样例逐项实测 §6 S0-6 清单；② 样板试转：挑**中位难度**的一个（如 285 行的 `api/config-store.js`，含 `fs`/`crypto`）量**真实单文件代价** —— ⛔ 别拿最容易的 `api/redact.js`（纯函数）当样板，那会**系统性低估**代价；③ 外部引用清单；④ `.js` 源/产物 diff 抽查；⑤ **§2.1 那张清点表**（28 文件逐行：`require('electron')`? / 顶层副作用? / 惰性 require? / 环? / 单函数导出? / 消费方改导出值? / 顶层 `this`? —— **三清单与此表是同一件东西**）；⑥ **基线快照**（**频道清单** —— 转换后 `preload` 就没了，必须迁移前录）；⑦ **样本**（复用 `tests/` fixtures，见 §4.2） | 地基与旗组合**定稿**；产出写进 `日志.md`（**清点表是批次划分的依据 —— 它推翻哪条断言就改本文**） |
+| **B0-a 试红 spike**（不写业务代码） | ① 最小样例逐项实测 §6 S0-6 清单；② 样板试转：挑**中位难度**的一个（如 285 行的 `api/config-store.js`，含 `fs`/`crypto`）量**真实单文件代价** —— ⛔ 别拿最容易的 `api/redact.js`（纯函数）当样板，那会**系统性低估**代价；③ 外部引用清单；④ `.js` 源/产物 diff 抽查；⑤ **§2.1 那张清点表**（28 文件逐行：`require('electron')`? / 顶层副作用? / 惰性 require? / 环? / 单函数导出? / 消费方改导出值? / 顶层 `this`? —— **三清单与此表是同一件东西**）；⑥ **基线快照**（**频道清单** —— 转换后 `preload` 就没了，必须迁移前录）；⑦ **样本**（复用 `tests/` fixtures，见 §4.2） | 地基与旗组合**定稿**（＝ `electron/tsconfig.json` 落地）；产出写进 `日志.md`（**清点表是批次划分的依据 —— 它推翻哪条断言就改本文**） |
 | **B0-b 运行地基与接入** | §4.1 的 D-1…D-9 ＋ §4.2 的 D-10…D-13 ＋ 两闸落地（§8 落地清单） | **检查点 C1**（§4.3） |
 | **B1 契约面**（382 ＋ 表） | `ipc.ts`(39) · `preload.ts`(173) · `api/bridge.ts`(170) ＋ **频道表**（`src/stable/ipc-channels.ts`；**脚本出草稿**，人补类型/形状/note）＋ mapped type 派生 `WindowApi` ＋ `extract-host-api.cjs` **并入草稿生成** | **检查点 C2**（§9.4，**名面闭环**） |
 | **B2 api/ 子域**（2,078） | `types`(57)→`redact`·`quota`·`domains`·`http`(283)→`_shared`(20)→5 个 providers(852)→`registry`(38)→`config-store`(285)→`job-manager`(545) | tsc ＋ lint 零红；同批落纯逻辑测试；**config-store 过数据兼容样本** |
@@ -97,7 +97,7 @@
 | D-5 | `preload: __dirname/preload.js` ＋ guest 脚本拷贝**同目录** | 预加载/注入失败 | 冒烟 ＋ 注入 diag |
 | D-6 | **构建链**：`build:electron` 进 `npm run build`（`pack:*` 依赖它） | 打包发**旧产物或无产物** | `pack:dir` 查产物 |
 | D-7 | 打包 `files`：`electron/**` ＋ `!electron/**/{*.ts,tsconfig*.json,*.tsbuildinfo}` | 连源码与配置一起发 | `pack:dir` 查 asar 清单 |
-| D-8 | ignore：`build/shared-types/` · `build/host-api/` · `.migration-backup/` · tsbuildinfo；**核实** `electron/dist` 是否被现有 `.gitignore` 命中（锚定 vs 非锚定） | 产物/备份进 git | `git status` |
+| D-8 | ignore：`build/` · `.migration-backup/` · `*.tsbuildinfo` · 本任务 `evidence/`（B0-a 已加）；**`electron/dist` 已被现有 `.gitignore` 的非锚定 `dist/` 命中**（实证 `git check-ignore -v`） | 产物/备份进 git | `git status` |
 | D-9 | eslint ignores 加**全部产物目录**；**保留 `electron/**/*.js` 的 ignore** | 未转 `.js` 被通用 TS 规则扫红 ⇒ 误判"代码太差"⇒ 降档 | `npm run lint` **当天绿** |
 
 ### 4.2 ★ 基线证据与黄金样本（**没有 before，就无法证明 after**）
@@ -188,6 +188,16 @@
 | `build:shared` 最小 include 是否绿 | `--explainFiles` 定位；缩 include；**若某形状文件依赖 DOM ⇒ 那些形状不该被后端消费，后端定义局部接口并登记** |
 | `.js` 产出与源是否一致 · `noEmitOnError` 产出是否完整 | 有差异 ⇒ 记日志，B3/B4 逐个核对 |
 
+**★ B0-a 逐项实测结论**（原始命令与输出见 `日志.md`；定稿 ＝ `electron/tsconfig.json`）：
+
+1. **`module: node16` ＋ `verbatimModuleSyntax: true` 不成立** —— TS1295/TS1287（本目录最近 package.json 是 `"type":"commonjs"` ⇒ 文件按 CJS 处理，开 verbatim 时 ESM 语法被拒）。⇒ 走替代阶梯的**第二档**：「`@shared` 只许类型导入」交给 eslint `no-restricted-imports`（`allowTypeImports`）。
+2. **阶梯第一档 `node10` 也不可用** —— TS 6.0.3 报 TS5107「已弃用，TS 7.0 起停止工作」（要靠 `ignoreDeprecations` 才跑得动，那是降噪开关）。⇒ **定稿 `module/moduleResolution: node16` ＋ `verbatimModuleSyntax: false`**：实测绿，且产物是 `require` / `exports.x`（运行期形态不变）。
+3. **`erasableSyntaxOnly` 保留**：`electron/**` 里 `enum` / `namespace` / 参数属性 **grep 零命中**（探针实测这四类形态确实会被 TS1294 拒；`import x = require()` 同样被拒——本仓不需要它，因为 verbatim 关了、ESM 语法可用）。
+4. **type-aware lint 用 `projectService` 挂得上**（探针实测：故意违规文件被 `no-unsafe-*` / `no-explicit-any` / `no-non-null-assertion` / `no-floating-promises` / `consistent-type-assertions` 全数抓住）⇒ 不必退到显式 `project`。
+5. **风格层实测**：在真转完的 `config-store` 上只报 5 处，全是**与源逐字等价**的写法（`${number}` 模板 ×2 · `String(unknown)` ×3）⇒ 属噪声（关这两条，**不动类型安全轴**）；同批 `no-unnecessary-condition` / `no-unnecessary-type-assertion` 各抓到 1 处**真冗余** ⇒ 风格层**不是**整片噪声，按条处置、别整族关。
+6. **`build:shared` 机制成立**（声明层产物 → `paths` 消费 → `satisfies` 编译期受检）：一个真 `src/stable` 文件在**无 DOM**、`types: []` 下绿，产物落点随 `rootDir`。⚠️ 实测要求 `rootDir` **显式**给（否则 TS6059/TS5011）。
+7. **过桥核对（`.js` 源/产物）**：AST 级比 ⇒ **实质 0**，唯一差异是 tsc 注入的 `"use strict"`（sloppy→strict 的语义风险面另做扫描：`with` / `arguments.callee` / 八进制 / `delete 变量` / 给未声明名赋值 **均零命中**）⇒ B3/B4 不必逐个手核。
+
 **总则**：**技术性替代可自行采用 ＋ 日志留痕**；**真降档必须用户拍板 ＋ `弯路.md` 一条**（点名：`exactOptionalPropertyTypes` · `noUncheckedIndexedAccess` · 类型安全层任何一条）。**不许静默降。**
 
 ## §7 ★ 改写不变量（防"编译绿、行为变"）
@@ -224,7 +234,7 @@
 
 **通用战术**：先标导出面再填内部 · 形状**从调用方 grep** · deps 注入工厂的形状从**解构默认值**读 · 文件头注释即契约源 · `catch(err)` 全仓一个 sanctioned 微改（`err instanceof Error ? err.message : String(err)`，B1 在 `ipc.ts` 定形复用）· **拒绝清单**：无 any ／ 无 ts-ignore ／ 不放宽配置 ／ 无留痕的逻辑改动 ／ **不拆文件（重构≠转换）** ／ 不"先转了以后再收窄" ／ 禁 `export default` ／ 不动惰性 `require`。
 
-**★ 闸落地清单（B0-b 执行，走 `lint:gates` 申诉口三问 ＋ 留痕）**：① `eslint.config.js`：从顶层 ignores **移出 `electron/**`**，新增 electron 块（**只匹配 `electron/**/*.ts`**），并**显式 ignore `electron/**/*.js` 与全部产物目录**（D-9）；② `package.json`：加 `typecheck:electron` / `build:electron` / `build:shared` / `gen:window-api`；③ `gates.manifest.json`：登记 `typecheck:electron`（**理由 ＝ TD-13-26 既定解法，非新建闸**）；④ 两闸的**申诉三问**写进 `日志.md`。
+**★ 闸落地清单（B0-b 执行，走 `lint:gates` 申诉口三问 ＋ 留痕）**：① `eslint.config.js`：从顶层 ignores **移出 `electron/**`**，新增 electron 块（**只匹配 `electron/**/*.ts`**），并**显式 ignore `electron/**/*.js` 与全部产物目录**（D-9）；② `package.json`：加 `typecheck:electron` / `build:electron`（§5 的 mapped type 方案下**没有** `gen:window-api`；`build:shared` 见 §11.4 的时机修正）；③ `gates.manifest.json`：登记 `typecheck:electron`（**理由 ＝ TD-13-26 既定解法，非新建闸**）；④ 两闸的**申诉三问**写进 `日志.md`。
 
 **★ 生成步必须显式调用，不靠 npm 的 `pre*` 钩子魔法**：`gates-run.mjs` 内部若直接 spawn `tsc`（而不是 `npm run typecheck`），钩子**不会触发** ⇒ 用旧产物 ⇒ **假绿**。⇒ 生成步写在**脚本内部**（`build:shared && gen:window-api && tsc …` 串在同一条命令里），且 C1 要有一条"故意改表不重生成 ⇒ 检查必须红"的验证。
 
@@ -341,7 +351,7 @@
 |---|---|---|---|
 | `build-electron.mjs` | 步骤：`build:shared` → `tsc -p electron/tsconfig.json` → 拷 `dola-duration-main.js`；输出 `electron/dist/` ＋ **文件清单**；缺文件 ⇒ exit 2 | **B0-a 骨架 → B0-b 定稿** | `module`/`moduleResolution` 组合 · exclude 清单 · rootDir/outDir |
 | `census-electron.mjs` | 输入：**同一个 `electron/tsconfig.json` ＋ CLI `--checkJs`**（⛔ **优先不建第二份配置**；B0-a 先实测 CLI 覆盖是否可行，不可行才退到 `tsconfig.census.json` ＋ extends）；输出：人读表（文件×码×簇）＋ 基线 `census-baseline.json`（本目录）；**默认只报告（天然 dry）** · `--update-baseline`（**带「不许涨」守卫**） · `--changed` · `--check` | **B0-a 骨架 → B0-b** | CLI 覆盖是否可行 · tsc 输出解析格式 · 簇分类规则 |
-| **`draft-channel-map.mjs`** | 读 `electron/preload.js` → 产 `src/stable/ipc-channels.ts` **草稿**（名 · 种类 · 频道名 · 参数名；**判不出的一律留 `TODO(…)`**）；**改源文件 ⇒ 默认 dry ＋ `--write`** | **B1**（必须在 `preload.js` 还在时跑） | 抽取用 AST 还是沿用并升级现有正则 |
+| **`draft-channel-map.mjs`** | 读 `electron/preload.js` → ① `--snapshot` 产**证据快照**（D-10：preload 侧名面）② `--write` 产 `src/stable/ipc-channels.ts` **草稿**（名 · 种类 · 频道名 · 参数名；**判不出的一律留 `TODO(…)`**）；**改源文件 ⇒ 默认 dry ＋ `--write`** | **① B0-a（抽取＋快照）/ ② B1（写草稿）** —— 快照必须在 `preload.js` 还在时录（D-10） | 抽取用 AST（已定：正则认不出 helper 转发，见 `弯路.md` W24） |
 | **`draft-handler-returns.mjs`** | AST 抽每个 handler `return {…}` 的**字段名** → 输出「待补形状」清单（人补类型与判别联合） | **B1 起，B3/B4 反复用** | 多分支返回的合并规则 |
 | **`codemod-boundary.mjs`** | **模块边界改写**（机械面）：顶层 `const {a} = require('x')` / `const x = require('x')` → `import`；顶层 `module.exports = {…}` → `export {…}`。**⛔ 拒绝并报告**（不猜）：函数内/动态 `require` · `module.exports = fn` · `default` 形态。**改源文件 ⇒ 默认 dry ＋ `--write`**；幂等；改前打印受影响文件与改动清单 | **B2 起，逐文件用**（输入＝清点表的拒绝清单） | 边缘形态（`exports.x =` · 重导出） |
 | **`jsdoc-typedef-to-ts.mjs`** | `electron/api/types.js` 的 JSDoc `@typedef`/`@property` → TS `interface` 草稿（一次性） | **B2** | 联合类型 / 可选位映射 |
@@ -356,8 +366,9 @@
 ### 11.4 写脚本的时机（**现在写什么、做什么时写什么**）
 
 - **现在**：只定 §11.1 通用契约 ＋ §11.2 脚本契约（**不写实现**）—— 实现依赖 spike 结论与频道表，提前写 ＝ 在未验证假设上写代码（P7 同类）。
-- **B0-a**：写 `build-electron` / `census` 的**最小骨架**（spike 本身要用：要编译、要计数）＋ 清点表扫描脚本（**候选扫描**，非草稿）。
+- **B0-a**：写 `build-electron` / `census` 的**最小骨架**（spike 本身要用：要编译、要计数）＋ 清点表扫描脚本（**候选扫描**，非草稿）＋ **`draft-channel-map` 的抽取/快照部分**（⑥ 的 before 证据只能在此刻录，D-10）＋ `check-passthrough` / `replay-samples`（④/⑦ 的证据）。
 - **B0-b**：脚本定稿 ＋ `smoke-electron` ＋ 闸接线 ＋ §11.1 的**分级自证**。
+  ⚠️ **时机修正**：`build:shared` 的实际接线上限是 **B1** —— 它的 include 目标是 `src/stable/ipc-channels.ts`（B1 的产物），B0-b 落它只会得到一个空 include。⇒ B0-b 只接 **`typecheck:electron`**（+ eslint 块），`build:shared` 随 B1 同批接；`build-electron.mjs` 对缺失的共享配置**显式打印跳过**（不静默）。
 - **B1**：`draft-channel-map`（**必须在 `preload.js` 还在时跑**）＋ `draft-handler-returns`。
 - **B2**：`jsdoc-typedef-to-ts`（一次性）＋ `codemod-boundary`（逐文件起用）。
 - **B3–B4**：`codemod-boundary` ＋ `draft-handler-returns` 为**主力工具**（不是"维护性变更"）；其他脚本只做维护性变更（登记进 `日志.md`）。
@@ -370,7 +381,7 @@
 
 **草稿三条纪律**（防"草稿被当成真源"）：① 判不出的一律**留 `TODO(…)`**，⛔ 不许猜着填；② **完成判据 ＝ TODO 清零 ＋ 编译期交叉校验通过**（不是"脚本跑过"）；③ 草稿脚本**改源文件 ⇒ 默认 dry ＋ `--write`**（§11.1 分类）。
 
-**一次性命令（不立脚本 —— 立了就是过度）**：`depcruise electron --no-circular`（出环）· `tsc -p electron --listFiles`（D-3 数文件数）· `grep -rn "enum \|namespace \|constructor(.*private"`（S0-6 便携性项预检）· `npx asar list <产物>`（D-7 查打包内容）。
+**一次性命令（不立脚本 —— 立了就是过度）**：`npx depcruise electron --output-type err`（出环：**v18 没有 `--no-circular` 这个 CLI 开关**，走仓里配置的规则即可）· `npx tsc -p electron/tsconfig.json --listFiles`（D-3 数文件数）· `grep -rn "enum \|namespace \|constructor(.*private"`（S0-6 便携性项预检）· `npx asar list <产物>`（D-7 查打包内容）。
 
 ### 11.6 ★ 授权：执行者**可以**自写脚本、改进方法、推翻本文裁决
 
