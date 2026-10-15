@@ -2,7 +2,7 @@
 
 > **定位**：把 `electron/**` 从 CommonJS JS 迁到**真 TS**（最严格档 · 收窄 · 无 any 兜底），并让前后端 IPC 契约**机器受检**（消灭人工对账）。
 > **为什么做**：① 契约漂移是本仓**唯一实证过的 bug 类**（剪贴板三 bug · `jobId` vs `id` · `size` vs `bytes` · `pickStorage` 漏 payload）；② **TD-13-26**（electron 零闸：tsconfig/eslint/vitest 三方都不含）的既定解法就是把它拉进类型覆盖。
-> **状态**：**B0-a ＋ B0-b ＋ B1 已完成**（地基/旗组合/两闸 → 检查点 **C1 已过**；频道表 ＋ 两端名面编译期闭合 → 检查点 **C2 已过**）；**B2 进行中：B2-a（`api/` 叶子簇）已完成**，B2-b（providers ＋ registry）/ B2-c（config-store ＋ job-manager ＋ bridge）待做。逐条凭证见 `日志.md`，弯路见 `弯路.md` W21–W30。
+> **状态**：**B0-a ＋ B0-b ＋ B1 已完成**（地基/旗组合/两闸 → 检查点 **C1 已过**；频道表 ＋ 两端名面编译期闭合 → 检查点 **C2 已过**）；**B2 进行中：B2-a（`api/` 叶子簇）＋ B2-b（5 providers ＋ registry）已完成**，B2-c（config-store ＋ job-manager ＋ bridge）待做。逐条凭证见 `日志.md`，弯路见 `弯路.md` W21–W31。
 > **粒度**：**执行级** —— 裁决与顺序已写死；凡遇本文没写到的情形，**停下来改本文**，别就地决定。
 > **本目录**：`README.md`（计划 · 本文）· `日志.md`（批次日志）· `弯路.md`（弯路台账）· `scripts/`（任务脚本）。
 
@@ -77,7 +77,7 @@
 | **B0-a 试红 spike**（不写业务代码） | ① 最小样例逐项实测 §6 S0-6 清单；② 样板试转：挑**中位难度**的一个（如 285 行的 `api/config-store.js`，含 `fs`/`crypto`）量**真实单文件代价** —— ⛔ 别拿最容易的 `api/redact.js`（纯函数）当样板，那会**系统性低估**代价；③ 外部引用清单；④ `.js` 源/产物 diff 抽查；⑤ **§2.1 那张清点表**（28 文件逐行：`require('electron')`? / 顶层副作用? / 惰性 require? / 环? / 单函数导出? / 消费方改导出值? / 顶层 `this`? —— **三清单与此表是同一件东西**）；⑥ **基线快照**（**频道清单** —— 转换后 `preload` 就没了，必须迁移前录）；⑦ **样本**（复用 `tests/` fixtures，见 §4.2） | 地基与旗组合**定稿**（＝ `electron/tsconfig.json` 落地）；产出写进 `日志.md`（**清点表是批次划分的依据 —— 它推翻哪条断言就改本文**） |
 | **B0-b 运行地基与接入** | §4.1 的 D-1…D-9 ＋ §4.2 的 D-10…D-13 ＋ 两闸落地（§8 落地清单） | **检查点 C1**（§4.3） |
 | **B1 契约面**（382 ＋ 表） | `ipc.ts`(39) · `preload.ts`(173) ＋ **频道表**（`src/stable/ipc-channels.ts`；**脚本出草稿**，人补类型/形状/note）＋ mapped type 派生 `WindowApi` ＋ `extract-host-api.cjs` 路径同批改。⚠️ **`api/bridge.ts`(170) 已挪到 B2 末**（B0-a/B1 的依赖序取证：它 require 的 `config-store`/`job-manager`/`registry`/`providers/*` **全在 B2** ⇒ 放在 B1 会"caller 先于 callee"，把字段面收窄全挤到最前面） | **检查点 C2**（§9.4，**名面闭环**） |
-| **B2 api/ 子域**（2,078 ＋ 170） | `types`(57)→`redact`·`quota`·`domains`·`http`(283)→`_shared`(20)→5 个 providers(852)→`registry`(38)→`config-store`(285)→`job-manager`(545)→**`bridge.ts`(170，自 B1 挪来)**。★ **B2 已拆三小批**（体量与依赖序）：**B2-a 叶子簇 = `types`/`redact`/`quota`/`domains`/`http`/`_shared`（已完成）** · B2-b = 5 providers ＋ `registry` · B2-c = `config-store` ＋ `job-manager` ＋ `bridge` | tsc ＋ lint 零红；同批落纯逻辑测试；**config-store 过数据兼容样本** |
+| **B2 api/ 子域**（2,078 ＋ 170） | `types`(57)→`redact`·`quota`·`domains`·`http`(283)→`_shared`(20)→5 个 providers(852)→`registry`(38)→`config-store`(285)→`job-manager`(545)→**`bridge.ts`(170，自 B1 挪来)**。★ **B2 已拆三小批**（体量与依赖序）：**B2-a 叶子簇 = `types`/`redact`/`quota`/`domains`/`http`/`_shared`（已完成）** · **B2-b = 5 providers ＋ `registry`（已完成）** · B2-c = `config-store` ＋ `job-manager` ＋ `bridge` | tsc ＋ lint 零红；同批落纯逻辑测试；**config-store 过数据兼容样本** |
 | **B3 域模块**（4,288） | `dola-media`(1551)→`license`(758)→`chrome-cdp`(465)→`lovart-fetch`(379)→`clipboard-image`(327)→`lovart-scan`(255)→`fingerprint-preload`(226)→`firefox`(231)→`site-hosts`(96) | 各域零红；**冒烟只要求「起窗 ＋ 打开相关面板不崩」**（真实站点/CDP 链路**不可达 —— `verify-e2e` 从未跑过**，行为如实标未验）；**license 过黄金样本** |
 | **B4 main.js**（2,403） | handler 区（回归频道表）→ 项目存储迁移 → settings 读写 → 窗口/会话/胶水 | 零红 ＋ **冒烟＝起窗/加载工程/打开设置**（需登录账号的链路标未验）；**存储布局/settings 过样本** |
 | **B5 收尾** | `pack:dir` · TD-13-26 销账（＋ `dola-duration-main` 与账号 preload 生成物的零覆盖**另立债**）· 长期工具搬 `scripts/` · `弯路.md` 升华（含**规矩寿命**处置）· knip 覆盖 electron **先基线化、不当批硬清** | G1–G6 全绿 |

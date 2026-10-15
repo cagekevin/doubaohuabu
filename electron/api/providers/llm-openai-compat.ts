@@ -9,78 +9,85 @@
 // 原创实现，不搬运任何第三方混淆代码/文案资产。
 // ============================================================
 
+import { asRecord } from '../shape';
+import { requestJson } from '../http';
+import { TRANSIENT_ERROR_HINTS } from './_shared';
+import type { ProviderAdapter } from '../types';
+
 const BASE = 'https://api.openai.com/v1';
 
-function normalizeBase(base, fallback) {
+function normalizeBase(base: string | undefined, fallback: string): string {
   return (base || fallback || '').replace(/\/+$/, '');
 }
 
-/** @type {import('../types').ProviderAdapter} */
 const adapter = {
   id: 'llm-openai-compat',
   name: 'LLM（OpenAI 兼容 · 提示词/分镜）',
   capabilities: ['llm'],
   domains: [BASE],
   auth: { type: 'bearer', keyFields: ['apiKey'] },
-  transientErrorHints: require('./_shared').TRANSIENT_ERROR_HINTS,
+  transientErrorHints: TRANSIENT_ERROR_HINTS,
   quotaHints: [
-    { re: /insufficient_quota|额度不足|quota|余额不足/i, kind: 'quota_exhausted', advice: 'LLM 额度/余额不足，请充值后重试' }
+    { re: /insufficient_quota|额度不足|quota|余额不足/i, kind: 'quota_exhausted', advice: 'LLM 额度/余额不足，请充值后重试' },
   ],
   defaults: {
     baseUrl: BASE,
     model: 'gpt-4o-mini',
-    params: { model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 1024 }
+    params: { model: 'gpt-4o-mini', temperature: 0.8, maxTokens: 1024 },
   },
   paramSchema: [
     { key: 'model', label: '模型', type: 'text', default: 'gpt-4o-mini' },
     { key: 'temperature', label: '创造性（temperature）', type: 'number', default: 0.8, min: 0, max: 2 },
-    { key: 'maxTokens', label: '最大输出 token', type: 'number', default: 1024, min: 1, max: 8192 }
+    { key: 'maxTokens', label: '最大输出 token', type: 'number', default: 1024, min: 1, max: 8192 },
   ],
 
-  buildSubmit({ config, kind, params, prompt }) {
+  // `kind` 于本通道无意义（只有文本一种产出）⇒ 不参与解构（源里也没用它）
+  buildSubmit({ config, params, prompt }) {
     const base = normalizeBase(config.baseUrl, BASE);
-    const model = (params && params.model) || config.model || this.defaults.model;
-    const temperature = typeof (params && params.temperature) === 'number' ? params.temperature : 0.8;
-    const maxTokens = typeof (params && params.maxTokens) === 'number' ? params.maxTokens : 1024;
+    const model = (params && params['model']) || config.model || this.defaults.model;
+    const temperature = typeof (params && params['temperature']) === 'number' ? params['temperature'] : 0.8;
+    const maxTokens = typeof (params && params['maxTokens']) === 'number' ? params['maxTokens'] : 1024;
     const body = {
       model,
       messages: [{ role: 'user', content: prompt || '' }],
       temperature,
-      max_tokens: maxTokens
+      max_tokens: maxTokens,
     };
     return {
       url: `${base}/chat/completions`,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey || ''}` },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     };
   },
 
   parseSubmit(body) {
-    const b = body || {};
-    const text = b.choices && b.choices[0] && b.choices[0].message && b.choices[0].message.content;
+    const b = asRecord(body);
+    const choices = Array.isArray(b['choices']) ? b['choices'] : [];
+    const message = asRecord(asRecord(choices[0])['message']);
+    const text = message['content'];
     if (typeof text === 'string' && text.length) {
-      return { results: [{ type: 'text', text }] };
+      return { results: [{ type: 'text' as const, text }] };
     }
     // 错误形态（HTTP 200 + error）：{ error:{ message } }
-    if (b.error && b.error.message) {
-      return { error: { kind: 'business', message: b.error.message } };
+    const err = asRecord(b['error']);
+    if (typeof err['message'] === 'string' && err['message']) {
+      return { error: { kind: 'business', message: err['message'] } };
     }
     return {};
   },
 
-  parsePoll(body) {
+  parsePoll(_body) {
     // LLM 同步返回，无需轮询；占位以满足契约（引擎仅 async 任务调用 buildPoll）
     return { status: 'running' };
   },
 
   async testConnection({ config, fetchImpl }) {
-    const { requestJson } = require('../http');
     const base = normalizeBase(config.baseUrl, BASE);
     const r = await requestJson(fetchImpl, `${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey || ''}` },
       body: JSON.stringify({ model: '__ping__', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
-      timeoutMs: 15000
+      timeoutMs: 15000,
     });
     if (r.status === 401 || r.status === 403) {
       return { ok: false, message: `密钥无效或无权限（HTTP ${r.status}）` };
@@ -89,7 +96,9 @@ const adapter = {
       return { ok: false, message: r.error === 'timeout' ? '连接超时' : '网络不可达' };
     }
     return { ok: true, message: `连接成功（HTTP ${r.status}）` };
-  }
-};
+  },
+} satisfies ProviderAdapter;
 
-module.exports = adapter;
+// ⚠️ 具名导出（源是 `module.exports = adapter` 单值）：⛔ 不用 `export default`（本仓禁区）。
+//   ⇒ `bridge` 的 5 处 `registerProvider(require('./providers/x'))` 同批改成取 `.adapter`。
+export { adapter };

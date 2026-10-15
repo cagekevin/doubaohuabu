@@ -42,7 +42,12 @@ export default defineConfig({
   test: {
     // 原则 7：只测纯逻辑，不测 UI（见 docs/11 §6.5）
     environment: 'node',
-    include: ['src/**/tests/**/*.test.ts'],
+    /**
+     * ★ `electron/**` 也进来了（后端 TS 迁移 B2 起）：边界**不放宽** ——
+     *   electron 的测试**只许导入不依赖 `electron` 的纯模块**（provider 的解析函数、脱敏、额度、
+     *   域轮换这些），⛔ 不许 import 任何 `require('electron')` 的文件（那会让测试变成环境依赖的假守卫）。
+     */
+    include: ['src/**/tests/**/*.test.ts', 'electron/**/tests/**/*.test.ts'],
     globals: false,
     // 复用 worker 跨文件（省去「每文件一个 worker」的 spawn + env 开销）。
     // ⚠️ 前提：生产代码里**不得有跨文件共享的模块级可变状态**。

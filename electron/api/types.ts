@@ -21,8 +21,12 @@ export interface ParamField {
   label: string;
   /** 控件类型 */
   type: 'select' | 'number' | 'text';
-  /** `select` 的可选项 */
-  options?: { value: string; label: string }[];
+  /**
+   * `select` 的可选项。
+   * ⚠️ `value` 是 `string | number`：**取证自 provider**（geeknow/kling/vidu 的「时长」项用数字值
+   * `[5, 10, 15].map((v) => ({ value: v, … }))`；Ark 的时长项同样）。
+   */
+  options?: { value: string | number; label: string }[];
   /** `number` 的下界 */
   min?: number;
   /** `number` 的上界 */
@@ -56,25 +60,32 @@ export interface SubmitInput {
   refPaths: string[];
 }
 
-/** 提交阶段的产物：一条可直接 fetch 的请求 */
+/**
+ * 提交阶段的产物：一条可直接 fetch 的请求。
+ * ⚠️ `body` 是 `string | Buffer`：JSON 形态是字符串，而 **multipart 形态（geeknow 的
+ *   `buildMultipartEdits`）产出的是 `Buffer`**（二进制分帧不能过字符串）。
+ */
 export interface SubmitRequest {
   url: string;
   headers: Record<string, string>;
-  body: string;
+  body: string | Buffer;
 }
 
-/** 单张产出（`url` 与 `b64` 二选一，`mime` 只在 b64 时有意义） */
+/** 单张产出（`url` 与 `b64` 二选一，`mime` 只在 b64 时有意义；`text` 是 LLM 通道的产物） */
 export interface ResultItem {
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'text';
   url?: string;
   b64?: string;
   mime?: string;
+  /** LLM 通道：正文（`type: 'text'` 时） */
+  text?: string;
 }
 
-/** `parseSubmit` 的产物：拿到 taskId，或直接给结果（同步出图的通道） */
+/** `parseSubmit` 的产物：拿到 taskId、直接给结果（同步出图的通道），或**业务错误**（HTTP 200 + `error`） */
 export interface SubmitOutcome {
   taskId?: string;
-  results?: { url?: string; b64?: string; mime?: string }[];
+  results?: { type?: ResultItem['type']; url?: string; b64?: string; mime?: string; text?: string }[];
+  error?: { kind: string; message: string; advice?: string };
 }
 
 /** 轮询/查询阶段的统一输出 */
@@ -86,11 +97,14 @@ export interface PollOutcome {
   error?: { kind: string; message: string; advice?: string };
 }
 
+/** 适配器能力（`llm` = 纯文本通道：不进双通道选择器、单独计费） */
+export type AdapterCapability = 'image' | 'video' | 'llm';
+
 /** 服务商适配器。注册进 registry 后，引擎 / 设置页 / 生成面板全部自动获得该服务。 */
 export interface ProviderAdapter {
   id: string;
   name: string;
-  capabilities: ('image' | 'video')[];
+  capabilities: AdapterCapability[];
   paramSchema: ParamField[];
   /** baseUrl / model 等默认配置（用户未覆盖时使用） */
   defaults: {
@@ -104,6 +118,15 @@ export interface ProviderAdapter {
    *   · `transientErrorHints` —— `job-manager` 的瞬时错误判定读它；4 个 provider 曾逐字重复
    *     （已收口到 `providers/_shared.ts` 的 `TRANSIENT_ERROR_HINTS`）。
    */
+  /**
+   * ★ 同族（也都不在原 JSDoc 里，同样是"照调用方取证"）：
+   *   · `domains` —— `factory` 按它建域轮换器（`job-manager` 读）、`registry` 下发给渲染层；
+   *   · `auth` / `frameSupport` —— **只有写、没有任何读者**（全仓 grep 实测）：属"登记在案的惰性元数据"，
+   *     ⛔ 本任务不删（照抄源）；它们"该不该有"与 `open-lovart-chrome` 同族，见 日志 B2-b。
+   */
+  domains?: string[];
+  auth?: { type: string; keyFields?: string[] };
+  frameSupport?: { first?: boolean; last?: boolean; refs?: string };
   quotaHints?: QuotaHint[];
   transientErrorHints?: RegExp;
   buildSubmit(input: SubmitInput): SubmitRequest;

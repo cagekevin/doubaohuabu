@@ -17,11 +17,14 @@ const { createJobManager } = require('./job-manager');
 const apiRegistry = require('./registry');
 
 // 新接入一个服务 = 一个 provider 文件 + 这里 registerProvider 一行
-apiRegistry.registerProvider(require('./providers/volcengine-ark'));
-apiRegistry.registerProvider(require('./providers/geeknow-relay'));      // 中转聚合（Stage B）
-apiRegistry.registerProvider(require('./providers/vidu'));               // Vidu 官方直连（Stage D · 含首尾帧）
-apiRegistry.registerProvider(require('./providers/kling'));              // 可灵官方直连（Stage E · JWT 自签）
-apiRegistry.registerProvider(require('./providers/llm-openai-compat'));  // LLM 通道（Stage F · 与生成隔离）
+// ⚠️ 取 `.adapter`：5 个 provider 已转 TS，导出从「单值 module.exports」改成**具名导出**
+//    （本仓禁 `export default`）⇒ 这里必须同批跟着改，否则运行期拿到的是命名空间对象
+//    （registerProvider 会因缺 id 抛错 —— 而且**编译期不会报**，因为本文件还是 .js）。
+apiRegistry.registerProvider(require('./providers/volcengine-ark').adapter);
+apiRegistry.registerProvider(require('./providers/geeknow-relay').adapter);      // 中转聚合（Stage B）
+apiRegistry.registerProvider(require('./providers/vidu').adapter);               // Vidu 官方直连（Stage D · 含首尾帧）
+apiRegistry.registerProvider(require('./providers/kling').adapter);              // 可灵官方直连（Stage E · JWT 自签）
+apiRegistry.registerProvider(require('./providers/llm-openai-compat').adapter);  // LLM 通道（Stage F · 与生成隔离）
 
 let _apiConfigStore = null;
 let _apiJobManager = null;
