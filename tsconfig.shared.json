@@ -1,0 +1,29 @@
+{
+  "$comment": [
+    "后端（宿主壳）消费的**共享契约定稿层**的声明层产物：`tsc -p tsconfig.shared.json` → build/shared-types/。",
+    "为什么需要它：后端是 `\"type\":\"commonjs\"` 的独立包，直接 include `src/stable/**` 会把共享源码编进 electron/dist/",
+    "  （rootDir 打架 + 平白多一份产物）；而两端**同形**的契约只需要**声明** ⇒ 只发 .d.ts，由 electron 的 paths 消费。",
+    "★ 最小 include：只收 `src/stable/ipc-channels.ts`（它 import 到的稳定形状会被 tsc 自动带上）；不贪多。",
+    "★ 无 DOM：这两层不该依赖 DOM（B0-a 实测：真实 src/stable 文件在 lib 只有 ES2023、types 为空时是绿的）。",
+    "★ rootDir 必须显式给（B0-a 实测：不给 ⇒ TS6059/TS5011）。"
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "types": [],
+    "module": "node16",
+    "moduleResolution": "node16",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src/stable",
+    "outDir": "build/shared-types",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "noEmitOnError": true,
+    "incremental": true,
+    "tsBuildInfoFile": "build/shared-types/.tsbuildinfo"
+  },
+  "include": ["src/stable/ipc-channels.ts"]
+}

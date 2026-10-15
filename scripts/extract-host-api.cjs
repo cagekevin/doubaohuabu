@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 抽取 `electron/preload.js` 暴露的 `window.api` 方法面
+ * 抽取 `electron/preload.ts` 暴露的 `window.api` 方法面
  *
  * 用途：
  *   1. 生成 `adapters/host/electron` 的实现规格（W1 要求"方法名完全一致"）
@@ -11,10 +11,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PRELOAD = path.resolve(__dirname, '..', 'electron', 'preload.js');
+const PRELOAD = path.resolve(__dirname, '..', 'electron', 'preload.ts');
 
 if (!fs.existsSync(PRELOAD)) {
-  console.error('❌ 未找到 electron/preload.js');
+  console.error('❌ 未找到 electron/preload.ts');
   process.exit(1);
 }
 
@@ -68,7 +68,7 @@ if (process.argv.includes('--json')) {
   const byKind = { invoke: [], send: [], sendSync: [], on: [], value: [] };
   for (const x of uniq) (byKind[x.kind] ??= []).push(x);
 
-  console.log(`preload.js 暴露 ${uniq.length} 个成员\n`);
+  console.log(`preload.ts 暴露 ${uniq.length} 个成员\n`);
   for (const [kind, list] of Object.entries(byKind)) {
     if (list.length === 0) continue;
     console.log(`── ${kind}（${list.length}）──`);

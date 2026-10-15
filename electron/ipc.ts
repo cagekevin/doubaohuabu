@@ -14,25 +14,26 @@
 //   · catch 里另做**留痕 / 回滚 / 清理**（守卫不做这些，见各 handler）；
 //   · 回执形状与守卫**不同**（如 `detect-errors` 的 `errors:[]`、`api-config:test` 的 `message`）。
 //
-// ⚠️ **宿主壳（`main.js`）不再持有 `ipcMain`** ⇒ 它想裸注册一个 handler，得自己
+// ⚠️ **宿主壳（`main.ts`）不再持有 `ipcMain`** ⇒ 它想裸注册一个 handler，得自己
 //   `require('electron')`（显式动作，不再是"顺手写一行"）。
 // ============================================================
 
-const { ipcMain } = require('electron');
+import { ipcMain } from 'electron';
 
-function handle(channel, fn) {
-  ipcMain.handle(channel, async (...args) => {
+/** `invoke` 型注册口：把「抛」转成可传输的回执（原文透传，不吞、不改写） */
+function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
+  ipcMain.handle(channel, async (...args: unknown[]) => {
     try {
       return await fn(...args);
     } catch (err) {
-      return { ok: false, error: (err && err.message) || String(err) };
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
 }
 
 /** `send` / `sendSync` 型通道的注册入口（透传，不包守卫 —— 见文件头） */
-function on(channel, fn) {
+function on(channel: string, fn: (...args: unknown[]) => void): void {
   ipcMain.on(channel, fn);
 }
 
-module.exports = { handle, on };
+export { handle, on };

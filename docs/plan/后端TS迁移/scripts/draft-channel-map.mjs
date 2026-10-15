@@ -162,55 +162,61 @@ if (wantJson) {
   process.exit(0);
 }
 
-/** 生成 TS 草稿（名面完整 · 字段面一律 TODO —— B1 的起手，不是终态） */
+/**
+ * 生成 TS 草稿（**名面完整 · 字段面注释占位**）。
+ *
+ * ★ 形状占位为什么是**注释**而不是未定义符号：草稿必须**当场能编译**
+ *   —— 否则 B1 的第一步不是"补形状"而是"先把语法修活"，而语法错误会掩盖真正的名面交叉校验。
+ *   §5.2 已定：字段面**随 handler 转换同批**精确化 ⇒ B1 只锁名面（名/种类/频道/参数元组/判别位）。
+ */
 function draftTs() {
   const lines = [];
-  lines.push('// ⚠️ 本文件由 `draft-channel-map.mjs` 从 `electron/preload.js` 生成 —— **草稿**。');
+  lines.push('// ⚠️ 由 `draft-channel-map.mjs` 从 `electron/preload.js` 生成的名面 —— **B1 的起手，不是终态**。');
   lines.push('//    · 名面（成员名 · 种类 · 频道名 · 参数名）由脚本抽出 ⇒ 与 preload 同源；');
-  lines.push('//    · 字段面（参数类型 · 回执形状 · note）是判断 ⇒ 一律留 TODO(…)，**完成判据 = TODO 清零**；');
-  lines.push('//    · `electron/preload.ts` 的 `satisfies WindowApi` 是交叉校验：漏/多/改名 ⇒ 编译期当场红。');
+  lines.push('//    · 字段面（参数类型 · 回执形状 · note）是**判断**，见 §5.2：随各自 handler 的转换同批补；');
+  lines.push('//    · `electron/preload.ts` 的 `satisfies WindowApi` 是交叉校验：漏/多/改名/种类不符 ⇒ 编译期当场红。');
   lines.push('');
   lines.push("export type ChannelKind = 'invoke' | 'send' | 'sendSync' | 'on' | 'value';");
   lines.push('');
   lines.push('export interface ChannelSpec {');
   lines.push('  readonly kind: ChannelKind;');
+  lines.push('  /** 频道名（`value` 类为 null —— 它不是 IPC，只是同批暴露给渲染层的常量） */');
   lines.push('  readonly channel: string | null;');
+  lines.push('  /** 形参名（顺序即调用序） */');
   lines.push('  readonly params: readonly string[];');
-  lines.push('  /** 回执原始形状 */');
-  lines.push('  readonly ret: unknown;');
+  lines.push('  /**');
+  lines.push('   * 回执**原始**形状：**这个值的类型**就是形状（运行时不经表 —— 表只承载类型）。');
+  lines.push('   * B1 只锁名面（§5.2）⇒ 先留空；精确形状随各自 handler 的转换同批补（锚点用符号名，禁行号）。');
+  lines.push('   */');
+  lines.push('  readonly ret?: unknown;');
   lines.push('  readonly note?: string;');
   lines.push('}');
   lines.push('');
   lines.push('export const IPC_CHANNELS = {');
   for (const m of members) {
-    lines.push(`  // TODO(形状)：${m.name} 的 ret —— 按 handler 实际 return 补（取证锚点用符号名，禁行号）`);
-    if (m.kind !== 'value') lines.push(`  // TODO(note)：${m.name} 的判据（fail-closed / sendSync 不得 await 等）`);
+    lines.push(`  // TODO(形状)：${m.name} 的 ret —— 按 handler 实际 return 补`);
     lines.push(
       `  ${m.name}: { kind: '${m.kind}', channel: ${m.channel === null ? 'null' : `'${m.channel}'`}, params: [${m.params
         .map((p) => `'${p}'`)
-        .join(', ')}], ret: TODO_${m.name}.ret } as const,`,
+        .join(', ')}] },`,
     );
   }
   lines.push('} as const satisfies Record<string, ChannelSpec>;');
   lines.push('');
   lines.push('export type IpcChannelMap = typeof IPC_CHANNELS;');
   lines.push('');
-  lines.push('/** 渲染层原始面（四种种类各有各的回执形态 —— 只按 sendSync 分两支会漏 send/on） */');
+  lines.push('/** 渲染层原始面：**五种种类各有各的回执形态**（只按 `sendSync` 分两支会漏 `send`/`on`/`value`） */');
   lines.push('export type WindowApi = {');
-  lines.push('  readonly [K in keyof IpcChannelMap]: IpcChannelMap[K][\'kind\'] extends \'sendSync\'');
-  lines.push('    ? (...args: unknown[]) => unknown');
-  lines.push('    : IpcChannelMap[K][\'kind\'] extends \'send\'');
-  lines.push('      ? (...args: unknown[]) => void');
-  lines.push('      : IpcChannelMap[K][\'kind\'] extends \'on\'');
-  lines.push('        ? (...args: unknown[]) => () => void');
-  lines.push('        : IpcChannelMap[K][\'kind\'] extends \'value\'');
-  lines.push('          ? unknown');
-  lines.push('          : (...args: unknown[]) => Promise<unknown>;');
+  lines.push("  readonly [K in keyof IpcChannelMap]: IpcChannelMap[K]['kind'] extends 'sendSync'");
+  lines.push('    ? (...args: never[]) => unknown');
+  lines.push("    : IpcChannelMap[K]['kind'] extends 'send'");
+  lines.push('      ? (...args: never[]) => void');
+  lines.push("      : IpcChannelMap[K]['kind'] extends 'on'");
+  lines.push('        ? (...args: never[]) => () => void');
+  lines.push("        : IpcChannelMap[K]['kind'] extends 'value'");
+  lines.push('          ? IpcChannelMap[K] extends { ret: infer R } ? R : unknown');
+  lines.push('          : (...args: never[]) => Promise<unknown>;');
   lines.push('};');
-  lines.push('');
-  for (const m of members) {
-    lines.push(`// TODO(形状)：declare namespace TODO_${m.name} { const ret: unknown; }   // 占位，B1 逐个补`);
-  }
   return lines.join('\n');
 }
 

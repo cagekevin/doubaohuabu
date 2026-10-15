@@ -1,14 +1,37 @@
-const { contextBridge, ipcRenderer } = require('electron');
+// ============================================================
+// 渲染层 ↔ 后端的 **原始面**（`window.api`）
+// ------------------------------------------------------------
+// ★ 这个对象 `satisfies WindowApi`（形状来自契约真源 `src/stable/ipc-channels.ts`，
+//   经 `@shared` **type-only** 引入）⇒ **漏一个 / 多一个 / 改名 / 种类不符，编译期当场红** ——
+//   这就是"消灭人工对账"的落点（对比：此前靠 `extract-host-api.cjs` 人工比差集）。
+// ⚠️ 频道名（字符串）目前仍在两侧各写一次：后端**不许运行时 import `@shared`**（那里只有 .d.ts），
+//   而映射（成员名 → 频道名）不是机械可推的（`apiJobSubmit` → `api-job:submit`）。
+//   ⇒ 今天编译器能钉住的是**成员名与种类**；字符串级的一致性见 日志 B1 的记录（待决）。
+// ============================================================
+import { contextBridge, ipcRenderer } from 'electron';
+// ⚠️ `resolution-mode: 'import'` 不是装饰：共享声明层由 `src/stable/`（**ESM**，根 package.json 是 `"type":"module"`）
+//    产出 ⇒ 从 CommonJS 文件里做纯类型导入时，TS 要求显式声明这次解析按 ESM 走（否则 TS1541）。
+//    ⛔ 也没有别的选：换成运行时 import 会把渲染层源码打进后端产物（判据见 eslint 的 `@shared` 规则）。
+import type { WindowApi } from '@shared/ipc-channels' with { 'resolution-mode': 'import' };
 
 // 真实宿主平台：preload 运行于主窗口上下文，process.platform 100% 准确，不受任何指纹
 // 伪装 preload 影响。指纹模块 detectHostOS() 优先采用它，避免在渲染进程里读「被改写过的
 // navigator」而误判平台（真源 = src/constants/fingerprint.ts + src/adapters/host/shared/env.ts）。
-function hostOSFromPlatform() {
+function hostOSFromPlatform(): 'windows' | 'macos' | 'linux' {
   const p = (typeof process !== 'undefined' && process.platform) || '';
   if (p === 'win32') return 'windows';
   if (p === 'darwin') return 'macos';
   if (p === 'linux') return 'linux';
   return 'macos';
+}
+
+/**
+ * `sendSync` 的唯一收窄口：`ipcRenderer.sendSync` 的返回类型是 `any`（electron 的签名如此），
+ * 直接返回会踩类型安全层的 `no-unsafe-return`。**返回形状不由这里说了算** —— 它由契约表
+ * （`IPC_CHANNELS.<成员>.ret`）给出 ⇒ 这里只把它收成 `unknown`，⛔ 不写 `as SomeShape` 假装知道形状。
+ */
+function syncUnknown(channel: string, ...args: unknown[]): unknown {
+  return ipcRenderer.sendSync(channel, ...args) as unknown;
 }
 
 contextBridge.exposeInMainWorld('api', {
@@ -21,7 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   // 与 localStorage 的 leveldb 物理隔离 —— Local Storage 再被清空时可从这份 JSON 恢复。
   saveProjectsBackup: (json) => ipcRenderer.send('projects-backup', json),
   // 当前项目分类存储：项目切换使用同步调用，保证 img:// / vid:// 首帧就从正确目录读取。
-  activateProjectStorage: (payload) => ipcRenderer.sendSync('project-storage-activate-sync', payload),
+  activateProjectStorage: (payload) => syncUnknown('project-storage-activate-sync', payload),
   pickProjectStorage: (payload) => ipcRenderer.invoke('project-storage-pick', payload),
   saveProjectSnapshot: (project) => ipcRenderer.send('project-snapshot', project),
   logProjectOperation: (event) => ipcRenderer.send('project-operation', event),
@@ -42,7 +65,7 @@ contextBridge.exposeInMainWorld('api', {
   readClipboardImage: () => ipcRenderer.invoke('read-clipboard-image'),
   // 应用内（如 webview 里的「复制图片」）写入系统剪贴板图片时主进程广播
   onClipboardImageChanged: (cb) => {
-    const listener = () => cb();
+    const listener = (): void => cb();
     ipcRenderer.on('clipboard-image-changed', listener);
     return () => ipcRenderer.removeListener('clipboard-image-changed', listener);
   },
@@ -69,7 +92,7 @@ contextBridge.exposeInMainWorld('api', {
   detectVideos: (webContentsId, seenKeys) => ipcRenderer.invoke('detect-videos', webContentsId, seenKeys),
   detectErrors: (webContentsId) => ipcRenderer.invoke('detect-errors', webContentsId),
   // 图片外置存储：dataUrl → img:// 引用（同步落盘，供持久化链路使用）
-  saveImageSync: (dataUrl) => ipcRenderer.sendSync('img-save-sync', dataUrl),
+  saveImageSync: (dataUrl) => syncUnknown('img-save-sync', dataUrl),
   // 视频外置存储：远端视频直链 → 落盘为 vid:// 引用（历史版本跨重启可播放）
   // 返回 { ok, ref: 'vid://<sha1>.mp4', size } 或 { ok:false, error }
   saveVideoFromUrl: (url, referer) => ipcRenderer.invoke('save-video-from-url', { url, referer }),
@@ -110,7 +133,7 @@ contextBridge.exposeInMainWorld('api', {
   getLovartChromeStatus: () => ipcRenderer.invoke('get-lovart-chrome-status'),
   // dola 无水印资源：主进程 CDP 拦截 dola 聊天响应后实时推送
   onDolaMedia: (cb) => {
-    const listener = (_e, payload) => cb(payload);
+    const listener = (_e: unknown, payload: unknown): void => cb(payload);
     ipcRenderer.on('dola-media-update', listener);
     return () => ipcRenderer.removeListener('dola-media-update', listener);
   },
@@ -121,12 +144,12 @@ contextBridge.exposeInMainWorld('api', {
   // 下载分批推送：每张完成发 lovart-fetch-item，整批结束发 lovart-fetch-done。
   lovartFetchImages: (args) => ipcRenderer.invoke('lovart-fetch-images', args),
   onLovartFetchItem: (cb) => {
-    const listener = (_e, payload) => cb(payload);
+    const listener = (_e: unknown, payload: unknown): void => cb(payload);
     ipcRenderer.on('lovart-fetch-item', listener);
     return () => ipcRenderer.removeListener('lovart-fetch-item', listener);
   },
   onLovartFetchDone: (cb) => {
-    const listener = (_e, payload) => cb(payload);
+    const listener = (_e: unknown, payload: unknown): void => cb(payload);
     ipcRenderer.on('lovart-fetch-done', listener);
     return () => ipcRenderer.removeListener('lovart-fetch-done', listener);
   },
@@ -165,8 +188,8 @@ contextBridge.exposeInMainWorld('api', {
   apiSetupSet: (patch) => ipcRenderer.invoke('api-setup:set', patch),
   apiConfigSetSecret: (providerId, key) => ipcRenderer.invoke('api-config:set-secret', providerId, key),
   onApiJobEvent: (cb) => {
-    const listener = (_e, snap) => cb(snap);
+    const listener = (_e: unknown, snap: unknown): void => cb(snap);
     ipcRenderer.on('api-job-event', listener);
     return () => ipcRenderer.removeListener('api-job-event', listener);
   },
-});
+} satisfies WindowApi);

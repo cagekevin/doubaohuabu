@@ -47,7 +47,10 @@
 
     "rootDir": ".",
     "outDir": "dist",
-    "paths": { "@shared/*": ["../build/shared-types/*"] }
+    /* ★ 映射必须带 `.d.ts` 扩展名：`node16` 的 ESM 解析**不做无扩展名查找**
+       （实测 `--traceResolution`：不带扩展名时它把 `@shared/ipc-channels` 当**目录**找，随即放弃 ⇒ TS2307）。
+       共享层只发声明（emitDeclarationOnly）⇒ 这里恒为 `.d.ts`。 */
+    "paths": { "@shared/*": ["../build/shared-types/*.d.ts"] }
   },
   "include": ["**/*"],
   "exclude": ["node_modules", "dist", "dola-duration-main.js"]

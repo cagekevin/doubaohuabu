@@ -9,7 +9,32 @@ import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { COMMON_TEXT, HOST_TEXT } from '@/constants/text';
 import type { SendFailKind } from '@/constants/failure';
 import { asRecord, isRecord } from '@/lib/object';
+import type { WindowApi } from '@/stable/ipc-channels';
 import type { HostApi } from './window-api';
+
+/**
+ * **名面同源守卫**（编译期，零运行时开销）
+ *
+ * 契约真源 = `@/stable/ipc-channels` 的 `IPC_CHANNELS`；而 `./window-api.d.ts` 是渲染层那张**手写面**。
+ * 这两者的**成员名集合必须相等** —— 缺 ⇒ 渲染层调不到那个方法；多 ⇒ 幽灵方法：
+ *   · `MissingInHandWritten` 非 `never` ⇒ **表里有、手写面没有**（后端已暴露，渲染层用不了）
+ *   · `ExtraInHandWritten` 非 `never` ⇒ **手写面有、表里没有**（幽灵方法，调了必崩）
+ * 不等时下面那行注解会红，错误信息里的两个联合类型**直接点名差集**。
+ *
+ * ⚠️ **寿命 = 混合期**：手写面被"由表派生的面"替换后**删掉本守卫**（前提消失，守卫即僵尸约束）。
+ */
+type MissingInHandWritten = Exclude<keyof WindowApi, keyof HostApi>;
+type ExtraInHandWritten = Exclude<keyof HostApi, keyof WindowApi>;
+/**
+ * 不等时**把差集塞进期望类型**，让编译错误直接点名 —— 否则只报一句 `true` 不能赋给 `false`，
+ * 看不出差在哪个成员（实测过：探针里那条错就是这么"哑"的）。
+ */
+type MembersAligned =
+  [MissingInHandWritten, ExtraInHandWritten] extends [never, never]
+    ? true
+    : { 缺: MissingInHandWritten; 多: ExtraInHandWritten };
+const membersAligned: MembersAligned = true;
+void membersAligned;
 
 /** 宿主缺失时的明确错误（**不返回假成功**）—— 文案真源 = `HOST_TEXT.apiMissing`（本处只转发） */
 export const HOST_MISSING = HOST_TEXT.apiMissing;
