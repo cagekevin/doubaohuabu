@@ -32,7 +32,7 @@ import type { FetchLike, ProviderAdapter } from './types';
 /** 宿主壳注入的两个能力（域不反向依赖它） */
 interface ApiBridgeDeps {
   /** 任务事件回推用；窗口可能已被销毁/尚未创建 ⇒ 允许返回 null */
-  getMainWindow: () => { isDestroyed(): boolean; webContents: { send(channel: string, payload: unknown): void } } | null;
+  getMainWindow: () => { isDestroyed(): boolean; webContents: { send(channel: string, payload: unknown): void } } | null | undefined;
   /** `img://` 引用 → 本地绝对路径（由宿主壳的存储/媒体域实现） */
   resolveImageRef: (ref: string) => string | null;
 }

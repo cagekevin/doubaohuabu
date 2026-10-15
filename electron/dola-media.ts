@@ -53,8 +53,8 @@ interface MediaItem {
   wcId?: number;
 }
 
-/** 取主窗口（宿主注入）：事件推送 + 下载目录对话框都要真窗口 */
-type MainWindowGetter = () => BrowserWindow | null;
+/** 取主窗口（宿主注入）：事件推送 + 下载目录对话框都要真窗口（`undefined` 也收：宿主在起窗前它是未赋值） */
+type MainWindowGetter = () => BrowserWindow | null | undefined;
 
 // 无水印媒体抽取时允许回源的 fallback_api 主机（防止抽错域）：
 //   dola  → dola.com / byteintlapi.com

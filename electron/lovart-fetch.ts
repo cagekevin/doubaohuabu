@@ -256,7 +256,7 @@ interface LovartFetchDeps {
   getMainWindow?: () => {
     isDestroyed(): boolean;
     webContents: { isDestroyed(): boolean; send(channel: string, data: unknown): void };
-  } | null;
+  } | null | undefined;
 }
 
 /** IPC 事件对象上本文件用到的两个成员（`handle` 的形参是 `unknown`） */

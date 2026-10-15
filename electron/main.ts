@@ -1,16 +1,33 @@
-const { app, BrowserWindow, dialog, shell, clipboard, nativeImage, webContents, session, protocol, net, Menu, nativeTheme } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const crypto = require('crypto');
-const { Readable } = require('stream');
-const { pathToFileURL } = require('url');
-const { execFileSync } = require('child_process');
-const license = require('./license');
-const clipboardImage = require('./clipboard-image');
-const apiBridge = require('./api/bridge');
-// IPC 注册唯一入口（`handle` = invoke 型 · `on` = send/sendSync 型）见 `electron/ipc.js`
-const { handle, on } = require('./ipc');
+// §7 C-1：本文件顶层 `require` 与下面 `app.setPath('userData')` 的**顺序是求值顺序的一部分**
+//   （`import` 会被提前求值 ⇒ 顺序变）⇒ 按 §7 C-1「命中时保留原样」：`require` 调用留在原位，
+//   只是给它们补上类型（断言在编译期擦除，运行期仍是同一个 `require`）。
+//   类型导入单独用 `import type`（编译期擦除，不参与求值）。
+import type { BrowserWindow as BrowserWindowType, WebContents } from 'electron';
+import type { Dirent, Stats } from 'fs';
+
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports --
+   §7 C-1：本文件顶层 `require` 与 `app.setPath('userData')` 的先后顺序是**求值顺序的一部分**
+   （`import` 会被提前求值）⇒ 按 C-1「命中时保留原样」保留 require 形态；§7 C-3 授权局部放行。
+   类型由 `as typeof import(...)` 补上（编译期擦除）。 */
+
+const { app, BrowserWindow, dialog, shell, clipboard, nativeImage, webContents, session, protocol, net, Menu, nativeTheme } =
+  require('electron') as typeof import('electron');
+const path = require('path') as typeof import('path');
+const fs = require('fs') as typeof import('fs');
+const os = require('os') as typeof import('os');
+const crypto = require('crypto') as typeof import('crypto');
+const { Readable } = require('stream') as typeof import('stream');
+const { pathToFileURL } = require('url') as typeof import('url');
+// ⚠️ 源在第 8 行还有 `const { execFileSync } = require('child_process');`，但**全文件零使用**
+//    （`git grep` 实算：只有这一行）⇒ 同 `license` 的 `b64urlEncode`：未转过来（保留会踩未使用检查）。
+const license = require('./license') as typeof import('./license');
+const clipboardImage = require('./clipboard-image') as typeof import('./clipboard-image');
+const apiBridge = require('./api/bridge') as typeof import('./api/bridge');
+// IPC 注册唯一入口（`handle` = invoke 型 · `on` = send/sendSync 型）见 `electron/ipc.ts`
+const { handle, on } = require('./ipc') as typeof import('./ipc');
+const { asRecord } = require('./api/shape') as typeof import('./api/shape');
+
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports */
 
 // ── userData 目录固定（2026-09-29 历史工程"消失"事故根治）────
 // Electron 默认按 package.json 的 name 解析 userData；但旧版 Electron 打包时代
@@ -37,18 +54,34 @@ const PROJECT_STORAGE_DIRS = Object.freeze({
   operations: '操作记录',
   cache: '缓存',
   images: '图片',
-  videos: '视频'
+  videos: '视频',
 });
 const INNER_FOLDER_NAME = '资源';
 const PROJECT_STORAGE_VERSION_LEGACY = 1;
 const PROJECT_STORAGE_VERSION_NEW = 2;
 
-let activeProjectStorage = null;
-const knownProjectStorageRoots = new Set();
+/** 项目存储的布局种类（源里是字符串字面量返回值） */
+type StorageLayout = 'new-file' | 'new-folder' | 'legacy';
+
+/** 项目存储上下文（源里是就地建的对象字面量） */
+interface StorageContext {
+  projectId: string;
+  projectName: string;
+  root: string;
+  wrapperPath: string;
+  wrapperName: string;
+  innerFolderName: string;
+  layout: StorageLayout;
+  engineeringFileName: string;
+  dirs: Record<string, string>;
+}
+
+let activeProjectStorage: StorageContext | null = null;
+const knownProjectStorageRoots = new Set<string>();
 
 // 把用户输入的项目名清洗成可作为目录名的字符串：剔除 Windows/macOS 不允许字符，
 // 避免后续 path.join 时产生非法路径或触发 Finder 显示「该文件夹无法访问」。
-function sanitizeFolderName(name) {
+function sanitizeFolderName(name: unknown): string {
   if (typeof name !== 'string') return '未命名项目';
   const cleaned = name
     .trim()
@@ -70,7 +103,7 @@ function sanitizeFolderName(name) {
 // 注意：new-folder 的探测必须排在「资源/项目存储说明.json」之前 —— 旧版 new-folder
 // 结构下 资源/项目存储说明.json 也存在，如果先命中它就会错判成 new-file，
 // 跳过迁移步骤，结果写入会跟旧子目录脱钩。
-function detectStorageLayout(root, wrapperName) {
+function detectStorageLayout(root: string, wrapperName: string): StorageLayout {
   const wrapperDir = path.join(root, wrapperName);
   // 1) 最强信号：wrapper/<项目名>.json 已就位 → 最终态
   if (fs.existsSync(path.join(wrapperDir, `${wrapperName}.json`))) return 'new-file';
@@ -90,7 +123,7 @@ function detectStorageLayout(root, wrapperName) {
 
 // 把旧版「工程包在 wrapper/<项目名>/子目录」结构迁移成「<项目名>.json 直接放 wrapper 里」。
 // 用户最初要求的：项目工程放在最外面，与 资源 同级。直接文件比同名子目录更直观。
-function migrateEngineeringToFile(wrapperPath, wrapperName) {
+function migrateEngineeringToFile(wrapperPath: string, wrapperName: string): boolean {
   const oldDir = path.join(wrapperPath, wrapperName);
   const oldFile = path.join(oldDir, '项目工程.json');
   const newFile = path.join(wrapperPath, `${wrapperName}.json`);
@@ -99,46 +132,64 @@ function migrateEngineeringToFile(wrapperPath, wrapperName) {
     // 先拷贝再删旧文件，最后尝试移除空目录。两步分离，避免拷贝失败时旧文件被误删。
     fs.copyFileSync(oldFile, newFile);
     // ★ TD-16-37：删旧快照失败**留痕**（残留会在下次迁移时被跳过、不影响功能，但事后要能看出来）
-    try { fs.unlinkSync(oldFile); } catch (e) { console.warn('[project-migrate] 旧快照文件删除失败:', (e && e.message) || e); }
+    try {
+      fs.unlinkSync(oldFile);
+    } catch (e) {
+      console.warn('[project-migrate] 旧快照文件删除失败:', e instanceof Error ? e.message : String(e));
+    }
     // 仅在目录空的时候移除，留着别的残留文件也不影响功能。
-    try { fs.rmdirSync(oldDir); } catch (_) { /* 目录非空，保留 */ }
+    try {
+      fs.rmdirSync(oldDir);
+    } catch {
+      /* 目录非空，保留 */
+    }
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
 
-function legacyImagesDir() { return path.join(app.getPath('userData'), 'images'); }
-function legacyVideosDir() { return path.join(app.getPath('userData'), 'videos'); }
-function legacyThumbsDir() { return path.join(app.getPath('userData'), 'thumbs'); }
+function legacyImagesDir(): string {
+  return path.join(app.getPath('userData'), 'images');
+}
+function legacyVideosDir(): string {
+  return path.join(app.getPath('userData'), 'videos');
+}
+function legacyThumbsDir(): string {
+  return path.join(app.getPath('userData'), 'thumbs');
+}
 
-function atomicWriteFile(file, content) {
+function atomicWriteFile(file: string, content: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.tmp';
   fs.writeFileSync(tmp, content, 'utf8');
   try {
     fs.renameSync(tmp, file);
-  } catch (err) {
+  } catch {
     // Windows 上目标文件存在时 rename 可能不覆盖；删除的是同一份快照文件，可安全重试。
     // ★ TD-16-37：此处**刻意不吞** —— 删不掉也无妨，紧随的 `renameSync` 会抛并原样上报。
-    try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (_) { /* 失败由下一行 renameSync 抛 */ }
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch {
+      /* 失败由下一行 renameSync 抛 */
+    }
     fs.renameSync(tmp, file);
   }
 }
 
-function makeProjectStorage(payload = {}) {
-  const raw = typeof payload.storagePath === 'string' ? payload.storagePath.trim() : '';
+function makeProjectStorage(payload: Record<string, unknown> = {}): StorageContext | null {
+  const raw = typeof payload['storagePath'] === 'string' ? payload['storagePath'].trim() : '';
   if (!raw) return null;
   const root = path.resolve(raw);
-  const projectId = String(payload.projectId || '');
-  const projectName = String(payload.projectName || '未命名项目').trim() || '未命名项目';
+  const projectId = String(payload['projectId'] || '');
+  const projectName = String(payload['projectName'] || '未命名项目').trim() || '未命名项目';
   const wrapperName = sanitizeFolderName(projectName);
 
   const layout = detectStorageLayout(root, wrapperName);
 
-  let wrapperPath;
-  let dirs;
-  let engineeringFileName;
+  let wrapperPath: string;
+  let dirs: Record<string, string>;
+  let engineeringFileName: string;
   if (layout === 'legacy') {
     // 旧结构：直接以 root 为容器，子目录平铺。工程文件名沿用 项目工程.json。
     wrapperPath = root;
@@ -162,7 +213,7 @@ function makeProjectStorage(payload = {}) {
       operations: path.join(resourcesDir, PROJECT_STORAGE_DIRS.operations),
       cache: path.join(resourcesDir, PROJECT_STORAGE_DIRS.cache),
       images: path.join(resourcesDir, PROJECT_STORAGE_DIRS.images),
-      videos: path.join(resourcesDir, PROJECT_STORAGE_DIRS.videos)
+      videos: path.join(resourcesDir, PROJECT_STORAGE_DIRS.videos),
     };
     // wrapper 本身 + 资源子目录都要存在
     fs.mkdirSync(wrapperPath, { recursive: true });
@@ -175,7 +226,7 @@ function makeProjectStorage(payload = {}) {
   // 的图片/视频目录当作本工程的数据源（多项目共用同一个外层目录时尤其关键）。
   knownProjectStorageRoots.add(wrapperPath);
 
-  const ctx = {
+  const ctx: StorageContext = {
     projectId,
     projectName,
     root,
@@ -184,25 +235,29 @@ function makeProjectStorage(payload = {}) {
     innerFolderName: layout === 'legacy' ? '' : INNER_FOLDER_NAME,
     layout,
     engineeringFileName,
-    dirs
+    dirs,
   };
 
   // 项目存储说明：旧结构写 root/，新结构写 wrapper/资源/。
   const instructionsDir = layout === 'legacy' ? root : path.join(wrapperPath, INNER_FOLDER_NAME);
   atomicWriteFile(
     path.join(instructionsDir, '项目存储说明.json'),
-    JSON.stringify({
-      format: 'doubao-canvas-project-storage',
-      version: layout === 'legacy' ? PROJECT_STORAGE_VERSION_LEGACY : PROJECT_STORAGE_VERSION_NEW,
-      layout,
-      projectId: ctx.projectId,
-      projectName: ctx.projectName,
-      wrapperName: layout === 'legacy' ? undefined : wrapperName,
-      innerFolder: layout === 'legacy' ? undefined : INNER_FOLDER_NAME,
-      engineeringFileName: engineeringFileName,
-      updatedAt: Date.now(),
-      folders: PROJECT_STORAGE_DIRS
-    }, null, 2)
+    JSON.stringify(
+      {
+        format: 'doubao-canvas-project-storage',
+        version: layout === 'legacy' ? PROJECT_STORAGE_VERSION_LEGACY : PROJECT_STORAGE_VERSION_NEW,
+        layout,
+        projectId: ctx.projectId,
+        projectName: ctx.projectName,
+        wrapperName: layout === 'legacy' ? undefined : wrapperName,
+        innerFolder: layout === 'legacy' ? undefined : INNER_FOLDER_NAME,
+        engineeringFileName: engineeringFileName,
+        updatedAt: Date.now(),
+        folders: PROJECT_STORAGE_DIRS,
+      },
+      null,
+      2,
+    ),
   );
   return ctx;
 }
@@ -212,16 +267,17 @@ function makeProjectStorage(payload = {}) {
 //   - 字符串：视为旧结构（wrapper == root），原样登记；
 //   - 对象 { path, name }：按项目名算出 wrapper 路径，同时把 root 也登记（旧项目兜底）。
 // 新结构下跨项目素材迁移必须按 wrapper 走，否则同 root 下多项目会串味。
-function registerKnownProjects(items) {
+function registerKnownProjects(items: unknown): void {
   if (!Array.isArray(items)) return;
   items.forEach((item) => {
     let pathStr = '';
     let nameStr = '';
     if (typeof item === 'string') {
       pathStr = item;
-    } else if (item && typeof item === 'object' && typeof item.path === 'string') {
-      pathStr = item.path;
-      nameStr = typeof item.name === 'string' ? item.name : '';
+    } else if (item && typeof item === 'object' && typeof asRecord(item)['path'] === 'string') {
+      pathStr = String(asRecord(item)['path']);
+      const name = asRecord(item)['name'];
+      nameStr = typeof name === 'string' ? name : '';
     }
     if (!pathStr.trim()) return;
     try {
@@ -234,22 +290,28 @@ function registerKnownProjects(items) {
         const wrapperGuess = path.join(resolved, wrapperName);
         knownProjectStorageRoots.add(wrapperGuess);
       }
-    } catch (_) { /* 忽略坏路径 */ }
+    } catch {
+      /* 忽略坏路径 */
+    }
   });
 }
 
-function activateProjectStorage(payload = {}) {
-  registerKnownProjects(payload.knownStoragePaths);
+function activateProjectStorage(payload: Record<string, unknown> = {}): StorageContext | null {
+  registerKnownProjects(payload['knownStoragePaths']);
   activeProjectStorage = makeProjectStorage(payload);
   return activeProjectStorage;
 }
 
-function safeRefName(ref, prefix) {
+function safeRefName(ref: unknown, prefix: string): string {
   if (typeof ref !== 'string' || !ref.startsWith(prefix)) return '';
-  return ref.slice(prefix.length).split(/[?#]/)[0].replace(/[\\/]/g, '');
+  return ref.slice(prefix.length).split(/[?#]/)[0]?.replace(/[\\/]/g, '') ?? '';
 }
 
-function collectProjectAssetRefs(value, refs = { images: new Set(), videos: new Set() }, seen = new Set()) {
+function collectProjectAssetRefs(
+  value: unknown,
+  refs: { images: Set<string>; videos: Set<string> } = { images: new Set(), videos: new Set() },
+  seen: Set<object> = new Set(),
+): { images: Set<string>; videos: Set<string> } {
   if (typeof value === 'string') {
     const image = safeRefName(value, 'img://');
     const video = safeRefName(value, 'vid://');
@@ -264,11 +326,11 @@ function collectProjectAssetRefs(value, refs = { images: new Set(), videos: new 
   return refs;
 }
 
-function copyFirstExisting(name, sourceDirs, destDir) {
+function copyFirstExisting(name: string, sourceDirs: (string | null | undefined)[], destDir: string): boolean {
   if (!name) return false;
   const dest = path.join(destDir, name);
   if (fs.existsSync(dest) && fs.statSync(dest).size > 0) return true;
-  for (const dir of sourceDirs.filter(Boolean)) {
+  for (const dir of sourceDirs.filter((d): d is string => !!d)) {
     const src = path.join(dir, name);
     if (!fs.existsSync(src)) continue;
     fs.mkdirSync(destDir, { recursive: true });
@@ -278,70 +340,81 @@ function copyFirstExisting(name, sourceDirs, destDir) {
   return false;
 }
 
-function migrateProjectAssets(project, target, previous) {
+function migrateProjectAssets(
+  project: unknown,
+  target: StorageContext | null,
+  previous: StorageContext | null,
+): { images: number; videos: number } {
   if (!target || !project) return { images: 0, videos: 0 };
   const refs = collectProjectAssetRefs(project);
   const knownImages = [...knownProjectStorageRoots].map((root) => path.join(root, PROJECT_STORAGE_DIRS.images));
   const knownVideos = [...knownProjectStorageRoots].map((root) => path.join(root, PROJECT_STORAGE_DIRS.videos));
-  const imageSources = [previous && previous.dirs.images, legacyImagesDir(), ...knownImages];
-  const videoSources = [previous && previous.dirs.videos, legacyVideosDir(), ...knownVideos];
+  const imageSources = [previous && previous.dirs['images'], legacyImagesDir(), ...knownImages];
+  const videoSources = [previous && previous.dirs['videos'], legacyVideosDir(), ...knownVideos];
   let images = 0;
   let videos = 0;
-  refs.images.forEach((name) => { if (copyFirstExisting(name, imageSources, target.dirs.images)) images += 1; });
-  refs.videos.forEach((name) => { if (copyFirstExisting(name, videoSources, target.dirs.videos)) videos += 1; });
+  refs.images.forEach((name) => {
+    if (copyFirstExisting(name, imageSources, target.dirs['images'] ?? '')) images += 1;
+  });
+  refs.videos.forEach((name) => {
+    if (copyFirstExisting(name, videoSources, target.dirs['videos'] ?? '')) videos += 1;
+  });
   return { images, videos };
 }
 
-function writeProjectSnapshot(project, ctx = activeProjectStorage) {
+function writeProjectSnapshot(project: unknown, ctx: StorageContext | null = activeProjectStorage): boolean {
   if (!ctx || !project || typeof project !== 'object') return false;
-  const normalized = {
-    ...project,
+  const proj = asRecord(project);
+  const normalized: Record<string, unknown> = {
+    ...proj,
     storagePath: ctx.root,
-    updatedAt: Number(project.updatedAt) || Date.now()
+    updatedAt: Number(proj['updatedAt']) || Date.now(),
   };
   // 跨项目复制/导入的节点可能仍引用另一个项目目录里的 img:// / vid:// 文件。
   // 每次快照只补齐当前目录缺失的文件，已存在文件按内容哈希命名，不重复复制。
   migrateProjectAssets(normalized, ctx, null);
   atomicWriteFile(
-    path.join(ctx.dirs.engineering, ctx.engineeringFileName || '项目工程.json'),
-    JSON.stringify({ format: 'doubao-canvas-project', version: 1, ...normalized }, null, 2)
+    path.join(ctx.dirs['engineering'] ?? '', ctx.engineeringFileName || '项目工程.json'),
+    JSON.stringify({ format: 'doubao-canvas-project', version: 1, ...normalized }, null, 2),
+  );
+  atomicWriteFile(path.join(ctx.dirs['data'] ?? '', '画布数据.json'), JSON.stringify(normalized['data'] || {}, null, 2));
+  const data = asRecord(normalized['data']);
+  atomicWriteFile(
+    path.join(ctx.dirs['data'] ?? '', '项目索引.json'),
+    JSON.stringify(
+      {
+        projectId: normalized['id'] || ctx.projectId,
+        projectName: normalized['name'] || ctx.projectName,
+        storagePath: ctx.root,
+        updatedAt: normalized['updatedAt'],
+        counts: {
+          nodes: Array.isArray(data['nodes']) ? data['nodes'].length : 0,
+          edges: Array.isArray(data['edges']) ? data['edges'].length : 0,
+          library: Array.isArray(data['library']) ? data['library'].length : 0,
+          videos: Array.isArray(data['videoShares']) ? data['videoShares'].length : 0,
+        },
+      },
+      null,
+      2,
+    ),
   );
   atomicWriteFile(
-    path.join(ctx.dirs.data, '画布数据.json'),
-    JSON.stringify(normalized.data || {}, null, 2)
-  );
-  const data = normalized.data || {};
-  atomicWriteFile(
-    path.join(ctx.dirs.data, '项目索引.json'),
-    JSON.stringify({
-      projectId: normalized.id || ctx.projectId,
-      projectName: normalized.name || ctx.projectName,
-      storagePath: ctx.root,
-      updatedAt: normalized.updatedAt,
-      counts: {
-        nodes: Array.isArray(data.nodes) ? data.nodes.length : 0,
-        edges: Array.isArray(data.edges) ? data.edges.length : 0,
-        library: Array.isArray(data.library) ? data.library.length : 0,
-        videos: Array.isArray(data.videoShares) ? data.videoShares.length : 0
-      }
-    }, null, 2)
-  );
-  atomicWriteFile(
-    path.join(ctx.dirs.cache, '缓存索引.json'),
-    JSON.stringify({ version: 1, thumbnailDirectory: '缩略图', updatedAt: Date.now() }, null, 2)
+    path.join(ctx.dirs['cache'] ?? '', '缓存索引.json'),
+    JSON.stringify({ version: 1, thumbnailDirectory: '缩略图', updatedAt: Date.now() }, null, 2),
   );
   return true;
 }
 
-function appendProjectOperation(event, ctx = activeProjectStorage) {
+function appendProjectOperation(event: unknown, ctx: StorageContext | null = activeProjectStorage): boolean {
   if (!ctx || !event || typeof event !== 'object') return false;
+  const ev = asRecord(event);
   const line = JSON.stringify({
-    at: Number(event.at) || Date.now(),
-    projectId: event.projectId || ctx.projectId,
-    type: String(event.type || 'operation'),
-    detail: event.detail && typeof event.detail === 'object' ? event.detail : undefined
+    at: Number(ev['at']) || Date.now(),
+    projectId: ev['projectId'] || ctx.projectId,
+    type: String(ev['type'] || 'operation'),
+    detail: ev['detail'] && typeof ev['detail'] === 'object' ? ev['detail'] : undefined,
   });
-  fs.appendFileSync(path.join(ctx.dirs.operations, '用户操作.jsonl'), line + '\n', 'utf8');
+  fs.appendFileSync(path.join(ctx.dirs['operations'] ?? '', '用户操作.jsonl'), line + '\n', 'utf8');
   return true;
 }
 
@@ -356,42 +429,52 @@ on('projects-backup', (_e, json) => {
     const tmp = file + '.tmp';
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file); // 原子替换，避免写一半被读到
-  } catch (_) { /* 备份失败不影响主流程 */ }
+  } catch {
+    /* 备份失败不影响主流程 */
+  }
 });
 
 // 项目切换前同步设置存储上下文，确保新画布首次渲染 img:// / vid:// 时已经指向正确目录。
 on('project-storage-activate-sync', (e, payload) => {
+  // `on` 的监听参数全为 `unknown`（`ipc.ts` 的签名）⇒ 事件对象就地收窄（`asRecord` 对象时是同一引用）
+  const ev = asRecord(e);
   try {
-    const ctx = activateProjectStorage(payload || {});
-    e.returnValue = { ok: true, path: ctx ? ctx.root : '' };
+    const ctx = activateProjectStorage(asRecord(payload));
+    ev['returnValue'] = { ok: true, path: ctx ? ctx.root : '' };
   } catch (err) {
     activeProjectStorage = null;
-    e.returnValue = { ok: false, error: (err && err.message) || String(err) };
+    ev['returnValue'] = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 });
 
-handle('project-storage-pick', async (_e, payload = {}) => {
+handle('project-storage-pick', async (_e, payload) => {
+  const p = asRecord(payload);
   if (!mainWindow) return { ok: false, error: 'no_window' };
-  const existing = typeof payload.storagePath === 'string' ? payload.storagePath.trim() : '';
+  const existing = typeof p['storagePath'] === 'string' ? p['storagePath'].trim() : '';
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '选择项目保存路径',
     buttonLabel: '设为项目保存路径',
     defaultPath: existing || app.getPath('documents'),
-    properties: ['openDirectory', 'createDirectory', 'promptToCreate']
+    properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
   });
   if (res.canceled || !res.filePaths || !res.filePaths[0]) return { ok: false, canceled: true };
   const previous = activeProjectStorage;
   try {
-    registerKnownProjects(payload.knownStoragePaths);
-    const target = makeProjectStorage({ ...payload, storagePath: res.filePaths[0] });
-    const migrated = migrateProjectAssets(payload.project, target, previous);
+    registerKnownProjects(p['knownStoragePaths']);
+    const target = makeProjectStorage({ ...p, storagePath: res.filePaths[0] });
+    const migrated = migrateProjectAssets(p['project'], target, previous);
     activeProjectStorage = target;
-    if (payload.project) writeProjectSnapshot(payload.project, target);
-    appendProjectOperation({
-      type: existing ? 'change-storage-path' : 'set-storage-path',
-      detail: { path: target.root, migrated }
-    }, target);
-    return { ok: true, path: target.root, migrated };
+    if (p['project'] && target) writeProjectSnapshot(p['project'], target);
+    if (target) {
+      appendProjectOperation(
+        {
+          type: existing ? 'change-storage-path' : 'set-storage-path',
+          detail: { path: target.root, migrated },
+        },
+        target,
+      );
+    }
+    return { ok: true, path: target ? target.root : '', migrated };
   } catch (err) {
     // 失败即回滚激活状态（守卫不做这件事）⇒ 就地保留；回执转换交注册处
     activeProjectStorage = previous;
@@ -400,14 +483,18 @@ handle('project-storage-pick', async (_e, payload = {}) => {
 });
 
 on('project-snapshot', (_e, project) => {
-  try { writeProjectSnapshot(project); } catch (err) {
-    console.warn('[project-storage] 工程快照写入失败:', (err && err.message) || err);
+  try {
+    writeProjectSnapshot(project);
+  } catch (err) {
+    console.warn('[project-storage] 工程快照写入失败:', (err instanceof Error ? err.message : String(err)));
   }
 });
 
 on('project-operation', (_e, event) => {
-  try { appendProjectOperation(event); } catch (err) {
-    console.warn('[project-storage] 操作记录写入失败:', (err && err.message) || err);
+  try {
+    appendProjectOperation(event);
+  } catch (err) {
+    console.warn('[project-storage] 操作记录写入失败:', (err instanceof Error ? err.message : String(err)));
   }
 });
 
@@ -457,8 +544,9 @@ handle('project-storage-size', async (_e, storagePath) => {
 
   // 安全白名单：当前激活项目的实际工程目录（wrapper）+ 已注册过的项目根
   // pickProjectStorage 时已登记。新结构下 wrapper 与 root 不同，必须以 wrapper 为准。
-  const allowed = knownProjectStorageRoots.has(root)
-    || (activeProjectStorage && path.resolve(activeProjectStorage.wrapperPath) === root);
+  const allowed =
+    knownProjectStorageRoots.has(root) ||
+    (activeProjectStorage && path.resolve(activeProjectStorage.wrapperPath) === root);
   if (!allowed) return { ok: false, error: 'path_not_allowed' };
 
   // 异步递归求和；遇到软链 / 硬链不递增，避免双计。
@@ -470,18 +558,24 @@ handle('project-storage-size', async (_e, storagePath) => {
   let files = 0;
   let aborted = false;
 
-  async function walk(dir) {
+  async function walk(dir: string): Promise<void> {
     if (aborted) return;
-    if (Date.now() - startedAt > HARD_TIMEOUT_MS) { aborted = true; return; }
-    let entries;
+    if (Date.now() - startedAt > HARD_TIMEOUT_MS) {
+      aborted = true;
+      return;
+    }
+    let entries: Dirent[];
     try {
       entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    } catch (_) {
+    } catch {
       return; // 权限拒绝 / 已删除等异常吞掉，单个目录失败不影响整棵子树
     }
     for (const entry of entries) {
       if (aborted) return;
-      if (Date.now() - startedAt > HARD_TIMEOUT_MS) { aborted = true; return; }
+      if (Date.now() - startedAt > HARD_TIMEOUT_MS) {
+        aborted = true;
+        return;
+      }
       const child = path.join(dir, entry.name);
       if (entry.isSymbolicLink()) continue; // 跳过软链，避免递归环 + 双计
       if (entry.isDirectory()) {
@@ -493,7 +587,9 @@ handle('project-storage-size', async (_e, storagePath) => {
             bytes += s.size;
             files += 1;
           }
-        } catch (_) { /* 单文件读不到大小，跳过 */ }
+        } catch {
+          /* 单文件读不到大小，跳过 */
+        }
       }
     }
   }
@@ -511,25 +607,29 @@ nativeTheme.themeSource = 'light';
 // 用户双击 .app 启动看不到主进程控制台，这里把带 [dola-media] 标记的日志额外写入
 // 「用户主目录/dola-media-debug.log」，方便用户用文本编辑器直接查看，无需终端/DevTools。
 const dmDebugLogPath = path.join(os.homedir(), 'dola-media-debug.log');
-function dmCapture(level, args) {
+function dmCapture(level: string, args: unknown[]): void {
   try {
     const line = args
-      .map((a) => (a && a.message) || (typeof a === 'string' ? a : ''))
+      .map((a) => {
+        const message = asRecord(a)['message'];
+        if (typeof message === 'string' && message) return message;
+        return typeof a === 'string' ? a : '';
+      })
       .join(' ');
     if (line.includes('[dola-media]')) {
       fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [${level}] ${line}\n`);
     }
-  } catch (_) {
+  } catch {
     /* 忽略写入失败 */
   }
 }
 const _origLog = console.log.bind(console);
 const _origWarn = console.warn.bind(console);
-console.log = (...args) => {
+console.log = (...args: unknown[]): void => {
   dmCapture('log', args);
   _origLog(...args);
 };
-console.warn = (...args) => {
+console.warn = (...args: unknown[]): void => {
   dmCapture('warn', args);
   _origWarn(...args);
 };
@@ -539,13 +639,21 @@ console.warn = (...args) => {
 process.on('uncaughtException', (err) => {
   try {
     fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [FATAL uncaughtException] ${(err && err.stack) || err}\n`);
-  } catch (_) { /* ★ TD-16-37：写调试日志失败无妨 —— 下一行 _origWarn 仍把原文打到 console，不丢 */ }
+  } catch {
+    /* ★ TD-16-37：写调试日志失败无妨 —— 下一行 _origWarn 仍把原文打到 console，不丢 */
+  }
   _origWarn('[FATAL uncaughtException]', err);
 });
 process.on('unhandledRejection', (reason) => {
   try {
-    fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [WARN unhandledRejection] ${String(reason && (reason.stack || reason))}\n`);
-  } catch (_) { /* ★ TD-16-37：同上 —— console 兜底在下一行 */ }
+    const r = asRecord(reason);
+    fs.appendFileSync(
+      dmDebugLogPath,
+      `[${new Date().toISOString()}] [WARN unhandledRejection] ${String((r['stack'] as unknown) || reason)}\n`,
+    );
+  } catch {
+    /* ★ TD-16-37：同上 —— console 兜底在下一行 */
+  }
   _origWarn('[WARN unhandledRejection]', reason);
 });
 
@@ -555,7 +663,11 @@ process.on('unhandledRejection', (reason) => {
 // 关掉该特性后以正常浏览器身份运行（必须在 app ready 之前 append）。
 // ⚠️ 同一个开关名只能有一个值（后写覆盖前者），要关多个 Blink 特性必须逗号分隔写在一起。
 //    ComputePressure —— 见下方「关闭 Compute Pressure」注释（Tapnow 登录后闪退的根因）。
-try { app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled,ComputePressure'); } catch (_) { /* 忽略 */ }
+try {
+  app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled,ComputePressure');
+} catch {
+  /* 忽略 */
+}
 
 // 全局 UA 兜底：把 Electron / 应用标识从 UA 里彻底抹掉。
 // Cloudflare 的浏览器完整性检查会因 UA 带 `Electron/31.x` 直接判定为「嵌入式自定义浏览器」；
@@ -563,11 +675,13 @@ try { app.commandLine.appendSwitch('disable-blink-features', 'AutomationControll
 // 豆包/dola 的 webview 各自通过 useragent 属性指定伪装 UA，优先级高于此 fallback，不受影响。
 try {
   const _realChrome = String(process.versions.chrome || '120.0.0.0');
-  const _major = parseInt(_realChrome.split('.')[0], 10) || 120;
+  const _major = parseInt(_realChrome.split('.')[0] ?? '', 10) || 120;
   app.userAgentFallback =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
     `(KHTML, like Gecko) Chrome/${_major}.0.0.0 Safari/537.36`;
-} catch (_) { /* 忽略 */ }
+} catch {
+  /* 忽略 */
+}
 
 // ── 关闭 Compute Pressure（CPU 压力）───────────────────────
 // ⚠️ 这是「添加 Tapnow 账号 → 粘贴邮箱验证链接 → 主界面出现约 1 秒后整个应用闪退」的根因所在。
@@ -590,23 +704,43 @@ try {
 // device::ComputePressure 特性（device service 里的 CpuProbeManager 就归它管）。
 // 实测验证：默认 window.PressureObserver === 'function'；加开关后为 'undefined'
 // （tests/pressure-probe.js），且反自动化开关（AutomationControlled）仍生效。
-try { app.commandLine.appendSwitch('disable-features', 'ComputePressure'); } catch (_) { /* 忽略 */ }
+try {
+  app.commandLine.appendSwitch('disable-features', 'ComputePressure');
+} catch {
+  /* 忽略 */
+}
 
 // ── GPU 进程崩溃上限（保留，但并非本次闪退原因）────────────────
 // 曾经误判本机闪退为「GPU 进程连续崩溃 → gpu_data_manager_impl_private.cc 的 LOG(FATAL)
 // → 浏览器进程自杀」。实际上那条 FATAL 只在探针被外层沙箱掐死 GPU 进程时出现；
 // 线上四次崩溃里 child-process-gone 一条都没有，SIGTRAP 发生在 CPU 采样回调里（见上）。
 // 该开关本身无害（关掉后 GPU 进程可无限重启 / 降级软件合成），予以保留。
-try { app.commandLine.appendSwitch('disable-gpu-process-crash-limit'); } catch (_) { /* 忽略 */ }
+try {
+  app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
+} catch {
+  /* 忽略 */
+}
 
 // ── 关闭 Chromium 沙箱（解决 Intel / Rosetta 环境下 webview 白屏/空白）────
 // Electron 的 webview 在 x86_64 包跑在 Intel Mac 或 Apple Silicon 的 Rosetta 上时，
 // 渲染子进程的 sandbox 可能因架构/权限不匹配而无法启动，导致中间操作区白屏。
 // 关闭 sandbox 与 GPU sandbox 后，Chromium 改用主进程权限启动渲染，可绕过此问题。
 // 注意：这会降低渲染进程隔离级别，但对本地桌面自动化工具是可接受的折中。
-try { app.commandLine.appendSwitch('no-sandbox'); } catch (_) { /* 忽略 */ }
-try { app.commandLine.appendSwitch('disable-setuid-sandbox'); } catch (_) { /* 忽略 */ }
-try { app.commandLine.appendSwitch('disable-gpu-sandbox'); } catch (_) { /* 忽略 */ }
+try {
+  app.commandLine.appendSwitch('no-sandbox');
+} catch {
+  /* 忽略 */
+}
+try {
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+} catch {
+  /* 忽略 */
+}
+try {
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+} catch {
+  /* 忽略 */
+}
 
 // ── Chromium 原生日志落盘 ─────────────────────────────────────
 // 双击 .app 启动时 stderr 不可见，一旦再发生 LOG(FATAL)/CHECK 失败就拿不到原文。
@@ -616,26 +750,25 @@ try {
   app.commandLine.appendSwitch('log-file', _logFile);
   app.commandLine.appendSwitch('enable-logging');
   app.commandLine.appendSwitch('log-level', '2'); // 0=INFO 1=WARN 2=ERROR 3=FATAL
-} catch (_) { /* 忽略 */ }
+} catch {
+  /* 忽略 */
+}
 
 // ── 子进程崩溃观测 ───────────────────────────────────────────
 // 记录 GPU / 渲染进程 / 网络服务等子进程的非正常退出，事后能还原崩溃前的时序。
 app.on('child-process-gone', (_event, details) => {
   try {
-    fs.appendFileSync(
-      dmDebugLogPath,
-      `[${new Date().toISOString()}] [child-process-gone] ${JSON.stringify(details)}\n`
-    );
+    fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [child-process-gone] ${JSON.stringify(details)}\n`);
   } catch (e) {
     // ★ TD-16-37：此处**无 console 兜底** ⇒ 写日志失败必须自己留痕（否则崩溃时序彻底丢失）
-    console.warn('[child-process-gone] 写调试日志失败，事件明细：', (e && e.message) || e, details);
+    console.warn('[child-process-gone] 写调试日志失败，事件明细：', (e instanceof Error ? e.message : String(e)), details);
   }
 });
 
-let mainWindow;
+let mainWindow: BrowserWindowType | undefined;
 
 // 当前聚焦的 webview guest（用于菜单打开其 DevTools）
-let lastFocusedGuest = null;
+let lastFocusedGuest: WebContents | null = null;
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'tif', 'tiff'];
 
@@ -654,11 +787,14 @@ protocol.registerSchemesAsPrivileged([
   // 生产环境页面由 file:// 加载，而 Chromium 禁止 file:// 页面 fetch/XHR 本地文件，
   // MediaPipe 无法据此加载 wasm 二进制；故注册特权 scheme 由主进程读盘返回，
   // 并给出正确的 application/wasm MIME（流式编译校验 MIME，错了会拒绝编译）。
-  { scheme: 'appasset', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true } }
+  {
+    scheme: 'appasset',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true },
+  },
 ]);
 
 // 静态资源扩展名 → MIME（appasset:// 用）
-const APPASSET_MIME = {
+const APPASSET_MIME: Record<string, string> = {
   '.js': 'text/javascript',
   '.mjs': 'text/javascript',
   '.wasm': 'application/wasm',
@@ -672,12 +808,11 @@ const APPASSET_MIME = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.css': 'text/css',
-  '.txt': 'text/plain; charset=utf-8'
+  '.txt': 'text/plain; charset=utf-8',
 };
 
-const imagesDir = () => activeProjectStorage ? activeProjectStorage.dirs.images : legacyImagesDir();
+const imagesDir = (): string => (activeProjectStorage ? activeProjectStorage.dirs['images'] ?? '' : legacyImagesDir());
 
-// 把一张 dataUrl 写入磁盘，返回 img:// 引用；失败返回原 dataUrl（调用方降级）
 /**
  * 把 `data:image/...` 内联图落盘 → 返回 `img://<hash>.<ext>` 引用。
  *
@@ -686,12 +821,12 @@ const imagesDir = () => activeProjectStorage ? activeProjectStorage.dirs.images 
  *   三个调用点**都已兜底**：`img-save-sync` → 前端 `adapters/host/electron` 的 catch 转 `err`（原则 6）；
  *   `import-files` → 注册处守卫转 `{ok:false,error}` 回执（不 reject）；`start-file-drag` → 本地 `try/catch` 已就位。
  */
-function persistImageDataUrl(dataUrl) {
+function persistImageDataUrl(dataUrl: unknown): unknown {
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl;
   const m = dataUrl.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
   if (!m) return dataUrl;
-  const mime = m[1];
-  const buf = Buffer.from(m[2], 'base64');
+  const mime = m[1] ?? '';
+  const buf = Buffer.from(m[2] ?? '', 'base64');
   if (!buf || buf.length === 0) return dataUrl;
   const ext = (mime.split('/')[1] || 'png').replace('svg+xml', 'svg').replace('jpeg', 'jpg');
   const hash = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
@@ -703,15 +838,13 @@ function persistImageDataUrl(dataUrl) {
 }
 
 // 缩略图缓存目录：画布/列表显示用的降采样 JPEG，避免每次挂载都解码 2～20MB 原图
-function thumbsDir() {
-  return activeProjectStorage
-    ? path.join(activeProjectStorage.dirs.cache, '缩略图')
-    : legacyThumbsDir();
+function thumbsDir(): string {
+  return activeProjectStorage ? path.join(activeProjectStorage.dirs['cache'] ?? '', '缩略图') : legacyThumbsDir();
 }
 
 // 生成缩略图：读原图 → nativeImage 降采样 → JPEG 落盘缓存。
 // 只在缓存缺失时执行一次，之后 img://xxx.png?w=480 直接命中磁盘缓存。
-function ensureThumb(filePath, name, width) {
+function ensureThumb(filePath: string, name: string, width: number): string | null {
   const dir = thumbsDir();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const base = name.replace(/\.[^.]+$/, '');
@@ -728,14 +861,14 @@ function ensureThumb(filePath, name, width) {
   if (!buf || buf.length === 0) return null;
   try {
     fs.writeFileSync(out, buf);
-  } catch (_) {
+  } catch {
     return null;
   }
   return out;
 }
 
 // 把 img:// 引用解析回磁盘文件绝对路径（供剪贴板等需要真实文件的场景）
-function resolveImageRef(ref) {
+function resolveImageRef(ref: unknown): string | null {
   try {
     if (typeof ref !== 'string' || !ref.startsWith('img://')) return null;
     const name = ref.slice('img://'.length).replace(/[\\/]/g, ''); // 防路径穿越
@@ -759,13 +892,16 @@ function resolveImageRef(ref) {
 // 下载到 userData/videos/，工程数据改存 `vid://<sha1>.<ext>` 引用，
 // 播放/拖进度条都走本地文件，与远端签名/防盗链彻底解耦。
 // ============================================================
-function videosDir() {
-  return activeProjectStorage ? activeProjectStorage.dirs.videos : legacyVideosDir();
+function videosDir(): string {
+  return activeProjectStorage ? activeProjectStorage.dirs['videos'] ?? '' : legacyVideosDir();
 }
+
+/** 视频本地化的回执（源里是就地 return 的字面量） */
+type SaveVideoResult = { ok: true; ref: string; size: number; cached?: boolean } | { ok: false; error: string };
 
 // 下载远端视频 → 落盘 → 返回 vid:// 引用。按 URL sha1 命名 → 同一链接天然去重；
 // 已存在直接命中不重复下载。referer 传空串表示不带 Referer 头。
-async function saveVideoFromUrl(url, referer) {
+async function saveVideoFromUrl(url: unknown, referer: unknown): Promise<SaveVideoResult> {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
     return { ok: false, error: 'bad_url' };
   }
@@ -774,40 +910,44 @@ async function saveVideoFromUrl(url, referer) {
   const hash = crypto.createHash('sha1').update(url).digest('hex').slice(0, 16);
   let ext = '.mp4';
   try {
-    const m = (new URL(url)).pathname.match(/\.(mp4|webm|mov|m4v)$/i);
-    if (m) ext = '.' + m[1].toLowerCase();
-  } catch (_) { /* URL 解析失败保持 .mp4 */ }
+    const m = new URL(url).pathname.match(/\.(mp4|webm|mov|m4v)$/i);
+    if (m) ext = '.' + String(m[1]).toLowerCase();
+  } catch {
+    /* URL 解析失败保持 .mp4 */
+  }
   const fileName = `${hash}${ext}`;
   const filePath = path.join(dir, fileName);
   if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
     return { ok: true, ref: `vid://${fileName}`, size: fs.statSync(filePath).size, cached: true };
   }
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    'Accept': '*/*',
-    'Accept-Language': 'zh-CN,zh;q=0.9'
+  const headers: Record<string, string> = {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    Accept: '*/*',
+    'Accept-Language': 'zh-CN,zh;q=0.9',
   };
-  if (referer) headers['Referer'] = referer;
-  let buf;
+  if (referer) headers['Referer'] = String(referer);
+  let buf: Buffer;
   try {
     const resp = await net.fetch(url, { method: 'GET', headers, redirect: 'follow' });
     if (!resp.ok) return { ok: false, error: 'http_' + resp.status };
     buf = Buffer.from(await resp.arrayBuffer());
   } catch (e) {
-    return { ok: false, error: (e && (e.message || String(e))) || 'fetch_failed' };
+    // 源写 `(e && (e.message || String(e))) || 'fetch_failed'`：保留"假值即回落"的选取顺序
+    return { ok: false, error: (e ? (e instanceof Error ? e.message : String(e)) : '') || 'fetch_failed' };
   }
   // 过小视为异常响应（防盗链错误页 / 空响应），不落盘
   if (buf.length < 1024) return { ok: false, error: 'too_small' };
   try {
     fs.writeFileSync(filePath, buf);
   } catch (e) {
-    return { ok: false, error: (e && (e.message || String(e))) || 'write_failed' };
+    return { ok: false, error: (e ? (e instanceof Error ? e.message : String(e)) : '') || 'write_failed' };
   }
   return { ok: true, ref: `vid://${fileName}`, size: buf.length };
 }
 
 // 把 vid:// 引用解析回磁盘文件绝对路径（下载 / 定位文件等场景）
-function resolveVideoRef(ref) {
+function resolveVideoRef(ref: unknown): string | null {
   try {
     if (typeof ref !== 'string' || !ref.startsWith('vid://')) return null;
     const name = ref.slice('vid://'.length).replace(/[\\/]/g, ''); // 防路径穿越
@@ -831,40 +971,48 @@ function resolveVideoRef(ref) {
 // 再于主进程按 partition 注入 Accept-Language 请求头，实现「同浏览器多账号指纹隔离」。
 // preload 文件按 account.id 隔离存放于 userData/fingerprints/，内容与指纹一同落盘，
 // 因此同一账号每次启动命中的是同一份配置（稳定）。
-const { buildFingerprintPreload } = require('./fingerprint-preload');
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports --
+   §7 C-1：以下 require 同样留在原位（`import` 提前求值 ⇒ 求值顺序变）；§7 C-3 授权局部放行。
+   类型由 `as typeof import(...)` 补上（编译期擦除）。 */
+const { buildFingerprintPreload } = require('./fingerprint-preload') as typeof import('./fingerprint-preload');
 // ★ **零注入**：Lovart 容器不挂载任何自定义 preload —— 自定义 UA preload 会留下 fn.toString() 可探测痕迹。
-const dolaMedia = require('./dola-media');
+const dolaMedia = require('./dola-media') as typeof import('./dola-media');
 // ★ 站点域名真相（层 1 域名 + 层 2 归属判定）—— 2026-10-14 收口：此前 main.js 自己内联了
 //   3 遍域名判定（`includes('dola')` 选源 · `includes(sourceHost)` 精确找 · `includes('doubao.com')` 兜底）
-const siteHosts = require('./site-hosts');
-const lovartFetch = require('./lovart-fetch');
-const lovartScan = require('./lovart-scan');
-const firefox = require('./firefox');
-const chromeCdp = require('./chrome-cdp');
+const siteHosts = require('./site-hosts') as typeof import('./site-hosts');
+const lovartFetch = require('./lovart-fetch') as typeof import('./lovart-fetch');
+const lovartScan = require('./lovart-scan') as typeof import('./lovart-scan');
+const firefox = require('./firefox') as typeof import('./firefox');
+const chromeCdp = require('./chrome-cdp') as typeof import('./chrome-cdp');
+
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports */
 
 // 按 partition 注入 HTTP 层指纹头（Accept-Language + 客户端提示，与伪装的 UA 对齐）
-function applyFingerprintHeaders(ses, fp) {
-  if (!fp || !fp.languages || !fp.languages.length) return;
-  const acceptLang = fp.languages.join(',');
+function applyFingerprintHeaders(
+  ses: Electron.Session,
+  fp: { languages?: unknown; uaClientHints?: Record<string, unknown> },
+): void {
+  if (!fp || !fp.languages || !(fp.languages as unknown[]).length) return;
+  const acceptLang = (fp.languages as string[]).join(',');
   const ch = fp.uaClientHints || {};
   try {
     ses.webRequest.onBeforeSendHeaders((details, callback) => {
-      const h = details.requestHeaders || {};
+      const h = (details.requestHeaders || {}) as unknown as Record<string, string>;
       h['Accept-Language'] = acceptLang;
       // 客户端提示与伪装的 Chrome 版本对齐（best-effort：Chromium 可能仍按真实版本下发，
       // 但即便如此也仍落在「Chromium」范畴内，与伪装 UA 不冲突）
-      if (ch['Sec-CH-UA']) h['Sec-CH-UA'] = ch['Sec-CH-UA'];
-      if (ch['Sec-CH-UA-Mobile']) h['Sec-CH-UA-Mobile'] = ch['Sec-CH-UA-Mobile'];
-      if (ch['Sec-CH-UA-Platform']) h['Sec-CH-UA-Platform'] = ch['Sec-CH-UA-Platform'];
-      if (ch['Sec-CH-UA-Full-Version']) h['Sec-CH-UA-Full-Version'] = ch['Sec-CH-UA-Full-Version'];
+      if (ch['Sec-CH-UA']) h['Sec-CH-UA'] = String(ch['Sec-CH-UA']);
+      if (ch['Sec-CH-UA-Mobile']) h['Sec-CH-UA-Mobile'] = String(ch['Sec-CH-UA-Mobile']);
+      if (ch['Sec-CH-UA-Platform']) h['Sec-CH-UA-Platform'] = String(ch['Sec-CH-UA-Platform']);
+      if (ch['Sec-CH-UA-Full-Version']) h['Sec-CH-UA-Full-Version'] = String(ch['Sec-CH-UA-Full-Version']);
       callback({ requestHeaders: h });
     });
   } catch (e) {
-    console.error('[fingerprint] 注入指纹请求头失败:', e && e.message || e);
+    console.error('[fingerprint] 注入指纹请求头失败:', (e instanceof Error ? e.message : String(e)));
   }
 }
 
-function createWindow() {
+function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -877,8 +1025,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webviewTag: true
-    }
+      webviewTag: true,
+    },
   });
 
   /*
@@ -908,35 +1056,34 @@ function createWindow() {
         ' 先跑 `npm run build`（或 `npm run build:watch` 持续重建），再重启本应用。',
     );
   }
-  mainWindow.loadFile(distPath);
+  // 源是浮动 promise（未 await / 未 catch）⇒ 闸要求显式忽略；`void` 不改行为
+  void mainWindow.loadFile(distPath);
 
   // ── webview 调试支持 ──────────────────────────────────────
   // 跟踪当前聚焦的 webview guest，便于菜单打开其 DevTools；
   // 同时把 guest 内部 console 转发到调试日志文件，
   // 这样无需打开 DevTools 也能在 ~/dola-media-debug.log 里排查。
-  const trackedGuests = new Set();
-  function trackGuestConsole(guest) {
+  const trackedGuests = new Set<WebContents>();
+  function trackGuestConsole(guest: WebContents): void {
     if (!guest || trackedGuests.has(guest) || guest.isDestroyed()) return;
     trackedGuests.add(guest);
     try {
       guest.on('console-message', (_e, level, message) => {
-        if (
-          typeof message === 'string' &&
-          (message.includes('[dola-media]') || message.includes('[watermarkFree]'))
-        ) {
+        if (typeof message === 'string' && (message.includes('[dola-media]') || message.includes('[watermarkFree]'))) {
           const tag = level === 1 ? 'warn' : level === 2 ? 'error' : 'log';
           try {
-            fs.appendFileSync(
-              dmDebugLogPath,
-              `[${new Date().toISOString()}] [webview] [${tag}] ${message}\n`
-            );
-          } catch (e) { console.warn('[webview] 写调试日志失败:', (e && e.message) || e); }
+            fs.appendFileSync(dmDebugLogPath, `[${new Date().toISOString()}] [webview] [${tag}] ${message}\n`);
+          } catch (e) {
+            console.warn('[webview] 写调试日志失败:', (e instanceof Error ? e.message : String(e)));
+          }
         }
       });
-    } catch (_) { /* ★ TD-16-37：接管 guest console 失败 —— 只是少一份调试日志，不影响功能 */ }
+    } catch {
+      /* ★ TD-16-37：接管 guest console 失败 —— 只是少一份调试日志，不影响功能 */
+    }
   }
 
-  mainWindow.webContents.on('did-attach-webview', (event, guest) => {
+  mainWindow.webContents.on('did-attach-webview', (_event, guest) => {
     if (lastFocusedGuest !== guest) lastFocusedGuest = guest;
     trackGuestConsole(guest);
     try {
@@ -945,23 +1092,26 @@ function createWindow() {
       });
     } catch (e) {
       // ★ TD-16-37：注册失败 = **功能降级**（"打开 DevTools" 会指向非当前 guest）⇒ 必须留痕
-      console.warn('[webview] 注册 focus 监听失败:', (e && e.message) || e);
+      console.warn('[webview] 注册 focus 监听失败:', (e instanceof Error ? e.message : String(e)));
     }
   });
 }
 
-app.whenReady().then(() => {
+// 源是浮动 promise（`whenReady().then(...)` 无 catch）⇒ 闸要求显式忽略；`void` 不改行为
+void app.whenReady().then(() => {
   // 调试用金丝雀：应用一启动就往时长日志写一行，用于确认「重启后的新代码确实已加载」。
   // 若重启后该文件立即出现 APP-START，说明新代码生效；若仍无，说明跑的仍是旧进程。
   try {
     fs.appendFileSync(
       path.join(os.homedir(), 'dola-duration-debug.log'),
-      `[${new Date().toISOString()}] APP-START pid=${process.pid}\n`
+      `[${new Date().toISOString()}] APP-START pid=${process.pid}\n`,
     );
-  } catch (e) { /* 忽略 */ }
+  } catch {
+    /* 忽略 */
+  }
   // ── 应用菜单：保留 macOS 标准菜单，追加「调试」项，可打开 webview DevTools ──
   try {
-    const template = [
+    const template: Electron.MenuItemConstructorOptions[] = [
       { role: 'appMenu' },
       { role: 'fileMenu' },
       { role: 'editMenu' },
@@ -974,13 +1124,14 @@ app.whenReady().then(() => {
             label: '打开账号 WebView 开发工具',
             accelerator: 'CmdOrCtrl+Shift+D',
             click: () => {
-              const target = lastFocusedGuest && !lastFocusedGuest.isDestroyed()
-                ? lastFocusedGuest
-                : (mainWindow && mainWindow.webContents);
+              const target =
+                lastFocusedGuest && !lastFocusedGuest.isDestroyed()
+                  ? lastFocusedGuest
+                  : mainWindow && mainWindow.webContents;
               if (!target) return;
               if (target.isDevToolsOpened()) target.closeDevTools();
               else target.openDevTools({ mode: 'detach' });
-            }
+            },
           },
           {
             label: '打开主窗口开发工具',
@@ -990,15 +1141,15 @@ app.whenReady().then(() => {
                 if (mainWindow.webContents.isDevToolsOpened()) mainWindow.webContents.closeDevTools();
                 else mainWindow.webContents.openDevTools({ mode: 'detach' });
               }
-            }
-          }
-        ]
-      }
+            },
+          },
+        ],
+      },
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
   } catch (e) {
     // ★ TD-16-37：菜单构建失败 = **用户可见**（应用菜单整个缺失）⇒ 必须留痕
-    console.warn('[menu] 应用菜单构建失败（菜单将缺失）:', (e && e.message) || e);
+    console.warn('[menu] 应用菜单构建失败（菜单将缺失）:', (e instanceof Error ? e.message : String(e)));
   }
 
   // img:// 协议 → userData/images/ 目录下的图片文件（渲染层 <img src="img://xxx.png"> 直接可用）
@@ -1006,7 +1157,7 @@ app.whenReady().then(() => {
   // 而 img:// 与页面（file://）不同源，跨源图 drawImage 到 canvas 会污染画布，
   // 之后 getImageData / toDataURL 一律抛 SecurityError。带上 CORS 头后，
   // 渲染层用 <img crossOrigin="anonymous"> 加载即可安全读像素。
-  const withCors = (res) => {
+  const withCors = (res: Response): Response => {
     try {
       const headers = new Headers(res.headers);
       headers.set('Access-Control-Allow-Origin', '*');
@@ -1034,7 +1185,7 @@ app.whenReady().then(() => {
           if (thumb && fs.existsSync(thumb)) {
             return withCors(await net.fetch(pathToFileURL(thumb).toString()));
           }
-        } catch (e) {
+        } catch {
           // 缩略图失败不影响使用：降级返回原图
         }
       }
@@ -1057,12 +1208,12 @@ app.whenReady().then(() => {
       if (!filePath) return new Response('', { status: 404 });
       const stat = fs.statSync(filePath);
       const mime = /\.webm$/i.test(safeName) ? 'video/webm' : /\.mov$/i.test(safeName) ? 'video/quicktime' : 'video/mp4';
-      const common = {
+      const common: Record<string, string> = {
         'Content-Type': mime,
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*',
         'Cross-Origin-Resource-Policy': 'cross-origin',
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'no-cache',
       };
       const range = req.headers.get('range');
       const m = range ? /bytes=(\d*)-(\d*)/.exec(range) : null;
@@ -1075,18 +1226,22 @@ app.whenReady().then(() => {
           return new Response('', { status: 416, headers: { 'Content-Range': `bytes */${stat.size}` } });
         }
         const stream = fs.createReadStream(filePath, { start, end });
-        return new Response(Readable.toWeb(stream), {
+        return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
           status: 206,
-          headers: { ...common, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Content-Length': String(end - start + 1) }
+          headers: {
+            ...common,
+            'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+            'Content-Length': String(end - start + 1),
+          },
         });
       }
       const stream = fs.createReadStream(filePath);
-      return new Response(Readable.toWeb(stream), {
+      return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
         status: 200,
-        headers: { ...common, 'Content-Length': String(stat.size) }
+        headers: { ...common, 'Content-Length': String(stat.size) },
       });
     } catch (e) {
-      console.error('[vid-store] 读取失败:', e && e.message || e);
+      console.error('[vid-store] 读取失败:', (e instanceof Error ? e.message : String(e)));
       return new Response('', { status: 500 });
     }
   });
@@ -1104,7 +1259,7 @@ app.whenReady().then(() => {
       if (filePath !== distRoot && !filePath.startsWith(distRoot + path.sep)) {
         return new Response('', { status: 403 });
       }
-      let stat;
+      let stat: Stats;
       try {
         stat = fs.statSync(filePath);
       } catch {
@@ -1122,11 +1277,11 @@ app.whenReady().then(() => {
           // 且 wasm 二进制是跨源 fetch —— 必须放行 CORS，否则被拦。
           'Access-Control-Allow-Origin': '*',
           'Cross-Origin-Resource-Policy': 'cross-origin',
-          'Cache-Control': 'no-cache'
-        }
+          'Cache-Control': 'no-cache',
+        },
       });
     } catch (err) {
-      console.error('[appasset] 读取失败:', err && err.message || err);
+      console.error('[appasset] 读取失败:', (err instanceof Error ? err.message : String(err)));
       return new Response('', { status: 500 });
     }
   });
@@ -1161,7 +1316,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// IPC 注册唯一入口（守卫在注册处统一施加）见 `electron/ipc.js`
+// IPC 注册唯一入口（守卫在注册处统一施加）见 `electron/ipc.ts`
 
 // 导入素材文件：主进程直接读取 → 落盘 → 返回 img:// 引用列表
 // （不再把大 base64 送回渲染进程，避免内存与 IPC 膨胀）
@@ -1170,7 +1325,7 @@ handle('import-files', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '导入素材',
     properties: ['openFile', 'multiSelections'],
-    filters: [{ name: '图片素材', extensions: IMAGE_EXT }]
+    filters: [{ name: '图片素材', extensions: IMAGE_EXT }],
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return [];
   return res.filePaths.map((p) => {
@@ -1180,14 +1335,15 @@ handle('import-files', async () => {
     return {
       name: path.basename(p, path.extname(p)),
       fullName: path.basename(p),
-      dataUrl: persistImageDataUrl(`data:${mime};base64,${buf.toString('base64')}`)
+      dataUrl: persistImageDataUrl(`data:${mime};base64,${buf.toString('base64')}`),
     };
   });
 });
 
 // 同步保存图片：渲染进程持久化时把 dataUrl 批量转成 img:// 引用（sendSync 保证同步返回）
 on('img-save-sync', (e, dataUrl) => {
-  e.returnValue = persistImageDataUrl(dataUrl);
+  const ev = asRecord(e);
+  ev['returnValue'] = persistImageDataUrl(dataUrl);
 });
 
 // 远端图片直链 → dataUrl（文生图后台通道用：CDP 抓到的无水印图是临时签名直链，
@@ -1196,9 +1352,9 @@ handle('image-fetch-dataurl', async (_e, url) => {
   if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'bad-url' };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 30000);
-  let res;
+  let res: Response;
   try {
-    res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    res = await fetch(String(url), { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
   } finally {
     clearTimeout(timer);
   }
@@ -1214,7 +1370,7 @@ handle('image-fetch-dataurl', async (_e, url) => {
 // 这些文件可自动重建，删除后页面首次打开会稍慢一点；登录态存在 Local Storage / Cookies /
 // IndexedDB 里，不会受影响，账号不会掉线。用于释放长期积累的十几 GB 磁盘占用。
 handle('clear-browser-cache', async () => {
-  const targets = []; // 仅这些名称属于「纯缓存」
+  const targets: string[] = []; // 仅这些名称属于「纯缓存」
   const cacheNames = new Set(['Cache', 'Code Cache', 'CodeCache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache']);
   const userData = app.getPath('userData');
   const partitionsDir = path.join(userData, 'Partitions');
@@ -1236,7 +1392,7 @@ handle('clear-browser-cache', async () => {
     }
   } catch (e) {
     // 语境前缀是守卫不做的 ⇒ 就地保留；回执转换交注册处
-    throw new Error('扫描缓存目录失败: ' + (e && e.message ? e.message : e));
+    throw new Error('扫描缓存目录失败: ' + (e instanceof Error ? e.message : String(e)));
   }
   let freed = 0;
   let failed = 0;
@@ -1244,7 +1400,7 @@ handle('clear-browser-cache', async () => {
     try {
       fs.rmSync(dir, { recursive: true, force: true });
       freed += 1;
-    } catch (_) {
+    } catch {
       failed += 1; // 页面正在占用时可能删不掉，忽略即可（下次启动再清）
     }
   }
@@ -1262,37 +1418,48 @@ handle('clear-browser-cache', async () => {
 //    （`docs/10` #53「拖拽预览 icon 必须是 64px」）。⇒ 该字段已从渲染层端口删除（幽灵字段）。
 // 真正 drop 到页面的文件仍是原图 filePath，保证画质。
 on('start-file-drag', (e, payload) => {
-  const win = (BrowserWindow.fromWebContents && BrowserWindow.fromWebContents(e.sender)) || mainWindow;
+  const ev = asRecord(e);
+  const p = asRecord(payload);
+  const win =
+    (BrowserWindow.fromWebContents &&
+      BrowserWindow.fromWebContents(ev['sender'] as unknown as WebContents)) ||
+    mainWindow;
   if (!win || win.isDestroyed()) return;
-  let filePath = (payload && payload.path) || null;
-  if (!filePath && payload && payload.dataUrl) {
+  let filePath = (p['path'] as string | null | undefined) || null;
+  if (!filePath && p['dataUrl']) {
     try {
-      const ref = persistImageDataUrl(payload.dataUrl);
+      const ref = persistImageDataUrl(p['dataUrl']);
       filePath = resolveImageRef(ref);
     } catch (err) {
-      console.warn('[start-file-drag] 原图落盘失败：', (err && err.message) || err);
+      console.warn('[start-file-drag] 原图落盘失败：', err instanceof Error ? err.message : String(err));
     }
   }
   if (!filePath) return;
 
   // 拖拽预览 icon 必须是小缩略图（用户要求和面板缩略图同尺寸），
   // 因此直接从原图生成 64px NativeImage，避免原图作为 icon 导致拖拽时显示大图。
-  let icon;
+  let icon: Electron.NativeImage | null | undefined;
   try {
     const raw = nativeImage.createFromPath(filePath);
     if (!raw.isEmpty()) {
       icon = raw.resize({ width: 64, quality: 'good' });
     }
   } catch (err) {
-    console.warn('[start-file-drag] 生成拖拽预览 icon 失败：', (err && err.message) || err);
+    console.warn('[start-file-drag] 生成拖拽预览 icon 失败：', err instanceof Error ? err.message : String(err));
   }
   if (!icon || (typeof icon.isEmpty === 'function' && icon.isEmpty())) {
-    try { icon = nativeImage.createEmpty(); } catch (_) { icon = null; }
+    try {
+      icon = nativeImage.createEmpty();
+    } catch {
+      icon = null;
+    }
   }
   try {
-    win.webContents.startDrag({ file: filePath, icon: icon || undefined });
+    // 源写 `icon: icon || undefined`（键恒在、值可能 undefined）；electron 的 `Item.icon` 类型标成必填
+    // ⇒ 断言只为过声明类型（编译期擦除，运行期还是同一个值）
+    win.webContents.startDrag({ file: filePath, icon: (icon || undefined) as Electron.NativeImage });
   } catch (err) {
-    console.warn('[start-file-drag] startDrag 失败：', (err && err.message) || err);
+    console.warn('[start-file-drag] startDrag 失败：', err instanceof Error ? err.message : String(err));
   }
 });
 
@@ -1302,10 +1469,11 @@ handle('save-file', async (_e, content) => {
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '保存画布',
     defaultPath: 'doubao-canvas.json',
-    filters: [{ name: '豆包画布', extensions: ['json'] }]
+    filters: [{ name: '豆包画布', extensions: ['json'] }],
   });
   if (res.canceled || !res.filePath) return false;
-  fs.writeFileSync(res.filePath, content, 'utf-8');
+  // `content` 来自渲染层（字符串）⇒ 断言只为过声明类型，不做运行期改写
+  fs.writeFileSync(res.filePath, content as string, 'utf-8');
   return true;
 });
 
@@ -1315,15 +1483,16 @@ handle('load-file', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '打开画布',
     properties: ['openFile'],
-    filters: [{ name: '豆包画布', extensions: ['json'] }]
+    filters: [{ name: '豆包画布', extensions: ['json'] }],
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
-  return fs.readFileSync(res.filePaths[0], 'utf-8');
+  // 上一行已保证长度 > 0 ⇒ 断言只为过 `noUncheckedIndexedAccess`，运行期同一个值
+  return fs.readFileSync(res.filePaths[0] as string, 'utf-8');
 });
 
 // 打开外部链接（豆包账号等）
 handle('open-external', async (_e, url) => {
-  await shell.openExternal(url);
+  await shell.openExternal(String(url));
   return true;
 });
 
@@ -1341,7 +1510,7 @@ handle('open-external', async (_e, url) => {
 // ─────────────────────────────────────────────────────────────
 
 // 清理过期的中转图片（避免 tmp 目录无限增长）
-function sweepAttachTmp(dir, maxAgeMs) {
+function sweepAttachTmp(dir: string, maxAgeMs: number): void {
   try {
     const now = Date.now();
     for (const f of fs.readdirSync(dir)) {
@@ -1349,86 +1518,146 @@ function sweepAttachTmp(dir, maxAgeMs) {
         const p = path.join(dir, f);
         const st = fs.statSync(p);
         if (now - st.mtimeMs > maxAgeMs) fs.unlinkSync(p);
-      } catch (_) { /* 单个文件清理失败忽略 */ }
+      } catch {
+        /* 单个文件清理失败忽略 */
+      }
     }
-  } catch (_) { /* 目录不存在等忽略 */ }
+  } catch {
+    /* 目录不存在等忽略 */
+  }
+}
+
+/** `pickImageFileInput` 的回执 */
+interface PickedFileInput {
+  nodeId: number;
+  accept: string;
+  reason?: string;
 }
 
 // 在目标页面里挑出「图片型」file input（豆包同时存在文档类与图片类两个 input）
-async function pickImageFileInput(dbg) {
-  const doc = await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
-  const rootId = doc && doc.root ? doc.root.nodeId : 0;
+async function pickImageFileInput(dbg: WebContents['debugger']): Promise<PickedFileInput> {
+  const doc = (await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true })) as {
+    root?: { nodeId?: number };
+  };
+  const rootId = doc && doc.root ? doc.root.nodeId ?? 0 : 0;
   if (!rootId) return { nodeId: 0, accept: '', reason: '拿不到 DOM 根节点' };
-  let ids = [];
+  let ids: number[] = [];
   try {
-    const q = await dbg.sendCommand('DOM.querySelectorAll', { nodeId: rootId, selector: 'input[type=file]' });
+    const q = (await dbg.sendCommand('DOM.querySelectorAll', { nodeId: rootId, selector: 'input[type=file]' })) as {
+      nodeIds?: number[];
+    };
     ids = (q && q.nodeIds) || [];
-  } catch (_) { ids = []; }
+  } catch {
+    ids = [];
+  }
   if (!ids.length) return { nodeId: 0, accept: '', reason: '页面里没有 input[type=file]' };
 
-  let fallback = null;
+  let fallback: PickedFileInput | null = null;
   for (const nid of ids) {
     let accept = '';
     try {
-      const d = await dbg.sendCommand('DOM.describeNode', { nodeId: nid });
+      const d = (await dbg.sendCommand('DOM.describeNode', { nodeId: nid })) as {
+        node?: { attributes?: string[] };
+      };
       const attrs = (d && d.node && d.node.attributes) || [];
       for (let i = 0; i < attrs.length; i += 2) if (attrs[i] === 'accept') accept = String(attrs[i + 1] || '');
-    } catch (_) { /* 读不到属性就退化为无 accept */ }
+    } catch {
+      /* 读不到属性就退化为无 accept */
+    }
     if (/\.png|\.jpe?g|\.webp|image\//i.test(accept)) return { nodeId: nid, accept };
     if (!fallback) fallback = { nodeId: nid, accept };
   }
   return fallback || { nodeId: 0, accept: '', reason: '未找到可用 file input' };
 }
 
+/** `attach-images-to-webview` 的回执（源里是就地建的对象） */
+interface AttachImagesOut {
+  ok: boolean;
+  via: string;
+  files: { index: number; label: string; filePath: string; bytes: number; reused: boolean }[];
+  errors: string[];
+  nodeId?: number;
+  accept?: string;
+  count?: number;
+}
+
 // 容错靠内层 `out.errors` 累积（不抛）⇒ 无外层 catch，注册处守卫仅作兜底
 handle('attach-images-to-webview', async (_e, webContentsId, imgs) => {
   // imgs: [{ dataUrl, label }]，数组顺序即参考图顺序
-  const out = { ok: false, via: 'cdp-file-input', files: [], errors: [] };
-  const wc = webContents.fromId(webContentsId);
-  if (!wc) { out.errors.push(`找不到目标 webContents: ${webContentsId}`); return out; }
+  const out: AttachImagesOut = { ok: false, via: 'cdp-file-input', files: [], errors: [] };
+  const wc = webContents.fromId(Number(webContentsId));
+  if (!wc) {
+    out.errors.push(`找不到目标 webContents: ${String(webContentsId)}`);
+    return out;
+  }
   const list = Array.isArray(imgs) ? imgs : [];
-  if (!list.length) { out.errors.push('图片列表为空'); return out; }
+  if (!list.length) {
+    out.errors.push('图片列表为空');
+    return out;
+  }
 
   const tmpDir = path.join(os.tmpdir(), 'doubao-canvas', 'attach');
-  try { if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true }); } catch (_) { /* 忽略 */ }
+  try {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  } catch {
+    /* 忽略 */
+  }
   sweepAttachTmp(tmpDir, 6 * 60 * 60 * 1000); // 清掉 6 小时前的中转文件
 
   // ① 先把每张参考图落成真实文件（img:// 引用直接复用素材原文件，不复制）
   for (let i = 0; i < list.length; i++) {
-    const img = list[i] || {};
-    const label = img.label || `参考图${i + 1}`;
+    const img = asRecord(list[i]);
+    const label = (img['label'] as string | undefined) || `参考图${i + 1}`;
     try {
-      const dataUrl = String(img.dataUrl || '');
-      let filePath = null;
+      const dataUrl = String(img['dataUrl'] || '');
+      let filePath: string | null = null;
       let reused = false;
       if (dataUrl.startsWith('img://')) {
         filePath = resolveImageRef(dataUrl);
-        if (!filePath) { out.errors.push(`[${i}] ${label}: img:// 素材原文件不存在`); continue; }
+        if (!filePath) {
+          out.errors.push(`[${i}] ${label}: img:// 素材原文件不存在`);
+          continue;
+        }
         reused = true;
       } else {
         const m = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-        if (!m) { out.errors.push(`[${i}] ${label}: dataUrl 格式无效`); continue; }
-        const ext = (m[1].split('/')[1] || 'png').toLowerCase().replace('jpeg', 'jpg');
+        if (!m) {
+          out.errors.push(`[${i}] ${label}: dataUrl 格式无效`);
+          continue;
+        }
+        const ext = ((m[1] ?? '').split('/')[1] || 'png').toLowerCase().replace('jpeg', 'jpg');
         const safe = String(label).replace(/[\\/:"*?<>|]/g, '_').slice(0, 40);
         filePath = path.join(tmpDir, `${String(i).padStart(2, '0')}-${safe}-${Date.now()}.${ext}`);
-        fs.writeFileSync(filePath, Buffer.from(m[2], 'base64'));
+        fs.writeFileSync(filePath, Buffer.from(m[2] ?? '', 'base64'));
       }
-      if (!filePath || !fs.existsSync(filePath)) { out.errors.push(`[${i}] ${label}: 文件落盘失败`); continue; }
+      if (!filePath || !fs.existsSync(filePath)) {
+        out.errors.push(`[${i}] ${label}: 文件落盘失败`);
+        continue;
+      }
       const bytes = fs.statSync(filePath).size;
-      if (!bytes) { out.errors.push(`[${i}] ${label}: 图片数据为空`); continue; }
+      if (!bytes) {
+        out.errors.push(`[${i}] ${label}: 图片数据为空`);
+        continue;
+      }
       out.files.push({ index: i, label, filePath, bytes, reused });
     } catch (err) {
-      out.errors.push(`[${i}] ${label}: ${(err && err.message) || err}`);
+      out.errors.push(`[${i}] ${label}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  if (!out.files.length) { out.errors.push('没有任何可用的图片文件'); return out; }
+  if (!out.files.length) {
+    out.errors.push('没有任何可用的图片文件');
+    return out;
+  }
 
   // ② 用 CDP 把文件按顺序喂给豆包的上传控件
   const dbg = wc.debugger;
   let attachedHere = false;
   try {
     if (!dbg) throw new Error('该 webContents 不支持 debugger');
-    if (!dbg.isAttached()) { dbg.attach('1.3'); attachedHere = true; }
+    if (!dbg.isAttached()) {
+      dbg.attach('1.3');
+      attachedHere = true;
+    }
     await dbg.sendCommand('DOM.enable');
     const picked = await pickImageFileInput(dbg);
     out.nodeId = picked.nodeId;
@@ -1436,14 +1665,20 @@ handle('attach-images-to-webview', async (_e, webContentsId, imgs) => {
     if (!picked.nodeId) throw new Error(picked.reason || '未找到豆包的 file input');
     await dbg.sendCommand('DOM.setFileInputFiles', {
       files: out.files.map((f) => f.filePath),
-      nodeId: picked.nodeId
+      nodeId: picked.nodeId,
     });
     out.ok = true;
     out.count = out.files.length;
   } catch (err) {
-    out.errors.push(`CDP 喂文件失败: ${(err && err.message) || err}`);
+    out.errors.push(`CDP 喂文件失败: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
-    if (attachedHere) { try { dbg.detach(); } catch (_) { /* 忽略 */ } }
+    if (attachedHere) {
+      try {
+        dbg.detach();
+      } catch {
+        /* 忽略 */
+      }
+    }
   }
 
   // ③ 上传已在浏览器侧接管，延迟回收中转文件（不立刻删：Chromium 读取文件是惰性的）
@@ -1451,13 +1686,25 @@ handle('attach-images-to-webview', async (_e, webContentsId, imgs) => {
     const strays = out.files.filter((f) => !f.reused).map((f) => f.filePath);
     if (strays.length) {
       const t = setTimeout(() => {
-        strays.forEach((p) => { try { fs.unlinkSync(p); } catch (_) { /* 忽略 */ } });
+        strays.forEach((p) => {
+          try {
+            fs.unlinkSync(p);
+          } catch {
+            /* 忽略 */
+          }
+        });
       }, 5 * 60 * 1000);
       if (t && typeof t.unref === 'function') t.unref();
     }
   } else {
     out.files.forEach((f) => {
-      if (!f.reused) { try { fs.unlinkSync(f.filePath); } catch (_) { /* 忽略 */ } }
+      if (!f.reused) {
+        try {
+          fs.unlinkSync(f.filePath);
+        } catch {
+          /* 忽略 */
+        }
+      }
     });
   }
 
@@ -1492,8 +1739,8 @@ handle('copy-text-to-clipboard', async (_e, text) => {
     .replace(/&nbsp;/g, ' ')
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/g, "'")
-    .replace(/&#(\d+);/g, (_, cp) => String.fromCharCode(parseInt(cp, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, cp) => String.fromCharCode(parseInt(cp, 16)));
+    .replace(/&#(\d+);/g, (_, cp: string) => String.fromCharCode(parseInt(cp, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, cp: string) => String.fromCharCode(parseInt(cp, 16)));
 
   // ── Step 3: 清理空白 ──
   clean = clean.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -1511,8 +1758,8 @@ handle('copy-text-to-clipboard', async (_e, text) => {
 // 在指定 webview 的 webContents 中触发真实粘贴（等同用户按 Cmd+V）
 // 豆包原生 paste 处理器会把系统剪贴板内容写入 React state，规避合成事件无效的问题
 handle('paste-to-webview', async (_e, webContentsId) => {
-  const wc = webContents.fromId(webContentsId);
-  if (!wc) return { ok: false, error: '找不到 webContents: ' + webContentsId };
+  const wc = webContents.fromId(Number(webContentsId));
+  if (!wc) return { ok: false, error: '找不到 webContents: ' + String(webContentsId) };
   wc.paste();
   return { ok: true };
 });
@@ -1521,46 +1768,66 @@ handle('paste-to-webview', async (_e, webContentsId) => {
 // 账号导入导出 —— cookie 级别会话数据
 // ============================================================
 
+/** cookie 的 sameSite 取值（electron 的 `CookiesSetDetails['sameSite']` 含 undefined ⇒ 单列一个） */
+type SameSite = 'unspecified' | 'no_restriction' | 'lax' | 'strict';
+
+/** 账号导出里的一条 cookie（源里就地 map 出的形状；两个字段都可能缺席 ⇒ 显式 `| undefined`） */
+interface AccountCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  expirationDate?: number | undefined;
+  sameSite?: SameSite | undefined;
+}
+
 // 读取指定 partition 持久化会话的全部 cookie
 handle('export-account-cookies', async (_e, partition) => {
-  const ses = session.fromPartition(partition);
+  const ses = session.fromPartition(String(partition));
   const cookies = await ses.cookies.get({});
   // 序列化：移除 hostOnly/sameSite 等无法直接 set 的只读字段，保留核心字段
-  const clean = cookies.map((c) => ({
+  const clean: AccountCookie[] = cookies.map((c) => ({
     name: c.name,
     value: c.value,
-    domain: c.domain,
+    domain: c.domain as string,
     path: c.path || '/',
     secure: c.secure || false,
     httpOnly: c.httpOnly || false,
     expirationDate: c.expirationDate,
-    sameSite: c.sameSite || 'unspecified'
+    sameSite: (c.sameSite || 'unspecified') as SameSite,
   }));
   return { ok: true, cookies: clean, count: clean.length };
 });
 
 // 将一组 cookie 写入指定 partition 的持久化会话
 handle('import-account-cookies', async (_e, partition, cookies) => {
-  const ses = session.fromPartition(partition);
+  const ses = session.fromPartition(String(partition));
   let okCount = 0;
-  for (const c of cookies) {
+  const list = Array.isArray(cookies) ? cookies : [];
+  for (const raw of list) {
+    const c = asRecord(raw);
     try {
-      const url = `${c.secure ? 'https' : 'http'}://${c.domain.replace(/^\./, '')}${c.path || '/'}`;
+      const domain = String(c['domain'] || '');
+      const url = `${c['secure'] ? 'https' : 'http'}://${domain.replace(/^\./, '')}${String(c['path'] || '/')}`;
       await ses.cookies.set({
         url,
-        name: c.name,
-        value: c.value,
-        domain: c.domain,
-        path: c.path || '/',
-        secure: c.secure || false,
-        httpOnly: c.httpOnly || false,
-        expirationDate: c.expirationDate,
-        sameSite: c.sameSite || 'unspecified'
+        name: String(c['name'] || ''),
+        value: String(c['value'] || ''),
+        domain,
+        path: String(c['path'] || '/'),
+        secure: Boolean(c['secure']),
+        httpOnly: Boolean(c['httpOnly']),
+        ...(typeof c['expirationDate'] === 'number' ? { expirationDate: c['expirationDate'] } : {}),
+        sameSite: String(c['sameSite'] || 'unspecified') as SameSite,
       });
       okCount++;
-    } catch { /* 单个 cookie 失败不中断 */ }
+    } catch {
+      /* 单个 cookie 失败不中断 */
+    }
   }
-  return { ok: true, restored: okCount, total: cookies.length };
+  return { ok: true, restored: okCount, total: list.length };
 });
 
 // 保存账号导出文件
@@ -1569,10 +1836,10 @@ handle('save-accounts-file', async (_e, content) => {
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '导出豆包账号',
     defaultPath: `doubao-accounts-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: '豆包账号备份', extensions: ['json'] }]
+    filters: [{ name: '豆包账号备份', extensions: ['json'] }],
   });
   if (res.canceled || !res.filePath) return { ok: false, error: '已取消' };
-  fs.writeFileSync(res.filePath, content, 'utf-8');
+  fs.writeFileSync(res.filePath, content as string, 'utf-8');
   return { ok: true, path: res.filePath };
 });
 
@@ -1582,10 +1849,11 @@ handle('load-accounts-file', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '导入豆包账号',
     properties: ['openFile'],
-    filters: [{ name: '豆包账号备份', extensions: ['json'] }]
+    filters: [{ name: '豆包账号备份', extensions: ['json'] }],
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
-  return fs.readFileSync(res.filePaths[0], 'utf-8');
+  // 上一行已保证长度 > 0 ⇒ 断言只为过 `noUncheckedIndexedAccess`，运行期同一个值
+  return fs.readFileSync(res.filePaths[0] as string, 'utf-8');
 });
 
 // 选择下载目录
@@ -1593,29 +1861,36 @@ handle('select-folder', async () => {
   if (!mainWindow) return null;
   const res = await dialog.showOpenDialog(mainWindow, {
     title: '选择下载目录',
-    properties: ['openDirectory', 'createDirectory']
+    properties: ['openDirectory', 'createDirectory'],
   });
   if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null;
   return res.filePaths[0];
 });
 
+/** 下载回执（源里是就地 return 的字面量） */
+type DownloadResult = { ok: true; path: string; size: number } | { ok: false; error: string };
+
 // 下载文件到指定路径（支持重定向跟随）
-function downloadUrl(url, filePath) {
-  const { net } = require('electron');
+function downloadUrl(url: string, filePath: string): Promise<DownloadResult> {
+  /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports --
+     §7 C-3：**函数内惰性 require 保留原样**（源如此）；§7 C-3 授权局部放行。 */
+  const { net } = require('electron') as typeof import('electron');
+  /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports */
   return new Promise((resolve) => {
     try {
       const request = net.request({ url, method: 'GET' });
-      const chunks = [];
+      const chunks: Buffer[] = [];
       request.on('response', (response) => {
-        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          resolve(downloadUrl(response.headers.location, filePath));
+        const location = response.headers['location'];
+        if (response.statusCode >= 300 && response.statusCode < 400 && typeof location === 'string') {
+          resolve(downloadUrl(location, filePath));
           return;
         }
         if (response.statusCode !== 200) {
           resolve({ ok: false, error: 'http_' + response.statusCode });
           return;
         }
-        response.on('data', (d) => chunks.push(d));
+        response.on('data', (d: Buffer) => chunks.push(d));
         response.on('end', () => {
           try {
             const dir = path.dirname(filePath);
@@ -1623,31 +1898,32 @@ function downloadUrl(url, filePath) {
             fs.writeFileSync(filePath, Buffer.concat(chunks));
             resolve({ ok: true, path: filePath, size: Buffer.concat(chunks).length });
           } catch (writeErr) {
-            resolve({ ok: false, error: writeErr.message || String(writeErr) });
+            resolve({ ok: false, error: writeErr instanceof Error ? writeErr.message : String(writeErr) });
           }
         });
-        response.on('error', (err) => resolve({ ok: false, error: err.message || String(err) }));
+        response.on('error', (err: Error) => resolve({ ok: false, error: err.message || String(err) }));
       });
-      request.on('error', (err) => resolve({ ok: false, error: err.message || String(err) }));
+      request.on('error', (err: Error) => resolve({ ok: false, error: err.message || String(err) }));
       request.end();
     } catch (ex) {
-      resolve({ ok: false, error: ex.message || String(ex) });
+      resolve({ ok: false, error: ex instanceof Error ? ex.message : String(ex) });
     }
   });
 }
 
 handle('download-file', async (_e, url, filePath) => {
   if (!url || !filePath) return { ok: false, error: 'missing_args' };
+  const target = String(filePath);
   // vid:// 引用：文件已在本地，直接复制（不走网络）
   if (typeof url === 'string' && url.startsWith('vid://')) {
     const src = resolveVideoRef(url);
     if (!src) return { ok: false, error: '视频文件不存在（vid:// 引用失效）' };
     try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      fs.copyFileSync(src, filePath);
-      return { ok: true, path: filePath, size: fs.statSync(src).size };
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(src, target);
+      return { ok: true, path: target, size: fs.statSync(src).size };
     } catch (e) {
-      return { ok: false, error: (e && e.message) || String(e) };
+      return { ok: false, error: (e && (e instanceof Error ? e.message : String(e))) || String(e) };
     }
   }
   // img:// 引用：图片本体已在本地，直接复制（不走网络）—— 与 download-file-as 同口径
@@ -1655,35 +1931,36 @@ handle('download-file', async (_e, url, filePath) => {
     const src = resolveImageRef(url);
     if (!src) return { ok: false, error: '图片文件不存在（img:// 引用失效）' };
     try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      fs.copyFileSync(src, filePath);
-      return { ok: true, path: filePath, size: fs.statSync(src).size };
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(src, target);
+      return { ok: true, path: target, size: fs.statSync(src).size };
     } catch (e) {
-      return { ok: false, error: (e && e.message) || String(e) };
+      return { ok: false, error: (e && (e instanceof Error ? e.message : String(e))) || String(e) };
     }
   }
   // data: URL：内联 base64，直接解码落盘
   const dm = typeof url === 'string' ? url.match(/^data:([^;,]+);base64,(.+)$/) : null;
   if (dm) {
     try {
-      const buf = Buffer.from(dm[2], 'base64');
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      fs.writeFileSync(filePath, buf);
-      return { ok: true, path: filePath, size: buf.length };
+      const buf = Buffer.from(dm[2] ?? '', 'base64');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, buf);
+      return { ok: true, path: target, size: buf.length };
     } catch (e) {
-      return { ok: false, error: (e && e.message) || String(e) };
+      return { ok: false, error: (e && (e instanceof Error ? e.message : String(e))) || String(e) };
     }
   }
-  return downloadUrl(url, filePath);
+  return downloadUrl(String(url), target);
 });
 
 // 视频本地化：把远端视频直链下载进 userData/videos/，返回 vid:// 引用。
 // 先带豆包 Referer（多数 CDN 防盗链要求）下载；失败再不带 Referer 试一次。
 // 下载失败不影响原直链继续使用（渲染层保留原 URL，行为同旧版）。
 handle('save-video-from-url', async (_e, p) => {
-  const url = p && p.url;
+  const pp = asRecord(p);
+  const url = pp['url'];
   if (!url) return { ok: false, error: 'missing_args' };
-  const r = await saveVideoFromUrl(url, (p && p.referer) || 'https://www.doubao.com/');
+  const r = await saveVideoFromUrl(url, pp['referer'] || 'https://www.doubao.com/');
   if (r.ok) return r;
   const r2 = await saveVideoFromUrl(url, '');
   return r2.ok ? r2 : r;
@@ -1700,24 +1977,28 @@ handle('download-file-as', async (_e, url, defaultName, filters) => {
   let defaultDir = app.getPath('downloads');
   try {
     if (!fs.existsSync(defaultDir)) defaultDir = app.getPath('home');
-  } catch (_) {
+  } catch {
     defaultDir = app.getPath('home');
   }
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '保存到…',
     defaultPath: path.join(defaultDir, safeName),
-    filters: Array.isArray(filters) && filters.length ? filters : [{ name: '所有文件', extensions: ['*'] }]
+    // `filters` 来自渲染层（原生对话框过滤器）⇒ 断言只为过声明类型
+    filters:
+      Array.isArray(filters) && filters.length ? (filters as Electron.FileFilter[]) : [{ name: '所有文件', extensions: ['*'] }],
   });
   if (!res || res.canceled || !res.filePath) return { ok: false, canceled: true };
+  // 收成局部变量：下面几处在闭包（try/catch）里用 ⇒ TS 不保留属性收窄，源用的就是同一个值
+  const outPath = res.filePath;
   // vid:// 引用：文件已在本地，直接复制到用户选的路径（不走网络）
   if (typeof url === 'string' && url.startsWith('vid://')) {
     const src = resolveVideoRef(url);
     if (!src) return { ok: false, canceled: false, error: '视频文件不存在（vid:// 引用失效）' };
     try {
-      fs.copyFileSync(src, res.filePath);
-      return { ok: true, canceled: false, path: res.filePath, size: fs.statSync(src).size };
+      fs.copyFileSync(src, outPath);
+      return { ok: true, canceled: false, path: outPath, size: fs.statSync(src).size };
     } catch (e) {
-      return { ok: false, canceled: false, error: (e && e.message) || String(e) };
+      return { ok: false, canceled: false, error: (e && (e instanceof Error ? e.message : String(e))) || String(e) };
     }
   }
   // img:// 引用：图片本体已在本地（userData/images/），同样直接复制（不走网络）。
@@ -1727,25 +2008,26 @@ handle('download-file-as', async (_e, url, defaultName, filters) => {
     const src = resolveImageRef(url);
     if (!src) return { ok: false, canceled: false, error: '图片文件不存在（img:// 引用失效）' };
     try {
-      fs.copyFileSync(src, res.filePath);
-      return { ok: true, canceled: false, path: res.filePath, size: fs.statSync(src).size };
+      fs.copyFileSync(src, outPath);
+      return { ok: true, canceled: false, path: outPath, size: fs.statSync(src).size };
     } catch (e) {
-      return { ok: false, canceled: false, error: (e && e.message) || String(e) };
+      return { ok: false, canceled: false, error: (e && (e instanceof Error ? e.message : String(e))) || String(e) };
     }
   }
   // data: URL：内联 base64，直接解码落盘（不走网络）
   const dm = typeof url === 'string' ? url.match(/^data:([^;,]+);base64,(.+)$/) : null;
   if (dm) {
     try {
-      const buf = Buffer.from(dm[2], 'base64');
-      fs.writeFileSync(res.filePath, buf);
-      return { ok: true, canceled: false, path: res.filePath, size: buf.length };
+      const buf = Buffer.from(dm[2] ?? '', 'base64');
+      fs.writeFileSync(outPath, buf);
+      return { ok: true, canceled: false, path: outPath, size: buf.length };
     } catch (e) {
-      return { ok: false, canceled: false, error: (e && e.message) || String(e) };
+      return { ok: false, canceled: false, error: (e && (e instanceof Error ? e.message : String(e))) || String(e) };
     }
   }
-  const r = await downloadUrl(url, res.filePath);
-  return { ...r, canceled: false, path: (r && r.path) || res.filePath };
+  const r = await downloadUrl(String(url), outPath);
+  // 源写 `(r && r.path) || res.filePath`：失败分支没有 `path` 键 ⇒ 断言只为过声明类型（擦除）
+  return { ...r, canceled: false, path: (r as { path?: string }).path || outPath };
 });
 
 // 在 Finder / 资源管理器中定位文件：
@@ -1754,7 +2036,8 @@ handle('download-file-as', async (_e, url, defaultName, filters) => {
 // ⇒ 一个入口收两种输入，由本 handler 自己判别并解析 —— 调用方**没有**「该调哪个方法」的选择余地。
 handle('reveal-path', async (_e, p) => {
   if (!p) return { ok: false, error: 'missing_args' };
-  const target = String(p).startsWith('img://') ? resolveImageRef(p) : p;
+  // `p` 是 IPC 形参（`unknown`）⇒ 断言只为过声明类型（源直接把 `p` 交给 openPath，运行期就是字符串）
+  const target = String(p).startsWith('img://') ? resolveImageRef(p) : (p as string);
   if (!target) return { ok: false, error: '未找到对应的本地文件（素材可能还没有落盘）' };
   shell.showItemInFolder(target);
   return { ok: true, path: target };
@@ -1773,11 +2056,12 @@ handle('capture-rect', async (_e, rect) => {
   if (!mainWindow) return { ok: false, error: '窗口未就绪' };
   const img = await mainWindow.webContents.capturePage();
   if (!rect) return { ok: true, dataUrl: img.toDataURL() };
+  const rc = asRecord(rect);
   const size = img.getSize();
-  const x = Math.max(0, Math.min(Math.round(rect.x), size.width));
-  const y = Math.max(0, Math.min(Math.round(rect.y), size.height));
-  const w = Math.max(0, Math.min(Math.round(rect.width), size.width - x));
-  const h = Math.max(0, Math.min(Math.round(rect.height), size.height - y));
+  const x = Math.max(0, Math.min(Math.round(Number(rc['x'])), size.width));
+  const y = Math.max(0, Math.min(Math.round(Number(rc['y'])), size.height));
+  const w = Math.max(0, Math.min(Math.round(Number(rc['width'])), size.width - x));
+  const h = Math.max(0, Math.min(Math.round(Number(rc['height'])), size.height - y));
   if (w <= 0 || h <= 0) {
     return { ok: false, error: 'capture-rect-out-of-bounds' };
   }
@@ -1792,7 +2076,7 @@ handle('capture-rect', async (_e, rect) => {
 //       被服务端识别为非浏览器请求导致 empty_response
 // ============================================================
 handle('detect-videos', async (_e, webContentsId, seenKeys) => {
-  const wc = webContents.fromId(webContentsId);
+  const wc = webContents.fromId(Number(webContentsId));
   if (!wc || wc.isDestroyed()) return { ok: false, error: 'webview已销毁' };
 
   const wcUrl = wc.getURL();
@@ -1806,13 +2090,21 @@ handle('detect-videos', async (_e, webContentsId, seenKeys) => {
   }
 
   // ── 阶段0：验证 webview 可执行脚本（区分「注入失败」vs「脚本内报错」）──
-  let injectOk = false;
+  let injectOk: unknown = false;
   try {
     injectOk = await wc.executeJavaScript('({injectTest:true})');
   } catch (injectErr) {
-    return { ok: false, error: 'inject_failed', _diag: { step: 'inject_test', detail: injectErr?.message || String(injectErr), url: wcUrl } };
+    return {
+      ok: false,
+      error: 'inject_failed',
+      _diag: {
+        step: 'inject_test',
+        detail: injectErr instanceof Error ? injectErr.message : String(injectErr),
+        url: wcUrl,
+      },
+    };
   }
-  if (!injectOk || !injectOk.injectTest) {
+  if (!injectOk || !asRecord(injectOk)['injectTest']) {
     return { ok: false, error: 'inject_verify_failed', _diag: { step: 'inject_test', result: injectOk, url: wcUrl } };
   }
 
@@ -1950,8 +2242,12 @@ handle('detect-videos', async (_e, webContentsId, seenKeys) => {
 })()
 `;
 
-  const rawResult = await wc.executeJavaScript(DETECT_JS)
-    .catch((execErr) => ({ ok: false, error: 'exec:' + (execErr?.message || String(execErr)), _diag: { method: 'webview-fetch', url: wcUrl } }));
+  // `executeJavaScript` 的返回类型是 `any` ⇒ 收成 `unknown` 再判（避免 any 泄漏）
+  const rawResult: unknown = await wc.executeJavaScript(DETECT_JS).catch((execErr: unknown) => ({
+    ok: false,
+    error: 'exec:' + (execErr instanceof Error ? execErr.message : String(execErr)),
+    _diag: { method: 'webview-fetch', url: wcUrl },
+  }));
 
   if (!rawResult || typeof rawResult !== 'object') {
     return { ok: false, error: 'invalid_result_type:' + typeof rawResult };
@@ -1963,7 +2259,7 @@ handle('detect-videos', async (_e, webContentsId, seenKeys) => {
 // 回执含 `errors:[]`（与守卫的 `{ok:false,error}` 形状不同）⇒ 外层 try/catch 就地保留
 handle('detect-errors', async (_e, webContentsId) => {
   try {
-    const wc = webContents.fromId(webContentsId);
+    const wc = webContents.fromId(Number(webContentsId));
     if (!wc || wc.isDestroyed()) return { ok: false, errors: [] };
     if (wc.isLoading() || wc.getURL() === 'about:blank') return { ok: false, errors: [] };
 
@@ -1993,12 +2289,15 @@ handle('detect-errors', async (_e, webContentsId) => {
   } catch(e){ return { ok:false, errors:[], error:e.message||String(e)};}
 })
 `;
-    const rawResult = await wc.executeJavaScript(`(${ERROR_JS})()`)
-      .catch((execErr) => ({ ok: false, errors: [], error: 'exec:' + (execErr?.message || String(execErr)) }));
+    const rawResult: unknown = await wc.executeJavaScript(`(${ERROR_JS})()`).catch((execErr: unknown) => ({
+      ok: false,
+      errors: [],
+      error: 'exec:' + (execErr instanceof Error ? execErr.message : String(execErr)),
+    }));
     if (!rawResult || typeof rawResult !== 'object') return { ok: false, errors: [] };
     return rawResult;
   } catch (err) {
-    return { ok: false, errors: [], error: err.message || String(err) };
+    return { ok: false, errors: [], error: err instanceof Error ? err.message : String(err) };
   }
 });
 
@@ -2007,14 +2306,19 @@ handle('detect-errors', async (_e, webContentsId) => {
 
 // 由主进程直接对 webview 执行 JS，把真实时长下拉 DOM 拉回主进程写盘（绕过不可靠的 webview→主进程回传通道）。
 // 这样只要脚本被注入、且 dola 页面加载过，~/dola-duration-debug.log 就一定会有真实结构数据，便于精准修复。
-function dolaDurationDump() {
+// ⚠️ 本函数会被 `.toString()` 注入页面 ⇒ **语句/表达式逐字不动**（类型标注与断言在编译期擦除，
+//    产出的 JS 文本与源一致）。
+/* eslint-disable no-var, no-restricted-globals -- 本函数整体会被 `.toString()` 注入 guest 页面：
+   `var` 与 `document` 都是**注入脚本的一部分**（页面里的 `document` 正是要用的 API），必须与源逐字一致。
+   §6 S0-4 的「局部放行」机制：规则不移除，只在本段内放行并写明理由。 */
+function dolaDurationDump(): string {
   try {
     var durRe = /^(5|10|15|30|60)\s*(s|秒)?$/i;
-    function leavesOf(root) {
-      var out = [];
+    function leavesOf(root: Document): Element[] {
+      var out: Element[] = [];
       var all = root.querySelectorAll('*');
       for (var i = 0; i < all.length; i++) {
-        var el = all[i];
+        var el = all[i] as Element;
         if (el.children.length === 0) {
           var t = (el.textContent || '').trim();
           if (durRe.test(t)) out.push(el);
@@ -2022,19 +2326,24 @@ function dolaDurationDump() {
       }
       return out;
     }
-    function countDesc(el) {
-      var c = 0, k = el.querySelectorAll('*');
+    function countDesc(el: Element): number {
+      var c = 0,
+        k = el.querySelectorAll('*');
       for (var j = 0; j < k.length; j++) {
-        if (k[j].children.length === 0 && durRe.test((k[j].textContent || '').trim())) c++;
+        if ((k[j] as Element).children.length === 0 && durRe.test(((k[j] as Element).textContent || '').trim())) c++;
       }
       return c;
     }
-    function chain(el) {
-      var arr = [], p = el;
+    function chain(el: Node | null): string[] {
+      var arr: string[] = [],
+        p = el;
       for (var k = 0; k < 8 && p; k++) {
-        var cls = (p.className && typeof p.className === 'string') ? p.className.split(' ').slice(0, 3).join('.') : '';
-        arr.push((p.tagName || '') + (cls ? '.' + cls : ''));
-        p = p.parentElement;
+        var cls =
+          (p as Element).className && typeof (p as Element).className === 'string'
+            ? (p as Element).className.split(' ').slice(0, 3).join('.')
+            : '';
+        arr.push(((p as Element).tagName || '') + (cls ? '.' + cls : ''));
+        p = (p as Element).parentElement;
       }
       return arr;
     }
@@ -2042,7 +2351,8 @@ function dolaDurationDump() {
     if (!leaves.length) {
       return JSON.stringify({ leaves: 0, note: '页面无 5s/10s/15s 这类时长叶子，可能标签不同或尚未加载' });
     }
-    var container = leaves[0].parentElement, guard = 0;
+    var container = (leaves[0] as Element).parentElement,
+      guard = 0;
     while (container && container.parentElement && guard++ < 12) {
       if (countDesc(container) >= 2) break;
       container = container.parentElement;
@@ -2051,29 +2361,34 @@ function dolaDurationDump() {
       return {
         text: (l.textContent || '').trim(),
         tag: l.tagName,
-        cls: (l.className && typeof l.className === 'string') ? l.className.slice(0, 90) : '',
+        cls: l.className && typeof l.className === 'string' ? l.className.slice(0, 90) : '',
         role: l.getAttribute && l.getAttribute('role'),
-        chain: chain(l.parentNode)
+        chain: chain(l.parentNode),
       };
     });
     var html = container ? container.outerHTML.slice(0, 6000) : '';
     return JSON.stringify({ leaves: leaves.length, info: info, containerHTML: html });
   } catch (e) {
-    return JSON.stringify({ error: e.message });
+    return JSON.stringify({ error: e instanceof Error ? e.message : String(e) });
   }
 }
+/* eslint-enable no-var, no-restricted-globals */
 const DUMP_EXPR = `(${dolaDurationDump.toString()})()`;
 
 handle('inject-dola-duration-main', async (_e, webContentsId) => {
   // 保底：本 handler 一旦被调用，立刻写这一行，证明触发（写在 wc 校验之前，避免 id 无效时连日志都没有）
   const logPath = path.join(os.homedir(), 'dola-duration-debug.log');
-  const writeLog = (line) => {
-    try { fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${line}\n`); } catch (e) { /* 忽略 */ }
+  const writeLog = (line: string): void => {
+    try {
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${line}\n`);
+    } catch {
+      /* 忽略 */
+    }
   };
-  writeLog(`INJECT-START wcId=${webContentsId}`);
-  const wc = webContents.fromId(webContentsId);
+  writeLog(`INJECT-START wcId=${String(webContentsId)}`);
+  const wc = webContents.fromId(Number(webContentsId));
   if (!wc || wc.isDestroyed()) {
-    writeLog(`INJECT-SKIP wcId=${webContentsId} reason=webview已销毁或id无效`);
+    writeLog(`INJECT-SKIP wcId=${String(webContentsId)} reason=webview已销毁或id无效`);
     return { ok: false, error: 'webview 已销毁或 id 无效' };
   }
   try {
@@ -2082,7 +2397,9 @@ handle('inject-dola-duration-main', async (_e, webContentsId) => {
     //   外层 `.catch` 是**主进程**的 ⇒ 必须留痕（否则"开关没打开"永远查不出来）
     await wc
       .executeJavaScript("try{localStorage.setItem('intl_doubao_enable_30s_v1','1')}catch(e){}")
-      .catch((e) => console.warn('[dola-30s] 打开 30s 开关失败（注入页面前置步骤）:', (e && e.message) || e));
+      .catch((e: unknown) =>
+        console.warn('[dola-30s] 打开 30s 开关失败（注入页面前置步骤）:', e instanceof Error ? e.message : String(e)),
+      );
     const script = fs.readFileSync(path.join(__dirname, 'dola-duration-main.js'), 'utf8');
     writeLog(`INJECT-SCRIPT scriptLen=${script.length}`);
     // ★ **站点域名由宿主传参**（2026-10-14 收口）：`dola-duration-main.js` 是**函数表达式**，
@@ -2093,27 +2410,35 @@ handle('inject-dola-duration-main', async (_e, webContentsId) => {
     //         登记为残留，见 `docs/判据登记表.md` §4「站点域名」行）。
     //   ⚠️ 改这里必须同步改 `dola-duration-main.js`（它已去掉自调用，单独跑不会再自执行）。
     await wc.executeJavaScript(`(${script})(${JSON.stringify({ SITE_HOSTS: siteHosts.SITE_HOSTS })})`);
-    writeLog(`INJECT-DONE wcId=${webContentsId}`);
+    writeLog(`INJECT-DONE wcId=${String(webContentsId)}`);
 
     // 主进程主动拉取真实时长 DOM（每 3s，DOM 变化时写盘），绕过 webview→主进程的不可靠回传通道
     let lastSig = '';
+    // 源就是 `setInterval(async () => …)`（fire-and-forget 轮询）⇒ 闸要求显式说明：
+    // 回调里的 promise 由内部 try/catch 兜住，不向外抛（改成外层 void 包一层会动定时逻辑）
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     const dumpTimer = setInterval(async () => {
-      if (!wc || wc.isDestroyed()) { clearInterval(dumpTimer); return; }
+      if (!wc || wc.isDestroyed()) {
+        clearInterval(dumpTimer);
+        return;
+      }
       try {
-        const res = await wc.executeJavaScript(DUMP_EXPR);
+        const res: unknown = await wc.executeJavaScript(DUMP_EXPR);
         const sig = String(res).slice(0, 400);
         if (sig !== lastSig) {
           lastSig = sig;
-          writeLog(`DUMP ${res}`);
+          writeLog(`DUMP ${String(res)}`);
         }
-      } catch (e) { /* 忽略单次拉取失败 */ }
+      } catch {
+        /* 忽略单次拉取失败 */
+      }
     }, 3000);
     wc.once('destroyed', () => clearInterval(dumpTimer));
 
     return { ok: true };
   } catch (err) {
     // 写诊断日志是守卫不做的（守卫只把异常转回执）⇒ 就地保留；回执转换交注册处
-    writeLog(`INJECT-ERROR ${err?.message || String(err)}`);
+    writeLog(`INJECT-ERROR ${err instanceof Error ? err.message : String(err)}`);
     throw err;
   }
 });
@@ -2133,7 +2458,7 @@ handle('export-machine-code', async (_e, machineCode) => {
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '导出机器码',
     defaultPath: `machine-code-${new Date().toISOString().slice(0, 10)}.txt`,
-    filters: [{ name: '文本文件', extensions: ['txt'] }]
+    filters: [{ name: '文本文件', extensions: ['txt'] }],
   });
   if (res.canceled || !res.filePath) return { ok: false, error: '已取消' };
   fs.writeFileSync(res.filePath, String(machineCode || ''), 'utf-8');
@@ -2146,13 +2471,14 @@ handle('export-machine-code', async (_e, machineCode) => {
 // 返回 { ok, preloadUrl }，渲染进程将其作为 <webview preload> 属性挂载
 // ============================================================
 handle('ensure-fingerprint', async (_e, acc) => {
+  const ac = asRecord(acc);
   const dir = path.join(app.getPath('userData'), 'fingerprints');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   // 仅保留安全文件名字符，防止目录穿越
-  const id = String(acc && acc.id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const id = String(ac['id'] || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
   const jsonPath = path.join(dir, `${id}.json`);
   const jsPath = path.join(dir, `${id}.js`);
-  const fp = (acc && acc.fingerprint) || {};
+  const fp = ac['fingerprint'] || {};
   fs.writeFileSync(jsonPath, JSON.stringify(fp));
   fs.writeFileSync(jsPath, buildFingerprintPreload(fp));
   // HTTP 层：注入 Accept-Language（DOM 层在 preload 内覆盖）
@@ -2160,31 +2486,37 @@ handle('ensure-fingerprint', async (_e, acc) => {
   //   后端不再猜站点；且内层失败**如实上报**（探债段解法第二条）——
   //   此前这里是「**无兜底** + 只 console.error + **仍回 ok:true**」⇒ 建号（partition:null）时
   //   头注入静默跳过，而调用方拿到的是"成功"（探债段症状①）。
-  if (!acc.partition) throw new Error('ensure-fingerprint: 缺少 partition（应由前端按账号类型提供）');
+  if (!ac['partition']) throw new Error('ensure-fingerprint: 缺少 partition（应由前端按账号类型提供）');
   try {
-    const ses = session.fromPartition(acc.partition);
-    applyFingerprintHeaders(ses, fp);
+    const ses = session.fromPartition(String(ac['partition']));
+    applyFingerprintHeaders(ses, fp as { languages?: unknown; uaClientHints?: Record<string, unknown> });
   } catch (e) {
-    throw new Error(`[fingerprint] 设置请求头失败: ${e && e.message || e}`);
+    throw new Error(`[fingerprint] 设置请求头失败: ${e instanceof Error ? e.message : String(e)}`);
   }
   return { ok: true, preloadUrl: pathToFileURL(jsPath).href };
 });
 
 // 指纹诊断（2026-09-28 Windows 502|4502 排查）：返回该账号会话的真实出口链路（系统代理会
 // 被 Chromium 默认接管，resolveProxy 能直接看出流量是否走了 PROXY）与真实引擎版本。
-handle('fp-net-diag', async (_e, { partition } = {}) => {
+handle('fp-net-diag', async (_e, p) => {
+  // 源是 `{ partition } = {}` 解构（形参是 `unknown` ⇒ 用 asRecord 取同一件事）
+  const partition = asRecord(p)['partition'];
   // ★ 2026-10-12（TD-04-11）：**不再猜站点** —— 此前无分区就探 `persist:doubao`
   //   ⇒ 非豆包号拿到的诊断报告是**别的会话**的出口（探债段症状②）。前端有账号类型时
   //   会用真源算好分区（core/rules/partition.defaultPartitionOf）；这里没有 ⇒ 明确失败。
   if (!partition) throw new Error('fp-net-diag: 缺少 partition（应由前端按账号类型提供）');
-  const ses = session.fromPartition(partition);
+  const ses = session.fromPartition(String(partition));
   let proxy = '';
-  try { proxy = await ses.resolveProxy('https://www.doubao.com'); } catch (_) { proxy = ''; }
+  try {
+    proxy = await ses.resolveProxy('https://www.doubao.com');
+  } catch {
+    proxy = '';
+  }
   return {
     ok: true,
     proxy: String(proxy || '').trim(), // 'DIRECT' 或 'PROXY host:port ...'
     engineChrome: process.versions.chrome || '',
-    hostPlatform: process.platform
+    hostPlatform: process.platform,
   };
 });
 
@@ -2220,11 +2552,15 @@ handle('fp-net-diag', async (_e, { partition } = {}) => {
 //   'zh-CN,zh;q=0.9;q=0.9,en-US;q=0.8;q=0.8,en;q=0.7;q=0.7'
 // 真实 Chrome 永不发出这种头，属「非真实浏览器」的显式痕迹，故必须用纯列表。
 // 语言统一取「系统语言 + 其主语言」，与 JS 侧 navigator.languages 首项保持一致。
-function buildPlainAcceptLanguages() {
+function buildPlainAcceptLanguages(): string {
   let loc = '';
-  try { loc = String(app.getLocale() || ''); } catch (_) { loc = ''; }
+  try {
+    loc = String(app.getLocale() || '');
+  } catch {
+    loc = '';
+  }
   if (!loc) loc = 'en-US';
-  const base = loc.split('-')[0];
+  const base = loc.split('-')[0] ?? '';
   return base && base !== loc ? `${loc},${base}` : loc;
 }
 
@@ -2239,12 +2575,12 @@ function buildPlainAcceptLanguages() {
 //     Cloudflare 通过，但 126 偏旧仍被 Lovart 风控 → 最终通过升级 Electron 到 44 根治。
 //   · 本常量随引擎自动取值，引擎升级后无需手工维护。
 const CHROME_COMPAT_MAJOR = (() => {
-  const m = parseInt(String(process.versions.chrome).split('.')[0], 10);
+  const m = parseInt(String(process.versions.chrome).split('.')[0] ?? '', 10);
   return m || 126;
 })();
 
 // Chrome 110+ 的 UA 与客户端提示都冻结为 major.0.0.0，只暴露主版本。
-function buildCleanChromeUA() {
+function buildCleanChromeUA(): string {
   return (
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
     `(KHTML, like Gecko) Chrome/${CHROME_COMPAT_MAJOR}.0.0.0 Safari/537.36`
@@ -2262,9 +2598,10 @@ function buildCleanChromeUA() {
 
 handle('ensure-plain-session', async (_e, acc) => {
   try {
+    const ac = asRecord(acc);
     // ★ 2026-10-12（TD-04-11）：不再猜 `persist:lovart` —— 前端按账号类型算好分区；
     //   拿不到就明确失败（静默落到别的 session 比报错更难查）。
-    const partition = (acc && acc.partition) || '';
+    const partition = String(ac['partition'] || '');
     if (!partition) throw new Error('缺少 partition（应由前端按账号类型提供）');
     const ses = session.fromPartition(partition);
     const ua = buildCleanChromeUA();
@@ -2275,7 +2612,7 @@ handle('ensure-plain-session', async (_e, acc) => {
     return { ok: true, userAgent: ua, acceptLanguage: lang };
   } catch (err) {
     // 留痕是守卫不做的（守卫只把异常转回执）⇒ 就地保留；回执转换交注册处
-    console.error('[plain-session] 应用失败:', (err && err.message) || err);
+    console.error('[plain-session] 应用失败:', err instanceof Error ? err.message : String(err));
     throw err;
   }
 });
@@ -2283,7 +2620,7 @@ handle('ensure-plain-session', async (_e, acc) => {
 // 规范化代理串：允许「host:port」「http://host:port」「socks5://host:port」「socks5h://host:port」，
 // 空串 = 直连（恢复默认网络栈）。这与 Firefox Multi-Account Containers + Mozilla VPN 的
 // 「每个容器独立出口 IP」思路一致，是 Lovart 区分多账号的关键（存储隔离 + IP 隔离）。
-function normalizeProxy(p) {
+function normalizeProxy(p: unknown): string {
   const s = String(p || '').trim();
   if (!s) return '';
   if (/^https?:\/\//i.test(s) || /^socks[45]h?:\/\//i.test(s)) return s;
@@ -2291,18 +2628,20 @@ function normalizeProxy(p) {
   return s; // 交给 Chromium 报错，不静默吞
 }
 
-function applySessionProxy(ses, proxy) {
+function applySessionProxy(ses: Electron.Session, proxy: unknown): Promise<void> {
   const server = normalizeProxy(proxy);
-  return ses.setProxy(server ? { mode: 'fixed_servers', server } : { mode: 'direct' });
+  // 断言只为过声明类型（三元表达式里的 `mode` 字面量没被上下文收窄）
+  return ses.setProxy((server ? { mode: 'fixed_servers', server } : { mode: 'direct' }) as Electron.ProxyConfig);
 }
 
 // 运行中修改某账号会话的代理（账号行 / 设置页调用）；proxy 为空 = 恢复直连
 handle('set-account-proxy', async (_e, p) => {
-  const partition = (p && p.partition) || '';
+  const pp = asRecord(p);
+  const partition = pp['partition'] || '';
   if (!partition) return { ok: false, error: '缺少 partition' };
-  const ses = session.fromPartition(partition);
-  await applySessionProxy(ses, p.proxy);
-  return { ok: true, applied: normalizeProxy(p.proxy) || 'direct' };
+  const ses = session.fromPartition(String(partition));
+  await applySessionProxy(ses, pp['proxy']);
+  return { ok: true, applied: normalizeProxy(pp['proxy']) || 'direct' };
 });
 
 // ============================================================
@@ -2322,7 +2661,7 @@ handle('set-account-proxy', async (_e, p) => {
 //   4. 默认关闭 Lovart 自动抓取，避免每 3 秒执行一次页面脚本被判定为机器人。
 // ============================================================
 
-async function prepareLovartContainer(ses, partition, proxy) {
+async function prepareLovartContainer(ses: Electron.Session, partition: string, proxy: unknown): Promise<{ ua: string }> {
   const ua = buildCleanChromeUA();
   // Accept-Language：所有 Lovart 容器统一为「系统语言 + 其主语言」，与 Firefox 多账号容器一致
   // （Firefox 容器从不修改语言、各容器共享同一份系统语言）。必须传「纯语言列表」而非带 q 值的
@@ -2343,7 +2682,7 @@ async function prepareLovartContainer(ses, partition, proxy) {
     try {
       await applySessionProxy(ses, proxy);
     } catch (e) {
-      console.error('[lovart-container] 设置代理失败:', e && e.message || e);
+      console.error('[lovart-container] 设置代理失败:', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -2363,23 +2702,25 @@ async function prepareLovartContainer(ses, partition, proxy) {
     if (!cookies || cookies.length === 0) {
       console.log('[lovart-container] 新容器，清理残留存储:', partition);
       await ses.clearStorageData({
+        // 按源传值（含 `quotas`；当前 electron.d.ts 已删该字段、storages 的 union 也窄于运行期）⇒ 整体断言
         storages: ['appcache', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers'],
-        quotas: ['temporary', 'syncable']
-      });
+        quotas: ['temporary', 'syncable'],
+      } as Electron.ClearStorageDataOptions);
     }
   } catch (e) {
-    console.error('[lovart-container] 清理存储失败:', e && e.message || e);
+    console.error('[lovart-container] 清理存储失败:', e instanceof Error ? e.message : String(e));
   }
   return { ua };
 }
 
 handle('ensure-lovart-container', async (_e, acc) => {
   try {
+    const ac = asRecord(acc);
     // ★ 2026-10-12（TD-04-11）：不再猜 `persist:lovart` —— 前端按账号类型算好分区；
     //   拿不到就明确失败（静默落到别的 session 比报错更难查）。
-    const partition = (acc && acc.partition) || '';
+    const partition = String(ac['partition'] || '');
     if (!partition) throw new Error('缺少 partition（应由前端按账号类型提供）');
-    const proxy = (acc && acc.proxy) || '';
+    const proxy = ac['proxy'] || '';
     const ses = session.fromPartition(partition);
     const { ua } = await prepareLovartContainer(ses, partition, proxy);
     // ★ **零注入**：不挂载任何自定义 preload —— 自定义 UA preload 通过 Object.defineProperty
@@ -2390,19 +2731,22 @@ handle('ensure-lovart-container', async (_e, acc) => {
     return { ok: true, userAgent: ua, preloadUrl, proxy: normalizeProxy(proxy) || 'direct' };
   } catch (err) {
     // 留痕是守卫不做的（守卫只把异常转回执）⇒ 就地保留；回执转换交注册处
-    console.error('[lovart-container] 失败:', (err && err.message) || err);
+    console.error('[lovart-container] 失败:', err instanceof Error ? err.message : String(err));
     throw err;
   }
 });
 
 // 移除账号时清理该账号容器的全部数据（cookie/storage/cache/service worker）
-handle('clear-account-session', async (_e, { partition } = {}) => {
+handle('clear-account-session', async (_e, p) => {
+  // 源是 `{ partition } = {}` 解构（形参是 `unknown` ⇒ 用 asRecord 取同一件事）
+  const partition = asRecord(p)['partition'];
   if (!partition) return { ok: false, error: '缺少 partition' };
-  const ses = session.fromPartition(partition);
+  const ses = session.fromPartition(String(partition));
   await ses.clearStorageData({
+    // 同上：按源传值（`cookies` 在内的这几个名字）
     storages: ['cookies', 'appcache', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers'],
-    quotas: ['temporary', 'syncable']
-  });
+    quotas: ['temporary', 'syncable'],
+  } as Electron.ClearStorageDataOptions);
   await ses.clearCache();
   return { ok: true };
 });
