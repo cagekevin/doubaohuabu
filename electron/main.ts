@@ -1805,8 +1805,10 @@ handle('export-account-cookies', async (_e, partition) => {
 handle('import-account-cookies', async (_e, partition, cookies) => {
   const ses = session.fromPartition(String(partition));
   let okCount = 0;
-  const list = Array.isArray(cookies) ? cookies : [];
-  for (const raw of list) {
+    // ⚠️ **按源形态**：`cookies` 非数组 ⇒ `for…of` **当场抛**（注册处守卫转 `{ok:false,error}`）。
+    //    ⛔ 不写成 `Array.isArray(cookies) ? cookies : []` —— 那会把"入参非法"变成"成功恢复 0 条"（**假成功**）。
+    const list = cookies as readonly unknown[];
+    for (const raw of list) {
     const c = asRecord(raw);
     try {
       const domain = String(c['domain'] || '');

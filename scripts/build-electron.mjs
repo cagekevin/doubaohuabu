@@ -15,7 +15,7 @@
  *    ⇒ 本步**显式打印跳过**并继续（落盘后自动接上）。这不是"静默降级"。
  *
  * 用法：
- *   node docs/plan/后端TS迁移/scripts/build-electron.mjs [--dry] [--quiet] [--help]
+ *   node scripts/build-electron.mjs [--dry] [--quiet] [--help]
  * 退出码：0 成功 · 2 用法/环境/缺文件。
  */
 
@@ -25,7 +25,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HERE, '..', '..', '..', '..');
+const REPO = path.resolve(HERE, '..');
 const DIST = path.join(REPO, 'electron', 'dist');
 const SHARED_CFG = 'tsconfig.shared.json';
 const ELEC_CFG = 'electron/tsconfig.json';

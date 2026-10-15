@@ -52,9 +52,9 @@ const createFile = (): FilePort => ({
   importFiles: async (): Promise<Result<PickedFile[]>> => {
     const r = await guard((api) => api.importFiles());
     if (!r.ok) return r;
-    // ⚠️ 后端返的是 `{ name, fullName, dataUrl }`，端口 `PickedFile` 要 `{ name, path?, … }`
-    //   ⇒ **不谎报**：逐字段搬（`path` 缺席 —— 后端从来不传它，见 `PickedFile.path` 的登记）。
-    //   旧写法是 `r.value as PickedFile[]`（把 `unknown` 谎报过去），换面后当场红。
+    // 逐字段搬（⛔ 不 `as PickedFile[]` 谎报 —— 那是换面后当场红的旧写法）。
+    // 端口 `PickedFile` 只声明 `{ name, dataUrl }`：后端产 `name` / `fullName` / `dataUrl`，
+    // 而渲染层只用 `name` / `dataUrl` ⇒ `fullName` 不搬、端口不声明（回源取证见 `PickedFile` 的注）。
     const list: PickedFile[] = Array.isArray(r.value)
       ? r.value.map((f) => ({ name: f.name, dataUrl: f.dataUrl }))
       : [];

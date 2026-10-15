@@ -5,8 +5,8 @@
 #         产物落在 **packing/win/out/** —— 不污染根目录，也不与 mac 产物混。
 #
 # 【前置】npm i -D electron-builder（一次性）
-# 【入口】根 package.json 的 "main": "electron/main.js"
-#   electron/main.js:878 生产环境 loadFile('../dist/index.html') ⇒ 打包前必须先 npm run build
+# 【入口】根 package.json 的 "main": "electron/dist/main.js"（后端**产物**；源码 electron/main.ts 不进包）
+#   生产环境 loadFile('../dist/index.html') ⇒ 打包前必须先 npm run build
 #
 # 【为什么 win / mac 分两个文件】产物格式、图标格式、签名机制都不同（见 ../README.md）。
 #   公共部分（appId / files / asar）在两个文件里各写一份 —— 刻意不抽 base，

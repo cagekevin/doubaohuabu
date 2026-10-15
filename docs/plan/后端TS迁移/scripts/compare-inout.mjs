@@ -14,9 +14,12 @@
  * ⛔ 它**不判**"等价"：只报"同 / 异 + 两侧的值"。判断归人（`人工检查清单.md` 的 B/E 层）。
  * ⛔ 不写仓库内任何文件（只写 OS 临时目录）。
  *
- * 用法：node .../compare-inout.mjs [--only <子串>] [--list] [--help]
+ * 用法：node .../compare-inout.mjs [--only <子串>] [--list] [--engine node|electron] [--e2-only <子串|序号>] [--values] [--help]
  *   --only <s>  只看路径含 <s> 的模块
  *   --list      只列模块与导出面（不跑样本）
+ *   --engine    `node`（E1 纯 Node，默认）/ `electron`（E2：真 Electron 探针）
+ *   --e2-only   E2 只跑匹配的用例（用例 JSON 子串 或 序号）
+ *   --values    「同」也打印两侧实值（用来分"都答对"与"一起失败"）
  * 退出码：0 = 跑完（差异不改变退出码 —— 差异是"给人看的料"，不是闸）
  */
 import fs from 'node:fs';
@@ -32,9 +35,12 @@ const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`compare-inout.mjs —— 两侧输入/输出对照（复核 E 层）
 
-用法：node .../compare-inout.mjs [--only <子串>] [--list]
-  --only <s>  只看路径含 <s> 的模块
-  --list      只列模块与导出面（不跑样本）
+用法：node .../compare-inout.mjs [--only <子串>] [--list] [--engine electron] [--e2-only <子串|序号>] [--values]
+  --only <s>   只看路径含 <s> 的模块
+  --list       只列模块与导出面（不跑样本）
+  --engine e   node（E1 默认）/ electron（E2 探针）
+  --e2-only s  E2 只跑匹配的用例（用例 JSON 子串 或 序号）
+  --values     「同」也打印两侧实值（用来分"都答对"与"一起失败"）
 只写 OS 临时目录；⛔ 不写仓库文件；不判"等价"（只报同/异）。`);
   process.exit(0);
 }
@@ -45,6 +51,13 @@ const engineIdx = args.indexOf('--engine');
 const engine = engineIdx >= 0 ? (args[engineIdx + 1] || 'node') : 'node';
 const e2OnlyIdx = args.indexOf('--e2-only');
 const e2Only = e2OnlyIdx >= 0 ? args[e2OnlyIdx + 1] : null;
+/**
+ * `--values`：**「同」也把两侧的实值打出来**。
+ * 为什么必须有：`同` 有两种 —— ①真的都答对了；②**两侧一起失败**（例：对端不可达 ⇒ 都 `{ok:false,status:0,error:'network'}`）
+ * 也逐字节相等 ⇒ 会被当成通过。**看不见实值就分不出这两种**（本工具就吃过这个亏：见 `runSide` 的 spawn 注释）。
+ * 默认关（不改默认输出）。
+ */
+const showValues = args.includes('--values');
 
 const sh = (c) => {
   try {
@@ -329,8 +342,16 @@ const CASES = {
 };
 
 /**
- * ③ **E2 样本**（要真 Electron 才跑得起来的那些）：`{{BASE}}` 在运行时换成父进程起的本地 HTTP 服务地址
- * （网络那几条要**可确定**的服务端 ⇒ 不碰外网）。
+ * `config-store` 往返样本用的**假 adapter**（只需它读的那几个字段：`id` / `defaults.baseUrl|model|params`）。
+ * ⚠️ 两侧传**同一个**对象 ⇒ 比的是模块行为，不是输入差异。
+ */
+const PROBE_ADAPTER = { id: 'probe-p1', defaults: { baseUrl: 'https://default.example.com', model: 'default-model', params: { z: 9 } } };
+
+/**
+ * ③ **E2 样本**（要真 Electron 才跑得起来的那些）：
+ *   `{{BASE}}`     → 父进程起的本地 HTTP 服务地址（网络那几条要**可确定**的服务端 ⇒ 不碰外网）
+ *   `{{USERDATA}}` → **该侧自己的** userData 目录（落盘样本写进各自目录）
+ *   字段：`{mod, fn, args}` 单调用 · `{mod, init, seq, readFile}` **往返**（见探针头注）
  */
 const E2_CASES = [
   // ⚠️ 签名按源码：`requestJson(fetchImpl, url, opts)` —— 首参是**注入的 fetch 栈**（生产用 `net.fetch`）
@@ -338,6 +359,9 @@ const E2_CASES = [
   { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/404'] },
   { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/500'] },
   { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/text'] },
+  // ★ **超时 vs 不可达要分清**：`/slow` 迟迟不答 ⇒ `timeoutMs` 到点主动 abort
+  //   ⇒ 期望两侧都 `{ok:false,status:0,error:'timeout'}`（**不是** `network`）
+  { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/slow', { timeoutMs: 80 }] },
   // 换栈分支：第一栈故意失败 ⇒ 应落到第二栈（`via` 字段就是它）
   {
     mod: 'api/http.js',
@@ -345,7 +369,34 @@ const E2_CASES = [
     args: [[{ $fn: '__throwingFetch' }, { $fn: 'net.fetch' }], '{{BASE}}/json'],
   },
   { mod: 'api/http.js', fn: 'requestJsonWithFallback', args: [[{ $fn: 'net.fetch' }], '{{BASE}}/json'] },
-  { mod: 'api/config-store.js', fn: 'createConfigStore', args: ['probe', {}] },
+  { mod: 'api/config-store.js', fn: 'createConfigStore', args: ['{{USERDATA}}', {}] },
+  /**
+   * ★★ **D 层（数据兼容）**：`config-store` 的**写→读→落盘**往返 ——
+   *   `init` 造 store（`userData` = **该侧自己的**目录，两侧互不污染）⇒ 依次走：
+   *   改非密钥字段 → 存密钥（`safeStorage` 传 `{}` ⇒ 走"不可用"分支，**不落明文**）→ 读公开形态 →
+   *   通道设置往返 → 额度计数 → `readFile` 读**落盘字节**。
+   *   ⇒ 判据不只是回值，还有**写到磁盘的 JSON 字节**（改字段名/格式 ⇒ 用户旧配置读不到）。
+   *   ⚠️ **未覆盖**：真 `safeStorage` 的加解密路径 —— 密文含随机 IV ⇒ 两侧字节必然不同、**不可比**；
+   *      且会碰真 Keychain。⇒ 该项记「未验」（见 `人工检查清单.md` §6）。
+   */
+  {
+    mod: 'api/config-store.js',
+    init: { fn: 'createConfigStore', args: ['{{USERDATA}}', {}] },
+    seq: [
+      { fn: 'updateProviderConfig', args: [PROBE_ADAPTER, { baseUrl: 'https://api.example.com/v1', model: 'probe-model', params: { a: 1, b: 'x' } }] },
+      { fn: 'setApiKey', args: [PROBE_ADAPTER, 'sk-probe-1234567890'] },
+      { fn: 'hasKey', args: [PROBE_ADAPTER] },
+      { fn: 'publicOf', args: [PROBE_ADAPTER] },
+      { fn: 'setSecretKey', args: [PROBE_ADAPTER, 'sec-probe-0987654321'] },
+      { fn: 'getSetup', args: [] },
+      { fn: 'setSetup', args: [{ imageProviderId: 'p1', videoProviderId: 'p2', concurrency: 5 }] },
+      { fn: 'incrementUsage', args: ['image', 1750000000000] },
+      { fn: 'incrementUsage', args: ['image', 1750000000000] },
+      { fn: 'incrementUsage', args: ['video', 1750000000000] },
+      { fn: 'getUsage', args: [] },
+    ],
+    readFile: 'api-config.json',
+  },
   { mod: 'license.js', fn: 'initLicense', args: [] },
 ];
 
@@ -374,6 +425,18 @@ async function startServer() {
       res.end(JSON.stringify({ error: 'boom' }));
       return;
     }
+    if (u === '/slow') {
+      // 迟迟不答 ⇒ 让客户端 `requestJson({timeoutMs: 小值})` 走到 **abort** 分支（超时 vs 不可达要分清）
+      setTimeout(() => {
+        try {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end('{}');
+        } catch {
+          /* 客户端已 abort ⇒ 连接没了，忽略 */
+        }
+      }, 3000);
+      return;
+    }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end('{}');
   });
@@ -383,15 +446,21 @@ async function startServer() {
 
 /** 跑 E2：起 Electron 探针，两侧各跑同一批 job，按 id 配对比较 */
 async function runElectron(base) {
-  const { spawnSync } = await import('node:child_process');
+  const { spawn } = await import('node:child_process');
   const electronBin = req('electron');
   const probe = path.join(HERE, 'compare-inout-probe.cjs');
   const { server, port } = await startServer();
   const BASE = `http://127.0.0.1:${port}`;
-  const fill = (a) => (typeof a === 'string' ? a.replace('{{BASE}}', BASE) : a);
+  /**
+   * 占位符替换（**每侧各填自己那份**）：
+   *   `{{BASE}}`     —— 本地 HTTP 服务地址（网络样本的对端）
+   *   `{{USERDATA}}` —— **该侧自己的** userData 目录（`config-store` 落盘样本写进各自目录 ⇒ 两侧互不污染）
+   */
+  const fillFor = (userData) => (a) =>
+    typeof a === 'string' ? a.replace('{{BASE}}', BASE).replace('{{USERDATA}}', userData) : a;
   const tmpRoot = path.dirname(base.oldDir);
   console.log(`探针：${probe}`);
-  console.log(`本地服务：${BASE}（端点：/json · /text · /404 · /500）`);
+  console.log(`本地服务：${BASE}（端点：/json · /text · /404 · /500 · /slow）`);
 
   /**
    * ★ **一进程一侧**（实测必需）：两侧同进程时，`license.initLicense()` 第二次会抛
@@ -399,9 +468,10 @@ async function runElectron(base) {
    *   ⇒ 那不是代码差异，是"同一进程塞了两个版本"。而且真实运行本来就是"一次只跑一个版本"。
    *   userData 也**两侧各一个**（`config-store` 会落盘 ⇒ 共用目录会让第二侧看到第一侧写的文件 ✗）。
    */
-  const runSide = (side) => {
+  const runSide = async (side) => {
     const userData = path.join(tmpRoot, `userdata-${side}`);
     const jobPath = path.join(tmpRoot, `job-${side}.json`);
+    const fill = fillFor(userData);
     const jobs = E2_CASES.map((c, i) => ({ c, i }))
       .filter(({ c, i }) => (e2Only ? JSON.stringify(c).includes(e2Only) || String(i) === e2Only : true))
       .map(({ c, i }) => ({
@@ -410,21 +480,48 @@ async function runElectron(base) {
         mod: c.mod,
         fn: c.fn,
         args: (c.args || []).map(fill),
+        // 往返样本（`init` 造主体 + `seq` 依次调它的方法）与落盘字节读取，见 E2_CASES 的注释
+        ...(c.init ? { init: { fn: c.init.fn, args: (c.init.args || []).map(fill) } } : {}),
+        ...(c.seq ? { seq: c.seq.map((st) => ({ fn: st.fn, args: (st.args || []).map(fill) })) } : {}),
+        ...(c.readFile ? { readFile: c.readFile } : {}),
       }));
     fs.writeFileSync(jobPath, JSON.stringify({ oldRoot: base.oldDir, newRoot, userData, jobs }, null, 2), 'utf8');
-    const res = spawnSync(electronBin, [probe, jobPath], { encoding: 'utf8', timeout: 90000, cwd: REPO });
+    /**
+     * ★★ **必须异步 `spawn`，不能用 `spawnSync`**（本工具最贵的一个坑）：
+     *   网络那几条样本的对端是**父进程里的本地 HTTP 服务**；`spawnSync` 会**阻塞父进程事件循环**
+     *   ⇒ 服务答不了请求 ⇒ 子进程每个请求都卡满 `requestJson` 的 30s 超时
+     *   ⇒ 现象是"后几例的结果行凭空消失"，且**前两例两侧一起超时 ⇒ 假报「同」**
+     *     （两侧都返回 `{ok:false,status:0,error:'timeout'}` ⇒ 逐字节相等 ⇒ 被当成通过）。
+     *   ⇒ 改成异步 `spawn` ＋ await：父进程事件循环保持可跑，本地服务才应答得出来。
+     */
+    const res = await new Promise((resolve) => {
+      const cp = spawn(electronBin, [probe, jobPath], { cwd: REPO });
+      let stdout = '';
+      let stderr = '';
+      cp.stdout.on('data', (d) => {
+        stdout += d;
+      });
+      cp.stderr.on('data', (d) => {
+        stderr += d;
+      });
+      const timer = setTimeout(() => cp.kill('SIGKILL'), 90000);
+      cp.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ stdout, stderr, code });
+      });
+    });
     const out = new Map();
-    for (const l of (res.stdout || '').split('\n')) {
+    for (const l of res.stdout.split('\n')) {
       if (!l.startsWith('__E2__ ')) continue;
       const o = JSON.parse(l.slice('__E2__ '.length));
       out.set(String(o.id), o);
     }
-    return { out, stderr: res.stderr || '', stdout: res.stdout || '' };
+    return { out, stderr: res.stderr, stdout: res.stdout };
   };
 
   const jobsCount = E2_CASES.filter((c, i) => (e2Only ? JSON.stringify(c).includes(e2Only) || String(i) === e2Only : true)).length;
-  const a = runSide('old');
-  const b = runSide('new');
+  const a = await runSide('old');
+  const b = await runSide('new');
   server.close();
   if (!a.out.size || !b.out.size) {
     console.log(`❌ 探针没有输出（旧 ${a.out.size} 行 / 新 ${b.out.size} 行）—— 原始 stdout/stderr：`);
@@ -443,15 +540,20 @@ async function runElectron(base) {
   let same = 0;
   let diff = 0;
   const problems = [];
+  /** 用例的可读标签（单调用看 `fn(args)`；往返看 `init ⇒ 步骤链`） */
+  const labelOf = (c) =>
+    c.fn
+      ? `${c.fn}(${JSON.stringify((c.args || []).map((x) => (typeof x === 'string' ? x.replace(BASE, '{{BASE}}') : x)))})`
+      : `${c.init ? c.init.fn + ' ⇒ ' : ''}${c.seq.map((s) => s.fn).join(' → ')}${c.readFile ? ` ＋ 落盘 ${c.readFile}` : ''}`;
   for (let i = 0; i < E2_CASES.length; i++) {
     const c = E2_CASES[i];
     if (e2Only && !(JSON.stringify(c).includes(e2Only) || String(i) === e2Only)) continue;
     const oa = a.out.get(String(i));
     const ob = b.out.get(String(i));
-    const argBrief = JSON.stringify((c.args || []).map((x) => (typeof x === 'string' ? x.replace(BASE, '{{BASE}}') : x)));
+    const argBrief = labelOf(c);
     if (!oa || !ob) {
-      console.log(`   ⚠️ ${c.mod} ${c.fn}(${argBrief}) —— 探针没回（旧 ${oa ? '有' : '无'} / 新 ${ob ? '有' : '无'}）`);
-      problems.push(`${c.mod}.${c.fn}：探针未回结果`);
+      console.log(`   ⚠️ ${c.mod} ${argBrief} —— 探针没回（旧 ${oa ? '有' : '无'} / 新 ${ob ? '有' : '无'}）`);
+      problems.push(`${c.mod}.${argBrief}：探针未回结果`);
       continue;
     }
     // ⛔ 比的是 **`ok` ＋ `value`**，不比 `id`（id 是配对用的，带 side ⇒ 必然不同）
@@ -461,10 +563,10 @@ async function runElectron(base) {
     if (ok) same++;
     else {
       diff++;
-      problems.push(`${c.mod}.${c.fn}(${argBrief}) 输出不同`);
+      problems.push(`${c.mod}.${argBrief} 输出不同`);
     }
-    console.log(`   ${ok ? '✅' : '❌'} ${c.mod.replace(/\.js$/, '')} · ${c.fn}(${argBrief})`);
-    if (!ok) {
+    console.log(`   ${ok ? '✅' : '❌'} ${c.mod.replace(/\.js$/, '')} · ${argBrief}`);
+    if (!ok || showValues) {
       console.log(`      旧：${sa.slice(0, 300)}`);
       console.log(`      新：${sb.slice(0, 300)}`);
     }

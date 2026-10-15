@@ -12,7 +12,10 @@
  * 比较由父进程 `compare-inout.mjs --engine=electron` 做（两侧用**同一个**序列化器 ⇒ 可比）。
  *
  * 用法（由父进程 spawn，不手跑）：electron <本文件> <job.json>
- *   job.json = { oldRoot, newRoot, userData, jobs: [{ id, side, mod, fn, args }] }
+ *   job.json = { oldRoot, newRoot, userData, jobs: [job] }
+ *   job = { id, side, mod, fn, args }                          —— 单调用
+ *       | { id, side, mod, init?, seq, readFile? }              —— **往返**：`init` 造主体（缺省＝模块本体）
+ *                                                                  ⇒ `seq` 依次调它的方法 ⇒ `readFile` 读该侧 userData 里的落盘字节
  * 退出码：0 正常跑完（哪怕有 job 失败 —— 失败也是"事实"，交由父进程比）。
  */
 const fs = require('node:fs');
@@ -25,12 +28,26 @@ if (!jobPath) {
 }
 const job = JSON.parse(fs.readFileSync(jobPath, 'utf8'));
 
+/**
+ * **抹掉"侧相关"的路径**（否则必然假报"异"）：两侧刻意住在**不同目录**
+ * （`userdata-old`/`userdata-new`、`onc/old`、`electron/dist`）⇒ 返回值里一带路径就不同。
+ * ⛔ 只抹**本探针自己造的那几个目录**，不碰别的字符串（不是通用脱敏）。
+ */
+function scrub(s) {
+  let out = s;
+  if (job.userData) out = out.split(job.userData).join('<USERDATA>');
+  if (job.oldRoot) out = out.split(job.oldRoot).join('<OLDROOT>');
+  if (job.newRoot) out = out.split(job.newRoot).join('<NEWROOT>');
+  return out.replace(/\buserdata-(old|new)\b/g, '<USERDATA>').replace(/\bonc[\\/](old|new)\b/g, '<ONCROOT>');
+}
+
 /** 序列化：与父进程的 normalize 同口径（函数比 name/arity、undefined 显式、循环注明） */
 function ser(v, seen = new Set()) {
   if (v === undefined) return { t: 'undefined' };
   if (v === null) return { t: 'null' };
   const ty = typeof v;
-  if (ty === 'string' || ty === 'number' || ty === 'boolean') return { t: ty, v };
+  if (ty === 'string') return { t: ty, v: scrub(v) };
+  if (ty === 'number' || ty === 'boolean') return { t: ty, v };
   if (ty === 'function') return { t: 'function', name: v.name, arity: v.length };
   if (ty === 'symbol' || ty === 'bigint') return { t: ty, v: String(v) };
   if (ty !== 'object') return { t: ty };
@@ -108,13 +125,45 @@ async function main() {
     let out;
     try {
       const m = load(j.side === 'old' ? job.oldRoot : job.newRoot, j.mod);
-      const fn = m[j.fn];
-      if (typeof fn !== 'function') {
-        out = { id: j.id, ok: false, value: { t: 'missing', v: typeof fn } };
+      /**
+       * **单调用**（常态）· **往返**（`init` 造主体 ⇒ `seq` 依次调它的方法）。
+       * 往返是给"要连着调好几步才看得出等价"的东西用的（`config-store` 的写→读→落盘）。
+       */
+      if (j.seq) {
+        let subject = m;
+        if (j.init) subject = await m[j.init.fn](...(j.init.args || []).map(resolveArg));
+        const steps = [];
+        for (const st of j.seq) {
+          try {
+            const fn = subject[st.fn];
+            if (typeof fn !== 'function') {
+              steps.push({ ok: false, value: { t: 'missing', v: typeof fn } });
+              continue;
+            }
+            // eslint-disable-next-line no-await-in-loop -- 往返按序跑（顺序本身也是事实）
+            steps.push({ ok: true, value: ser(await fn(...(st.args || []).map(resolveArg))) });
+          } catch (e) {
+            steps.push({ ok: false, value: { t: 'throw', name: e && e.name, message: String((e && e.message) || e) } });
+          }
+        }
+        // 落盘字节（D 层数据兼容的取证）：读**该侧自己** userData 里的文件
+        let file;
+        if (j.readFile) {
+          try {
+            file = fs.readFileSync(path.join(job.userData, j.readFile), 'utf8');
+          } catch (e) {
+            file = { t: 'readError', message: String((e && e.message) || e) };
+          }
+        }
+        out = { id: j.id, ok: true, value: ser({ steps, file }) };
       } else {
-        // eslint-disable-next-line no-await-in-loop -- 探针按序跑（顺序本身也是事实）
-        const r = await fn(...(j.args || []).map(resolveArg));
-        out = { id: j.id, ok: true, value: ser(r) };
+        const fn = m[j.fn];
+        if (typeof fn !== 'function') {
+          out = { id: j.id, ok: false, value: { t: 'missing', v: typeof fn } };
+        } else {
+          const r = await fn(...(j.args || []).map(resolveArg));
+          out = { id: j.id, ok: true, value: ser(r) };
+        }
       }
     } catch (e) {
       out = { id: j.id, ok: false, value: { t: 'throw', name: e && e.name, message: String((e && e.message) || e) } };

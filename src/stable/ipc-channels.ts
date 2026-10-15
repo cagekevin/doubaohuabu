@@ -605,6 +605,19 @@ export const IPC_CHANNELS = {
 export type IpcChannelMap = typeof IPC_CHANNELS;
 
 /**
+ * **频道名的联合**（表里所有 `channel` 字面量的并集）。
+ *
+ * 为什么需要它：频道名此前**两侧各写一次裸字符串**（后端 `handle('…')` · preload 的调用口）——
+ * 写错一个字：类型绿 · lint 绿 · 冒烟绿，**只有运行期静默失效**（正是 TD-13-26 那个 bug 类的形状）。
+ * 收成这个联合之后，两端的注册/调用口都受它约束 ⇒ **写错的频道名编译不过**（不是"我核过了"）。
+ *
+ * `hostOS` 是 `value` 类（`channel: null`）⇒ 被 `NonNullable` 滤掉。
+ *
+ * @public 跨边界消费者：electron/ipc.ts · electron/preload.ts
+ */
+export type IpcChannelName = NonNullable<IpcChannelMap[keyof IpcChannelMap]['channel']>;
+
+/**
  * 渲染层原始面：**五种种类各有各的回执形态**
  *
  * ⚠️ 形参位现在是 `never[]`：它的用途是让**实现侧**（`electron/preload.ts` 的对象）**能被 `satisfies` 卡住**

@@ -19,9 +19,15 @@
 // ============================================================
 
 import { ipcMain } from 'electron';
+import type { IpcChannelName } from '@shared/ipc-channels' with { 'resolution-mode': 'import' };
 
-/** `invoke` 型注册口：把「抛」转成可传输的回执（原文透传，不吞、不改写） */
-function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
+/**
+ * `invoke` 型注册口：把「抛」转成可传输的回执（原文透传，不吞、不改写）
+ *
+ * ★ `channel` 收成 `IpcChannelName`（契约表里频道名的联合）⇒ **写错的频道名编译不过**。
+ *   此前是裸 `string` ⇒ 拼错一个字只有运行期静默失效（见 `ipc-channels.ts` 的 `IpcChannelName`）。
+ */
+function handle(channel: IpcChannelName, fn: (...args: unknown[]) => unknown): void {
   ipcMain.handle(channel, async (...args: unknown[]) => {
     try {
       return await fn(...args);
@@ -31,8 +37,8 @@ function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
   });
 }
 
-/** `send` / `sendSync` 型通道的注册入口（透传，不包守卫 —— 见文件头） */
-function on(channel: string, fn: (...args: unknown[]) => void): void {
+/** `send` / `sendSync` 型通道的注册入口（透传，不包守卫 —— 见文件头）；`channel` 同上收成表里的联合 */
+function on(channel: IpcChannelName, fn: (...args: unknown[]) => void): void {
   ipcMain.on(channel, fn);
 }
 

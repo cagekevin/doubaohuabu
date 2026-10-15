@@ -14,7 +14,7 @@
  * ⛔ 刻意**不做**：断言框架 · 判"窗口就绪" · 判 UI（那是 W15 端到端的事，脆且是另一个层次）。
  *
  * 用法：
- *   node docs/plan/后端TS迁移/scripts/smoke-electron.mjs [--timeout 12] [--json] [--help]
+ *   node scripts/smoke-electron.mjs [--timeout 12] [--json] [--help]
  * 前置：`npm run build:electron`（产物 electron/dist/ 存在）＋ `package.json` 的 main 指向产物
  * 退出码：0 通过 · 1 冒烟失败 · 2 用法或环境错。
  */
@@ -27,7 +27,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HERE, '..', '..', '..', '..');
+const REPO = path.resolve(HERE, '..');
 const REQUIRE = createRequire(import.meta.url);
 const READY_LOG = path.join(os.homedir(), 'dola-duration-debug.log');
 const EXPECTED_MAIN = 'electron/dist/main.js';

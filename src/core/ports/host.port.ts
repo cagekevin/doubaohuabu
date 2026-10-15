@@ -710,18 +710,25 @@ export interface HostPort {
 
 export type Unsubscribe = () => void;
 
+/**
+ * 系统「打开文件」对话框选中的素材（`importFiles` 的回执元素）。
+ *
+ * ★ **形状 = 后端产物 ∩ 消费者真实需要**（回源取证）：
+ *   · 后端两代都只产 `{ name, fullName, dataUrl }`（`electron/main.js` 的 `import-files` handler）；
+ *   · **原版渲染层三处消费点只读 `name` 与 `dataUrl`** —— `DT.jsx:11-27`（取第一张写
+ *     `{name, dataUrl, w:400, h:300}`）· `RT.jsx:133-154`（只用 `dataUrl` 量尺寸）·
+ *     `RT.jsx:181-208`（用 `{name, dataUrl}` 建素材）；
+ *   · `fullName` 后端产但**两侧零消费者**（原版亦然）⇒ 端口**不声明**它。
+ *   ⇒ 本类型**只留这两个字段**（曾有的 `path` / `size` / `type` 是端口自己发明的：原版不读、
+ *     后端不产、适配器不设 —— 已删）。
+ */
 export interface PickedFile {
   name: string;
   /**
-   * ⚠️ **契约不一致（2026-10-15 换面后由机器逮到，如实登记待裁）**：后端 `import-files` 的
-   * handler 只返 `{ name, fullName, dataUrl }` —— **从来没有 `path`**。此前靠适配层的
-   * `as PickedFile[]` 把 `unknown` 谎报成这个形状 ⇒ TS 看不见，运行期 `path` 一直是 `undefined`。
-   * 换面（`WindowApi` 派生）后该断言当场红。本批**不就地改业务**（转换期零逻辑改动）：
-   * 只把 `path` 标成可选**如实描述现状**；"是前端该改、还是后端该补字段"待裁（见 `日志.md`）。
+   * ⚠️ 仍标**可选**：后端恒产它（`persistImageDataUrl` 恒返字符串），但渲染层几处按"可能缺席"守着
+   *   （`filter((f) => f.dataUrl)` / `?? ''`）—— 收成必填会让那些守卫变成永真判断（属 `ui/**` 的取舍，
+   *   不在后端迁移范围）。
    */
-  path?: string;
-  size?: number;
-  type?: string;
   dataUrl?: string;
 }
 

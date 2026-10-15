@@ -9,7 +9,7 @@
 #    所以这个文件是**待 mac 机器执行**的配置，不是现在就能跑的东西。
 #
 # 【前置】npm i -D electron-builder（一次性）· macOS 上先 npm run build（产物 dist/）
-# 【入口】根 package.json 的 "main": "electron/main.js"
+# 【入口】根 package.json 的 "main": "electron/dist/main.js"（后端**产物**；源码 electron/main.ts 不进包）
 # =============================================================================
 
 appId: com.doubaocanvas.app

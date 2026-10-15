@@ -81,7 +81,7 @@
 | **B2 api/ 子域**（2,078 ＋ 170） | `types`(57)→`redact`·`quota`·`domains`·`http`(283)→`_shared`(20)→5 个 providers(852)→`registry`(38)→`config-store`(285)→`job-manager`(545)→**`bridge.ts`(170，自 B1 挪来)**。★ **B2 已拆三小批**（体量与依赖序）：**B2-a 叶子簇 = `types`/`redact`/`quota`/`domains`/`http`/`_shared`（已完成）** · **B2-b = 5 providers ＋ `registry`（已完成）** · **B2-c = `config-store` ＋ `job-manager` ＋ `bridge`（已完成）** | tsc ＋ lint 零红；同批落纯逻辑测试；**config-store 过数据兼容样本** |
 | **B3 域模块**（4,288） | `dola-media`(1551)→`license`(758)→`chrome-cdp`(465)→`lovart-fetch`(379)→`clipboard-image`(327)→`lovart-scan`(255)→`fingerprint-preload`(226)→`firefox`(231)→`site-hosts`(96) | 各域零红；**冒烟只要求「起窗 ＋ 打开相关面板不崩」**（真实站点/CDP 链路**不可达 —— `verify-e2e` 从未跑过**，行为如实标未验）；**license 过黄金样本** |
 | **B4 main.js**（2,403） | handler 区（回归频道表）→ 项目存储迁移 → settings 读写 → 窗口/会话/胶水 | 零红 ＋ **冒烟＝起窗/加载工程/打开设置**（需登录账号的链路标未验）；**存储布局/settings 过样本** |
-| **B5 收尾** | `pack:dir` · TD-13-26 销账（＋ `dola-duration-main` / `dola-duration-dump` 与账号 preload 生成物的零覆盖**另立债**）· 长期工具搬 `scripts/` · `弯路.md` 升华（含**规矩寿命**处置）· knip 覆盖 electron **先基线化、不当批硬清** | G1–G6 全绿 |
+| **B5 收尾** | ✅ TD-13-26 销账（走 `debt.mjs`，note 写清**销了什么／没销什么**）＋ 零覆盖三项另立 **TD-13-31** · ✅ 长期工具 `build-electron` / `smoke-electron` 搬进 `scripts/` · ✅ 打包白名单**静态验证**（`verify-pack-files.mjs`，用 electron-builder 自己的匹配器；win/mac 两配置 **D-7 全过**，74 文件进包）｜ ⬜ `弯路.md` 升华（含**规矩寿命**处置）· ⬜ `census` 终态回写 `判据登记表.md` · ⬜ knip 覆盖 electron 先基线化、不当批硬清 · ⬜ `pack:dir` 真跑（会下载 win32 electron） | G1–G6 全绿 ✅ |
 
 ## §4 ★ 运行地基与基线证据
 
@@ -446,4 +446,4 @@
 
 **每批最小阅读集**：§3 当前批次行 ＋ §4（地基/样本）＋ §7（不变量）＋ §8（DoD）＋ §11.5–11.6（机械活/授权）＋ `弯路.md`；改契约时另加 §5。
 
-**升华（任务完成时）**：逐条判 `弯路.md` 哪些对常驻工作有价值 —— 搬进真源（`docs/判据登记表.md` / `docs/adr/` / `docs/架构与契约定稿.md`）；长期工具（`build-electron` · `gen-window-api` · `census` 若仍需要）搬进 `scripts/`；混合期规矩按寿命处置；其余封板留本目录。
+**升华（任务完成时）**：逐条判 `弯路.md` 哪些对常驻工作有价值 —— 搬进真源（`docs/判据登记表.md` / `docs/adr/` / `docs/架构与契约定稿.md`）；长期工具搬进 `scripts/`（★ **已执行**：`build-electron.mjs` · `smoke-electron.mjs` —— 它们是 `package.json` 的常驻构建/冒烟步骤，不能住在本目录；其余 `audit-*` / `compare-*` / `census` / `replay-samples` 等是**复核期任务脚本**，随本目录封板）；混合期规矩按寿命处置；其余封板留本目录。
