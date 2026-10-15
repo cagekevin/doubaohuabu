@@ -36,7 +36,15 @@ const ELEC_CFG = 'electron/tsconfig.json';
  *   · `*-skill-pack.json` —— `dola-media.js` 用 `path.join(__dirname, file)` 读；
  *     ⛔ 漏拷的后果是**静默回落成空 pack**（只 `console.warn`）⇒ 只判存活的冒烟抓不到
  */
-const SAME_DIR_ASSETS = ['dola-duration-main.js', 'dola-skill-pack.json', 'doubao-skill-pack.json'];
+const SAME_DIR_ASSETS = [
+  'dola-duration-main.js',
+  // 30s 诊断脚本（`.toString()` 注入页面的那段）：**不进编译面**（tsconfig exclude）⇒ 必须原样拷
+  // ⚠️ 它被编译后的 `main.js` **`require`**（`inject-dola-duration-main` 用它的 `DUMP_EXPR`）⇒
+  //    漏拷 = 启动即 `MODULE_NOT_FOUND`（本清单 + REQUIRED 自检就是防这个）
+  'dola-duration-dump.js',
+  'dola-skill-pack.json',
+  'doubao-skill-pack.json',
+];
 /** 产物里**必须**存在的关键文件（缺 ⇒ 构建链漏了东西） */
 const REQUIRED = ['main.js', 'preload.js', 'ipc.js', ...SAME_DIR_ASSETS];
 

@@ -28,6 +28,7 @@
 | `electron/**/*.ts`（已转文件） | 类型（满载档）＋ lint（type-aware） | `typecheck:electron` ＋ eslint（**进 `npm run check`**） |
 | `electron/**/*.js`（未转） | **不检查**（passthrough 过桥） | 登记在 `日志.md` 未转清单；运行期冒烟 |
 | `electron/dola-duration-main.js`（2,190 行） | **永不进程序**（guest 主世界文本注入，不能 `require`） | diag 日志 ＋ 手工域名判定探针 —— **如实：零类型覆盖**，**B5 另立一笔债**（不塞进已销的 TD-13-26） |
+| `electron/dola-duration-dump.js`（56 行，**2026-10-15 复核期新增**） | **不进编译面**（`tsconfig.exclude`）：它的文本被 `.toString()` **注入 guest 主世界** ⇒ **文本即行为** | **零类型覆盖**，**与上一条同笔债**。★ 为什么必须移出编译面见 `弯路.md` W35：住在 `.ts` 里时注入文本 ＝ **tsc 打印出来的文本**（实测打印机会丢冗余括号）⇒ ①「逐字一致」在该载体内**不可保证** ②将来 TS 升级会**静默**改掉注入进页面的脚本。校验：`audit-redzone.mjs` 对它做 **`.js` 载体逐字比**（当前 ✅ 原 1938 字符逐字一致） |
 | `build/shared-types/**` | 生成物（**禁手改**）：`@shared/*` 的声明层落点（§5 的 mapped type 方案**没有**第二份产物） | `build:shared` 每次重建（**过期结构上不可能**） |
 | **生成的注入代码**（`fingerprint-preload.js` 产出的账号 preload 字符串模板） | **零类型覆盖**（它是字符串，不是模块） | 与 `dola-duration-main.js` 同判：如实登记，不假装覆盖 |
 | 行为等价 | 只有部分可机器对照 | **黄金样本对照**（§4.2）＋ 冒烟；其余手测清单；**没做的写"未验"** |
@@ -62,7 +63,7 @@
 | A-4 | 各域自注册的 IPC 频道总数（`dola-media` 5 个等） | 表覆盖不完整 ⇒ C2 判据不成立 | **成立，且抓到 1 处真缺口**：preload **81** 成员（invoke 69 · send 4 · sendSync 2 · on 5 · value 1）、后端 `handle` 70 ＋ `on` 6；三侧对账后 **`open-lovart-chrome` 未暴露**（后端注册、preload 无名面、`src/` 零消费）⇒ B1 必须显式处置它 |
 | A-5 | 28 个文件的 `require` 关系**无环** | 环上模块保留 CJS 形态 | **成立**（两法一致：脚本自建图 0 环 · `depcruise electron` = 67 modules / 0 violations） |
 | A-6 | 没有"消费方改已转模块的导出值"的写法（§7 I-4） | 那些模块**保留 CJS 形态** | **成立**（28 文件该列全空）。⚠️ 脚本口径只认「直接 `require(..).x =`」与「顶层 `const m = require(..)` 后改 `m.x`」；经别名/参数传递的改法**扫不到** |
-| A-7 | guest 注入脚本只有 `dola-duration-main.js` 一个（`fingerprint-preload` 生成物除外，见 1.2） | §3 批次与 §4 地基加特例 | **成立**（`main.js` 只有一处 `readFileSync('dola-duration-main.js')` 注入源；`fingerprint-preload.js` 是产出字符串的**生成器模块**，属 1.2 已登记项） |
+| A-7 | guest 注入脚本只有 `dola-duration-main.js` 一个（`fingerprint-preload` 生成物除外，见 1.2） | §3 批次与 §4 地基加特例 | **成立**（`main.js` 只有一处 `readFileSync('dola-duration-main.js')` 注入源；`fingerprint-preload.js` 是产出字符串的**生成器模块**，属 1.2 已登记项）—— ★ **2026-10-15 复核期修订**：新增 `dola-duration-dump.js`（同属「文本注入」）⇒ 断言改写为「**凡"文本即行为"的代码必须住在编译面之外**」，本行结论随之更新为 **2 个**（＋1 处生成器） |
 
 ## §3 顺序
 
@@ -80,7 +81,7 @@
 | **B2 api/ 子域**（2,078 ＋ 170） | `types`(57)→`redact`·`quota`·`domains`·`http`(283)→`_shared`(20)→5 个 providers(852)→`registry`(38)→`config-store`(285)→`job-manager`(545)→**`bridge.ts`(170，自 B1 挪来)**。★ **B2 已拆三小批**（体量与依赖序）：**B2-a 叶子簇 = `types`/`redact`/`quota`/`domains`/`http`/`_shared`（已完成）** · **B2-b = 5 providers ＋ `registry`（已完成）** · **B2-c = `config-store` ＋ `job-manager` ＋ `bridge`（已完成）** | tsc ＋ lint 零红；同批落纯逻辑测试；**config-store 过数据兼容样本** |
 | **B3 域模块**（4,288） | `dola-media`(1551)→`license`(758)→`chrome-cdp`(465)→`lovart-fetch`(379)→`clipboard-image`(327)→`lovart-scan`(255)→`fingerprint-preload`(226)→`firefox`(231)→`site-hosts`(96) | 各域零红；**冒烟只要求「起窗 ＋ 打开相关面板不崩」**（真实站点/CDP 链路**不可达 —— `verify-e2e` 从未跑过**，行为如实标未验）；**license 过黄金样本** |
 | **B4 main.js**（2,403） | handler 区（回归频道表）→ 项目存储迁移 → settings 读写 → 窗口/会话/胶水 | 零红 ＋ **冒烟＝起窗/加载工程/打开设置**（需登录账号的链路标未验）；**存储布局/settings 过样本** |
-| **B5 收尾** | `pack:dir` · TD-13-26 销账（＋ `dola-duration-main` 与账号 preload 生成物的零覆盖**另立债**）· 长期工具搬 `scripts/` · `弯路.md` 升华（含**规矩寿命**处置）· knip 覆盖 electron **先基线化、不当批硬清** | G1–G6 全绿 |
+| **B5 收尾** | `pack:dir` · TD-13-26 销账（＋ `dola-duration-main` / `dola-duration-dump` 与账号 preload 生成物的零覆盖**另立债**）· 长期工具搬 `scripts/` · `弯路.md` 升华（含**规矩寿命**处置）· knip 覆盖 electron **先基线化、不当批硬清** | G1–G6 全绿 |
 
 ## §4 ★ 运行地基与基线证据
 
@@ -92,9 +93,9 @@
 |---|---|---|---|
 | D-1 | **产物住 `electron/dist/`**（必须在 `electron/` 内） | 根 `package.json` 是 `"type":"module"` ⇒ 产物被判 ESM ⇒ `require is not defined` | 冒烟：起窗 |
 | D-2 | 产物同层能解析 **`ws`** | `ws` 在 `electron/node_modules`；产物挪到仓根 ⇒ `Cannot find module 'ws'`（`chrome-cdp.js:36`） | 冒烟：走 Chrome/CDP 集成链 |
-| D-3 | `exclude: ["node_modules", "dist", "dola-duration-main.js"]` | `include: ["**/*"]` ＋ `allowJs` 把产物与 `node_modules` 当源码 ⇒ **自噬** | `tsc --listFiles` 数文件数（应 ≈ 28） |
+| D-3 | `exclude: ["node_modules", "dist", "dola-duration-main.js", "dola-duration-dump.js"]`（**第二个是 2026-10-15 复核期加的**，理由见 1.2 与 `弯路.md` W35） | `include: ["**/*"]` ＋ `allowJs` 把产物与 `node_modules` 当源码 ⇒ **自噬** | `tsc --listFiles` 数文件数（应 ≈ 28） |
 | D-4 | **入口切产物 ＋ `dist` 基准同批改**：`package.json` 的 `main` → `electron/dist/main.js`，`main.js` 里 `'../dist/index.html'` / `path.resolve(__dirname,'..','dist')` → **上两级**。⛔ **`app.getAppPath()` 不可用**：B0-a 实测它 ＝ **入口所在目录**（文件入口 ⇒ 文件所在目录；目录入口 ⇒ 该目录），**不是"仓根"** ⇒ 拿它拼 `dist` 会在某种启动方式下指错 | 渲染层入口找不到 ⇒ 白屏 | 冒烟：**产物**起窗 ＋ stderr 无「`[main] 找不到 …index.html`」 |
-| D-5 | **同目录资源全清单**（`__dirname` 基准，B0-a grep 实算）：`preload.js`（tsc 产出）· `dola-duration-main.js`（拷）· **`dola-skill-pack.json` ＋ `doubao-skill-pack.json`（拷 —— 漏了会**静默回落成空 pack**，只判存活的冒烟抓不到）** | 预加载 / 注入 / skill-pack 注入失败 | 冒烟：stderr 无「`[dola-media] 读取 … 失败`」＋ 注入 diag |
+| D-5 | **同目录资源全清单**（`__dirname` 基准，B0-a grep 实算）：`preload.js`（tsc 产出）· `dola-duration-main.js`（拷）· **`dola-duration-dump.js`（拷 —— 2026-10-15 新增；它被编译后的 `main.js` **`require`** ⇒ 漏拷就**启动即 `MODULE_NOT_FOUND`**）** · **`dola-skill-pack.json` ＋ `doubao-skill-pack.json`（拷 —— 漏了会**静默回落成空 pack**，只判存活的冒烟抓不到）** | 预加载 / 注入 / skill-pack 注入失败 | 冒烟：stderr 无「`[dola-media] 读取 … 失败`」＋ 注入 diag ＋ 构建脚本的 `REQUIRED` 自检会点名 |
 | D-6 | **构建链**：`build:electron` 进 `npm run build`（`pack:*` 依赖它） | 打包发**旧产物或无产物** | `pack:dir` 查产物 |
 | D-7 | 打包 `files`：`electron/**` ＋ `!electron/**/{*.ts,tsconfig*.json,*.tsbuildinfo}` | 连源码与配置一起发 | `pack:dir` 查 asar 清单 |
 | D-8 | ignore：`build/` · `.migration-backup/` · `*.tsbuildinfo` · 本任务 `evidence/`（B0-a 已加）；**`electron/dist` 已被现有 `.gitignore` 的非锚定 `dist/` 命中**（实证 `git check-ignore -v`） | 产物/备份进 git | `git status` |
@@ -333,7 +334,7 @@
 | 外部引用（`scripts/` · `packing/*.yml` · `docs/` · 根 `package.json`） | B0-a 出清单，B0-b/B5 逐个同步；`pack:dir` 至少跑一次 |
 | knip 覆盖 electron | 从 `knip.json` ignore 移出 ⇒ 存量死代码暴露；**基线 ＋ 当批清偿**；量大先基线化记债 |
 | `docs/**` 路径过期 | `mv-sync-refs.mjs` 顺链 ＋ B5 统一核一次 |
-| **与常驻台账的边界** | 本任务只动 **TD-13-26（销账，写清销了什么/没销什么）＋ `dola-duration-main` / 账号 preload 生成物的零覆盖新债**；**不新增缺口行**（迁移不是功能缺口）⇒ DoD 的「三处回写」**对本次不适用**（`dataflow`/`plan 13·14·15` 均无对应行），B5 一句说明即可 —— ⛔ 不为"豁免"写论证（零收益的仪式） |
+| **与常驻台账的边界** | 本任务只动 **TD-13-26（销账，写清销了什么/没销什么）＋ `dola-duration-main` / `dola-duration-dump` / 账号 preload 生成物的零覆盖新债**；**不新增缺口行**（迁移不是功能缺口）⇒ DoD 的「三处回写」**对本次不适用**（`dataflow`/`plan 13·14·15` 均无对应行），B5 一句说明即可 —— ⛔ 不为"豁免"写论证（零收益的仪式） |
 | **不碰跨世界重复** | `electron/site-hosts.js` 层 2 判定 vs `dola-duration-main.js` 的主机名判定（已裁定"保留 ＋ 如实登记为跨世界残留"，**值 1 / 判定 2**）⇒ 本任务**不顺手合并**（那是重构夹带）；只登记不改 |
 
 ### 10.4 中断 / 并发 / 降档诱惑

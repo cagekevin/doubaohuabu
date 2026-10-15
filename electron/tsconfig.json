@@ -6,7 +6,9 @@
     "     开着它时 ESM 语法被拒（TS1295/TS1287）。README §6 S0-6 预置的替代阶梯即此 ⇒ 「@shared 只许类型导入」",
     "     由 eslint 的 no-restricted-imports（allowTypeImports）承担，仍是机器检查，只是载体换了。",
     "  2. `moduleResolution` **不用 node10**：TS 6 已弃用（TS5107），靠 ignoreDeprecations 才跑得动 ⇒ 定稿 node16。",
-    "`allowJs` = 混合期的过桥（未转 .js 原样过一遍，不进类型检查）；`checkJs` 的测量归 census 脚本。"
+    "★ 终态（B5，2026-10-15）：`checkJs` 已按 §6 S0-3 置 true —— `electron/**` 已无受检 .js：",
+    "  唯一剩下的 `dola-duration-main.js` 在 exclude 里（guest 主世界文本注入脚本：不能 require、不编译、零类型覆盖，已另立债）。",
+    "`allowJs` 仍留 true：它让那个 .js 能过桥（也保持「混合态合法」——§12 交付态）。"
   ],
   "compilerOptions": {
     "target": "ES2023",
@@ -40,7 +42,7 @@
     "forceConsistentCasingInFileNames": true,
 
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "noEmitOnError": true,
     "sourceMap": true,
     "incremental": true,
@@ -53,5 +55,5 @@
     "paths": { "@shared/*": ["../build/shared-types/*.d.ts"] }
   },
   "include": ["**/*"],
-  "exclude": ["node_modules", "dist", "dola-duration-main.js"]
+  "exclude": ["node_modules", "dist", "dola-duration-main.js", "dola-duration-dump.js"]
 }

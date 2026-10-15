@@ -2306,74 +2306,12 @@ handle('detect-errors', async (_e, webContentsId) => {
 
 // 由主进程直接对 webview 执行 JS，把真实时长下拉 DOM 拉回主进程写盘（绕过不可靠的 webview→主进程回传通道）。
 // 这样只要脚本被注入、且 dola 页面加载过，~/dola-duration-debug.log 就一定会有真实结构数据，便于精准修复。
-// ⚠️ 本函数会被 `.toString()` 注入页面 ⇒ **语句/表达式逐字不动**（类型标注与断言在编译期擦除，
-//    产出的 JS 文本与源一致）。
-/* eslint-disable no-var, no-restricted-globals -- 本函数整体会被 `.toString()` 注入 guest 页面：
-   `var` 与 `document` 都是**注入脚本的一部分**（页面里的 `document` 正是要用的 API），必须与源逐字一致。
-   §6 S0-4 的「局部放行」机制：规则不移除，只在本段内放行并写明理由。 */
-function dolaDurationDump(): string {
-  try {
-    var durRe = /^(5|10|15|30|60)\s*(s|秒)?$/i;
-    function leavesOf(root: Document): Element[] {
-      var out: Element[] = [];
-      var all = root.querySelectorAll('*');
-      for (var i = 0; i < all.length; i++) {
-        var el = all[i] as Element;
-        if (el.children.length === 0) {
-          var t = (el.textContent || '').trim();
-          if (durRe.test(t)) out.push(el);
-        }
-      }
-      return out;
-    }
-    function countDesc(el: Element): number {
-      var c = 0,
-        k = el.querySelectorAll('*');
-      for (var j = 0; j < k.length; j++) {
-        if ((k[j] as Element).children.length === 0 && durRe.test(((k[j] as Element).textContent || '').trim())) c++;
-      }
-      return c;
-    }
-    function chain(el: Node | null): string[] {
-      var arr: string[] = [],
-        p = el;
-      for (var k = 0; k < 8 && p; k++) {
-        var cls =
-          (p as Element).className && typeof (p as Element).className === 'string'
-            ? (p as Element).className.split(' ').slice(0, 3).join('.')
-            : '';
-        arr.push(((p as Element).tagName || '') + (cls ? '.' + cls : ''));
-        p = (p as Element).parentElement;
-      }
-      return arr;
-    }
-    var leaves = leavesOf(document);
-    if (!leaves.length) {
-      return JSON.stringify({ leaves: 0, note: '页面无 5s/10s/15s 这类时长叶子，可能标签不同或尚未加载' });
-    }
-    var container = (leaves[0] as Element).parentElement,
-      guard = 0;
-    while (container && container.parentElement && guard++ < 12) {
-      if (countDesc(container) >= 2) break;
-      container = container.parentElement;
-    }
-    var info = leaves.slice(0, 12).map(function (l) {
-      return {
-        text: (l.textContent || '').trim(),
-        tag: l.tagName,
-        cls: l.className && typeof l.className === 'string' ? l.className.slice(0, 90) : '',
-        role: l.getAttribute && l.getAttribute('role'),
-        chain: chain(l.parentNode),
-      };
-    });
-    var html = container ? container.outerHTML.slice(0, 6000) : '';
-    return JSON.stringify({ leaves: leaves.length, info: info, containerHTML: html });
-  } catch (e) {
-    return JSON.stringify({ error: e instanceof Error ? e.message : String(e) });
-  }
-}
-/* eslint-enable no-var, no-restricted-globals */
-const DUMP_EXPR = `(${dolaDurationDump.toString()})()`;
+/* eslint-disable @typescript-eslint/no-require-imports --
+   §7 C-1：`require` 保留原样（本文件顶层 require 与 `app.setPath` 的先后是求值顺序的一部分）；
+   §7 C-3 授权局部放行。形状就地写成 `{ DUMP_EXPR: string }` —— 该模块是**不进编译面的 .js**
+   （`electron/dola-duration-dump.js`，与 `dola-duration-main.js` 同族：文本即注入文本）⇒ 没有可导入的类型。 */
+const { DUMP_EXPR } = require('./dola-duration-dump') as { DUMP_EXPR: string };
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 handle('inject-dola-duration-main', async (_e, webContentsId) => {
   // 保底：本 handler 一旦被调用，立刻写这一行，证明触发（写在 wc 校验之前，避免 id 无效时连日志都没有）
