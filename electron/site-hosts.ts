@@ -29,8 +29,11 @@
  *    （会话页 / 登录页地址），**不要往这里搬**。
  */
 
-/** 层 1 · 每源主域（**唯一** —— 加源只改这一处） */
-const SITE_HOSTS = Object.freeze({
+/**
+ * 层 1 · 每源主域（**唯一** —— 加源只改这一处）。
+ * 类型写成 `Readonly<Record<string, string>>`：`isHostOf` 用**变量**当下标查它（`SITE_HOSTS[source]`）。
+ */
+const SITE_HOSTS: Readonly<Record<string, string>> = Object.freeze({
   dola: 'dola.com',
   doubao: 'doubao.com',
 });
@@ -42,7 +45,7 @@ const SITE_HOSTS = Object.freeze({
  *    **尾点**（`doubao.com.` 这种合法 FQDN 写法）来自 `dola-media.safeGetHost` 的 `.replace(/\.$/, '')`
  *    —— 少这一条会把带尾点的 host 判成"不认识"（原先判得对、改后判错 = 回归）。
  */
-function normalizeHost(raw) {
+function normalizeHost(raw: unknown): string {
   return String(raw || '')
     .replace(/^www\./i, '')
     .replace(/\.$/, '')
@@ -56,7 +59,7 @@ function normalizeHost(raw) {
  *    （历史实现直接在 URL 上做 `includes('doubao.com')` —— 那会把
  *    `https://evil.test/?u=doubao.com` 也判成豆包）。必须**先取 host 再判**。
  */
-function hostOfUrl(rawUrl) {
+function hostOfUrl(rawUrl: unknown): string {
   try {
     return new URL(String(rawUrl)).hostname;
   } catch {
@@ -64,8 +67,8 @@ function hostOfUrl(rawUrl) {
   }
 }
 
-/** 层 2 · 某个 host 是不是某个源（含子域；`source` 未知 ⇒ `false`） */
-function isHostOf(host, source) {
+/** 层 2 · 某个 host 是不是某个源（含子域；`source` 未知 ⇒ 查不到 ⇒ `false`） */
+function isHostOf(host: unknown, source: string): boolean {
   const base = SITE_HOSTS[source];
   if (!base) return false;
   const h = normalizeHost(host);
@@ -73,7 +76,7 @@ function isHostOf(host, source) {
 }
 
 /** 层 2 · 某 host 归哪个源（不认识 ⇒ 空串 —— **不编默认值**，由层 3 决定怎么处置） */
-function sourceOfHost(host) {
+function sourceOfHost(host: unknown): string {
   for (const source of Object.keys(SITE_HOSTS)) {
     if (isHostOf(host, source)) return source;
   }
@@ -81,15 +84,8 @@ function sourceOfHost(host) {
 }
 
 /** 层 2 · 是不是"我们认识的源域"（不认识 ⇒ `false`） */
-function isKnownHost(host) {
+function isKnownHost(host: unknown): boolean {
   return sourceOfHost(host) !== '';
 }
 
-module.exports = {
-  SITE_HOSTS,
-  normalizeHost,
-  hostOfUrl,
-  isHostOf,
-  sourceOfHost,
-  isKnownHost,
-};
+export { SITE_HOSTS, normalizeHost, hostOfUrl, isHostOf, sourceOfHost, isKnownHost };

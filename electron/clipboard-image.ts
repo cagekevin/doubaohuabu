@@ -23,16 +23,18 @@
 // 没有图片时静默返回 { ok: false }，渲染层据此回落到「粘贴画布节点」，不弹任何错误。
 // ============================================================
 
-const { clipboard, nativeImage, webContents, BrowserWindow } = require('electron');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { execFileSync } = require('child_process');
-const { handle } = require('./ipc');
+import { clipboard, nativeImage, webContents, BrowserWindow } from 'electron';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { execFileSync } from 'child_process';
+import { handle } from './ipc';
+import { asRecord } from './api/shape';
+import type { NativeImage } from 'electron';
 
 const CLIPBOARD_IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|avif|heic|heif|tiff?)$/i;
 
-const CLIPBOARD_IMAGE_MIME = {
+const CLIPBOARD_IMAGE_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -43,25 +45,55 @@ const CLIPBOARD_IMAGE_MIME = {
   heic: 'image/heic',
   heif: 'image/heif',
   tif: 'image/tiff',
-  tiff: 'image/tiff'
+  tiff: 'image/tiff',
 };
 
 // 位图探测顺序：Chromium 基本都能转码出 png，其余格式作为「原生字节」兜底
 const CLIPBOARD_IMAGE_FORMATS = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'];
 
 /**
- * 从剪贴板取一种格式的位图字节。
- * @param {string} fmt mime
- * @param {boolean} useHas 是否先用 has() 探测（第二轮不探测，防 has 误报）
+ * `clipboard` 的**结构视图**：本文件按版本差异逐处 `typeof … === 'function'` 探测
+ * （源如此：Electron 44 的异步面与老版本 `readImage`/`readFilePath` 可能此有彼无），
+ * 而 electron.d.ts 只描述当前版本的形状 ⇒ 用一份结构视图同时容纳两代 API。
  */
-async function readClipboardFormat(fmt, useHas) {
-  if (useHas && typeof clipboard.has === 'function') {
+interface ClipboardLike {
+  read?(fmt: string): Promise<unknown[]>;
+  has?(fmt: string): Promise<boolean>;
+  readImage?(): NativeImage;
+  readFilePath?(): string;
+  writeImage?(img: NativeImage): void;
+}
+const clip = clipboard as unknown as ClipboardLike;
+
+/** Electron 44 的 `ClipboardItem` 形状（`getType(mime)` → Blob） */
+interface ClipboardItemLike {
+  types?: unknown;
+  getType?(mime: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
+  [k: string]: unknown;
+}
+
+/** 取到的一张位图 */
+interface BitmapGot {
+  buf: Buffer;
+  mime: string;
+  img: NativeImage;
+}
+
+/**
+ * 从剪贴板取一种格式的位图字节。
+ * @param fmt mime
+ * @param useHas 是否先用 has() 探测（第二轮不探测，防 has 误报）
+ */
+async function readClipboardFormat(fmt: string, useHas: boolean): Promise<BitmapGot | null> {
+  if (useHas && typeof clip.has === 'function') {
     try {
-      if (!(await clipboard.has(fmt))) return null; // Electron 44 的 has() 返回 Promise
-    } catch (_) { /* has 不可靠时不要据此放弃 */ }
+      if (!(await clip.has(fmt))) return null; // Electron 44 的 has() 返回 Promise
+    } catch {
+      /* has 不可靠时不要据此放弃 */
+    }
   }
-  const items = await clipboard.read(fmt);
-  const item = Array.isArray(items) ? items[0] : null;
+  const items = await clip.read?.(fmt);
+  const item = (Array.isArray(items) ? items[0] : undefined) as ClipboardItemLike | undefined;
   if (!item || typeof item.getType !== 'function') return null;
 
   const types = Array.isArray(item.types) ? item.types : [];
@@ -82,24 +114,28 @@ async function readClipboardFormat(fmt, useHas) {
  * 取剪贴板里的第一张位图。命中返回 { buf, mime, img }，否则 null。
  * 两轮：先按 has() 快速探测；全都没中时再无探测重跑一遍（防 has() 漏判）。
  */
-async function readClipboardBitmap() {
+async function readClipboardBitmap(): Promise<BitmapGot | null> {
   // Electron 44：异步 Clipboard API
-  if (typeof clipboard.read === 'function') {
+  if (typeof clip.read === 'function') {
     for (const useHas of [true, false]) {
       for (const fmt of CLIPBOARD_IMAGE_FORMATS) {
         try {
           const got = await readClipboardFormat(fmt, useHas);
           if (got) return got;
-        } catch (_) { /* 该格式不可用 → 换下一个 */ }
+        } catch {
+          /* 该格式不可用 → 换下一个 */
+        }
       }
     }
     return null;
   }
   // 老款 Electron 兜底：同步 readImage（本机已被移除，保留为兼容分支）
   try {
-    const img = typeof clipboard.readImage === 'function' ? clipboard.readImage() : null;
+    const img = typeof clip.readImage === 'function' ? clip.readImage() : null;
     if (img && !img.isEmpty()) return { buf: img.toPNG(), mime: 'image/png', img };
-  } catch (_) { /* 老 Electron 兼容分支：API 不存在或读取失败 ⇒ 回落主路径 */ }
+  } catch {
+    /* 老 Electron 兼容分支：API 不存在或读取失败 ⇒ 回落主路径 */
+  }
   return null;
 }
 
@@ -108,28 +144,37 @@ async function readClipboardBitmap() {
  * Electron 44 移除了 readFilePath → macOS 走 osascript 兜底（剪贴板不是文件时
  * osascript 会立刻报错，不会挂住；再叠一层 2s 超时保底）。
  */
-function readClipboardFilePath() {
-  if (typeof clipboard.readFilePath === 'function') {
-    try { return clipboard.readFilePath() || ''; } catch (_) { return ''; }
+function readClipboardFilePath(): string {
+  if (typeof clip.readFilePath === 'function') {
+    try {
+      return clip.readFilePath() || '';
+    } catch {
+      return '';
+    }
   }
   if (process.platform !== 'darwin') return '';
   try {
     const out = execFileSync('/usr/bin/osascript', ['-e', 'POSIX path of (the clipboard as alias)'], {
       encoding: 'utf8',
       timeout: 2000,
-      stdio: ['ignore', 'pipe', 'ignore']
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
-    return String(out || '').trim().split('\n')[0].trim() || '';
-  } catch (_) {
+    return String(out || '')
+      .trim()
+      .split('\n')[0]
+      ?.trim() || '';
+  } catch {
     return '';
   }
 }
 
-/**
- * 供 IPC 直接调用的主入口。
- * @returns {Promise<{ok:true, source:'bitmap'|'file', mime, dataUrl, name?, w, h}|{ok:false, error?:string}>}
- */
-async function readClipboardImage() {
+/** 读剪贴板的回执（`ok:false` 时 `error` 只在真出错时给；"剪贴板没图"是静默的） */
+type ClipboardReadResult =
+  | { ok: true; source: 'bitmap' | 'file'; mime: string; dataUrl: string; name?: string; w: number; h: number }
+  | { ok: false; error?: string };
+
+/** 供 IPC 直接调用的主入口 */
+async function readClipboardImage(): Promise<ClipboardReadResult> {
   // ① 位图：直接回传剪贴板里的**原始字节**，不再二次 PNG/JPEG 编码。
   //    既避免 JPEG 被转 PNG 膨胀约 7 倍，也保住 GIF 动图与原始画质。
   try {
@@ -142,11 +187,11 @@ async function readClipboardImage() {
         mime: got.mime,
         dataUrl: `data:${got.mime};base64,${got.buf.toString('base64')}`,
         w: Math.max(1, Math.round(s.width) || 0),
-        h: Math.max(1, Math.round(s.height) || 0)
+        h: Math.max(1, Math.round(s.height) || 0),
       };
     }
   } catch (err) {
-    return { ok: false, error: err && err.message ? err.message : String(err) };
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 
   // ② 文件引用（Finder 复制图片文件）：pasteboard 上没有像素，只有路径
@@ -166,11 +211,13 @@ async function readClipboardImage() {
           dataUrl: `data:${mime};base64,${buf.toString('base64')}`,
           name: path.basename(p),
           w: Math.max(1, Math.round(s.width) || 0),
-          h: Math.max(1, Math.round(s.height) || 0)
+          h: Math.max(1, Math.round(s.height) || 0),
         };
       }
     }
-  } catch (_) { /* 没有文件引用也是正常情况 */ }
+  } catch {
+    /* 没有文件引用也是正常情况 */
+  }
 
   return { ok: false };
 }
@@ -188,34 +235,47 @@ async function readClipboardImage() {
 //     ① 主进程原生 `clipboard.writeImage`（存在就用，兼容有该 API 的 Electron）
 //     ② 回落到「目标 webview 页面内」用标准 Async Clipboard API（`navigator.clipboard.write`
 //        + `ClipboardItem`）—— 已实测能把 image/png 真正写进系统剪贴板（回读可确认）。
-async function writeImageToPasteboard(ni, webContentsId) {
-  if (ni && typeof clipboard.writeImage === 'function') {
-    clipboard.writeImage(ni);
+async function writeImageToPasteboard(ni: NativeImage, webContentsId: unknown): Promise<WriteResult> {
+  if (ni && typeof clip.writeImage === 'function') {
+    clip.writeImage(ni);
     return { ok: true, via: 'main-native' };
   }
   if (!webContentsId) {
     return {
       ok: false,
-      error: '当前 Electron 主进程没有 clipboard.writeImage，且未指定目标 webview（无法回落到页面内写入）'
+      error: '当前 Electron 主进程没有 clipboard.writeImage，且未指定目标 webview（无法回落到页面内写入）',
     };
   }
-  const wc = webContents.fromId(webContentsId);
+  // 载荷里的 webContentsId（源直接把它传给 `fromId`）
+  const wc = webContents.fromId(webContentsId as number);
   if (!wc) return { ok: false, error: `找不到目标 webContents: ${webContentsId}` };
 
   // 页面内写剪贴板需要 clipboard-sanitized-write 权限；豆包等分区默认没有权限处理器，
   // 这里按与 Lovart 容器同样的口径放行（只影响该 webview 所在分区会话）。
   try {
-    const ses = wc.session;
+    const ses = wc.session as Electron.Session & { __dcClipboardPermPatched?: boolean };
     if (ses && !ses.__dcClipboardPermPatched) {
       ses.__dcClipboardPermPatched = true;
-      try { ses.setPermissionCheckHandler(() => true); } catch (_) { /* 忽略 */ }
-      try { ses.setPermissionRequestHandler((_w, _p, cb) => cb(true)); } catch (_) { /* 忽略 */ }
+      try {
+        ses.setPermissionCheckHandler(() => true);
+      } catch {
+        /* 忽略 */
+      }
+      try {
+        ses.setPermissionRequestHandler((_w, _p, cb) => cb(true));
+      } catch {
+        /* 忽略 */
+      }
     }
-  } catch (_) { /* 忽略 */ }
+  } catch {
+    /* 忽略 */
+  }
 
   let b64 = '';
-  try { b64 = ni.toPNG().toString('base64'); } catch (e) {
-    return { ok: false, error: `图片编码失败: ${e && e.message || e}` };
+  try {
+    b64 = ni.toPNG().toString('base64');
+  } catch (e) {
+    return { ok: false, error: `图片编码失败: ${e instanceof Error ? e.message : String(e)}` };
   }
   if (!b64) return { ok: false, error: '图片数据为空' };
 
@@ -241,13 +301,23 @@ async function writeImageToPasteboard(ni, webContentsId) {
   })()`;
 
   try {
-    const r = await wc.executeJavaScript(script);
-    if (r && r.ok) return { ok: true, via: 'page-clipboard', verified: r.verified === true };
-    return { ok: false, error: (r && r.error) || '页面写剪贴板失败' };
+    const r = asRecord(await wc.executeJavaScript(script));
+    if (r['ok']) return { ok: true, via: 'page-clipboard', verified: r['verified'] === true };
+    return { ok: false, error: r['error'] ? String(r['error']) : '页面写剪贴板失败' };
   } catch (e) {
-    return { ok: false, error: `页面写剪贴板异常: ${(e && e.message) || e}` };
+    return { ok: false, error: `页面写剪贴板异常: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
+
+/** 写剪贴板的回执 */
+type WriteResult =
+  | { ok: true; via: 'main-native' | 'page-clipboard'; verified?: boolean }
+  | { ok: false; error: string };
+
+/** 写剪贴板的回执（对外形态：附临时文件扩展名） */
+type CopyResult =
+  | { ok: true; ext: string; via: 'main-native' | 'page-clipboard'; verified: boolean }
+  | { ok: false; error: string };
 
 /**
  * 将 dataUrl 图片写入临时文件并复制到系统剪贴板。
@@ -256,19 +326,18 @@ async function writeImageToPasteboard(ni, webContentsId) {
  * `webContentsId` 可选 —— 主进程无 `writeImage` 时用它把图片经该 webview 页面写进系统剪贴板。
  * ⚠️ `img://` → 本地路径是**存储/媒体域**的实现，由 `initClipboardImage` **注入**。
  */
-async function copyImageToClipboard(img, webContentsId, resolveImageRef) {
-  let dataUrl = (img.dataUrl || '');
-  let realPath = null;
+async function copyImageToClipboard(img: unknown, webContentsId: unknown, resolveImageRef: (ref: string) => string | null): Promise<CopyResult> {
+  const rec = asRecord(img);
+  const dataUrl = String(rec['dataUrl'] || '');
+  let realPath: string | null = null;
   if (dataUrl.startsWith('img://')) {
     realPath = resolveImageRef(dataUrl);
     if (!realPath) return { ok: false, error: '图片文件不存在（img:// 引用失效）' };
   }
 
-  const ext = realPath
-    ? path.extname(realPath).slice(1).toLowerCase()
-    : (dataUrl.match(/^data:image\/(\w+);/) || [])[1];
+  const ext = realPath ? path.extname(realPath).slice(1).toLowerCase() : (dataUrl.match(/^data:image\/(\w+);/) || [])[1];
 
-  let buffer;
+  let buffer: Buffer;
   if (realPath) {
     buffer = fs.readFileSync(realPath);
   } else {
@@ -276,7 +345,7 @@ async function copyImageToClipboard(img, webContentsId, resolveImageRef) {
     if (!match) {
       return { ok: false, error: '无效的 dataUrl 格式' };
     }
-    buffer = Buffer.from(match[2], 'base64');
+    buffer = Buffer.from(match[2] || '', 'base64');
   }
   if (!buffer || buffer.length === 0) return { ok: false, error: '图片数据为空' };
 
@@ -284,7 +353,9 @@ async function copyImageToClipboard(img, webContentsId, resolveImageRef) {
   const tmpDir = path.join(os.tmpdir(), 'doubao-canvas');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-  const safeLabel = (img.label || 'image').replace(/[\\/:"*?<>|]/g, '_').slice(0, 40);
+  const safeLabel = String(rec['label'] || 'image')
+    .replace(/[\\/:"*?<>|]/g, '_')
+    .slice(0, 40);
   const fileName = `${safeLabel}-${Date.now()}.${ext || 'png'}`;
   const filePath = path.join(tmpDir, fileName);
   fs.writeFileSync(filePath, buffer);
@@ -299,7 +370,11 @@ async function copyImageToClipboard(img, webContentsId, resolveImageRef) {
   const writeRes = await writeImageToPasteboard(ni, webContentsId);
   if (!writeRes.ok) {
     // 临时文件不再需要，清掉再返回失败原因（原因会一路带到发送日志/界面提示）
-    try { fs.unlinkSync(filePath); } catch (_) { /* 忽略清理失败 */ }
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      /* 忽略清理失败 */
+    }
     return { ok: false, error: writeRes.error || '写入系统剪贴板失败' };
   }
 
@@ -309,18 +384,24 @@ async function copyImageToClipboard(img, webContentsId, resolveImageRef) {
     BrowserWindow.getAllWindows().forEach((w) => {
       if (!w.isDestroyed()) w.webContents.send('clipboard-image-changed');
     });
-  } catch (_) { /* 忽略广播失败 */ }
+  } catch {
+    /* 忽略广播失败 */
+  }
 
   // 清理临时文件（剪贴板已持有内存副本）
-  try { fs.unlinkSync(filePath); } catch (_) { /* 忽略清理失败 */ }
+  try {
+    fs.unlinkSync(filePath);
+  } catch {
+    /* 忽略清理失败 */
+  }
 
   return { ok: true, ext: ext || 'png', via: writeRes.via, verified: writeRes.verified === true };
 }
 
 // 导出面 = **宿主可用面**：只有 `initClipboardImage` 出本文件（`read*` / 写剪贴板都是内部实现）
-function initClipboardImage({ resolveImageRef }) {
+function initClipboardImage({ resolveImageRef }: { resolveImageRef: (ref: string) => string | null }): void {
   handle('read-clipboard-image', async () => readClipboardImage());
   handle('copy-image-to-clipboard', async (_e, img, webContentsId) => copyImageToClipboard(img, webContentsId, resolveImageRef));
 }
 
-module.exports = { initClipboardImage };
+export { initClipboardImage };

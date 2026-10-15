@@ -13,30 +13,36 @@
 //  · 不改动任何指纹（保持 Firefox 原生），不接代理（与用户火狐体验一致）
 // ============================================================
 
-const fs = require('fs');
-const path = require('path');
-const { spawn, execSync } = require('child_process');
-const { app } = require('electron');
-const { handle } = require('./ipc');
+import fs from 'fs';
+import path from 'path';
+import { spawn, execSync } from 'child_process';
+import { app } from 'electron';
+import { handle } from './ipc';
+import { asRecord } from './api/shape';
 
-function shellEscape(arg) {
+/** 启动结果：失败带原因（macOS 的 `open` 路径还带实际执行的命令，供日志留痕） */
+type LaunchResult =
+  | { ok: true; executable: string; profile: string; args: string[]; command: string }
+  | { ok: false; error: string; command?: string };
+
+function shellEscape(arg: string): string {
   if (/^[a-zA-Z0-9_./:=@-]+$/.test(arg)) return arg;
   return "'" + arg.replace(/'/g, "'\"'\"'") + "'";
 }
 
 // 内置 Firefox（打包后位于 resources/firefox）
 // ⚠️ 开发态基准 = app 根：本文件住 `electron/`（源码）或 `electron/dist/`（产物）⇒ 一律上两级（同 D-4）
-function bundledFirefoxPath() {
+function bundledFirefoxPath(): string | null {
   const base = process.resourcesPath || path.join(__dirname, '..', '..');
   const candidates = [
     path.join(base, 'firefox', 'Firefox.app', 'Contents', 'MacOS', 'firefox'), // macOS
     path.join(base, 'firefox', 'firefox.exe'), // Windows
-    path.join(base, 'firefox', 'firefox') // Linux
+    path.join(base, 'firefox', 'firefox'), // Linux
   ];
   return candidates.find((p) => fs.existsSync(p)) || null;
 }
 
-function systemFirefoxPath() {
+function systemFirefoxPath(): string | null {
   if (process.platform === 'darwin') {
     const p = '/Applications/Firefox.app/Contents/MacOS/firefox';
     return fs.existsSync(p) ? p : null;
@@ -49,40 +55,42 @@ function systemFirefoxPath() {
   }
 }
 
-function getFirefoxExecutable() {
+function getFirefoxExecutable(): string | null {
   return bundledFirefoxPath() || systemFirefoxPath();
 }
 
 // 预装的 MAC 插件 XPI（打包后位于 resources/firefox-addons）
-function addonAssetPath() {
+function addonAssetPath(): string | null {
   const base = process.resourcesPath || path.join(__dirname, '..', '..');
   const p = path.join(base, 'firefox-addons', 'multi-account-containers.xpi');
   return fs.existsSync(p) ? p : null;
 }
 
 // 读取 XPI（zip）内 manifest.json 的 addon id，用于正确命名到 extensions/<id>.xpi
-function readAddonId(xpiPath) {
+function readAddonId(xpiPath: string): string | null {
   try {
     const raw = execSync(`unzip -p "${xpiPath}" manifest.json`, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-    const manifest = JSON.parse(raw);
-    const gecko = manifest.browser_specific_settings?.gecko || manifest.applications?.gecko;
-    return gecko?.id || null;
+    const manifest = asRecord(JSON.parse(raw) as unknown);
+    // 源的取法：`browser_specific_settings.gecko || applications.gecko`（两代 manifest 键名）
+    const gecko = asRecord(asRecord(manifest['browser_specific_settings'])['gecko'] || asRecord(manifest['applications'])['gecko']);
+    const id = gecko['id'];
+    return typeof id === 'string' ? id : null;
   } catch {
     return null;
   }
 }
 
-function profilesRoot() {
+function profilesRoot(): string {
   return path.join(app.getPath('userData'), 'firefox-profiles');
 }
 
-function profileDirFor(accountId) {
+function profileDirFor(accountId: unknown): string {
   const safe = String(accountId).replace(/[^a-zA-Z0-9_.-]/g, '_');
   return path.join(profilesRoot(), safe);
 }
 
 // 确保账号的独立 Firefox profile 已创建，并预装多账号容器插件
-function ensureProfile(accountId) {
+function ensureProfile(accountId: unknown): string {
   const dir = profileDirFor(accountId);
   fs.mkdirSync(path.join(dir, 'extensions'), { recursive: true });
 
@@ -96,24 +104,26 @@ function ensureProfile(accountId) {
   // user.js：保持 Firefox 原生，仅关闭首次运行噪音与遥测；
   // 关键：extensions.autoDisableScopes=0 让 sideload 的 XPI 自动启用，无需手动 about:addons
   const userJs = path.join(dir, 'user.js');
-  const prefs = [
-    'user_pref("extensions.autoDisableScopes", 0);',
-    'user_pref("extensions.autoDisableScanners", false);',
-    'user_pref("browser.shell.checkDefaultBrowser", false);',
-    'user_pref("toolkit.telemetry.enabled", false);',
-    'user_pref("toolkit.telemetry.unified", false);',
-    'user_pref("datareporting.healthreport.uploadEnabled", false);',
-    'user_pref("app.shield.optoutstudies.enabled", false);',
-    'user_pref("trailhead.firstrun.pin", false);',
-    'user_pref("browser.uitour.enabled", false);',
-    'user_pref("extensions.legacy.enabled", false);'
-  ].join('\n') + '\n';
+  const prefs =
+    [
+      'user_pref("extensions.autoDisableScopes", 0);',
+      'user_pref("extensions.autoDisableScanners", false);',
+      'user_pref("browser.shell.checkDefaultBrowser", false);',
+      'user_pref("toolkit.telemetry.enabled", false);',
+      'user_pref("toolkit.telemetry.unified", false);',
+      'user_pref("datareporting.healthreport.uploadEnabled", false);',
+      'user_pref("app.shield.optoutstudies.enabled", false);',
+      'user_pref("trailhead.firstrun.pin", false);',
+      'user_pref("browser.uitour.enabled", false);',
+      'user_pref("extensions.legacy.enabled", false);',
+    ].join('\n') + '\n';
   fs.writeFileSync(userJs, prefs);
 
   return dir;
 }
 
-function launch(accountId, url) {
+// 返回类型含"直接给结果"：源在前两个失败分支就是**直接返回对象**（不经 Promise），调用方 `await` 两者都能吃
+function launch(accountId: unknown, url: unknown): LaunchResult | Promise<LaunchResult> {
   const exe = getFirefoxExecutable();
   if (!exe) return { ok: false, error: 'no-firefox' };
   if (!fs.existsSync(exe)) return { ok: false, error: `firefox 不存在: ${exe}` };
@@ -126,24 +136,31 @@ function launch(accountId, url) {
   if (isMacAppBundle) {
     try {
       execSync(`xattr -dr com.apple.quarantine "${appBundle}"`, { stdio: 'ignore' });
-    } catch { /* 已无隔离属性，忽略 */ }
+    } catch {
+      /* 已无隔离属性，忽略 */
+    }
   }
 
   const commonArgs = ['--no-remote', '--profile', dir];
-  if (url) commonArgs.push(url);
+  if (url) commonArgs.push(String(url));
 
   return new Promise((resolve) => {
     let settled = false;
-    const settle = (res) => { if (!settled) { settled = true; resolve(res); } };
+    const settle = (res: LaunchResult): void => {
+      if (!settled) {
+        settled = true;
+        resolve(res);
+      }
+    };
 
     // macOS 优先使用 open -n -a <bundle> --args ... 启动 .app，绕过直接执行二进制可能遇到的签名/库校验问题
     if (isMacAppBundle) {
       const openArgs = ['-n', '-a', appBundle, '--args', ...commonArgs];
-      const command = ['open', ...openArgs].map(shellEscape).join(' ');
+      const command = ['open', ...openArgs].map((a) => shellEscape(a)).join(' ');
       const child = spawn('open', openArgs, { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
       let stderr = '';
-      if (child.stderr) child.stderr.on('data', (d) => { stderr += d.toString(); });
-      child.on('error', (err) => settle({ ok: false, error: `open 启动失败: ${err && err.message || err}`, command }));
+      if (child.stderr) child.stderr.on('data', (d: Buffer) => void (stderr += d.toString()));
+      child.on('error', (err) => settle({ ok: false, error: `open 启动失败: ${err.message}`, command }));
       child.on('exit', (code) => {
         if (code !== 0 && code !== null) {
           settle({ ok: false, error: `open 退出 (code ${code})：${stderr.trim() || '无错误输出'}`, command });
@@ -159,11 +176,11 @@ function launch(accountId, url) {
     }
 
     // 非 macOS / 非 .app 情况：直接执行二进制
-    const command = [exe, ...commonArgs].map(shellEscape).join(' ');
+    const command = [exe, ...commonArgs].map((a) => shellEscape(a)).join(' ');
     const child = spawn(exe, commonArgs, { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
-    if (child.stderr) child.stderr.on('data', (d) => { stderr += d.toString(); });
-    child.on('error', (err) => settle({ ok: false, error: `启动失败: ${err && err.message || err}`, command }));
+    if (child.stderr) child.stderr.on('data', (d: Buffer) => void (stderr += d.toString()));
+    child.on('error', (err) => settle({ ok: false, error: `启动失败: ${err.message}`, command }));
     child.on('exit', (code) => {
       if (code !== 0 && code !== null) {
         settle({ ok: false, error: `Firefox 进程退出 (code ${code})：${stderr.trim() || '无错误输出'}`, command });
@@ -178,19 +195,19 @@ function launch(accountId, url) {
   });
 }
 
-function removeProfile(accountId) {
+function removeProfile(accountId: unknown): { ok: true } {
   const dir = profileDirFor(accountId);
   fs.rmSync(dir, { recursive: true, force: true });
   return { ok: true };
 }
 
-function getStatus() {
+function getStatus(): { available: boolean; bundled: boolean; path: string | null; addonInstalled: boolean } {
   const exe = getFirefoxExecutable();
   return {
     available: !!exe,
     bundled: !!bundledFirefoxPath(),
     path: exe,
-    addonInstalled: !!addonAssetPath()
+    addonInstalled: !!addonAssetPath(),
   };
 }
 
@@ -200,14 +217,16 @@ function getStatus() {
  * ★ **域唯一门面**：宿主壳只说「初始化 Lovart 内置 Firefox 域」。
  * ⚠️ 宿主壳不再需要域内任何别的名字 —— 路径解析 / profile 落点 / 启动命令全在本文件。
  */
-function initFirefox() {
-  handle('ensure-lovart-firefox-profile', async (_e, { accountId } = {}) => {
+function initFirefox(): void {
+  handle('ensure-lovart-firefox-profile', async (_e, payload) => {
+    const { accountId } = asRecord(payload);
     if (!accountId) return { ok: false, error: '缺少 accountId' };
     ensureProfile(accountId);
     return { ok: true };
   });
 
-  handle('open-lovart-firefox', async (_e, { accountId, url } = {}) => {
+  handle('open-lovart-firefox', async (_e, payload) => {
+    const { accountId, url } = asRecord(payload);
     if (!accountId) return { ok: false, error: '缺少 accountId' };
     const res = await launch(accountId, url);
     if (!res.ok) {
@@ -218,7 +237,8 @@ function initFirefox() {
     return res;
   });
 
-  handle('remove-lovart-firefox-profile', async (_e, { accountId } = {}) => {
+  handle('remove-lovart-firefox-profile', async (_e, payload) => {
+    const { accountId } = asRecord(payload);
     if (!accountId) return { ok: false, error: '缺少 accountId' };
     removeProfile(accountId);
     return { ok: true };
@@ -228,4 +248,4 @@ function initFirefox() {
 }
 
 // 导出面 = **宿主可用面**：只有 `initFirefox` 出本文件（其余函数都是本文件内部实现）
-module.exports = { initFirefox };
+export { initFirefox };
