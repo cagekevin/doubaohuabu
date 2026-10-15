@@ -2,7 +2,7 @@
 
 > **定位**：把 `electron/**` 从 CommonJS JS 迁到**真 TS**（最严格档 · 收窄 · 无 any 兜底），并让前后端 IPC 契约**机器受检**（消灭人工对账）。
 > **为什么做**：① 契约漂移是本仓**唯一实证过的 bug 类**（剪贴板三 bug · `jobId` vs `id` · `size` vs `bytes` · `pickStorage` 漏 payload）；② **TD-13-26**（electron 零闸：tsconfig/eslint/vitest 三方都不含）的既定解法就是把它拉进类型覆盖。
-> **状态**：**B0-a 已完成**（地基与旗组合**定稿**；产出见 `日志.md`，弯路见 `弯路.md` W21–W24）。下一批 ＝ B0-b。
+> **状态**：**B0-a ＋ B0-b 已完成**（地基、旗组合、两闸落地 —— 检查点 **C1 已过**，逐条凭证见 `日志.md`；弯路见 `弯路.md` W21–W26）。下一批 ＝ B1。
 > **粒度**：**执行级** —— 裁决与顺序已写死；凡遇本文没写到的情形，**停下来改本文**，别就地决定。
 > **本目录**：`README.md`（计划 · 本文）· `日志.md`（批次日志）· `弯路.md`（弯路台账）· `scripts/`（任务脚本）。
 
@@ -93,8 +93,8 @@
 | D-1 | **产物住 `electron/dist/`**（必须在 `electron/` 内） | 根 `package.json` 是 `"type":"module"` ⇒ 产物被判 ESM ⇒ `require is not defined` | 冒烟：起窗 |
 | D-2 | 产物同层能解析 **`ws`** | `ws` 在 `electron/node_modules`；产物挪到仓根 ⇒ `Cannot find module 'ws'`（`chrome-cdp.js:36`） | 冒烟：走 Chrome/CDP 集成链 |
 | D-3 | `exclude: ["node_modules", "dist", "dola-duration-main.js"]` | `include: ["**/*"]` ＋ `allowJs` 把产物与 `node_modules` 当源码 ⇒ **自噬** | `tsc --listFiles` 数文件数（应 ≈ 28） |
-| D-4 | `main` 里 `../dist` 引用同批改 **`app.getAppPath()`** | 渲染层入口找不到 ⇒ 白屏 | 冒烟：加载 `dist/index.html` |
-| D-5 | `preload: __dirname/preload.js` ＋ guest 脚本拷贝**同目录** | 预加载/注入失败 | 冒烟 ＋ 注入 diag |
+| D-4 | **入口切产物 ＋ `dist` 基准同批改**：`package.json` 的 `main` → `electron/dist/main.js`，`main.js` 里 `'../dist/index.html'` / `path.resolve(__dirname,'..','dist')` → **上两级**。⛔ **`app.getAppPath()` 不可用**：B0-a 实测它 ＝ **入口所在目录**（文件入口 ⇒ 文件所在目录；目录入口 ⇒ 该目录），**不是"仓根"** ⇒ 拿它拼 `dist` 会在某种启动方式下指错 | 渲染层入口找不到 ⇒ 白屏 | 冒烟：**产物**起窗 ＋ stderr 无「`[main] 找不到 …index.html`」 |
+| D-5 | **同目录资源全清单**（`__dirname` 基准，B0-a grep 实算）：`preload.js`（tsc 产出）· `dola-duration-main.js`（拷）· **`dola-skill-pack.json` ＋ `doubao-skill-pack.json`（拷 —— 漏了会**静默回落成空 pack**，只判存活的冒烟抓不到）** | 预加载 / 注入 / skill-pack 注入失败 | 冒烟：stderr 无「`[dola-media] 读取 … 失败`」＋ 注入 diag |
 | D-6 | **构建链**：`build:electron` 进 `npm run build`（`pack:*` 依赖它） | 打包发**旧产物或无产物** | `pack:dir` 查产物 |
 | D-7 | 打包 `files`：`electron/**` ＋ `!electron/**/{*.ts,tsconfig*.json,*.tsbuildinfo}` | 连源码与配置一起发 | `pack:dir` 查 asar 清单 |
 | D-8 | ignore：`build/` · `.migration-backup/` · `*.tsbuildinfo` · 本任务 `evidence/`（B0-a 已加）；**`electron/dist` 已被现有 `.gitignore` 的非锚定 `dist/` 命中**（实证 `git check-ignore -v`） | 产物/备份进 git | `git status` |
@@ -106,7 +106,7 @@
 
 | # | 机制 | 内容 | 用途 |
 |---|---|---|---|
-| D-10 | **频道清单快照** | **＝ B1 的草稿生成脚本的产物**（`preload.js` 还在时跑一次；含 82 个成员的名单 · 种类 · 频道名） | B1 写表的**起点**；B5 与最终表对照 —— **不另存一份快照** |
+| D-10 | **频道清单快照** | **＝ 草稿生成脚本的产物**（`preload.js` 还在时跑一次；含成员名单 · 种类 · 频道名）。**成员数以快照为准** —— B0-a 实测 **81**（invoke 69 · send 4 · sendSync 2 · on 5 · value 1）；此前写的「82」是估值，已废，⛔ 不再在别处复述这个数 | B1 写表的**起点**（B0-a 已录）；B5 与最终表对照 —— **不另存一份快照** |
 | D-11 | （**已删**）回执形状快照 ⇒ 与「表条目自带精确回执形状 ＋ 取证锚点」（§5）**是同一件东西**，另存一份即第二载体 | — |
 | D-12 | **黄金样本（行为）** | **只给"单测覆盖不到、又不会崩"的部分**：**`license` 的机器码/验签** · 存储布局探测 `detectStorageLayout` / `migrateEngineeringToFile`。⛔ **不含 `providers` 的 parse / `job-manager`** —— 那两处由 **B2 同批单测**覆盖，样本对照是重复（且单测更持久） | 行为等价的**机器证据**（补 G5 无强手段的缺口） |
 | D-13 | **数据兼容样本** | 录文件样本：`settings.json` · `项目工程.json` · `api/config-store` 配置 · 账号导出 · skill-pack 缓存；迁移后**用旧样本读一遍、再写回对比** | 旧数据读不出/格式漂移**当场暴露** |
@@ -162,7 +162,7 @@
 
 **S0-1 严格族（全开）**：`strict` 全族（含 `useUnknownInCatchVariables` · `strictBuiltinIteratorReturn`）· `noUncheckedIndexedAccess` · **`exactOptionalPropertyTypes`** · `noImplicitOverride` · `noImplicitReturns` · `noPropertyAccessFromIndexSignature` · `noFallthroughCasesInSwitch` · `noUnusedLocals`/`Parameters`（认 `_`）· `allowUnreachableCode: false` · `allowUnusedLabels: false` · `noUncheckedSideEffectImports` · `moduleDetection: "force"` · `noErrorTruncation`。
 
-**S0-2 模块与产物**：`module`/`moduleResolution` **按 S0-6 实测定稿** · `verbatimModuleSyntax` · `isolatedModules` · `erasableSyntaxOnly`（待测）· `esModuleInterop` · **`noEmitOnError: true`** · `sourceMap` · `incremental` · `target/lib: ES2023`（含 `DOM`：`electron.d.ts` 需要）· `types: ["node"]` · **`rootDir: "."` · `outDir: "dist"` · exclude 见 D-3**。
+**S0-2 模块与产物**（**定稿值**，B0-a 实测 —— ⛔ 别再写"待测"，也别在别处复述第二遍）：`module: node16` · `moduleResolution: node16` · **`verbatimModuleSyntax: false`** · `isolatedModules` · **`erasableSyntaxOnly: true`** · `esModuleInterop` · **`noEmitOnError: true`** · `sourceMap` · `incremental` · `target/lib: ES2023`（含 `DOM`：`electron.d.ts` 需要）· `types: ["node"]` · **`rootDir: "."` · `outDir: "dist"` · exclude 见 D-3** · `allowJs: true` ＋ `checkJs: false`（S0-3）。
 
 **S0-3 明确"不开"**：`skipLibCheck: true`（三方 d.ts 的错不可行动）· `isolatedDeclarations`（为 DTS 并行构建设计；效果由「导出面显式标注」＋ lint 达成）· `checkJs` 执法口径 `false`（测量归 census；B5 终态置 `true`）。
 
@@ -174,6 +174,11 @@
 |---|---|---|
 | **类型安全层** | `no-unsafe-assignment`/`-member-access`/`-call`/`-return`/`-argument` · `no-floating-promises` · `no-misused-promises` · **`no-non-null-assertion`** · `consistent-type-assertions` · `no-explicit-any` · **`no-restricted-imports`（`@shared/*` ＋ `allowTypeImports`）** · **`no-restricted-globals`（`window`/`document`）** · `no-empty` | **不可去** |
 | **风格层** | `strictTypeChecked` 的 `no-unnecessary-condition` / `prefer-nullish-coalescing` 等 | B0-a 实测是噪声 ⇒ 关（**不动类型安全轴，不算降档**） |
+
+> ★ **`no-restricted-imports`（`@shared/*` ＋ `allowTypeImports`）为什么必须留在不可去层**：B0-a 实测本目录**必须**关 `verbatimModuleSyntax`（TS1295/1287），
+>   于是「`@shared` 只许类型导入」**唯一的机器载体**就是这条 eslint 规则 —— 它漏接不是"判据变松"，是**判据静默消失**（`@shared` 的任何 runtime 值都会被后端打进产物）。
+>   ⇒ 它与 `no-unsafe-*` 同级：只许改载体，**不许去掉**。
+>   ⚠️ 另一面（B2 起要注意）：`verbatimModuleSyntax` 关掉后，**仅用作类型的 import 会被自动擦除** ⇒ 只为副作用的**裸** `import './x'` **不会**被擦（安全），但"看着没用"就删掉它 = 改行为；见 §11.2 `codemod-boundary` 的拒绝清单。
 
 **S0-5 闸接线（与直觉相反）**：`allowJs` passthrough ⇒ 未转 `.js` 不报错 ⇒ **B0-b 当天即绿**，**立刻进 `npm run check`**，此后每转一个文件自动变严。拖到 B5 ＝ 整个迁移期无守卫（正是 TD-13-26 的病）。
 
@@ -353,7 +358,7 @@
 | `census-electron.mjs` | 输入：**同一个 `electron/tsconfig.json` ＋ CLI `--checkJs`**（⛔ **优先不建第二份配置**；B0-a 先实测 CLI 覆盖是否可行，不可行才退到 `tsconfig.census.json` ＋ extends）；输出：人读表（文件×码×簇）＋ 基线 `census-baseline.json`（本目录）；**默认只报告（天然 dry）** · `--update-baseline`（**带「不许涨」守卫**） · `--changed` · `--check` | **B0-a 骨架 → B0-b** | CLI 覆盖是否可行 · tsc 输出解析格式 · 簇分类规则 |
 | **`draft-channel-map.mjs`** | 读 `electron/preload.js` → ① `--snapshot` 产**证据快照**（D-10：preload 侧名面）② `--write` 产 `src/stable/ipc-channels.ts` **草稿**（名 · 种类 · 频道名 · 参数名；**判不出的一律留 `TODO(…)`**）；**改源文件 ⇒ 默认 dry ＋ `--write`** | **① B0-a（抽取＋快照）/ ② B1（写草稿）** —— 快照必须在 `preload.js` 还在时录（D-10） | 抽取用 AST（已定：正则认不出 helper 转发，见 `弯路.md` W24） |
 | **`draft-handler-returns.mjs`** | AST 抽每个 handler `return {…}` 的**字段名** → 输出「待补形状」清单（人补类型与判别联合） | **B1 起，B3/B4 反复用** | 多分支返回的合并规则 |
-| **`codemod-boundary.mjs`** | **模块边界改写**（机械面）：顶层 `const {a} = require('x')` / `const x = require('x')` → `import`；顶层 `module.exports = {…}` → `export {…}`。**⛔ 拒绝并报告**（不猜）：函数内/动态 `require` · `module.exports = fn` · `default` 形态。**改源文件 ⇒ 默认 dry ＋ `--write`**；幂等；改前打印受影响文件与改动清单 | **B2 起，逐文件用**（输入＝清点表的拒绝清单） | 边缘形态（`exports.x =` · 重导出） |
+| **`codemod-boundary.mjs`** | **模块边界改写**（机械面）：顶层 `const {a} = require('x')` / `const x = require('x')` → `import`；顶层 `module.exports = {…}` → `export {…}`。**⛔ 拒绝并报告**（不猜）：函数内/动态 `require` · `module.exports = fn` · `default` 形态。★ **副作用导入不得被删**：只为副作用的裸 `require('./x')` → 裸 `import './x'` 是**安全**的（裸 import 不会被擦除），但**不许"看着没用"就删** —— `verbatimModuleSyntax` 已关（类型专用 import 会被自动擦除），"类型导入"与"副作用导入"在**擦除前后**的差别只能靠人看 ⇒ 逐处对照清点表的 **C-1 列**复核。**改源文件 ⇒ 默认 dry ＋ `--write`**；幂等；改前打印受影响文件与改动清单 | **B2 起，逐文件用**（输入＝清点表的拒绝清单） | 边缘形态（`exports.x =` · 重导出） |
 | **`jsdoc-typedef-to-ts.mjs`** | `electron/api/types.js` 的 JSDoc `@typedef`/`@property` → TS `interface` 草稿（一次性） | **B2** | 联合类型 / 可选位映射 |
 | `smoke-electron.mjs` | **最低限度**：跑**产物**（`electron/dist/main.js`），判「进程存活 N 秒 ＋ stderr 无致命错（`Cannot find module` / `require is not defined`）＋ 主进程 READY 标记」；失败 ⇒ exit 1 ＋ 打印 stdout/stderr。⛔ **不做断言框架、不判"窗口就绪"**（脆、且那是 W15 端到端的事） | **B0-b** | Windows 下启动／超时／取证方式 |
 | `gen:shared`（无脚本） | `tsc -p tsconfig.shared.json` → `build/shared-types/` | B0-b | include 最小集（按需缩） |

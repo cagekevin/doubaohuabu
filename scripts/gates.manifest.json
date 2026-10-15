@@ -20,6 +20,12 @@
       "desc": "tsc --noEmit（类型 + 隐式 any）"
     },
     {
+      "id": "typecheck:electron",
+      "cmd": "npm run typecheck:electron",
+      "phase": "check",
+      "desc": "后端类型（electron/tsconfig.json 满载档；allowJs passthrough ⇒ 未转的 .js 不进检查，转了自动变严）"
+    },
+    {
       "id": "lint",
       "cmd": "npm run lint",
       "phase": "check",

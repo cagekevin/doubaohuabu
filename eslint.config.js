@@ -45,7 +45,12 @@ export default tseslint.config(
       //   （`--no-ignore` 实测大量 `no-require-imports`/`no-unused-vars`）。
       //   ⇒ 它的契约面（IPC 频道 / `window.api` 方法面）**不设机器守卫**，靠人工比对
       //   （工具 `scripts/extract-host-api.cjs`）—— 见 `AGENTS.md` §九「禁区速查」。
-      'electron/**',
+      //   ⚠️ 迁移期收窄为**只 ignore 未转的 `.js`**（后端 TS 迁移的 D-9 / 弯路 W10）：
+      //      把 TS 规则套在无类型的 CommonJS 上会**成片误报** ⇒ 会被误读成"electron 代码太差" ⇒ 降档。
+      //      已转的 `.ts` 由下面的 electron 块接管。
+      'electron/**/*.js',
+      'electron/dist/**', // ★ 后端产物（tsc emit）
+      'build/**', // ★ 声明层产物（build:shared）
       'public/**', // ★ 第三方静态资源（mediapipe：wasm 加载器 + .tflite 模型），非重写范围
       'docs/**', // 设计文档（Markdown + 少量脚本）
       '.codebuddy/**', // 工作区命令/技能
@@ -220,6 +225,73 @@ export default tseslint.config(
             '原则7（docs/11 §6.5）：ui/ 与 adapters/ 下不得有测试文件。UI 用端到端冒烟验（W15），不要写组件测试（假守卫）。',
         },
       ],
+    },
+  },
+
+  {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 后端（宿主壳 · `electron/**`）—— **类型安全层**（`docs/plan/后端TS迁移/README.md` §6 S0-4）
+    //   · 为什么单独一块：它必须 **type-aware**（写出的 `any` 只占少数，最大来源是**收到** `any`）；
+    //   · ⛔ 只匹配 `electron/**/*.ts`：未转的 `.js` 由顶层 ignores 排除（D-9 / 弯路 W10）；
+    //   · 风格层两条已按 B0-a 实测关掉（只在"与源逐字等价"的写法上报 ⇒ 噪声）；
+    //     ⚠️ 类型安全轴**一条未动**（`no-unnecessary-condition` 之类留在默认档，它同批抓到过真冗余）。
+    // ═══════════════════════════════════════════════════════════════════════════
+    files: ['electron/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      // ── 类型安全层：**不可去**（只许换载体，不许去掉）──
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/consistent-type-assertions': 'error',
+      '@typescript-eslint/no-explicit-any': 'error',
+      'no-empty': 'error',
+
+      // ★ 「`@shared` 只许类型导入」—— **本条是那条保证的唯一载体**：
+      //   `electron/tsconfig.json` 必须关 `verbatimModuleSyntax`（TS1295/1287 实测）
+      //   ⇒ tsconfig 侧已经没了这条保证，只剩这里。它漏接不是"变松"，是**判据静默消失**
+      //   （`@shared` 的任何 runtime 值都会被后端打进产物）。⇒ 与 `no-unsafe-*` 同级。
+      //   ⚠️ 必须用 `@typescript-eslint` 版：核心版没有 `allowTypeImports`。
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@shared',
+              allowTypeImports: true,
+              message: '后端只许**类型**导入 @shared（共享物是类型契约，不是后端的运行时依赖）',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@shared/*'],
+              allowTypeImports: true,
+              message: '@shared/* 只许**类型**导入（verbatimModuleSyntax 关闭后，这条规则是该判据的唯一载体）',
+            },
+          ],
+        },
+      ],
+      // 后端不是渲染层：宿主能力走 electron 的 API，不得碰 DOM 全局
+      'no-restricted-globals': [
+        'error',
+        { name: 'window', message: '后端不得碰 window（宿主能力走 electron 的 API）' },
+        { name: 'document', message: '后端不得碰 document（宿主能力走 electron 的 API）' },
+      ],
+
+      // ── 风格层（B0-a 实测噪声）⇒ 关；类型安全轴不动 ──
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
     },
   },
 );

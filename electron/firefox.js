@@ -25,8 +25,9 @@ function shellEscape(arg) {
 }
 
 // 内置 Firefox（打包后位于 resources/firefox）
+// ⚠️ 开发态基准 = app 根：本文件住 `electron/`（源码）或 `electron/dist/`（产物）⇒ 一律上两级（同 D-4）
 function bundledFirefoxPath() {
-  const base = process.resourcesPath || path.join(__dirname, '..');
+  const base = process.resourcesPath || path.join(__dirname, '..', '..');
   const candidates = [
     path.join(base, 'firefox', 'Firefox.app', 'Contents', 'MacOS', 'firefox'), // macOS
     path.join(base, 'firefox', 'firefox.exe'), // Windows
@@ -54,7 +55,7 @@ function getFirefoxExecutable() {
 
 // 预装的 MAC 插件 XPI（打包后位于 resources/firefox-addons）
 function addonAssetPath() {
-  const base = process.resourcesPath || path.join(__dirname, '..');
+  const base = process.resourcesPath || path.join(__dirname, '..', '..');
   const p = path.join(base, 'firefox-addons', 'multi-account-containers.xpi');
   return fs.existsSync(p) ? p : null;
 }

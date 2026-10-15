@@ -50,7 +50,11 @@
 ```bash
 npm run dev              # Vite 开发服务器（5175）—— ★ 服务的是「浏览器 + mock 宿主」那条路（无 window.api ⇒ container 回落 mock），与 Electron 加载目标无关
 npm run build:watch      # 持续重建 dist/ —— Electron 侧的开发循环：改 src 自动重建，窗口内 Ctrl+R 即生效
-npm run build            # check + vite build → dist/
+npm run build:watch:electron  # 持续重建后端产物（改 electron/** 才需要；窗口内 Ctrl+R 即生效）
+npm run build:electron   # 后端（宿主壳）产物 → electron/dist/ —— ★ 入口 main 指向它，改动 electron/** 后必须重跑
+npm run typecheck:electron    # 后端类型（满载档；未转的 .js 走 allowJs passthrough）
+npm run smoke:electron   # 后端最低限度冒烟（起产物 · 判存活/stderr/READY 标记）
+npm run build            # check + build:electron + vite build → dist/
 npm run check            # ★ 门禁（清单真源 scripts/gates.manifest.json）：typecheck + lint + boundaries + dead-code + gate-vitals + test
 npm run gate:status      # 闸开关注态（真源 = manifest 的 `disabled`；闸仍登记，只是被跳过）
 npm run gate:off -- <id> # 临时关某道闸（例 `npm run gate:off -- dead-code`）；恢复 `npm run gate:on -- <id>`

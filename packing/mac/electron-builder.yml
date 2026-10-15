@@ -24,6 +24,10 @@ directories:
 files:
   - dist/**
   - electron/**
+  # ★ 后端 TS 迁移（D-7）：只发**产物**，源码与配置不进包
+  - '!electron/**/*.ts'
+  - '!electron/**/tsconfig*.json'
+  - '!electron/**/*.tsbuildinfo'
   - package.json
   - '!electron/**/*.bak'
   - '!electron/node_modules/.bin'

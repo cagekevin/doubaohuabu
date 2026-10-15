@@ -83,6 +83,11 @@ const NON_GATE_HELPERS = {
  */
 const GATES = {
   typecheck: { roots: null, selfCheck: 'external', why: '由 tsc 遍历；tsc 对"无输入"会报错' },
+  'typecheck:electron': {
+    roots: null,
+    selfCheck: 'external',
+    why: '由 tsc 遍历 electron/；对"无输入"会报 TS18003（扫描根由 tsconfig 的 include/exclude 表达，不是字面目录）',
+  },
   lint: { roots: null, selfCheck: 'external', why: '由 eslint 遍历（eslint .）；无输入会报错' },
   boundaries: { roots: ['src'], selfCheck: 'external', why: 'depcruise 对空图会报错（无模块可分析）' },
   'dead-code': { roots: ['src'], selfCheck: 'own', why: '' },

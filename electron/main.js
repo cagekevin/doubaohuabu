@@ -895,7 +895,12 @@ function createWindow() {
    *   ⇒ 「让改动到达窗口」归**构建流水线**（`npm run build:watch`，窗口内 `Ctrl+R`），
    *      不归主进程推断。
    */
-  const distPath = path.join(__dirname, '../dist/index.html');
+  // ★ 产物落点（D-4）：本文件可能住 `electron/`（源码）或 `electron/dist/`（产物），两者**深度不同**
+  //   ⇒ 上**两级**才是 app 根（开发态 ＝ 仓根；打包态 ＝ `app.asar/` 根 —— vite 的 `dist/index.html`
+  //   两处都在那一层）。
+  //   ⛔ 不用 `app.getAppPath()`：实测它 ＝ **入口所在目录**（`electron <文件>` ⇒ 该文件所在目录；
+  //      `electron <目录>` ⇒ 该目录），**不是"仓根"** ⇒ 拿它拼 `dist` 会在某种启动方式下指错。
+  const distPath = path.join(__dirname, '../../dist/index.html');
   if (!fs.existsSync(distPath)) {
     // 原则 6：不静默、不落到别的地址 —— 明确报出来并给出修法
     console.error(
@@ -1092,7 +1097,8 @@ app.whenReady().then(() => {
       const url = new URL(req.url);
       // standard scheme 下 host 是路径首段，其余在 pathname
       const rel = decodeURIComponent(`${url.host || ''}${url.pathname || ''}`);
-      const distRoot = path.resolve(__dirname, '..', 'dist');
+      // 同 D-4：产物态下 app 根在 `__dirname` 的上两级（静态资源根始终是 vite 的 `dist/`）
+      const distRoot = path.resolve(__dirname, '..', '..', 'dist');
       const filePath = path.resolve(distRoot, rel.replace(/^[/\\]+/, ''));
       // 防路径穿越：解析后必须仍在 dist 根内
       if (filePath !== distRoot && !filePath.startsWith(distRoot + path.sep)) {

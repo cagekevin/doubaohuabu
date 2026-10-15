@@ -24,7 +24,11 @@ directories:
 # ── 打进包的文件（白名单；未列出的一律不进）──────────────────────────────
 files:
   - dist/** # Vite 产物（Electron 加载 dist/index.html）
-  - electron/** # 宿主壳（main.js / preload.js / api/* / *-preload.js）
+  - electron/** # 宿主壳（产物 electron/dist/** ＋ 依赖 node_modules/ws ＋ package.json）
+  # ★ 后端 TS 迁移（D-7）：只发**产物**，源码与配置不进包（否则 asar 里多一份 .ts 与 tsconfig）
+  - '!electron/**/*.ts'
+  - '!electron/**/tsconfig*.json'
+  - '!electron/**/*.tsbuildinfo'
   - package.json
   - '!electron/**/*.bak' # 后端备份件（license.js.bak）
   - '!electron/node_modules/.bin'

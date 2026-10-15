@@ -29,10 +29,16 @@ const REPO = path.resolve(HERE, '..', '..', '..', '..');
 const DIST = path.join(REPO, 'electron', 'dist');
 const SHARED_CFG = 'tsconfig.shared.json';
 const ELEC_CFG = 'electron/tsconfig.json';
-/** guest 注入脚本：原样拷，不进编译（`electron/tsconfig.json` 的 exclude 里有它） */
-const GUEST_SCRIPTS = ['dola-duration-main.js'];
+/**
+ * **同目录资源** —— 由构建**原样拷**进 `electron/dist/`（不进编译）。
+ * 清单以 `grep __dirname electron/` 的**实算**为准（README §4.1 D-5）：
+ *   · `dola-duration-main.js` —— guest 主世界文本注入脚本（`fs.readFileSync` 后注入，不能 `require`）
+ *   · `*-skill-pack.json` —— `dola-media.js` 用 `path.join(__dirname, file)` 读；
+ *     ⛔ 漏拷的后果是**静默回落成空 pack**（只 `console.warn`）⇒ 只判存活的冒烟抓不到
+ */
+const SAME_DIR_ASSETS = ['dola-duration-main.js', 'dola-skill-pack.json', 'doubao-skill-pack.json'];
 /** 产物里**必须**存在的关键文件（缺 ⇒ 构建链漏了东西） */
-const REQUIRED = ['main.js', 'preload.js', 'ipc.js', ...GUEST_SCRIPTS];
+const REQUIRED = ['main.js', 'preload.js', 'ipc.js', ...SAME_DIR_ASSETS];
 
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
@@ -81,14 +87,14 @@ for (const step of steps) {
   }
 }
 
-// ── ③ 拷 guest 脚本 ──
-for (const name of GUEST_SCRIPTS) {
+// ── ③ 拷同目录资源（guest 脚本 + skill-pack）──
+for (const name of SAME_DIR_ASSETS) {
   const src = path.join(REPO, 'electron', name);
   const dst = path.join(DIST, name);
-  log(`▶ 拷 guest 脚本 ${name} → electron/dist/`);
+  log(`▶ 拷同目录资源 ${name} → electron/dist/`);
   if (dry) continue;
   if (!fs.existsSync(src)) {
-    console.error(`❌ 缺 guest 脚本源文件：electron/${name}`);
+    console.error(`❌ 缺同目录资源源文件：electron/${name}`);
     process.exit(2);
   }
   fs.mkdirSync(DIST, { recursive: true });
