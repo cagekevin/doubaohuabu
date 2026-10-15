@@ -9,7 +9,8 @@
 //    （站点可读）⇒ 与「指纹伪装」目标**直接冲突**（反检测红线）。
 //    ⇒ 这些静默**不是"漏留痕"，而是"必须静默"**；**不得**按主进程口径给它们加 `console.warn`。
 
-function buildFingerprintPreload(fp) {
+/** 指纹配置（源是 `JSON.stringify(fp || {})`：形状不进类型面，字段只在生成的脚本里用） */
+function buildFingerprintPreload(fp: unknown): string {
   const fpJson = JSON.stringify(fp || {});
   return `(function(){
   'use strict';
@@ -222,4 +223,5 @@ function buildFingerprintPreload(fp) {
 })();`;
 }
 
-module.exports = { buildFingerprintPreload };
+// 导出面 = 宿主可用面（`main.ts` 的 `buildFingerprintPreload`）
+export { buildFingerprintPreload };

@@ -7,7 +7,7 @@
   },
   "measured": {
     "checkJs": true,
-    "errors": 234,
+    "errors": 233,
     "byCode": {
       "TS2322": 2,
       "TS2339": 63,
@@ -18,7 +18,7 @@
       "TS4111": 2,
       "TS6133": 2,
       "TS7005": 30,
-      "TS7006": 59,
+      "TS7006": 58,
       "TS7034": 4,
       "TS7053": 3,
       "TS18046": 20,
@@ -26,7 +26,6 @@
       "TS18048": 1
     },
     "byFile": {
-      "electron/fingerprint-preload.js": 1,
       "electron/main.js": 233
     }
   },
