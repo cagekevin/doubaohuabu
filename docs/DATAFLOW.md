@@ -260,7 +260,7 @@ ui/panels/LibraryPanel.tsx      → hostOps.importFiles()               【从�
 工程存储：ui/shell/TopBar（保存路径 / 打开目录 / 占用统计）→ state/projectOps → usecases/projectStorage → ports.host.project.{pickStorage,revealStorage,getStorageSize,activateStorage}
 导入工程：ui/pages/StartPage → state/projectOps.importProjectFile → usecases/importProject → state/slices/global.addImportedProject
 下载（gv-dl）：ui/nodes/{GenVideoNode,GenImageNode} → hostOps.downloadFileAs → ports.host.file.downloadFileAs
-「在文件管理器里定位」：ui/nodes/{GenVideoNode,GenImageNode}（下载 toast）· ui/canvas/NodeContextMenu（「打开文件所在位置」）→ hostOps.revealPath → ports.host.file.revealPath   【真实路径与 `img://` **同一个入口**，判别在 electron/main.js 的 handler 里】
+「在文件管理器里定位」：ui/nodes/{GenVideoNode,GenImageNode}（下载 toast）· ui/canvas/NodeContextMenu（「打开文件所在位置」）→ hostOps.revealPath → ports.host.file.revealPath   【真实路径与 `img://` **同一个入口**，判别在 electron/main.ts 的 handler 里】
 ```
 
 **关键边**：前两条**不从 `ui` 直调端口** —— 走 `state/hostOps`（`ui` **结构上拿不到 `Ports`**）。详见 §十八。
@@ -307,7 +307,7 @@ ui/panels/NewImagesPanel.tsx（开关）→ state/accountOps.setAutoWatch(on)
   → 复用 scanGallery                  【手动与值守共用同一条】
 ```
 
-**关键边**：谁能值守 = `SitePort.autoWatch?` **能力声明**（`tapnow` 声明、`lovart` 刻意不声明 —— 风控；后端 `electron/main.js` 有「Lovart 容器隔离」）；`core` / `state` / `ui` **零站点名判断**。扫描枚举真源 = `core/rules/scanChain.ts`（`SCAN_CHAIN` / `SCAN_PHASES` / `SCAN_SCOPES`），端口只 `import type` 转发。
+**关键边**：谁能值守 = `SitePort.autoWatch?` **能力声明**（`tapnow` 声明、`lovart` 刻意不声明 —— 风控；后端 `electron/main.ts` 有「Lovart 容器隔离」）；`core` / `state` / `ui` **零站点名判断**。扫描枚举真源 = `core/rules/scanChain.ts`（`SCAN_CHAIN` / `SCAN_PHASES` / `SCAN_SCOPES`），端口只 `import type` 转发。
 ⚠️ **DEV 断点**：mock 的 `imageFetchDataUrl` / `fetchImages` 都**合成内联图**（同 url 同图，不联网）⇒ 抓取链在 DEV 可验证；端到端要在 Electron 里跑 `scripts/verify-*.cjs`。
 
 ---
@@ -397,7 +397,7 @@ ui/panels/{LoginModal,BackendView} → state/accountOps.prepareWebviewSession（
                 │            ＋ gallerySiteLabelOf（画廊名，源 :711 的 Te）
                 · 值守能力 → SitePort.autoWatch?（tapnow 声明；lovart 不声明，见 §十三）
                 · 豆包系媒体链声明位 → SitePort.mediaSource?（adapters/site/doubao 工厂声明，值 = 工厂的 `kind`）⇒ CDP 挂载（§十九）· 30s 主世界钩子注入（§二十三）· CDP 回流的源标签（§二十四）三处消费者**只问注册表**
-                · 主进程域名 → electron/site-hosts.js 的 SITE_HOSTS（层 1）
+                · 主进程域名 → electron/site-hosts.ts 的 SITE_HOSTS（层 1）
                 · 渲染侧域名 → src/constants/siteHosts.ts 的 SITE_HOSTS（层 1 值）+ core/rules/siteHost.isHostOfSite（层 2 判定）
                   消费：adapters/site/lovart/pageKind · tapnow/pageKind · tapnow/api（判归属）· doubao/dolaForce（注入载荷）
                   ⚠️ 与主进程那份**不是镜像对账**：两个世界没有共享代码的路（主进程 CJS／渲染侧 ESM bundle）⇒ 各 1 份
@@ -470,16 +470,16 @@ ui/shell/AppShell.tsx（centerStage · doubaoViewVisible 默认 false · openDou
   → ui/panels/BackendView.tsx                【域主视图；源 _Component43 挂载点 _Component48.jsx:171-178】
        ├─ 每账号一个 <webview>                （源 _Component25.jsx）
        ├─ Lovart 会话条 → ui/panels/LovartSessionBar.tsx   （源 _Component25.jsx:358-382；守卫 = lovartSession.isChromeSessionSite ← 能力表 `hasChromeSession` ∧ active）
-       │      → accountOps.openLovartChrome / closeLovartChrome / syncLovartSession → AccountPort → electron/chrome-cdp.js
+       │      → accountOps.openLovartChrome / closeLovartChrome / syncLovartSession → AccountPort → electron/chrome-cdp.ts
        │      【真实 Chrome 人工登录 → cookie 同步进 webview 分区；提示行/禁用/错误码表 = core/rules/lovartSession】
        ├─ 无水印面板 → ui/panels/WatermarkPanel.tsx      （源 SD.jsx）
        ├─ **CDP 挂载**（无水印捕获的**前置**；捕获回流走 §二十二 的「CDP 支」= media.onDolaMedia → state/subscriptions → state/dolaMedia）
        │      两个入口调**同一个幂等实现**，且都只表达意图（dola-media.js 的门面 onGuestReady）：
        │        (a) 渲染层 dom-ready → accountOps.onWebviewDomReady（守卫 = `SitePort.mediaSource?`）→ HostPort.media.attachDolaDebugger
-       │            → invoke 'attach-dola-debugger'（handler 随 `electron/dola-media.js` 的 initDolaMedia **自注册**）        【准】
+       │            → invoke 'attach-dola-debugger'（handler 随 `electron/dola-media.ts` 的 initDolaMedia **自注册**）        【准】
        │        (b) 主进程 did-attach-webview（早，此时 URL 多为 about:blank）→ did-navigate 再试   【早】
        │      「谁该挂」由 dola-media.js 的 shouldAttach 内部判（按 ATTACH_SOURCES 的源声明；
-       │        host 判定走 electron/site-hosts.js 的 isHostOf）—— 调用方不判、不兜
+       │        host 判定走 electron/site-hosts.ts 的 isHostOf）—— 调用方不判、不兜
        ├─ 出新图条   → ui/panels/NewImagesPanel.tsx      （源 _Component26.jsx）
        └─ 静默开关   → ui/panels/AccountPanel.tsx 的 .autostartSwitch
                           → accountOps.toggleAutoStart   （源 OP.jsx:509-559）
@@ -654,11 +654,11 @@ Dola 30s「主世界钩子」注入（★ **另一条 30s 路径**：那条**改
     onWebviewDomReady   ← <webview> dom-ready，**延迟 600ms**（INJECT_DURATION_DELAY_MS：等页面把输入区挂出来）
     onWebviewNavigated  ← <webview> did-navigate，**重注入**（钩子装在页面主世界，SPA 换页就没了）；守卫 = `SitePort.mediaSource?`（同 `onWebviewDomReady`）
   → HostPort.media.injectDolaDurationMain(webContentsId)   【adapters/host/electron/index.ts → checkOk **fail-closed**；mock 明确 notImplemented】
-  → preload invoke 'inject-dola-duration-main' → electron/main.js 的 handler，做三件：
+  → preload invoke 'inject-dola-duration-main' → electron/main.ts 的 handler，做三件：
        ① 页内打开开关 localStorage['intl_doubao_enable_30s_v1'] = '1'（页内 catch **刻意静默**：那是注入到页面的串，打不了宿主日志）
        ② 读 electron/dola-duration-main.js 原文并注入 —— ★ **形态 = 函数表达式 + 宿主传参**：
           (script)(JSON.stringify({ SITE_HOSTS: siteHosts.SITE_HOSTS }))
-          【脚本跑在 guest **主世界、不能 require** ⇒ 域名**没有位置**可写；层 1 真源 = electron/site-hosts.js】
+          【脚本跑在 guest **主世界、不能 require** ⇒ 域名**没有位置**可写；层 1 真源 = electron/site-hosts.ts】
        ③ 每 3s dump 一次时长 DOM（DUMP_EXPR）；变化即写 ~/dola-duration-debug.log；wc destroyed ⇒ 清定时器
   诊断回灌：页内 logDurationDiag → window.api.dolaDurationDiag → invoke 'dola-duration-diag' ⇒ **同一个日志文件**
             ⚠️ 发送链的**阶段行**同走这条路：adapters/site/doubao/index.ts 的 diag() → HostPort.media.logDolaDuration

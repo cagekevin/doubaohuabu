@@ -1,7 +1,7 @@
 {
   "_comment": "死代码闸基线（scripts/check-dead-code.mjs 消费）。基线内=存量（不阻塞，可逐步清偿）；基线外新增=闸红。重生成：node scripts/check-dead-code.mjs --update-baseline",
   "knipVersion": "6.41.0",
-  "count": 37,
+  "count": 36,
   "items": [
     "src/adapters/host/electron/index.ts::exports::HOST_MISSING",
     "src/adapters/host/electron/index.ts::exports::getHostApi",
@@ -16,7 +16,6 @@
     "src/constants/index.ts::exports::DOMAIN_COOLDOWN_MS",
     "src/constants/index.ts::exports::DRAG_ICON_SIZE",
     "src/constants/index.ts::exports::IMAGE_FETCH_TIMEOUT_MS",
-    "src/constants/index.ts::exports::PAGE_TIMEOUT_LONG_MS",
     "src/constants/index.ts::exports::PAGE_TIMEOUT_SHORT_MS",
     "src/constants/index.ts::exports::SCAN_FRAME_TIMEOUT_MS",
     "src/constants/index.ts::exports::SEND_MAX_RETRIES",
