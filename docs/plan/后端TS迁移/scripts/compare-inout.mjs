@@ -174,6 +174,27 @@ const FACE = {
 };
 
 /** ② 输入样本（**人写**：这一步是判断活，脚本不生成输入） */
+/** 5 个 provider 共用的样本（表里没这个函数时会被跳过） */
+const PROVIDER_CASES = [
+  { fn: 'buildSubmit', args: [{}] },
+  { fn: 'buildSubmit', args: [null] },
+  { fn: 'buildSubmit', args: [undefined] },
+  { fn: 'buildSubmit', args: [{ model: 'x', prompt: 'hello', params: { a: 1 } }] },
+  { fn: 'buildPoll', args: [{ id: 'job-1' }] },
+  { fn: 'buildPoll', args: [null] },
+  { fn: 'parseSubmit', args: [{ code: 0, data: { task_id: 't1', id: 'j1' } }] },
+  { fn: 'parseSubmit', args: [{}] },
+  { fn: 'parseSubmit', args: [null] },
+  { fn: 'parseSubmit', args: ['not-json'] },
+  { fn: 'parsePoll', args: [{ code: 0, data: { status: 'done', url: 'https://x/y.mp4' } }] },
+  { fn: 'parsePoll', args: [{}] },
+  { fn: 'parsePoll', args: [null] },
+  { fn: 'signKlingJwt', args: ['ak-test', 'sk-test', { a: 1 }] },
+  { fn: 'signKlingJwt', args: ['', '', 0] },
+];
+/** ⏱ 需要**冻结时钟**才可比的模块（含 `iat/exp` 之类时间戳的函数：两侧必须拿到同一个 `Date.now()`） */
+const FREEZE = new Set(['api/providers/kling.js']);
+
 const CASES = {
   // ★ 最高价值的一组：站点域名判定（层 1 域名 + 层 2 归属）—— 6 个导出，形参数已实测
   'site-hosts': [
@@ -237,6 +258,17 @@ const CASES = {
   ],
   // license 的导出面只有 initLicense / __setTrustedTimeOverride ⇒ 机器码/验签**不可注入**（如实"无样本"）
   'license': [{ fn: '__setTrustedTimeOverride', args: [1234567890] }, { fn: '__setTrustedTimeOverride', args: [null] }],
+  // ★ provider 的**请求构建 / 响应解析**（改写最容易静默漂移的地方；5 个 provider 共用同一张表，
+  //   工具会跳过"该模块没有的函数"）。数据常量（auth/capabilities/defaults/paramSchema/…）走常量深比。
+  ...Object.fromEntries(
+    [
+      'api/providers/geeknow-relay.js',
+      'api/providers/kling.js',
+      'api/providers/llm-openai-compat.js',
+      'api/providers/vidu.js',
+      'api/providers/volcengine-ark.js',
+    ].map((k) => [k, 'PROVIDER_CASES']),
+  ),
   'api/shape': [
     { fn: 'asRecord', args: [{ a: 1 }] },
     { fn: 'asRecord', args: [null] },
@@ -378,7 +410,8 @@ for (const m of mods) {
   }
   // 函数：有样本就逐例跑，没有就显式列"无样本"
   const fns = kn.filter((k) => typeof n[k] === 'function');
-  const cases = (CASES[m] || CASES[m.replace(/\.js$/, '')] || []).filter((c) => typeof n[c.fn] === 'function');
+  const rawCases = CASES[m] || CASES[m.replace(/\.js$/, '')] || [];
+  const cases = (Array.isArray(rawCases) ? rawCases : PROVIDER_CASES).filter((c) => typeof n[c.fn] === 'function');
   const covered = new Set(cases.map((c) => c.fn));
   for (const k of fns) if (!covered.has(k)) noSample++;
   for (const c of cases) {
@@ -389,8 +422,22 @@ for (const m of mods) {
         return { ok: false, v: { t: 'throw', name: e?.name, message: String(e?.message ?? e) } };
       }
     };
-    const a = runOne(o, o);
-    const b = runOne(n, n);
+    // ⏱ 需要冻结时钟的模块：两侧拿到**同一个** `Date.now()`（否则 time 相关函数必然"异"，那是假差异）
+    let a;
+    let b;
+    if (FREEZE.has(m) || FREEZE.has(m.replace(/\.js$/, ''))) {
+      const realNow = Date.now;
+      try {
+        Date.now = () => 1750000000000;
+        a = runOne(o, o);
+        b = runOne(n, n);
+      } finally {
+        Date.now = realNow;
+      }
+    } else {
+      a = runOne(o, o);
+      b = runOne(n, n);
+    }
     const same = JSON.stringify(a) === JSON.stringify(b);
     casesRun++;
     if (same) casesSame++;
