@@ -26,7 +26,11 @@ export interface JsonResult {
 export interface JsonRequestOptions {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  /**
+   * 请求体：**`string | Buffer`** —— 因为 `SubmitRequest.body` 可能是 Buffer
+   * （geeknow 的 multipart 二进制分帧不能过字符串），引擎把 adapter 的产物原样传下来。
+   */
+  body?: string | Buffer;
   timeoutMs?: number;
 }
 
@@ -50,7 +54,9 @@ async function requestJson(fetchImpl: FetchLike | null, url: string, { method = 
     const res = await f(url, {
       method,
       headers,
-      ...(body ? { body } : {}),
+      // ⚠️ 唯一一处断言：`Buffer` 运行时就是 `Uint8Array`（合法的 `BodyInit`），
+      //    只是 @types/node 与 DOM 的泛型参数不同源（`ArrayBufferLike` vs `ArrayBuffer`）⇒ 类型层不认。
+      ...(body ? { body: body as BodyInit } : {}),
       ...(ctl ? { signal: ctl.signal } : {}),
     });
     const text = await res.text();
@@ -80,7 +86,9 @@ async function requestJson(fetchImpl: FetchLike | null, url: string, { method = 
  *   `via` = 实际成功的栈下标（诊断用）
  */
 async function requestJsonWithFallback(
-  fetchImpls: FetchLike | FetchLike[] | null | undefined,
+  // ⚠️ 数组里允许 `null`/`undefined`：**实现的契约如此**（下面按真值过滤），
+  //    引擎传下来的就是 `[fetchImpl]`（`fetchImpl` 默认为 `null`）—— ⛔ 不在调用侧补 filter。
+  fetchImpls: FetchLike | (FetchLike | null | undefined)[] | null | undefined,
   url: string,
   opts?: JsonRequestOptions,
 ): Promise<JsonResult & { via?: number }> {

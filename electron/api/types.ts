@@ -45,6 +45,12 @@ export interface ProviderRunConfig {
   apiKey: string;
   params?: Record<string, unknown>;
   secretKey?: string;
+  /**
+   * 每类任务的超时（秒）。★ **读了没人写**（全仓取证：只有 `job-manager` 的 `doPoll` 读它，
+   *   而 `config` 是在 `runJob` 里按 5 个字段现搭的）⇒ 当前恒为 undefined ⇒ 兜底到 `DEFAULT_TIMEOUT`。
+   *   与 `auth`/`frameSupport`（写了没人读）**同族**：登记在案、本任务不处置。
+   */
+  timeoutSec?: Partial<Record<'image' | 'video', number>>;
 }
 
 /** 提交阶段参数（渲染层传来，已经过 schema 校验） */
@@ -84,7 +90,8 @@ export interface ResultItem {
 /** `parseSubmit` 的产物：拿到 taskId、直接给结果（同步出图的通道），或**业务错误**（HTTP 200 + `error`） */
 export interface SubmitOutcome {
   taskId?: string;
-  results?: { type?: ResultItem['type']; url?: string; b64?: string; mime?: string; text?: string }[];
+  /** 与 `PollOutcome.results` 同形（引擎的 `normalizeResult` 对两者走同一条规整链） */
+  results?: ResultItem[];
   error?: { kind: string; message: string; advice?: string };
 }
 
