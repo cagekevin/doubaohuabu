@@ -49,11 +49,14 @@ function createDomainRota(
   if (head === undefined) return null; // 与 `length < 2` 同义（只为收窄，不可达）
   const list: [string, ...string[]] = [head, ...all.slice(1)];
 
-  const nowFn = opts?.now ?? (() => Date.now());
-  const cooldownMs = opts?.cooldownMs != null ? opts.cooldownMs : DEFAULT_COOLDOWN_MS;
+  // ⚠️ 保持源的 `(opts && opts.x)` 形态：`??` 在这里不是类型必需（审计揪出的一处无理由偏离）
+  const nowFn = (opts && opts.now) || (() => Date.now());
+  const cooldownMs = opts && opts.cooldownMs != null ? opts.cooldownMs : DEFAULT_COOLDOWN_MS;
 
   let idx = 0;
   // ⚠️ 用 `Array.from` 而不是 `new Array(n).fill(0)` —— 后者在 TS 里是 `any[]`（会踩 no-unsafe-*）。
+  // ⚠️ 下面的 `coldUntil[i] ?? 0`：**不是兜底**，是类型收窄 —— 这个数组由本行**等长填满**，
+  //    元素必然存在（`?? 0` 与真实值一致）；`noUncheckedIndexedAccess` 只是不认这层构造保证。
   const coldUntil: number[] = Array.from({ length: list.length }, () => 0);
 
   /** 找到 url 对应的域下标（前缀匹配）；找不到 → -1 */

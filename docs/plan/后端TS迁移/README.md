@@ -372,6 +372,7 @@
 | **`codemod-boundary.mjs`** | **模块边界改写**（机械面）：顶层 `const {a} = require('x')` / `const x = require('x')` → `import`；顶层 `module.exports = {…}` → `export {…}`。**⛔ 拒绝并报告**（不猜）：函数内/动态 `require` · `module.exports = fn` · `default` 形态。★ **副作用导入不得被删**：只为副作用的裸 `require('./x')` → 裸 `import './x'` 是**安全**的（裸 import 不会被擦除），但**不许"看着没用"就删** —— `verbatimModuleSyntax` 已关（类型专用 import 会被自动擦除），"类型导入"与"副作用导入"在**擦除前后**的差别只能靠人看 ⇒ 逐处对照清点表的 **C-1 列**复核。**改源文件 ⇒ 默认 dry ＋ `--write`**；幂等；改前打印受影响文件与改动清单 | **B2 起，逐文件用**（输入＝清点表的拒绝清单） | 边缘形态（`exports.x =` · 重导出） |
 | **`jsdoc-typedef-to-ts.mjs`** | `electron/api/types.js` 的 JSDoc `@typedef`/`@property` → TS `interface` 草稿（一次性） | **B2** | 联合类型 / 可选位映射 |
 | `smoke-electron.mjs` | **最低限度**：跑**产物**（`electron/dist/main.js`），判「进程存活 N 秒 ＋ stderr 无致命错（`Cannot find module` / `require is not defined`）＋ 主进程 READY 标记」；失败 ⇒ exit 1 ＋ 打印 stdout/stderr。⛔ **不做断言框架、不判"窗口就绪"**（脆、且那是 W15 端到端的事） | **B0-b** | Windows 下启动／超时／取证方式 |
+| `audit-conversion.mjs` | **转换质量审计**：当前 `.ts` vs git 里的原 `.js` 做**事实面集合对账**（字符串/数字/调用/运算符/属性/标识符）＋ 导入面 ＋ 导出面 ＋ 定义面。★ **集合差不受代码移动影响**（位置对齐会被"新增的类型/助手"淹没 —— 实测过：噪声 321 条里绝大多数是新增守卫） | **每批结束前跑一次**（口径定稿见 §11.7） | 语义等价但整段改写的情形它看不见（`--struct` 可辅助）；它只给线索，**判"是不是漂移"仍需人看** |
 | `gen:shared`（无脚本） | `tsc -p tsconfig.shared.json` → `build/shared-types/` | B0-b | include 最小集（按需缩） |
 
 ### 11.3 ★ `--check` 的正确定位（纠正一处过度设计）
@@ -431,6 +432,20 @@
 | 债 | 中央 `daily/架构日志/债务.md`（走 `node scripts/debt.mjs`） | 不另立账本 |
 
 **★ 交付态**：**任何完成度都可运行、可打包**（`allowJs` passthrough ＝ 混合态合法）—— 不存在"必须全转完才能发版"。遇"摩擦 ≫ 价值"的文件走 §10.2 阶梯 ＋ 登记，**不硬扛**；是否继续 B3/B4 由用户定（不许静默漂移）。
+
+### §11.7 转换口径（**B2 审计定稿** · 后续批次一律照此）
+
+> 出处：`audit-conversion.mjs` 把已转文件与 git 里的原 `.js` 做**事实面集合对账**（字面量/调用/运算符/属性/标识符），
+> 逐条分类后定稿（见 `日志.md` 的 B2-审计条目）。**这 6 条是"允许的系统性微改"，其余一律不许偏离源。**
+
+| # | 口径 | 为什么必需 | 边界 |
+|---|---|---|---|
+| 1 | **`\|\|` → `??` 只在类型必需处** | 索引访问（`arr[i]`）、正则捕获组（`m[1]`）、`JSON.stringify` 的 `string \| undefined` 在 `noUncheckedIndexedAccess` 下都是可空类型 | ⛔ **非必需处必须保留源的 `\|\|`**；每处注依据（B2 审计据此纠回 2 处） |
+| 2 | **`global.` 不改**（不换 `globalThis`） | 不是类型必需 | 同上 |
+| 3 | **`.map().filter(Boolean)` → 显式 `for` ＋ `push`** | 元素类型要落成 `ResultItem[]`，`filter(Boolean)` 给不出收窄 | 过滤条件与顺序**逐字保留** |
+| 4 | **外部 JSON 的字符串字段一律 `String(...)` 收成 `string`** | 表/接口类型要求是 `string` | 对真实数据等价；⛔ 不用 `as string` |
+| 5 | **`catch` 收窄成 `err instanceof Error ? err.message : String(err)`**（B1 定形，全仓一个形状） | `unknown` 抛出物要有统一原文 | 对非 Error 抛出物等价（原实现取 `err.message` 同样是 `undefined`）；B2 同批把 `http` 的 abort 判定也收窄成同一形状 |
+| 6 | **外部未知键的点访问 → 方括号**（`b['data']`） | `noPropertyAccessFromIndexSignature` 是对的：让"外部形状"在每一处读取都显式可见 | 只作用于**记录类型**的键；自有接口（`config.baseUrl`）仍点访问 |
 
 **★ 规矩寿命**（P11）：**只标「混合期」的那些**（默认＝永久，不标 —— 省一半噪音）：禁 `export default` · 顶层 `require` 保留 · 未转清单 · **名面同源守卫（`host-api.ts` 顶部；手写面被派生面替换后即删）** 等**前提消失即失效**。任务结束时：混合期规矩**删除**（或标注失效），永久规矩进 eslint 块 / `docs/判据登记表.md`。
 

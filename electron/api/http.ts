@@ -37,7 +37,10 @@ export interface JsonRequestOptions {
  *   网络层失败 → `{ ok:false, status:0, error:'timeout'|'network' }`（`body` 为空对象）
  */
 async function requestJson(fetchImpl: FetchLike | null, url: string, { method = 'GET', headers = {}, body = '', timeoutMs = 30000 }: JsonRequestOptions = {}): Promise<JsonResult> {
-  const f = fetchImpl ?? globalThis.fetch;
+  // ⚠️ 保持源的 `||` 与 `global.`：审计（`audit-conversion.mjs`）把这两处点出来了 ——
+  //    它们不是类型必需（`||` 与 `??` 对函数入参等价，`global` 在 @types/node 里就是 globalThis），
+  //    ⇒ **非必需处不许偏离源**（改了既没理由、也让对账多两条噪声）。
+  const f = fetchImpl || global.fetch;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   if (ctl) {
