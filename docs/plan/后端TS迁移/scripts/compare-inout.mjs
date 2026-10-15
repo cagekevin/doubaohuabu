@@ -41,6 +41,10 @@ if (args.includes('--help') || args.includes('-h')) {
 const onlyIdx = args.indexOf('--only');
 const only = onlyIdx >= 0 ? args[onlyIdx + 1] : null;
 const listOnly = args.includes('--list');
+const engineIdx = args.indexOf('--engine');
+const engine = engineIdx >= 0 ? (args[engineIdx + 1] || 'node') : 'node';
+const e2OnlyIdx = args.indexOf('--e2-only');
+const e2Only = e2OnlyIdx >= 0 ? args[e2OnlyIdx + 1] : null;
 
 const sh = (c) => {
   try {
@@ -256,6 +260,32 @@ const CASES = {
     { fn: 'classifyHttpError', args: [null] },
     { fn: 'classifyHttpError', args: [undefined] },
   ],
+  // ★ 密钥脱敏（1 参）：脱错 = 日志里漏密钥 ⇒ 高价值
+  'api/config-store': [
+    { fn: 'maskKey', args: ['sk-1234567890123456789012345678901234567890'] },
+    { fn: 'maskKey', args: ['short'] },
+    { fn: 'maskKey', args: [''] },
+    { fn: 'maskKey', args: [null] },
+    { fn: 'maskKey', args: [undefined] },
+    { fn: 'maskKey', args: ['a'.repeat(200)] },
+  ],
+  // ★ 服务商注册表（纯内存状态：两侧各自从空开始 ⇒ 逐例同序调用即等价可比）
+  'api/registry': [
+    { fn: 'listProviderIds', args: [] },
+    { fn: 'listProvidersMeta', args: [] },
+    { fn: 'getProvider', args: ['nope'] },
+    { fn: 'getProvider', args: [null] },
+  ],
+  // 轮换器与队列工具的**接口形状**（时间/网络相关的行为不在此层测 ⇒ 见 7.1b 读法纪律）
+  'api/domains': [
+    { fn: 'createDomainRota', args: ['a.com,b.com', 1000] },
+    { fn: 'createDomainRota', args: [[], 0] },
+  ],
+  'api/job-manager': [
+    { fn: 'defaultFetchBytes', args: [{ byteLength: 10 }, 'https://x/y'] },
+    { fn: 'defaultFetchBytes', args: [null, null] },
+    { fn: 'createJobManager', args: [{}] },
+  ],
   // license 的导出面只有 initLicense / __setTrustedTimeOverride ⇒ 机器码/验签**不可注入**（如实"无样本"）
   'license': [{ fn: '__setTrustedTimeOverride', args: [1234567890] }, { fn: '__setTrustedTimeOverride', args: [null] }],
   // ★ provider 的**请求构建 / 响应解析**（改写最容易静默漂移的地方；5 个 provider 共用同一张表，
@@ -298,6 +328,150 @@ const CASES = {
   'dola-duration-dump': [{ fn: 'DUMP_EXPR', args: [], note: '常量逐字比（注入文本）' }],
 };
 
+/**
+ * ③ **E2 样本**（要真 Electron 才跑得起来的那些）：`{{BASE}}` 在运行时换成父进程起的本地 HTTP 服务地址
+ * （网络那几条要**可确定**的服务端 ⇒ 不碰外网）。
+ */
+const E2_CASES = [
+  // ⚠️ 签名按源码：`requestJson(fetchImpl, url, opts)` —— 首参是**注入的 fetch 栈**（生产用 `net.fetch`）
+  { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/json'] },
+  { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/404'] },
+  { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/500'] },
+  { mod: 'api/http.js', fn: 'requestJson', args: [{ $fn: 'net.fetch' }, '{{BASE}}/text'] },
+  // 换栈分支：第一栈故意失败 ⇒ 应落到第二栈（`via` 字段就是它）
+  {
+    mod: 'api/http.js',
+    fn: 'requestJsonWithFallback',
+    args: [[{ $fn: '__throwingFetch' }, { $fn: 'net.fetch' }], '{{BASE}}/json'],
+  },
+  { mod: 'api/http.js', fn: 'requestJsonWithFallback', args: [[{ $fn: 'net.fetch' }], '{{BASE}}/json'] },
+  { mod: 'api/config-store.js', fn: 'createConfigStore', args: ['probe', {}] },
+  { mod: 'license.js', fn: 'initLicense', args: [] },
+];
+
+/** 启一个**确定**的本地 HTTP 服务（网络类函数的对照必须有确定的对端） */
+async function startServer() {
+  const http = await import('node:http');
+  const server = http.createServer((req, res) => {
+    const u = req.url || '/';
+    if (u === '/json') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, n: 1 }));
+      return;
+    }
+    if (u === '/text') {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('hello');
+      return;
+    }
+    if (u === '/404') {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not_found' }));
+      return;
+    }
+    if (u === '/500') {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'boom' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return { server, port: server.address().port };
+}
+
+/** 跑 E2：起 Electron 探针，两侧各跑同一批 job，按 id 配对比较 */
+async function runElectron(base) {
+  const { spawnSync } = await import('node:child_process');
+  const electronBin = req('electron');
+  const probe = path.join(HERE, 'compare-inout-probe.cjs');
+  const { server, port } = await startServer();
+  const BASE = `http://127.0.0.1:${port}`;
+  const fill = (a) => (typeof a === 'string' ? a.replace('{{BASE}}', BASE) : a);
+  const tmpRoot = path.dirname(base.oldDir);
+  console.log(`探针：${probe}`);
+  console.log(`本地服务：${BASE}（端点：/json · /text · /404 · /500）`);
+
+  /**
+   * ★ **一进程一侧**（实测必需）：两侧同进程时，`license.initLicense()` 第二次会抛
+   *   `Attempted to register a second handler for 'get-machine-code'` —— Electron **禁止重复注册同一 IPC handler**
+   *   ⇒ 那不是代码差异，是"同一进程塞了两个版本"。而且真实运行本来就是"一次只跑一个版本"。
+   *   userData 也**两侧各一个**（`config-store` 会落盘 ⇒ 共用目录会让第二侧看到第一侧写的文件 ✗）。
+   */
+  const runSide = (side) => {
+    const userData = path.join(tmpRoot, `userdata-${side}`);
+    const jobPath = path.join(tmpRoot, `job-${side}.json`);
+    const jobs = E2_CASES.map((c, i) => ({ c, i }))
+      .filter(({ c, i }) => (e2Only ? JSON.stringify(c).includes(e2Only) || String(i) === e2Only : true))
+      .map(({ c, i }) => ({
+        id: String(i),
+        side,
+        mod: c.mod,
+        fn: c.fn,
+        args: (c.args || []).map(fill),
+      }));
+    fs.writeFileSync(jobPath, JSON.stringify({ oldRoot: base.oldDir, newRoot, userData, jobs }, null, 2), 'utf8');
+    const res = spawnSync(electronBin, [probe, jobPath], { encoding: 'utf8', timeout: 90000, cwd: REPO });
+    const out = new Map();
+    for (const l of (res.stdout || '').split('\n')) {
+      if (!l.startsWith('__E2__ ')) continue;
+      const o = JSON.parse(l.slice('__E2__ '.length));
+      out.set(String(o.id), o);
+    }
+    return { out, stderr: res.stderr || '', stdout: res.stdout || '' };
+  };
+
+  const jobsCount = E2_CASES.filter((c, i) => (e2Only ? JSON.stringify(c).includes(e2Only) || String(i) === e2Only : true)).length;
+  const a = runSide('old');
+  const b = runSide('new');
+  server.close();
+  if (!a.out.size || !b.out.size) {
+    console.log(`❌ 探针没有输出（旧 ${a.out.size} 行 / 新 ${b.out.size} 行）—— 原始 stdout/stderr：`);
+    console.log((a.stderr + a.stdout).slice(-1200));
+    console.log((b.stderr + b.stdout).slice(-1200));
+    return { ran: 0, same: 0, diff: 0, problems: ['E2 探针无输出（环境问题，非代码差异）'] };
+  }
+  // ⚠️ **部分失败也要给原因**（不然只看到"探针没回"，看不见它为什么死）
+  if (a.out.size < jobsCount || b.out.size < jobsCount) {
+    console.log(
+      `⚠️ 探针**提前结束**（期望 ${jobsCount} 行：旧 ${a.out.size} / 新 ${b.out.size}）—— stderr 尾部：`,
+    );
+    console.log('   [旧] ' + (a.stderr.trim().split('\n').slice(-4).join(' ｜ ') || '(空)').slice(0, 400));
+    console.log('   [新] ' + (b.stderr.trim().split('\n').slice(-4).join(' ｜ ') || '(空)').slice(0, 400));
+  }
+  let same = 0;
+  let diff = 0;
+  const problems = [];
+  for (let i = 0; i < E2_CASES.length; i++) {
+    const c = E2_CASES[i];
+    if (e2Only && !(JSON.stringify(c).includes(e2Only) || String(i) === e2Only)) continue;
+    const oa = a.out.get(String(i));
+    const ob = b.out.get(String(i));
+    const argBrief = JSON.stringify((c.args || []).map((x) => (typeof x === 'string' ? x.replace(BASE, '{{BASE}}') : x)));
+    if (!oa || !ob) {
+      console.log(`   ⚠️ ${c.mod} ${c.fn}(${argBrief}) —— 探针没回（旧 ${oa ? '有' : '无'} / 新 ${ob ? '有' : '无'}）`);
+      problems.push(`${c.mod}.${c.fn}：探针未回结果`);
+      continue;
+    }
+    // ⛔ 比的是 **`ok` ＋ `value`**，不比 `id`（id 是配对用的，带 side ⇒ 必然不同）
+    const sa = JSON.stringify({ ok: oa.ok, value: oa.value });
+    const sb = JSON.stringify({ ok: ob.ok, value: ob.value });
+    const ok = sa === sb;
+    if (ok) same++;
+    else {
+      diff++;
+      problems.push(`${c.mod}.${c.fn}(${argBrief}) 输出不同`);
+    }
+    console.log(`   ${ok ? '✅' : '❌'} ${c.mod.replace(/\.js$/, '')} · ${c.fn}(${argBrief})`);
+    if (!ok) {
+      console.log(`      旧：${sa.slice(0, 300)}`);
+      console.log(`      新：${sb.slice(0, 300)}`);
+    }
+  }
+  return { ran: E2_CASES.length, same, diff, problems };
+}
+
 const t0 = Date.now();
 const base = exportBaseline();
 unifyResolution();
@@ -320,17 +494,44 @@ const walk = (d, out = []) => {
   }
   return out;
 };
+/**
+ * ⚠️ **有加载期副作用的模块必须排到最后**（否则会污染同进程里其它模块的对照）：
+ * `api/bridge.js` 在 **load 时**就 `registerProvider(…)` 五次 —— 实测把它排在 `api/registry.js` 之前时，
+ * registry 的两个"空表"样本会假报"异"（新侧已被注册、旧侧还是空）。这是**工具的顺序问题**，不是代码差异。
+ * ⇒ 本清单只放"加载即产生全局状态"的模块；加进来时必须写理由。
+ */
+const DEFER = new Set(['api/bridge.js']);
+
 const mods = walk(newRoot)
   .filter((m) => !['main.js', 'preload.js'].includes(m))
   .filter((m) => fs.existsSync(path.join(base.oldDir, m)))
   .filter((m) => (only ? m.includes(only) : true))
-  .sort();
+  .sort((a, b) => Number(DEFER.has(a)) - Number(DEFER.has(b)) || a.localeCompare(b));
+if (!only) {
+  const deferred = mods.filter((m) => DEFER.has(m));
+  if (deferred.length) console.log(`（已把有加载期副作用的模块排到末位：${deferred.join(' · ')}）\n`);
+}
 
 let casesRun = 0;
 let casesSame = 0;
 let casesDiff = 0;
 let noSample = 0;
 const problems = [];
+
+// ── E2 分支（要真 Electron 的那些）：跑完就收工 ──
+if (engine === 'electron') {
+  const r = await runElectron(base);
+  console.log(`════════ 汇总（E2 · Electron 探针）════════`);
+  console.log(`逐例对照 ${r.ran} 例（同 ${r.same} · 异 ${r.diff}）`);
+  if (r.problems.length) {
+    console.log(`⚠️ 需人看的项（${r.problems.length}）：`);
+    for (const p of r.problems) console.log('   · ' + p);
+  } else {
+    console.log('✅ 本次对照范围内没有"异"项（⛔ 但未进样本表的函数仍是未验）');
+  }
+  console.log(`（耗时 ${Date.now() - t0} ms · 两侧同一个序列化器 ⇒ 可比；⛔ 不判"等价"）`);
+  process.exit(0);
+}
 
 for (const m of mods) {
   const oldPath = path.join(base.oldDir, m);
