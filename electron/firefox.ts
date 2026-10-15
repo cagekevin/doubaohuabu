@@ -156,10 +156,13 @@ function launch(accountId: unknown, url: unknown): LaunchResult | Promise<Launch
     // macOS 优先使用 open -n -a <bundle> --args ... 启动 .app，绕过直接执行二进制可能遇到的签名/库校验问题
     if (isMacAppBundle) {
       const openArgs = ['-n', '-a', appBundle, '--args', ...commonArgs];
-      const command = ['open', ...openArgs].map((a) => shellEscape(a)).join(' ');
+      const command = ['open', ...openArgs].map(shellEscape).join(' ');
       const child = spawn('open', openArgs, { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
       let stderr = '';
-      if (child.stderr) child.stderr.on('data', (d: Buffer) => void (stderr += d.toString()));
+      if (child.stderr)
+        child.stderr.on('data', (d: Buffer) => {
+          stderr += d.toString();
+        });
       child.on('error', (err) => settle({ ok: false, error: `open 启动失败: ${err.message}`, command }));
       child.on('exit', (code) => {
         if (code !== 0 && code !== null) {
@@ -176,10 +179,13 @@ function launch(accountId: unknown, url: unknown): LaunchResult | Promise<Launch
     }
 
     // 非 macOS / 非 .app 情况：直接执行二进制
-    const command = [exe, ...commonArgs].map((a) => shellEscape(a)).join(' ');
+    const command = [exe, ...commonArgs].map(shellEscape).join(' ');
     const child = spawn(exe, commonArgs, { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
-    if (child.stderr) child.stderr.on('data', (d: Buffer) => void (stderr += d.toString()));
+    if (child.stderr)
+      child.stderr.on('data', (d: Buffer) => {
+        stderr += d.toString();
+      });
     child.on('error', (err) => settle({ ok: false, error: `启动失败: ${err.message}`, command }));
     child.on('exit', (code) => {
       if (code !== 0 && code !== null) {
