@@ -607,14 +607,14 @@ export type IpcChannelMap = typeof IPC_CHANNELS;
 export type WindowApi = {
   // `as` 子句做**类型层分区**：`backendOnly` 的条目留在表里（对账用），但不进渲染面
   readonly [K in keyof IpcChannelMap as IpcChannelMap[K] extends { backendOnly: true } ? never : K]: IpcChannelMap[K]['kind'] extends 'sendSync'
-    ? (...args: never[]) => unknown
+    ? (...args: never[]) => IpcChannelMap[K] extends { ret: infer R } ? R : unknown
     : IpcChannelMap[K]['kind'] extends 'send'
       ? (...args: never[]) => void
       : IpcChannelMap[K]['kind'] extends 'on'
         ? (cb: (...a: unknown[]) => void) => () => void
         : IpcChannelMap[K]['kind'] extends 'value'
           ? IpcChannelMap[K] extends { ret: infer R } ? R : unknown
-          : (...args: never[]) => Promise<unknown>;
+          : (...args: never[]) => Promise<IpcChannelMap[K] extends { ret: infer R } ? R : unknown>;
 };
 
 

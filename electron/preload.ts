@@ -12,7 +12,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 // ⚠️ `resolution-mode: 'import'` 不是装饰：共享声明层由 `src/stable/`（**ESM**，根 package.json 是 `"type":"module"`）
 //    产出 ⇒ 从 CommonJS 文件里做纯类型导入时，TS 要求显式声明这次解析按 ESM 走（否则 TS1541）。
 //    ⛔ 也没有别的选：换成运行时 import 会把渲染层源码打进后端产物（判据见 eslint 的 `@shared` 规则）。
-import type { WindowApi } from '@shared/ipc-channels' with { 'resolution-mode': 'import' };
+import type { IpcChannelMap, WindowApi } from '@shared/ipc-channels' with { 'resolution-mode': 'import' };
 
 // 真实宿主平台：preload 运行于主窗口上下文，process.platform 100% 准确，不受任何指纹
 // 伪装 preload 影响。指纹模块 detectHostOS() 优先采用它，避免在渲染进程里读「被改写过的
@@ -26,12 +26,26 @@ function hostOSFromPlatform(): 'windows' | 'macos' | 'linux' {
 }
 
 /**
- * `sendSync` 的唯一收窄口：`ipcRenderer.sendSync` 的返回类型是 `any`（electron 的签名如此），
- * 直接返回会踩类型安全层的 `no-unsafe-return`。**返回形状不由这里说了算** —— 它由契约表
- * （`IPC_CHANNELS.<成员>.ret`）给出 ⇒ 这里只把它收成 `unknown`，⛔ 不写 `as SomeShape` 假装知道形状。
+ * 契约表里「某频道 → 它的回执形状」的查表（**表是真源 ⇒ 形状只在这里取一次**）
  */
-function syncUnknown(channel: string, ...args: unknown[]): unknown {
-  return ipcRenderer.sendSync(channel, ...args) as unknown;
+type RetOfChannel<C extends string> = {
+  [K in keyof IpcChannelMap]: IpcChannelMap[K]['channel'] extends C
+    ? IpcChannelMap[K] extends { ret: infer R }
+      ? R
+      : unknown
+    : never;
+}[keyof IpcChannelMap];
+
+/**
+ * `sendSync` 的唯一收窄口：`ipcRenderer.sendSync` 的返回类型是 `any`（electron 的签名如此），
+ * 直接返回会踩类型安全层的 `no-unsafe-return`。
+ *
+ * ★ **形状取自契约表**（`IPC_CHANNELS.<成员>.ret`）—— 断言的是**真源**而不是本地猜测：
+ *   后端那条 `on(channel, …)` 处理器写的就是这个形状，且注册处守卫（`electron/ipc.ts`）保证
+ *   异常也落成表里那一支。⛔ 这里**不写**任何具体形状（写第二份就是第二载体）。
+ */
+function syncUnknown<C extends string>(channel: C, ...args: unknown[]): RetOfChannel<C> {
+  return ipcRenderer.sendSync(channel, ...args) as RetOfChannel<C>;
 }
 
 contextBridge.exposeInMainWorld('api', {
