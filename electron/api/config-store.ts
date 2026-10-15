@@ -11,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { SafeStorage } from 'electron';
-import { causeText } from './shape';
+import { asRecord, causeText } from './shape';
 import type { ProviderAdapter } from './types';
 
 const CONFIG_VERSION = 2;
@@ -38,8 +38,13 @@ interface ProviderConfigRow {
 interface ApiConfigDoc {
   version?: number;
   providers: Record<string, ProviderConfigRow>;
-  setup?: Record<string, unknown>;
-  usage?: Record<string, Record<string, number>>;
+  /**
+   * ⚠️ `setup` / `usage` **故意留 `unknown`**：磁盘文件可能被手改成任意形状，
+   *    而这些读取口在源里就有 `typeof === 'object'` 守卫（审计抓到我一度用 `?? {}` 把它丢掉 ⇒
+   *    对**损坏文件**行为不同：源会回落空配置，丢守卫会把 `null`/字符串原样带出去）。
+   */
+  setup?: unknown;
+  usage?: unknown;
   [k: string]: unknown;
 }
 
@@ -258,7 +263,8 @@ function createConfigStore(userDataPath: string, safeStorage: SafeStorage | null
   // ---- 全局通道设置（图片/视频通道 + 兜底服务商 + 队列并发）----
   function getSetup() {
     const data = loadRaw();
-    const s = data.setup ?? {};
+    // 源的 `data.setup || {}`：非对象（含字符串/null）一律当空 —— `asRecord` 正是这个语义
+    const s = asRecord(data.setup);
     return {
       imageProviderId: s['imageProviderId'] || null,
       videoProviderId: s['videoProviderId'] || null,
@@ -269,7 +275,8 @@ function createConfigStore(userDataPath: string, safeStorage: SafeStorage | null
 
   function setSetup(patch: unknown) {
     const data = loadRaw();
-    data.setup = { ...(data.setup ?? {}), ...(patch && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}) };
+    // ⚠️ 断言只为表达"磁盘值"：源的 `{...(data.setup || {})}` 对非对象就是 JS 的展开语义
+    data.setup = { ...((data.setup as Record<string, unknown> | null | undefined) || {}), ...(patch && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}) };
     saveRaw();
     return getSetup();
   }
@@ -283,14 +290,17 @@ function createConfigStore(userDataPath: string, safeStorage: SafeStorage | null
 
   function getUsage(): Record<string, Record<string, number>> {
     const data = loadRaw();
-    return data.usage ?? {};
+    const u = data.usage;
+    // 源的守卫逐字保留：`data.usage && typeof === 'object'`（非对象/假值 ⇒ 回落空配置）
+    return u && typeof u === 'object' ? (u as Record<string, Record<string, number>>) : {};
   }
 
   function incrementUsage(kind: unknown, t?: unknown): Record<string, number> {
     const data = loadRaw();
-    if (!data.usage) data.usage = {};
-    const usage = data.usage;
+    if (!data.usage || typeof data.usage !== 'object') data.usage = {};
+    const usage = data.usage as Record<string, Record<string, number>>;
     const key = todayKey(t);
+    // 源是 `if (!usage[key]) usage[key] = {…}`（等价：存在就复用同一对象、不存在才新建）
     const row = usage[key] ?? { image: 0, video: 0 };
     usage[key] = row;
     const ck = kind === 'image' ? 'image' : 'video';
