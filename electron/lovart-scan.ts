@@ -273,6 +273,7 @@ function initLovartScan(_deps: LovartScanDeps): void {
       merged.summary.iframes += Number(s['iframes'] || 0);
       merged.summary.shadows += Number(s['shadows'] || 0);
       const imgs = res['imgs'];
+      // `.map((x: unknown) => x)`：`Array.isArray` 收窄出的是 `any[]`，直接 spread 会踩 no-unsafe-argument
       if (Array.isArray(imgs)) merged.imgs.push(...imgs.map((x: unknown) => x));
       const canvases = res['canvases'];
       if (Array.isArray(canvases)) merged.canvases.push(...canvases.map((x: unknown) => x));
