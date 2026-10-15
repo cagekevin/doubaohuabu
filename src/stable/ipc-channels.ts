@@ -32,6 +32,20 @@ export interface ChannelSpec {
   readonly backendOnly?: true;
 }
 
+/**
+ * **公共失败分支**：`electron/ipc.ts` 的 `handle` **注册处守卫**把处理器抛出的异常统一转成这个形状
+ * （`{ ok: false, error: causeText(e) }`）⇒ 每个 `invoke` 条目的回执都含这一支，故抽出来免重复。
+ */
+export interface IpcFail {
+  ok: false;
+  error: string;
+}
+
+/**
+ * 各条 `ret` 的**取证锚点**（§9.1 R1：锚点用符号名、**禁行号**）：就是**同频道名**在
+ * `electron/**` 里的那个 `handle('<channel>', …)` 处理器（或它直接 `return` 委托的同域函数 —— 脚本
+ * `draft-handler-returns.mjs` 会把委托展开一层）。形状一律照处理器**实际 return** 写，⛔ 不按期望猜。
+ */
 export const IPC_CHANNELS = {
   /**
    * 非 IPC：`preload.ts` 的 `hostOSFromPlatform()` 直接算出（`process.platform`，不受指纹伪装影响）。
@@ -39,176 +53,518 @@ export const IPC_CHANNELS = {
    *   `const X: 'a'|'b' = 'a'` 那种常量会在使用处被**窄化**成字面量（实测：`satisfies` 会只认 `'a'`）。
    */
   hostOS: { kind: 'value', channel: null, params: [], ret: 'windows' as 'windows' | 'macos' | 'linux' },
-  // TODO(形状)：importFiles 的 ret —— 按 handler 实际 return 补
-  importFiles: { kind: 'invoke', channel: 'import-files', params: [] },
-  // TODO(形状)：saveFile 的 ret —— 按 handler 实际 return 补
-  saveFile: { kind: 'invoke', channel: 'save-file', params: ['content'] },
-  // TODO(形状)：loadFile 的 ret —— 按 handler 实际 return 补
-  loadFile: { kind: 'invoke', channel: 'load-file', params: [] },
-  // TODO(形状)：saveProjectsBackup 的 ret —— 按 handler 实际 return 补
-  saveProjectsBackup: { kind: 'send', channel: 'projects-backup', params: ['json'] },
-  // TODO(形状)：activateProjectStorage 的 ret —— 按 handler 实际 return 补
+  importFiles: {
+    kind: 'invoke',
+    channel: 'import-files',
+    params: [],
+    ret: [] as { name: string; fullName: string; dataUrl: unknown }[],
+  },
+  saveFile: { kind: 'invoke', channel: 'save-file', params: ['content'], ret: true as boolean | IpcFail },
+  loadFile: { kind: 'invoke', channel: 'load-file', params: [], ret: null as string | null | IpcFail },
+  saveProjectsBackup: { kind: 'send', channel: 'projects-backup', params: ['json'], ret: undefined as void },
   activateProjectStorage: {
     kind: 'sendSync',
     channel: 'project-storage-activate-sync',
     params: ['payload'],
     note: '**不得 await**：`sendSync` 靠 `e.returnValue` 回值，渲染层拿到的是同步结果（首帧就要读对目录）',
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
-  // TODO(形状)：pickProjectStorage 的 ret —— 按 handler 实际 return 补
-  pickProjectStorage: { kind: 'invoke', channel: 'project-storage-pick', params: ['payload'] },
-  // TODO(形状)：saveProjectSnapshot 的 ret —— 按 handler 实际 return 补
-  saveProjectSnapshot: { kind: 'send', channel: 'project-snapshot', params: ['project'] },
-  // TODO(形状)：logProjectOperation 的 ret —— 按 handler 实际 return 补
-  logProjectOperation: { kind: 'send', channel: 'project-operation', params: ['event'] },
-  // TODO(形状)：revealProjectStorage 的 ret —— 按 handler 实际 return 补
-  revealProjectStorage: { kind: 'invoke', channel: 'project-storage-reveal', params: ['storagePath'] },
-  // TODO(形状)：getProjectStorageSize 的 ret —— 按 handler 实际 return 补
-  getProjectStorageSize: { kind: 'invoke', channel: 'project-storage-size', params: ['storagePath'] },
-  // TODO(形状)：openExternal 的 ret —— 按 handler 实际 return 补
-  openExternal: { kind: 'invoke', channel: 'open-external', params: ['url'] },
-  // TODO(形状)：copyImageToClipboard 的 ret —— 按 handler 实际 return 补
-  copyImageToClipboard: { kind: 'invoke', channel: 'copy-image-to-clipboard', params: ['img', 'webContentsId'] },
-  // TODO(形状)：attachImagesToWebview 的 ret —— 按 handler 实际 return 补
-  attachImagesToWebview: { kind: 'invoke', channel: 'attach-images-to-webview', params: ['webContentsId', 'imgs'] },
-  // TODO(形状)：copyTextToClipboard 的 ret —— 按 handler 实际 return 补
-  copyTextToClipboard: { kind: 'invoke', channel: 'copy-text-to-clipboard', params: ['text'] },
-  // TODO(形状)：pasteToWebview 的 ret —— 按 handler 实际 return 补
-  pasteToWebview: { kind: 'invoke', channel: 'paste-to-webview', params: ['id'] },
-  // TODO(形状)：readClipboardImage 的 ret —— 按 handler 实际 return 补
-  readClipboardImage: { kind: 'invoke', channel: 'read-clipboard-image', params: [] },
-  // TODO(形状)：onClipboardImageChanged 的 ret —— 按 handler 实际 return 补
-  onClipboardImageChanged: { kind: 'on', channel: 'clipboard-image-changed', params: ['cb'] },
-  // TODO(形状)：exportAccountCookies 的 ret —— 按 handler 实际 return 补
-  exportAccountCookies: { kind: 'invoke', channel: 'export-account-cookies', params: ['partition'] },
-  // TODO(形状)：importAccountCookies 的 ret —— 按 handler 实际 return 补
-  importAccountCookies: { kind: 'invoke', channel: 'import-account-cookies', params: ['partition', 'cookies'] },
-  // TODO(形状)：saveAccountsFile 的 ret —— 按 handler 实际 return 补
-  saveAccountsFile: { kind: 'invoke', channel: 'save-accounts-file', params: ['content'] },
-  // TODO(形状)：loadAccountsFile 的 ret —— 按 handler 实际 return 补
-  loadAccountsFile: { kind: 'invoke', channel: 'load-accounts-file', params: [] },
-  // TODO(形状)：selectFolder 的 ret —— 按 handler 实际 return 补
-  selectFolder: { kind: 'invoke', channel: 'select-folder', params: [] },
-  // TODO(形状)：downloadFile 的 ret —— 按 handler 实际 return 补
-  downloadFile: { kind: 'invoke', channel: 'download-file', params: ['url', 'fileName'] },
-  // TODO(形状)：downloadFileAs 的 ret —— 按 handler 实际 return 补
-  downloadFileAs: { kind: 'invoke', channel: 'download-file-as', params: ['url', 'defaultName', 'filters'] },
-  // TODO(形状)：revealPath 的 ret —— 按 handler 实际 return 补
-  revealPath: { kind: 'invoke', channel: 'reveal-path', params: ['p'] },
-  // TODO(形状)：getMachineCode 的 ret —— 按 handler 实际 return 补
-  getMachineCode: { kind: 'invoke', channel: 'get-machine-code', params: [] },
-  // TODO(形状)：getLicenseStatus 的 ret —— 按 handler 实际 return 补
-  getLicenseStatus: { kind: 'invoke', channel: 'get-license-status', params: [] },
-  // TODO(形状)：activateWithCode 的 ret —— 按 handler 实际 return 补
-  activateWithCode: { kind: 'invoke', channel: 'activate-with-code', params: ['code'] },
-  // TODO(形状)：exportMachineCode 的 ret —— 按 handler 实际 return 补
-  exportMachineCode: { kind: 'invoke', channel: 'export-machine-code', params: ['machineCode'] },
-  // TODO(形状)：captureRect 的 ret —— 按 handler 实际 return 补
-  captureRect: { kind: 'invoke', channel: 'capture-rect', params: ['rect'] },
-  // TODO(形状)：detectVideos 的 ret —— 按 handler 实际 return 补
-  detectVideos: { kind: 'invoke', channel: 'detect-videos', params: ['webContentsId', 'seenKeys'] },
-  // TODO(形状)：detectErrors 的 ret —— 按 handler 实际 return 补
-  detectErrors: { kind: 'invoke', channel: 'detect-errors', params: ['webContentsId'] },
-  // TODO(形状)：saveImageSync 的 ret —— 按 handler 实际 return 补
+  pickProjectStorage: {
+    kind: 'invoke',
+    channel: 'project-storage-pick',
+    params: ['payload'],
+    ret: { ok: false, error: '' } as
+      | { ok: false; canceled: true }
+      | { ok: true; path: string; migrated: { images: number; videos: number } }
+      | IpcFail,
+  },
+  saveProjectSnapshot: { kind: 'send', channel: 'project-snapshot', params: ['project'], ret: undefined as void },
+  logProjectOperation: { kind: 'send', channel: 'project-operation', params: ['event'], ret: undefined as void },
+  revealProjectStorage: {
+    kind: 'invoke',
+    channel: 'project-storage-reveal',
+    params: ['storagePath'],
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
+  },
+  getProjectStorageSize: {
+    kind: 'invoke',
+    channel: 'project-storage-size',
+    params: ['storagePath'],
+    ret: { ok: false, error: '' } as
+      | { ok: true; bytes: number; files: number; partial: boolean; elapsedMs: number }
+      | IpcFail,
+  },
+  openExternal: { kind: 'invoke', channel: 'open-external', params: ['url'], ret: true as boolean | IpcFail },
+  copyImageToClipboard: {
+    kind: 'invoke',
+    channel: 'copy-image-to-clipboard',
+    params: ['img', 'webContentsId'],
+    // 形状取自 `electron/clipboard-image.ts` 的 `copyImageToClipboard`（本文件不得 import 后端 ⇒ 形状写在表里）
+    ret: { ok: false, error: '' } as
+      | { ok: true; ext: string; via: 'main-native' | 'page-clipboard'; verified: boolean }
+      | IpcFail,
+  },
+  attachImagesToWebview: {
+    kind: 'invoke',
+    channel: 'attach-images-to-webview',
+    params: ['webContentsId', 'imgs'],
+    ret: { ok: false, via: 'cdp-file-input', files: [], errors: [] } as {
+      ok: boolean;
+      via: string;
+      files: { index: number; label: string; filePath: string; bytes: number; reused: boolean }[];
+      errors: string[];
+      nodeId?: number;
+      accept?: string;
+      count?: number;
+    },
+  },
+  copyTextToClipboard: {
+    kind: 'invoke',
+    channel: 'copy-text-to-clipboard',
+    params: ['text'],
+    ret: { ok: false, error: '' } as { ok: true; cleanedLen: number } | IpcFail,
+  },
+  pasteToWebview: { kind: 'invoke', channel: 'paste-to-webview', params: ['id'], ret: { ok: true } as { ok: true } | IpcFail },
+  readClipboardImage: {
+    kind: 'invoke',
+    channel: 'read-clipboard-image',
+    params: [],
+    // 形状取自 `electron/clipboard-image.ts` 的 `readClipboardImage`（四条 return）
+    ret: { ok: false } as
+      | { ok: true; source: string; mime: string; dataUrl: string; name?: string; w?: number; h?: number }
+      | { ok: false; error?: string },
+  },
+  onClipboardImageChanged: { kind: 'on', channel: 'clipboard-image-changed', params: ['cb'], ret: undefined as void },
+  exportAccountCookies: {
+    kind: 'invoke',
+    channel: 'export-account-cookies',
+    params: ['partition'],
+    ret: { ok: false, error: '' } as
+      | {
+          ok: true;
+          cookies: {
+            name: string;
+            value: string;
+            domain: string;
+            path: string;
+            secure: boolean;
+            httpOnly: boolean;
+            expirationDate?: number;
+            sameSite?: string;
+          }[];
+          count: number;
+        }
+      | IpcFail,
+  },
+  importAccountCookies: {
+    kind: 'invoke',
+    channel: 'import-account-cookies',
+    params: ['partition', 'cookies'],
+    ret: { ok: false, error: '' } as { ok: true; restored: number; total: number } | IpcFail,
+  },
+  saveAccountsFile: {
+    kind: 'invoke',
+    channel: 'save-accounts-file',
+    params: ['content'],
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
+  },
+  loadAccountsFile: { kind: 'invoke', channel: 'load-accounts-file', params: [], ret: null as string | null | IpcFail },
+  selectFolder: { kind: 'invoke', channel: 'select-folder', params: [], ret: null as string | null | IpcFail },
+  downloadFile: {
+    kind: 'invoke',
+    channel: 'download-file',
+    params: ['url', 'fileName'],
+    ret: { ok: false, error: '' } as { ok: true; path: string; size: number } | IpcFail,
+  },
+  downloadFileAs: {
+    kind: 'invoke',
+    channel: 'download-file-as',
+    params: ['url', 'defaultName', 'filters'],
+    ret: { ok: false, error: '' } as
+      | { ok: false; canceled: true }
+      | { ok: false; canceled: false; error: string }
+      | { ok: true; canceled: false; path: string; size: number }
+      | IpcFail,
+  },
+  revealPath: { kind: 'invoke', channel: 'reveal-path', params: ['p'], ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail },
+  getMachineCode: {
+    kind: 'invoke',
+    channel: 'get-machine-code',
+    params: [],
+    ret: { ok: false, error: '' } as { ok: true; machineCode: string } | IpcFail,
+  },
+  getLicenseStatus: {
+    kind: 'invoke',
+    channel: 'get-license-status',
+    params: [],
+    // 形状取自 `electron/license.ts` 的 `checkLicenseStatus`（`LicenseStatus` 五种状态）＋ 处理器那层 `{ ok: true, ... }`
+    ret: { ok: true, status: 'none', machineCode: '' } as
+      | ({ ok: true } & (
+          | { status: 'none'; machineCode: string }
+          | { status: 'invalid'; machineCode: string; reason: string }
+          | {
+              status: 'tampered';
+              machineCode: string;
+              tamperReason?: string | undefined;
+              expireAt?: unknown;
+              activatedAt?: unknown;
+            }
+          | { status: 'expired'; machineCode: string; expireAt?: unknown; activatedAt?: unknown }
+          | { status: 'ok'; machineCode: string; expireAt?: unknown; activatedAt?: unknown }
+        ))
+      | IpcFail,
+  },
+  activateWithCode: {
+    kind: 'invoke',
+    channel: 'activate-with-code',
+    params: ['code'],
+    // 形状取自 `electron/license.ts` 的 `activateWithCode`（四个 return ＋ 成功分支）
+    ret: { ok: false, status: 'invalid', error: '' } as
+      | { ok: false; status: 'invalid'; error: string }
+      | { ok: false; status: 'tampered'; tamperReason: string; error: string }
+      | { ok: false; status: 'used'; error: string }
+      | { ok: true; status: 'ok'; expireAt: number; activatedAt: number; machineCode: string }
+      | IpcFail,
+  },
+  exportMachineCode: {
+    kind: 'invoke',
+    channel: 'export-machine-code',
+    params: ['machineCode'],
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
+  },
+  captureRect: {
+    kind: 'invoke',
+    channel: 'capture-rect',
+    params: ['rect'],
+    ret: { ok: false, error: '' } as { ok: true; dataUrl: string } | IpcFail,
+  },
+  detectVideos: {
+    kind: 'invoke',
+    channel: 'detect-videos',
+    params: ['webContentsId', 'seenKeys'],
+    // ⛔ 不在表里再写一份形状：回执由**页内注入脚本**（`DETECT_JS`，见 `electron/main.ts`）产出
+    //   —— 成功是 `{ ok: true, videos: […], _diag }`、异常分支是 `{ ok: false, error, _diag? }`，
+    //   而脚本跑在 guest 主世界 ⇒ 形状以**脚本字面量**为准（写第二份就是第二载体）。
+    ret: null as unknown,
+  },
+  detectErrors: {
+    kind: 'invoke',
+    channel: 'detect-errors',
+    params: ['webContentsId'],
+    // 同上：形状出自 `ERROR_JS`（本仓源码里的字面量）⇒ 这里只记它写出来的那几个键
+    ret: { ok: false, errors: [], error: '' } as
+      | { ok: true; errors: { type: string; message: string }[] }
+      | { ok: false; errors: []; error?: string },
+  },
   saveImageSync: {
     kind: 'sendSync',
     channel: 'img-save-sync',
     params: ['dataUrl'],
     note: '**不得 await**（同 `activateProjectStorage`）：同步落盘后用 `img://` 引用',
+    // ⚠️ 处理器写的是 `persistImageDataUrl(dataUrl)`，其返回类型是 `unknown`（源里入参就是任意值）
+    //   ⇒ 表里如实写 `unknown`。渲染层手写面原写 `string` —— 要在 B1-b 定：收窄 handler 形参、还是渲染侧自行窄化。
+    ret: null as unknown,
   },
-  // TODO(形状)：saveVideoFromUrl 的 ret —— 按 handler 实际 return 补
-  saveVideoFromUrl: { kind: 'invoke', channel: 'save-video-from-url', params: ['url', 'referer'] },
-  // TODO(形状)：imageFetchDataUrl 的 ret —— 按 handler 实际 return 补
-  imageFetchDataUrl: { kind: 'invoke', channel: 'image-fetch-dataurl', params: ['url'] },
-  // TODO(形状)：clearBrowserCache 的 ret —— 按 handler 实际 return 补
-  clearBrowserCache: { kind: 'invoke', channel: 'clear-browser-cache', params: [] },
-  // TODO(形状)：startFileDrag 的 ret —— 按 handler 实际 return 补
-  startFileDrag: { kind: 'send', channel: 'start-file-drag', params: ['payload'] },
-  // TODO(形状)：ensureFingerprint 的 ret —— 按 handler 实际 return 补
-  ensureFingerprint: { kind: 'invoke', channel: 'ensure-fingerprint', params: ['acc'] },
-  // TODO(形状)：fpNetDiag 的 ret —— 按 handler 实际 return 补
-  fpNetDiag: { kind: 'invoke', channel: 'fp-net-diag', params: ['partition'] },
-  // TODO(形状)：ensurePlainSession 的 ret —— 按 handler 实际 return 补
-  ensurePlainSession: { kind: 'invoke', channel: 'ensure-plain-session', params: ['acc'] },
-  // TODO(形状)：ensureLovartContainer 的 ret —— 按 handler 实际 return 补
-  ensureLovartContainer: { kind: 'invoke', channel: 'ensure-lovart-container', params: ['acc'] },
-  // TODO(形状)：clearAccountSession 的 ret —— 按 handler 实际 return 补
-  clearAccountSession: { kind: 'invoke', channel: 'clear-account-session', params: ['partition'] },
-  // TODO(形状)：setAccountProxy 的 ret —— 按 handler 实际 return 补
-  setAccountProxy: { kind: 'invoke', channel: 'set-account-proxy', params: ['partition', 'proxy'] },
-  // TODO(形状)：ensureLovartFirefoxProfile 的 ret —— 按 handler 实际 return 补
-  ensureLovartFirefoxProfile: { kind: 'invoke', channel: 'ensure-lovart-firefox-profile', params: ['accountId'] },
-  // TODO(形状)：openLovartFirefox 的 ret —— 按 handler 实际 return 补
-  openLovartFirefox: { kind: 'invoke', channel: 'open-lovart-firefox', params: ['args'] },
-  // TODO(形状)：removeLovartFirefoxProfile 的 ret —— 按 handler 实际 return 补
-  removeLovartFirefoxProfile: { kind: 'invoke', channel: 'remove-lovart-firefox-profile', params: ['accountId'] },
-  // TODO(形状)：getFirefoxStatus 的 ret —— 按 handler 实际 return 补
-  getFirefoxStatus: { kind: 'invoke', channel: 'get-firefox-status', params: [] },
-  // TODO(形状)：ensureLovartChrome 的 ret —— 按 handler 实际 return 补
-  ensureLovartChrome: { kind: 'invoke', channel: 'ensure-lovart-chrome', params: ['args'] },
-  // TODO(形状)：closeLovartChrome 的 ret —— 按 handler 实际 return 补
-  closeLovartChrome: { kind: 'invoke', channel: 'close-lovart-chrome', params: ['args'] },
-  // TODO(形状)：syncLovartSession 的 ret —— 按 handler 实际 return 补
-  syncLovartSession: { kind: 'invoke', channel: 'sync-lovart-session', params: ['args'] },
-  // TODO(形状)：lovartChromeIsOpen 的 ret —— 按 handler 实际 return 补
-  lovartChromeIsOpen: { kind: 'invoke', channel: 'lovart-chrome-is-open', params: ['accountId'] },
-  // TODO(形状)：getLovartChromeStatus 的 ret —— 按 handler 实际 return 补
-  getLovartChromeStatus: { kind: 'invoke', channel: 'get-lovart-chrome-status', params: [] },
-  // TODO(形状)：onDolaMedia 的 ret —— 按 handler 实际 return 补
-  onDolaMedia: { kind: 'on', channel: 'dola-media-update', params: ['cb'] },
-  // TODO(形状)：downloadDolaMedia 的 ret —— 按 handler 实际 return 补
-  downloadDolaMedia: { kind: 'invoke', channel: 'dola-media-download', params: ['url', 'mediaType'] },
-  // TODO(形状)：clearDolaMedia 的 ret —— 按 handler 实际 return 补
-  clearDolaMedia: { kind: 'invoke', channel: 'dola-media-clear', params: [] },
-  // TODO(形状)：lovartFetchImages 的 ret —— 按 handler 实际 return 补
-  lovartFetchImages: { kind: 'invoke', channel: 'lovart-fetch-images', params: ['args'] },
-  // TODO(形状)：onLovartFetchItem 的 ret —— 按 handler 实际 return 补
-  onLovartFetchItem: { kind: 'on', channel: 'lovart-fetch-item', params: ['cb'] },
-  // TODO(形状)：onLovartFetchDone 的 ret —— 按 handler 实际 return 补
-  onLovartFetchDone: { kind: 'on', channel: 'lovart-fetch-done', params: ['cb'] },
-  // TODO(形状)：lovartScanFrames 的 ret —— 按 handler 实际 return 补
-  lovartScanFrames: { kind: 'invoke', channel: 'lovart-scan-frames', params: ['args'] },
-  // TODO(形状)：lovartDiag 的 ret —— 按 handler 实际 return 补
-  lovartDiag: { kind: 'invoke', channel: 'lovart-diag', params: ['payload'] },
-  // TODO(形状)：lovartDiagOpen 的 ret —— 按 handler 实际 return 补
-  lovartDiagOpen: { kind: 'invoke', channel: 'lovart-diag-open', params: [] },
-  // TODO(形状)：lovartDomDump 的 ret —— 按 handler 实际 return 补
-  lovartDomDump: { kind: 'invoke', channel: 'lovart-dom-dump', params: ['args'] },
-  // TODO(形状)：getDownloadSettings 的 ret —— 按 handler 实际 return 补
-  getDownloadSettings: { kind: 'invoke', channel: 'get-download-settings', params: [] },
-  // TODO(形状)：pickDownloadPath 的 ret —— 按 handler 实际 return 补
-  pickDownloadPath: { kind: 'invoke', channel: 'pick-download-path', params: [] },
-  // TODO(形状)：injectDolaDurationMain 的 ret —— 按 handler 实际 return 补
-  injectDolaDurationMain: { kind: 'invoke', channel: 'inject-dola-duration-main', params: ['webContentsId'] },
-  // TODO(形状)：dolaDurationDiag 的 ret —— 按 handler 实际 return 补
-  dolaDurationDiag: { kind: 'invoke', channel: 'dola-duration-diag', params: ['message'] },
-  // TODO(形状)：attachDolaDebugger 的 ret —— 按 handler 实际 return 补
-  attachDolaDebugger: { kind: 'invoke', channel: 'attach-dola-debugger', params: ['webContentsId'] },
-  // TODO(形状)：apiProvidersList 的 ret —— 按 handler 实际 return 补
-  apiProvidersList: { kind: 'invoke', channel: 'api-providers:list', params: [] },
-  // TODO(形状)：apiConfigGet 的 ret —— 按 handler 实际 return 补
-  apiConfigGet: { kind: 'invoke', channel: 'api-config:get', params: [] },
-  // TODO(形状)：apiConfigSet 的 ret —— 按 handler 实际 return 补
-  apiConfigSet: { kind: 'invoke', channel: 'api-config:set', params: ['providerId', 'patch'] },
-  // TODO(形状)：apiConfigSetKey 的 ret —— 按 handler 实际 return 补
-  apiConfigSetKey: { kind: 'invoke', channel: 'api-config:set-key', params: ['providerId', 'key'] },
-  // TODO(形状)：apiConfigTest 的 ret —— 按 handler 实际 return 补
-  apiConfigTest: { kind: 'invoke', channel: 'api-config:test', params: ['providerId'] },
-  // TODO(形状)：apiJobSubmit 的 ret —— 按 handler 实际 return 补
-  apiJobSubmit: { kind: 'invoke', channel: 'api-job:submit', params: ['payload'] },
-  // TODO(形状)：apiJobBatch 的 ret —— 按 handler 实际 return 补
-  apiJobBatch: { kind: 'invoke', channel: 'api-job:batch', params: ['basePayload', 'matrix'] },
-  // TODO(形状)：apiJobCancel 的 ret —— 按 handler 实际 return 补
-  apiJobCancel: { kind: 'invoke', channel: 'api-job:cancel', params: ['jobId'] },
-  // TODO(形状)：apiJobList 的 ret —— 按 handler 实际 return 补
-  apiJobList: { kind: 'invoke', channel: 'api-job:list', params: [] },
-  // TODO(形状)：apiSetupGet 的 ret —— 按 handler 实际 return 补
-  apiSetupGet: { kind: 'invoke', channel: 'api-setup:get', params: [] },
-  // TODO(形状)：apiSetupSet 的 ret —— 按 handler 实际 return 补
-  apiSetupSet: { kind: 'invoke', channel: 'api-setup:set', params: ['patch'] },
-  // TODO(形状)：apiConfigSetSecret 的 ret —— 按 handler 实际 return 补
-  apiConfigSetSecret: { kind: 'invoke', channel: 'api-config:set-secret', params: ['providerId', 'key'] },
-  // TODO(形状)：onApiJobEvent 的 ret —— 按 handler 实际 return 补
-  onApiJobEvent: { kind: 'on', channel: 'api-job-event', params: ['cb'] },
+  saveVideoFromUrl: {
+    kind: 'invoke',
+    channel: 'save-video-from-url',
+    params: ['url', 'referer'],
+    ret: { ok: false, error: '' } as { ok: true; ref: string; size: number; cached?: boolean } | IpcFail,
+  },
+  imageFetchDataUrl: {
+    kind: 'invoke',
+    channel: 'image-fetch-dataurl',
+    params: ['url'],
+    ret: { ok: false, error: '' } as { ok: true; mime: string; dataUrl: string } | IpcFail,
+  },
+  clearBrowserCache: {
+    kind: 'invoke',
+    channel: 'clear-browser-cache',
+    params: [],
+    ret: { ok: false, error: '' } as { ok: true; cleared: number; failed: number } | IpcFail,
+  },
+  startFileDrag: { kind: 'send', channel: 'start-file-drag', params: ['payload'], ret: undefined as void },
+  ensureFingerprint: {
+    kind: 'invoke',
+    channel: 'ensure-fingerprint',
+    params: ['acc'],
+    ret: { ok: false, error: '' } as { ok: true; preloadUrl: string } | IpcFail,
+  },
+  fpNetDiag: {
+    kind: 'invoke',
+    channel: 'fp-net-diag',
+    params: ['partition'],
+    ret: { ok: false, error: '' } as
+      | { ok: true; proxy: string; engineChrome: string; hostPlatform: string }
+      | IpcFail,
+  },
+  ensurePlainSession: {
+    kind: 'invoke',
+    channel: 'ensure-plain-session',
+    params: ['acc'],
+    ret: { ok: false, error: '' } as { ok: true; userAgent: string; acceptLanguage: string } | IpcFail,
+  },
+  ensureLovartContainer: {
+    kind: 'invoke',
+    channel: 'ensure-lovart-container',
+    params: ['acc'],
+    ret: { ok: false, error: '' } as
+      | { ok: true; userAgent: string; preloadUrl: null; proxy: string }
+      | IpcFail,
+  },
+  clearAccountSession: {
+    kind: 'invoke',
+    channel: 'clear-account-session',
+    params: ['partition'],
+    ret: { ok: false, error: '' } as { ok: true } | IpcFail,
+  },
+  setAccountProxy: {
+    kind: 'invoke',
+    channel: 'set-account-proxy',
+    params: ['partition', 'proxy'],
+    ret: { ok: false, error: '' } as { ok: true; applied: string } | IpcFail,
+  },
+  ensureLovartFirefoxProfile: {
+    kind: 'invoke',
+    channel: 'ensure-lovart-firefox-profile',
+    params: ['accountId'],
+    ret: { ok: true } as { ok: true } | IpcFail,
+  },
+  openLovartFirefox: {
+    kind: 'invoke',
+    channel: 'open-lovart-firefox',
+    params: ['args'],
+    // 形状取自 `electron/firefox.ts` 的 `launch`（`LaunchResult`）
+    ret: { ok: false, error: '' } as
+      | { ok: true; executable: string; profile: string; args: string[]; command: string }
+      | { ok: false; error: string; command?: string },
+  },
+  removeLovartFirefoxProfile: {
+    kind: 'invoke',
+    channel: 'remove-lovart-firefox-profile',
+    params: ['accountId'],
+    ret: { ok: true } as { ok: true } | IpcFail,
+  },
+  getFirefoxStatus: {
+    kind: 'invoke',
+    channel: 'get-firefox-status',
+    params: [],
+    ret: { ok: false, error: '' } as
+      | { available: boolean; bundled: boolean; path: string | null; addonInstalled: boolean }
+      | IpcFail,
+  },
+  ensureLovartChrome: {
+    kind: 'invoke',
+    channel: 'ensure-lovart-chrome',
+    params: ['args'],
+    // 形状取自 `electron/chrome-cdp.ts` 的 `ensureLovartChrome`（`EnsureResult`）
+    ret: { ok: false, error: '' } as
+      | { ok: true; alreadyOpen: true }
+      | { ok: true; profileDir: string }
+      | { ok: false; error: string; message?: string }
+      | IpcFail,
+  },
+  closeLovartChrome: {
+    kind: 'invoke',
+    channel: 'close-lovart-chrome',
+    params: ['args'],
+    ret: { ok: false, error: '' } as { ok: true; wasOpen: boolean } | IpcFail,
+  },
+  syncLovartSession: {
+    kind: 'invoke',
+    channel: 'sync-lovart-session',
+    params: ['args'],
+    ret: { ok: false, error: '' } as
+      | { ok: false; error: string; message?: string }
+      | { ok: true; count: number; total: number; rawTotal: number }
+      | IpcFail,
+  },
+  lovartChromeIsOpen: {
+    kind: 'invoke',
+    channel: 'lovart-chrome-is-open',
+    params: ['accountId'],
+    ret: { ok: false, error: '' } as { ok: boolean; open: boolean } | IpcFail,
+  },
+  getLovartChromeStatus: {
+    kind: 'invoke',
+    channel: 'get-lovart-chrome-status',
+    params: [],
+    // 形状取自 `electron/chrome-cdp.ts` 的 `getStatus`（`{ available, path, open }`）
+    ret: { ok: false, error: '' } as
+      | { ok: true; available: boolean; path: string | null; open: unknown[] }
+      | IpcFail,
+  },
+  onDolaMedia: { kind: 'on', channel: 'dola-media-update', params: ['cb'], ret: undefined as void },
+  downloadDolaMedia: {
+    kind: 'invoke',
+    channel: 'dola-media-download',
+    params: ['url', 'mediaType'],
+    ret: { ok: false, error: '' } as
+      | { ok: true; path: string; size: number; name: string; dir: string; configured: boolean }
+      | IpcFail,
+  },
+  clearDolaMedia: { kind: 'invoke', channel: 'dola-media-clear', params: [], ret: { ok: true } as { ok: true } | IpcFail },
+  lovartFetchImages: {
+    kind: 'invoke',
+    channel: 'lovart-fetch-images',
+    params: ['args'],
+    ret: { ok: false, error: '' } as { ok: true; jobId: string; total: number } | IpcFail,
+  },
+  onLovartFetchItem: { kind: 'on', channel: 'lovart-fetch-item', params: ['cb'], ret: undefined as void },
+  onLovartFetchDone: { kind: 'on', channel: 'lovart-fetch-done', params: ['cb'], ret: undefined as void },
+  lovartScanFrames: {
+    kind: 'invoke',
+    channel: 'lovart-scan-frames',
+    params: ['args'],
+    // `frames` 的元素形状出自**按 frame 注入的采集脚本**（`electron/lovart-scan.ts`）⇒ 元素记 `unknown`
+    ret: { ok: false, error: '' } as { ok: true; frames: unknown[]; logPath: string } | IpcFail,
+  },
+  lovartDiag: {
+    kind: 'invoke',
+    channel: 'lovart-diag',
+    params: ['payload'],
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
+  },
+  lovartDiagOpen: {
+    kind: 'invoke',
+    channel: 'lovart-diag-open',
+    params: [],
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
+  },
+  lovartDomDump: {
+    kind: 'invoke',
+    channel: 'lovart-dom-dump',
+    params: ['args'],
+    ret: { ok: false, error: '' } as
+      | { ok: false; error: string; dump?: unknown }
+      | { ok: true; path: string; summary: unknown }
+      | IpcFail,
+  },
+  getDownloadSettings: {
+    kind: 'invoke',
+    channel: 'get-download-settings',
+    params: [],
+    ret: { ok: false, error: '' } as
+      | { ok: true; path: string; configured: boolean; configuredPath: string }
+      | IpcFail,
+  },
+  pickDownloadPath: {
+    kind: 'invoke',
+    channel: 'pick-download-path',
+    params: [],
+    ret: { ok: false, error: '' } as
+      | { ok: false; canceled: true }
+      | { ok: true; path: string; configured: boolean }
+      | IpcFail,
+  },
+  injectDolaDurationMain: {
+    kind: 'invoke',
+    channel: 'inject-dola-duration-main',
+    params: ['webContentsId'],
+    ret: { ok: false, error: '' } as { ok: true } | IpcFail,
+  },
+  dolaDurationDiag: {
+    kind: 'invoke',
+    channel: 'dola-duration-diag',
+    params: ['message'],
+    ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
+  },
+  attachDolaDebugger: {
+    kind: 'invoke',
+    channel: 'attach-dola-debugger',
+    params: ['webContentsId'],
+    ret: { ok: false, error: '' } as { ok: true; url: string } | IpcFail,
+  },
+  apiProvidersList: {
+    kind: 'invoke',
+    channel: 'api-providers:list',
+    params: [],
+    // `providers` 是后端 `apiRegistry.listProvidersMeta()` 的产物（服务商元数据表）⇒ 元素记 `unknown`
+    ret: { ok: false, error: '' } as { ok: true; providers: unknown[] } | IpcFail,
+  },
+  apiConfigGet: {
+    kind: 'invoke',
+    channel: 'api-config:get',
+    params: [],
+    ret: { ok: false, error: '' } as
+      | { ok: true; providers: unknown[]; configs: Record<string, unknown> }
+      | IpcFail,
+  },
+  apiConfigSet: {
+    kind: 'invoke',
+    channel: 'api-config:set',
+    params: ['providerId', 'patch'],
+    // 后端的声明是 `Promise<OkReply | FailReply>`（`OkReply` 带索引签名、`FailReply` 的 error/message 皆可选）
+    ret: { ok: false, error: '' } as
+      | ({ ok: true } & Record<string, unknown>)
+      | { ok: false; error?: string; message?: string }
+      | IpcFail,
+  },
+  apiConfigSetKey: {
+    kind: 'invoke',
+    channel: 'api-config:set-key',
+    params: ['providerId', 'key'],
+    ret: { ok: false, error: '' } as
+      | { ok: true; keyHint: unknown; maskedBy: string }
+      | { ok: false; error?: string; message?: string }
+      | IpcFail,
+  },
+  apiConfigTest: {
+    kind: 'invoke',
+    channel: 'api-config:test',
+    params: ['providerId'],
+    // 处理器**自带显式注解** `{ ok: boolean; message: string }`（回执用 `message`，与守卫的 `error` 不同）
+    ret: { ok: false, message: '' } as { ok: boolean; message: string } | IpcFail,
+  },
+  apiJobSubmit: {
+    kind: 'invoke',
+    channel: 'api-job:submit',
+    params: ['payload'],
+    // 处理器**自带显式注解** `Promise<unknown>`（透传 `jobManager?.submit(...)`）
+    ret: null as unknown,
+  },
+  apiJobBatch: {
+    kind: 'invoke',
+    channel: 'api-job:batch',
+    params: ['basePayload', 'matrix'],
+    // 同上（`Promise<unknown>`，透传 `jobManager?.submitBatch(...)`）
+    ret: null as unknown,
+  },
+  apiJobCancel: {
+    kind: 'invoke',
+    channel: 'api-job:cancel',
+    params: ['jobId'],
+    // 同上（`Promise<unknown>`，表达式体箭头 ⇒ 回执就是 `jobManager?.cancel(...)`）
+    ret: null as unknown,
+  },
+  apiJobList: {
+    kind: 'invoke',
+    channel: 'api-job:list',
+    params: [],
+    ret: { ok: false, error: '' } as { ok: true; jobs: unknown[] } | IpcFail,
+  },
+  apiSetupGet: {
+    kind: 'invoke',
+    channel: 'api-setup:get',
+    params: [],
+    ret: { ok: false, error: '' } as { ok: true; setup: unknown; usage: unknown } | IpcFail,
+  },
+  apiSetupSet: {
+    kind: 'invoke',
+    channel: 'api-setup:set',
+    params: ['patch'],
+    ret: { ok: false, error: '' } as { ok: true; setup: unknown } | IpcFail,
+  },
+  apiConfigSetSecret: {
+    kind: 'invoke',
+    channel: 'api-config:set-secret',
+    params: ['providerId', 'key'],
+    ret: { ok: false, error: '' } as
+      | { ok: true; hasSecret: true }
+      | { ok: false; error?: string; message?: string }
+      | IpcFail,
+  },
+  onApiJobEvent: { kind: 'on', channel: 'api-job-event', params: ['cb'], ret: undefined as void },
 
   // ── 后端独有：注册了、但渲染层没有名面（`backendOnly` ⇒ 被 `WindowApi` 滤掉）──
   /**
@@ -225,7 +581,13 @@ export const IPC_CHANNELS = {
     backendOnly: true,
     note:
       '后端独有注册：原版亦然（见上方回源结论）⇒ 保留；渲染层从不调用它。' +
-      '字段面待补（回执形状随 `chrome-cdp` 批次填）；它的"该不该有"另走债务 TD-13-30。',
+      '它的"该不该有"另走债务 TD-13-30。',
+    // 回执＝`ensureLovartChrome` 的产物（`EnsureResult`）或本地失败分支
+    ret: { ok: false, error: '' } as
+      | { ok: true; alreadyOpen: true }
+      | { ok: true; profileDir: string }
+      | { ok: false; error: string; message?: string }
+      | IpcFail,
   },
 } as const satisfies Record<string, ChannelSpec>;
 
