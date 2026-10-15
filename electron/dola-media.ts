@@ -1295,7 +1295,8 @@ function onGuestReady(guest: WebContents): void {
  */
 function attachGuestDebugger(guest: WebContents): void {
   if (!guest) {
-    console.warn('[dola-media] attachGuestDebugger 跳过：guest 无效');
+    // 源的消息原文（含「或无 debugger 属性」那半截）—— 类型上已不需要那半截判断，但文案照抄
+    console.warn('[dola-media] attachGuestDebugger 跳过：guest 无效或无 debugger 属性');
     return;
   }
   if (attachedGuests.has(guest)) {
