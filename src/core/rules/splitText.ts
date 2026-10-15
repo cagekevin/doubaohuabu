@@ -186,8 +186,9 @@ export function splitAuto(text: unknown): SplitPart[] {
   if (marks.length < 2) return [];
 
   const out: SplitPart[] = [];
-  for (let i = 0; i < marks.length; i++) {
-    const cur = marks[i] as { index: number; keyword: string };
+  // ⚠️ 用 `entries()` 拿 `cur`（`marks[i]` 在 `noUncheckedIndexedAccess` 下是 `… | undefined`
+  //    ⇒ 断言只是为压掉它）；`next` 仍要「可能没有」，那是**语义**（最后一段取到结尾）
+  for (const [i, cur] of marks.entries()) {
     const next = marks[i + 1];
     const from = cur.index + (plain[cur.index] === '\n' ? 1 : 0);
     const to = next ? next.index : plain.length;

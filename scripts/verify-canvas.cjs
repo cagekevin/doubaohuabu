@@ -76,7 +76,9 @@ const project = [
   }
 
   await new Promise((r) => server.listen(0, r));
-  const url = `http://127.0.0.1:${server.address().port}/index.html`;
+  // ⚠️ 必须带 `?devMock=1`：mock 宿主的 **E 族（开门型假成功）** = `license.getStatus` 被门控
+  //   （见 `adapters/host/mock/index.ts` 头注清单）⇒ 不带就停在「软件授权激活」屏，进不了工程
+  const url = `http://127.0.0.1:${server.address().port}/index.html?devMock=1`;
   console.log('serving:', url);
 
   const browser = await launchBrowser();

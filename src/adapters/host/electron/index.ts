@@ -45,7 +45,7 @@ export { getHostApi, HOST_MISSING } from './host-api';
  *   消费它的边界文件内。`TD-04-12`
  */
 function isDolaMediaEvent(v: unknown): v is DolaMediaEvent {
-  return !!v && typeof v === 'object' && Array.isArray((v as { items?: unknown }).items);
+  return isRecord(v) && Array.isArray(v.items);
 }
 
 const createFile = (): FilePort => ({
@@ -318,7 +318,7 @@ export function createElectronHost(): HostPort {
         if (!r.ok) return r;
         // ⚠️ **先判取消**：后端取消是 `{ok:false, canceled:true}`，而 `checkOk` 见到 `ok:false` 会判失败
         //   —— 取消是**如实结果**（用户主动关掉对话框），不是错误（与 `pickStorage` 同口径）
-        if (isRecord(r.value) && (r.value as { canceled?: unknown }).canceled === true) {
+        if (isRecord(r.value) && r.value.canceled === true) {
           return ok({ canceled: true });
         }
         const c = checkOk<{ path?: unknown; configured?: unknown }>(r.value, {

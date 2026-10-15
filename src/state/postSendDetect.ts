@@ -100,25 +100,25 @@ export function createPostSendDetect(store: AppStore, ports: Ports): PostSendDet
     nodeId: string | null,
   ): boolean => {
     if (!v.key || !v.ready || !v.url) return false;
-    try {
-      landVideo(store, {
-        url: v.url,
-        vid: v.key,
-        width: v.width ?? null,
-        height: v.height ?? null,
-        duration: v.duration ?? null,
-        poster: v.poster ?? null,
-        accountId,
-        accountName,
-        name: v.name || '视频',
-        nodeId,
-      });
-      ensureSeen().add(v.key);
-      return true;
-    } catch (e: unknown) {
-      log.warn('[postSendDetect] 落库失败：', e);
+    // ★ 失败**由 `landVideo` 声明在返回值里**（原则 6：产生方收成 `Result`）⇒ 这里只转发，不再 try/catch
+    const landed = landVideo(store, {
+      url: v.url,
+      vid: v.key,
+      width: v.width ?? null,
+      height: v.height ?? null,
+      duration: v.duration ?? null,
+      poster: v.poster ?? null,
+      accountId,
+      accountName,
+      name: v.name || '视频',
+      nodeId,
+    });
+    if (!landed.ok) {
+      log.warn('[postSendDetect] 落库失败：', landed);
       return false;
     }
+    ensureSeen().add(v.key);
+    return true;
   };
 
   /** 一批新视频 → 归属 → 落库（原 `nt` ＋ 调用处的 `for … Z(...)`） */

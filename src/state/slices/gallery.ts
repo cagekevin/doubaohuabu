@@ -5,11 +5,13 @@
  *   **`global` 已有 27 个字段**（`docs/11 §5.3` 的上限是 25）⇒ 按同一节的规定**另开一片**。
  *
  * ★★ **本片只有"写"的能力，没有"想"的能力**：全部判断（去重 / 清理判据 / 键的增删语义）
- *   都在 **已测**的 `core/rules/lovartGallery.ts`（**35 条单测**）；这里只把结果落到 store。
+ *   都在 **已测**的 `core/rules/lovartGallery.ts`（**42 条单测**）；这里只把结果落到 store。
  *
  * 依据（**逐行回源**）：`addLovartImages` 29243 · `removeLovartImages` 29296 ·
- *   `clearLovartGallery` 29315 · `purgeLovartGallery` 29329 · `purgeLovartJunk` 29346 ·
- *   `purgeLovartByScope` 29382。
+ *   `clearLovartGallery` 29315 · `purgeLovartGallery` 29329。
+ * ⚠️ `purgeLovartJunk` 29346 / `purgeLovartByScope` 29382 **有意不落**（源里 **0 调用** ⇒
+ *   落它 = 死代码 + 第二份清理逻辑，见 `TD-16-141`）—— 连带纯层的 `purgeLovartImages` /
+ *   `matchesLovartScope` 一并删除（它们原先只被这两个死 action 消费）。
  *
  * ⚠️ **每个 action 都遵守"无变化就不写"**（源版 `return {}` = 不写状态、不落盘）——
  *   纯层用"返回原引用"表达这件事，本片据此**跳过 `set`**。这不是优化，是**正确性**：
@@ -19,9 +21,6 @@
 import {
   addLovartImages as addPure,
   clearLovartGallery as clearPure,
-  purgeLovartImages,
-  isLovartJunk,
-  matchesLovartScope,
   removeLovartAccount,
   removeLovartImages as removePure,
   type LovartGalleries,
@@ -39,10 +38,6 @@ export interface GallerySlice {
   clearLovartGallery: (accountId: string) => void;
   /** **删键**（原 29329；与上一个不是同一件事） */
   purgeLovartGallery: (accountId: string) => void;
-  /** 清垃圾（原 29346）@returns 清掉的条数 */
-  purgeLovartJunk: (accountId?: string | null) => number;
-  /** 按 scope 清（原 29382，默认哨兵 `'!canvas'`）@returns 清掉的条数 */
-  purgeLovartByScope: (accountId?: string | null, scope?: string) => number;
 }
 
 /** 本片需要的注入（原则 4：`core` 只收值，不收宿主） */
@@ -101,21 +96,6 @@ export const createGallerySlice =
         const cur = get().lovartGalleries;
         const r = removeLovartAccount(cur, accountId);
         commit(r.galleries, cur);
-      },
-
-      purgeLovartJunk: (accountId) => {
-        const cur = get().lovartGalleries;
-        const r = purgeLovartImages(cur, accountId, (x) => isLovartJunk(x));
-        commit(r.galleries, cur);
-        return r.removed;
-      },
-
-      purgeLovartByScope: (accountId, scope) => {
-        const cur = get().lovartGalleries;
-        // ⚠️ `scope` 不传 ⇒ 用纯层的哨兵默认值（`'!canvas'`）
-        const r = purgeLovartImages(cur, accountId, (x) => matchesLovartScope(x, scope));
-        commit(r.galleries, cur);
-        return r.removed;
       },
     };
   };

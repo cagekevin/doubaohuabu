@@ -16,7 +16,7 @@
  *    （`docs/过程.md` §2.5 写的是「返回 Result」—— 那是读源码前的写法；源码这里是**提前 return**。）
  */
 
-import type { ApiJobAttempt, ApiJobEvent, ApiJobStatus } from '@/stable/model/gen';
+import type { ApiJobAttempt, ApiJobEvent, VideoApiJob } from '@/stable/model/gen';
 import type { CanvasNode } from '@/stable/model/node';
 import { GEN_HISTORY_KEY } from '@/stable/model/node';
 import { API_TEXT } from '@/constants/text';
@@ -24,18 +24,6 @@ import { API_TOAST_ERROR_MS, API_TOAST_QUOTA_MS } from '@/constants';
 import { patchGenHistoryAttempt } from '@/core/rules/genHistory';
 import { formatClockTime } from '@/lib/time';
 import { asRecord } from '@/lib/object';
-
-/** 节点 `data.apiJob` 里记的那份任务摘要（原 30754-30762 的 `a`） */
-export interface ApiJobNodePatch {
-  jobId: string;
-  providerId?: string;
-  providerName?: string;
-  kind: 'image' | 'video';
-  status: ApiJobStatus;
-  progress?: number;
-  /** 只有 `failed` 才带 */
-  error?: unknown;
-}
 
 export interface ApiJobDecision {
   // ⚠️ 这里**没有** `jobId` / `job` —— 任务快照的回灌由**落点直接用事件本身**做
@@ -81,8 +69,8 @@ export interface ApiJobDecisionInput {
   now: number;
 }
 
-/** 源 `a`: 节点上要记的任务摘要 */
-function apiJobPatchOf(event: ApiJobEvent): ApiJobNodePatch {
+/** 源 `a`: 节点上要记的任务摘要（形状真源 = `stable/model/gen.VideoApiJob`，原 30754-30762） */
+function apiJobPatchOf(event: ApiJobEvent): VideoApiJob {
   return {
     jobId: event.jobId,
     providerId: event.providerId,

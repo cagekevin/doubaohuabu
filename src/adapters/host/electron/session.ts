@@ -33,8 +33,15 @@ export function createElectronClipboard(): ClipboardPort {
       if (!api) return err('unknown', HOST_MISSING);
       try {
         const raw = await api.readClipboardImage();
-        const r = raw as { dataUrl?: string; w?: number; h?: number; name?: string } | null;
-        return ok(r?.dataUrl ? { dataUrl: r.dataUrl, w: r.w ?? 0, h: r.h ?? 0, name: r.name } : null);
+        // ⚠️ IPC 返回值是**不可信载荷** ⇒ 先 `asRecord` 收，再**逐字段校验**（不自称形状）
+        const r = asRecord(raw);
+        if (typeof r.dataUrl !== 'string' || !r.dataUrl) return ok(null);
+        return ok({
+          dataUrl: r.dataUrl,
+          w: typeof r.w === 'number' ? r.w : 0,
+          h: typeof r.h === 'number' ? r.h : 0,
+          name: typeof r.name === 'string' ? r.name : undefined,
+        });
       } catch (e) {
         return err('unknown', toMessage(e), e);
       }

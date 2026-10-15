@@ -17,6 +17,7 @@ import {
   type FaceMaskEffect,
 } from '@/constants/facemask';
 import { clamp } from '@/lib/math';
+import { asRecord } from '@/lib/object';
 
 /** 人脸框（**归一化坐标** 0~1；原 `{nx, ny, nw, nh}`） */
 export interface FaceBox {
@@ -64,7 +65,7 @@ export { clamp };
  *    否则 clamp 到范围内。
  */
 export function normalizeFaceMaskOpts(raw: unknown): FaceMaskOpts {
-  const t = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const t = asRecord(raw);
   const effect = FACE_MASK_EFFECTS.includes(t.effect as FaceMaskEffect)
     ? (t.effect as FaceMaskEffect)
     : FACE_MASK_DEFAULTS.effect;

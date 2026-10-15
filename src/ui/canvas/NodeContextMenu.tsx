@@ -73,7 +73,7 @@ export function NodeContextMenu({
   //    这样用户在菜单开着时平移/缩放画布，落点仍是对的（逐字保留这个时机）。
   const { screenToFlowPosition } = useReactFlow();
   // ⚠️ 与源一致：`dataUrl` 必须是 `img://` 才能打开文件位置（画布内联 base64 / 远程地址都**不在磁盘上**）
-  const dataUrl = (node?.data as { dataUrl?: string } | undefined)?.dataUrl;
+  const dataUrl = node?.data?.dataUrl;
   const canReveal = typeof dataUrl === 'string' && /^img:\/\//i.test(dataUrl);
 
   // 源 `Te`（1093-1097）：`pe()`（记"刚复制"时刻）→ `copyNodes()`；关菜单由共享件做

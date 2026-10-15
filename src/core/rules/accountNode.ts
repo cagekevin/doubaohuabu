@@ -31,6 +31,7 @@ import { DEFAULT_VIDEO_MODEL, NODE_DEFAULT_RATIO_LABEL } from '@/constants/model
 import { ACCOUNT_NODE_TEXT } from '@/constants/text';
 import { parseRefChips, refsToReferenceLabels } from './refs';
 import { stripHtml } from '@/lib/text';
+import { popOrThrow, shiftOrThrow } from '@/lib/array';
 
 /** 上游文本的一条（原 `RL` 的 `y` 元素） */
 export interface AccountNodeText {
@@ -154,7 +155,7 @@ export function collectUpstreamOrder(
   const seen = new Set<string>();
   const stack = [nodeId];
   while (stack.length) {
-    const cur = stack.pop() as string;
+    const cur = popOrThrow(stack);
     for (const e of edges || []) {
       if (e.target === cur && !seen.has(e.source)) {
         seen.add(e.source);
@@ -179,7 +180,7 @@ export function collectUpstreamOrder(
     .sort((a, b) => (indexOf.get(a) ?? 0) - (indexOf.get(b) ?? 0));
   const order: string[] = [];
   while (ready.length) {
-    const k = ready.shift() as string;
+    const k = shiftOrThrow(ready);
     order.push(k);
     for (const c of (next.get(k) ?? []).slice().sort((a, b) => (indexOf.get(a) ?? 0) - (indexOf.get(b) ?? 0))) {
       inDegree.set(c, (inDegree.get(c) ?? 0) - 1);

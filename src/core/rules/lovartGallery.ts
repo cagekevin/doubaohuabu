@@ -26,6 +26,7 @@
 
 // ⚠️ 持久化形状的**真源**在 `stable/contracts`（本文件只做转发，不再自己定义一份）
 import type { LovartGalleryImage, LovartGalleriesMap } from '@/stable/contracts/lsValues';
+import { asRecord } from '@/lib/object';
 import { capsOf, siteTypesWhere } from './siteCaps';
 
 /**
@@ -270,7 +271,7 @@ export function clearLovartGallery(
  *   （这也与宿主一致：`img-save-sync` 收的就是 dataUrl —— `electron/main.js`。）
  */
 
-// ─────────────── 清理族（原 `purgeLovartGallery`/`purgeLovartJunk`/`purgeLovartByScope`）───────────────
+// ─────────────── 清理族（原 `purgeLovartGallery`；另两个源里 0 调用 ⇒ 有意不落）───────────────
 
 /** 判定"图太小"的默认最小边长（原 `aa` 22630 的 `96`） */
 export const LOVART_MIN_SIDE = 96;
@@ -286,7 +287,7 @@ const SMALL_SIDE = 512;
  * ⚠️ 空条目 ⇒ **直接算垃圾**。★ **调用方**：源版 4 处（清理动作 + 三个筛选点
  *   `shared.js:32625/32681/34000`）⇒ 本仓已接进扫描落库链（`adapters/site/shared/materializeScan.ts`
  *   的远端取图段，`TD-16-141`）；清理族那两个 action（`purgeLovartJunk` / `purgeLovartByScope`）
- *   源里**同为 0 调用**。
+ *   源里**同为 0 调用** ⇒ **有意不落**（落它 = 死代码 + 第二份清理逻辑，见 `TD-16-141`）。
  */
 export function isLovartJunk(
   item: Pick<LovartImage, 'natW' | 'natH' | 'sizeBytes'> | null | undefined,
@@ -300,60 +301,6 @@ export function isLovartJunk(
     (side === 0 && bytes > 0 && bytes < TINY_BYTES) ||
     (bytes > 0 && bytes < SMALL_BYTES && side < SMALL_SIDE)
   );
-}
-
-/** `purgeLovartByScope` 的哨兵：**"不是 canvas 的都算"**（原 29397） */
-export const LOVART_SCOPE_NOT_CANVAS = '!canvas';
-const CANVAS_SCOPE = 'canvas';
-
-/**
- * 这条图该不该被某个 scope 规则清掉（原 29395-29397）
- * ⚠️ 哨兵语义**容易读反**：`'!canvas'` 表示"**清掉所有非画布的**"（即**保留** canvas）。
- */
-export function matchesLovartScope(
-  item: Pick<LovartImage, 'scope'>,
-  scope: string = LOVART_SCOPE_NOT_CANVAS,
-): boolean {
-  const own = item.scope || '';
-  return scope === LOVART_SCOPE_NOT_CANVAS ? own !== CANVAS_SCOPE : own === scope;
-}
-
-/**
- * 按谓词批量清图（原 `purgeLovartJunk` 29346-29381 与 `purgeLovartByScope` 29382-29418 的**公共体**）
- *
- * ★ 这两个 action **结构逐字相同**（取键 → 逐键过滤 → 计数 → 有变化才落盘），只差一个谓词
- *   ⇒ 判据 C1 要求抽出公共体。
- *
- * 规则：① `accountId` 给了 ⇒ 只看那一个键，否则**遍历全部键**；② 每个键**不是数组/空数组 ⇒ 跳过**
- *   （⚠️ **空键留在原地**，不被删 —— 源版如此）；③ **该键有变化才写回**；④ **整体无变化 ⇒ 原引用**
- *   （源版 `return {}` = 不写状态、不落盘）。
- * @returns `removed` = 清掉的条数（源版的返回值就是它）
- */
-export function purgeLovartImages(
-  galleries: LovartGalleries,
-  accountId: string | null | undefined,
-  shouldDrop: (item: LovartImage) => boolean,
-): { galleries: LovartGalleries; removed: number } {
-  const next = { ...(galleries || {}) };
-  const keys = accountId ? [accountId] : Object.keys(next);
-  let removed = 0;
-  let changed = false;
-
-  for (const key of keys) {
-    const list = next[key];
-    if (!Array.isArray(list) || list.length === 0) continue;
-    const kept = list.filter((item) => {
-      const drop = shouldDrop(item);
-      if (drop) removed += 1;
-      return !drop;
-    });
-    if (kept.length !== list.length) {
-      next[key] = kept;
-      changed = true;
-    }
-  }
-
-  return { galleries: changed ? next : galleries, removed };
 }
 
 /**
@@ -434,7 +381,8 @@ export function canvasMaterialBookmarks(
   const out: LovartImageInput[] = [];
   for (const n of nodes || []) {
     if (!n || !n.selected || n.type !== 'material' || !n.data) continue;
-    const d = n.data as Record<string, unknown>;
+    // ⚠️ `n` 是**结构化最小视图**（不是 `CanvasNode`）⇒ `data` 是 `unknown`，走 `asRecord`
+    const d = asRecord(n.data);
     if (!d.dataUrl) continue;
     const label = typeof d.label === 'string' ? d.label : '';
     const name = typeof d.name === 'string' ? d.name : '';

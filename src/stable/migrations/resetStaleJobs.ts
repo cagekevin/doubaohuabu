@@ -15,6 +15,7 @@
 
 import type { MigrationOutcome } from './types';
 import { STALE_JOB_STATUSES } from '../model/gen';
+import { asRecord, isRecord } from '@/lib/object';
 
 /**
  * 未完成 API 任务状态的**查表**（重启时清理）
@@ -25,16 +26,10 @@ import { STALE_JOB_STATUSES } from '../model/gen';
  */
 const STALE_JOB_STATUS_LOOKUP = new Set<string>(STALE_JOB_STATUSES);
 
-interface AnyNode {
-  type?: unknown;
-  data?: Record<string, unknown>;
-  [k: string]: unknown;
-}
+function resetOneNode(node: unknown): { node: unknown; changed: boolean } {
+  if (!isRecord(node) || node.type !== 'genvideo' || !node.data) return { node, changed: false };
 
-function resetOneNode(node: AnyNode): { node: AnyNode; changed: boolean } {
-  if (node.type !== 'genvideo' || !node.data) return { node, changed: false };
-
-  const d: Record<string, unknown> = { ...node.data };
+  const d: Record<string, unknown> = { ...asRecord(node.data) };
   let changed = false;
 
   // 在途标记（本次会话的临时产物，落盘时本就不该有；残留在旧文件里也要清）
@@ -48,8 +43,8 @@ function resetOneNode(node: AnyNode): { node: AnyNode; changed: boolean } {
   }
 
   // 未完成的 API 任务 —— 重启即放弃（不会有回调了）
-  const job = d.apiJob as { status?: unknown } | undefined;
-  if (job && typeof job.status === 'string' && STALE_JOB_STATUS_LOOKUP.has(job.status)) {
+  const job = asRecord(d.apiJob);
+  if (typeof job.status === 'string' && STALE_JOB_STATUS_LOOKUP.has(job.status)) {
     delete d.apiJob;
     changed = true;
   }
@@ -62,8 +57,8 @@ export function resetStaleJobs<T extends { data?: unknown }>(projects: readonly 
   let touched = 0;
 
   const value = projects.map((proj) => {
-    const d = (proj.data ?? {}) as Record<string, unknown>;
-    const nodes = Array.isArray(d.nodes) ? (d.nodes as AnyNode[]) : [];
+    const d = asRecord(proj.data);
+    const nodes: unknown[] = Array.isArray(d.nodes) ? d.nodes : [];
     if (nodes.length === 0) return proj;
 
     let anyChanged = false;
@@ -75,7 +70,7 @@ export function resetStaleJobs<T extends { data?: unknown }>(projects: readonly 
 
     if (!anyChanged) return proj;
     touched += 1;
-    return { ...proj, data: { ...d, nodes: nextNodes } } as T;
+    return { ...proj, data: { ...d, nodes: nextNodes } };
   });
 
   const notes = touched > 0 ? [`[reset] 清理了 ${touched} 个工程的在途任务状态`] : [];

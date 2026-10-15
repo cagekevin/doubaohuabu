@@ -32,6 +32,7 @@ import type { Account, SiteType } from '@/stable/model/account';
 import type { LovartGalleries } from '@/core/rules/lovartGallery';
 // ★ 站点能力表（本文件的"站点判定"全部改问它 —— 站点名不写在这里）
 import { capsOf } from './siteCaps';
+import { asRecord } from '@/lib/object';
 // ⚠️ 条目形状的**真源**在持久化契约层（`lovartGallery.ts` 只转发 `LovartImage`，不另定义）
 import type { LovartGalleryImage } from '@/stable/contracts/lsValues';
 import { NEW_IMAGES_FRESH_MS, NEW_IMAGES_LIMIT } from '@/constants';
@@ -180,7 +181,7 @@ export function aggregateNewImages(
       // ③ 站点相关的二次过滤（仅在「只留本画布」且有当前账号时生效）
       if (currentOnly && activeId) {
         if (isTapnowSite(acc)) {
-          if (canvasId && (img as { canvasId?: string }).canvasId !== canvasId) continue;
+          if (canvasId && asRecord(img).canvasId !== canvasId) continue;
         } else if (isLovartSite(acc) && img.scope && img.scope !== 'canvas') {
           continue;
         }

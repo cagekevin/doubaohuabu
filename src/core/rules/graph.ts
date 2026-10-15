@@ -16,6 +16,8 @@ import type { CanvasEdge } from '@/stable/model/project';
 import { err, ok, type Result } from '@/core/model/result';
 // ⚠️ 文本归一（原 `Vk(In(...))`）—— `d3` 的正文清洗与提示词组装共用同一套
 import { stripHtml } from '@/lib/text';
+import { asRecord } from '@/lib/object';
+import { popOrThrow } from '@/lib/array';
 import { stripGeneratedArtifacts } from './prompt';
 import { CIRCULAR_REF_MESSAGE, EDGE_TEXT } from '@/constants/text';
 
@@ -57,7 +59,7 @@ export function collectLinkedTexts(
   const incoming = (edges || []).filter((e) => e.target === nodeId);
 
   const target = byId.get(nodeId);
-  const data = (target?.data ?? {}) as Record<string, unknown>;
+  const data = asRecord(target?.data);
   const order = Array.isArray(data.referenceOrder) ? (data.referenceOrder as unknown[]) : null;
 
   let ordered = incoming;
@@ -72,7 +74,7 @@ export function collectLinkedTexts(
   for (const e of ordered) {
     const src = byId.get(e.source);
     if (!src || src.type !== 'text') continue;
-    const sd = (src.data ?? {}) as Record<string, unknown>;
+    const sd = asRecord(src.data);
     const raw = typeof sd.text === 'string' ? sd.text : typeof sd.prompt === 'string' ? sd.prompt : '';
     const body = stripGeneratedArtifacts(stripHtml(raw).trim());
     if (!body) continue;
@@ -159,7 +161,7 @@ export function detectCycle(
   const seen = new Set<string>();
   const stack: string[] = [target];
   while (stack.length > 0) {
-    const cur = stack.pop() as string;
+    const cur = popOrThrow(stack);
     if (cur === source) return true;
     if (!seen.has(cur)) {
       seen.add(cur);

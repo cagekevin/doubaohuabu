@@ -17,7 +17,7 @@ import type { SitePort, SiteRegistry } from '@/core/ports/site.port';
 import type { SiteSendPayload } from '@/core/rules/payload';
 import type { ApiPort, HostPort } from '@/core/ports/host.port';
 import type { ClockPort } from '@/core/ports/clock.port';
-import type { ApiJobPayload, ApiJobVariant } from '@/stable/model/gen';
+import type { ApiJobAttempt, ApiJobPayload, ApiJobVariant } from '@/stable/model/gen';
 
 const acc = (id: string, status = '已登录'): Account => ({
   id,
@@ -557,9 +557,9 @@ describe('generateImage / generateVideo · API 通道', () => {
     expect(batch).toHaveBeenCalledTimes(1);
     // ★ 后端 `submitBatch` 用 `Array.isArray(matrix)` 判定（job-manager.js:464）——
     //   传对象会被静默当成空数组 ⇒ 提交 0 个任务却报成功。断言形状即锁死这条 bug。
-    const matrix = batch.mock.calls[0]![1] as Array<{
+    const matrix = batch.mock.calls[0]![1] as ReadonlyArray<{
       params: { ratio: string };
-      attempt: { id: string; status: string; accountName: string; note: string; params: unknown; edit: unknown };
+      attempt: ApiJobAttempt;
     }>;
     expect(matrix.map((v) => v.params.ratio)).toEqual(['16:9', '9:16', '1:1']);
     // ★ TD-03-6：每条变体带自己的 attempt（原 `Z3_1.jsx:904-927`）⇒ 出片后 genHistory 才有记录

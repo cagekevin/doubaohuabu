@@ -4,6 +4,8 @@
  * 归属说明：数据形状属 `stable`（L1）—— 见 `./node.ts` 头部说明
  */
 
+import { isRecord } from '@/lib/object';
+
 /** API 任务状态机（原 `job-manager.js:4-5`） */
 export const API_JOB_STATUSES = [
   'queued',
@@ -41,9 +43,67 @@ export interface ApiJobResult {
   [k: string]: unknown;
 }
 
-/** 尝试记录（渲染层回写 `genHistory` 用；**不含密钥**） */
+/**
+ * 节点 `data.apiJob` 的形状（API 通道的状态条数据）—— ★ **唯一真源**
+ *
+ * ★ **两个产生方**（同一形状的两种来源，故并成一个类型）：
+ *   ① `core/usecases/applyApiJobEvent.apiJobPatchOf` —— 从 `ApiJobEvent` **降采样**（原 30754-30762）
+ *      ⇒ `jobId` 一定有，带 `progress` / `error`。
+ *   ② `core/rules/apiBatch.planVideoBatchLanding` —— 批量提交摘要（原 `Z3_1.jsx:928-940`）
+ *      ⇒ `jobId` 可为 `null`（全部提交失败），多一个 `batch: true`。
+ *
+ * ⚠️ 两者的并集：`jobId` 可空 · `batch` 仅批量分支有 · `progress`/`error` 仅事件分支有。
+ *    读写侧都只关心 `status`（`apiJobLabel` / `genVideoWaiting` / `resetStaleJobs`）。
+ */
+export interface VideoApiJob {
+  /** 任务 id；批量提交全部失败 ⇒ `null` */
+  jobId: string | null;
+  providerId?: string;
+  providerName?: string;
+  kind: 'image' | 'video';
+  status: ApiJobStatus;
+  progress?: number;
+  /** 只有 `failed` 才带 */
+  error?: ApiJobError | null;
+  /** 批量提交摘要才有 */
+  batch?: true;
+}
+
+/**
+ * 尝试记录（原 `Fc` `shared.js:25518-25552` 的产物）—— ★ **形状真源**
+ *
+ * ★ **唯一产生方** = `core/rules/genHistory.makeGenAttempt`（它按源逐字填默认值）⇒ 本类型即
+ *    该构造器的**输出形状**。它同时是三个位置的值：`genHistory.attempts[]` 的元素 ·
+ *    `_pendingAttempt(s)` 的值 · 发给后端的 `job.attempt`（后端原样带回）。
+ * ⚠️ 恒带键（源恒写）：`id/at/accountId/accountName/params/prompt/conversationId/messageId/vid/resourceId/status/note`
+ *    · `edit` **仅在有值时出现**（源 `...(s ? {edit:{...s}} : null)`）。
+ * ⚠️ 出片后由 `patchGenHistoryAttempt` **追加** `url/poster/width/height/duration`。
+ * ⚠️ 索引签名保留：老数据 / 后续补丁可能带其它键（读侧以本类型为准，不因此收窄成 `unknown`）。
+ * ⚠️ **不含密钥**。
+ */
 export interface ApiJobAttempt {
   id: string;
+  /** 写入时刻（`at`） */
+  at: number;
+  accountId: string | null;
+  accountName: string;
+  params: Record<string, unknown> | null;
+  prompt: string;
+  /** 编辑器正文等（源 `edit`；假值 ⇒ 整个键不出现） */
+  edit?: Record<string, unknown>;
+  conversationId: string | null;
+  messageId: string | null;
+  vid: string | null;
+  resourceId: string | null;
+  status: string;
+  note: string;
+  /** 出片后追加：直链 */
+  url?: string | null;
+  /** 出片后追加：海报 */
+  poster?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
   [k: string]: unknown;
 }
 
@@ -88,13 +148,12 @@ export interface ApiJobEvent {
  *    不冒充必需。
  */
 export function isApiJobEvent(v: unknown): v is ApiJobEvent {
-  if (!v || typeof v !== 'object') return false;
-  const r = v as Record<string, unknown>;
+  if (!isRecord(v)) return false;
   return (
-    typeof r.jobId === 'string' &&
-    (r.kind === 'image' || r.kind === 'video') &&
-    typeof r.status === 'string' &&
-    Array.isArray(r.results)
+    typeof v.jobId === 'string' &&
+    (v.kind === 'image' || v.kind === 'video') &&
+    typeof v.status === 'string' &&
+    Array.isArray(v.results)
   );
 }
 

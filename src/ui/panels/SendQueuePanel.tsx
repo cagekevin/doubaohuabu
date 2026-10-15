@@ -258,8 +258,7 @@ export function SendQueuePanel() {
                 const node = nodeById.get(it.nodeId);
                 // ★ 该节点是否已有出片（原 `ke` = `H.data.resultUrl || H.data.resultPoster`）——
                 //   决定「查看」渲不渲染（源同判据）
-                const d = node?.data as { resultUrl?: unknown; resultPoster?: unknown } | undefined;
-                const hasResult = !!(d?.resultUrl || d?.resultPoster);
+                const hasResult = !!(node?.data?.resultUrl || node?.data?.resultPoster);
                 // ★ 后台进度（源 `A.queueProgress[item.id]`）—— 由 `state/sendQueue` 的 `runQueuePing` 写（`TD-16-103`）
                 const progress: GenReplyLite | null = queueProgress[it.id] ?? null;
                 const g = resolveGenProgress(

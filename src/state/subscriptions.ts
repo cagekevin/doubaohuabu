@@ -104,12 +104,12 @@ export function createSubscriptions(
           // ★ 落库**内建**本地化（源 `addVideoNode` 末尾）⇒ 调用方不需要知道"写完要落盘"
           st.addVideoNode({
             url: decision.videoNode.url,
-            vid: (decision.videoNode.attempt?.vid as string | undefined) ?? null,
+            vid: decision.videoNode.attempt?.vid ?? null,
             width: null,
             height: null,
             duration: null,
             poster: null,
-            accountId: (decision.videoNode.attempt?.accountId as string | undefined) ?? null,
+            accountId: decision.videoNode.attempt?.accountId ?? null,
             // ★ name / accountName **必须用决策算好的**（源 `shared.js:30775-30776`：
             //   `o.data && o.data.label || 'API 视频'` · `API · ${n.providerName}`）
             accountName: decision.videoNode.accountName,

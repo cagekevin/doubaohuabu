@@ -41,10 +41,16 @@ import { makeAttemptId } from '@/core/rules/genHistory';
 import { readChromeMajor, readHostOs, readRealGpu, readRealViewport } from '@/adapters/host/shared/env';
 import { filterWinScreens, filterWinWebgl } from '@/core/rules/fingerprintGenerator';
 import { createSubscriptions, type Subscriptions } from '@/state/subscriptions';
+import { getHostApi } from '@/adapters/host/electron/host-api';
 
-/** 是否运行在 Electron 宿主里（有 `window.api` 即真实宿主） */
+/**
+ * 是否运行在 Electron 宿主里（有 `window.api` 即真实宿主）
+ *
+ * ⚠️ **走 `getHostApi`**：`window.api` 的**唯一读者**是 `adapters/host/electron/host-api.ts`
+ *    （见 `window-api.d.ts` 头注）—— 本处此前又自己读了一遍 `window.api` ⇒ 同一判据两份。
+ */
 export function hasElectronHost(): boolean {
-  return typeof window !== 'undefined' && typeof (window as { api?: unknown }).api === 'object';
+  return getHostApi() !== null;
 }
 
 /**

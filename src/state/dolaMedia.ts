@@ -153,23 +153,21 @@ export function createDolaMedia(store: AppStore, ports: Ports): DolaMediaControl
       job.satisfied = true;
       if (accountId) satisfiedAt.set(accountId, now);
 
-      try {
-        landVideo(store, {
-          url: item.url,
-          // ⚠️ 源在视频支里 `vid` 用的**就是 url**（`addVideoNode({ vid: Y.url })`，`:305/311`）
-          vid: item.url,
-          width: null,
-          height: null,
-          duration: null,
-          poster: null,
-          accountId: job.accountId,
-          accountName: job.accountName,
-          name: '视频',
-          nodeId: job.nodeId,
-        });
-      } catch (e: unknown) {
-        log.warn('[dolaMedia] 落库失败：', e);
-      }
+      // ★ 失败**由 `landVideo` 声明在返回值里** ⇒ 这里只转发，不再 try/catch
+      const landed = landVideo(store, {
+        url: item.url,
+        // ⚠️ 源在视频支里 `vid` 用的**就是 url**（`addVideoNode({ vid: Y.url })`，`:305/311`）
+        vid: item.url,
+        width: null,
+        height: null,
+        duration: null,
+        poster: null,
+        accountId: job.accountId,
+        accountName: job.accountName,
+        name: '视频',
+        nodeId: job.nodeId,
+      });
+      if (!landed.ok) log.warn('[dolaMedia] 落库失败：', landed);
     }
   };
 

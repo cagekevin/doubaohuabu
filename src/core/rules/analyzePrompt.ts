@@ -12,6 +12,8 @@
  *    同样信息、少一层异常控制流，且不制造"看着有文案其实没人用"的假象。
  */
 
+import { isRecord } from '@/lib/object';
+
 /**
  * 从模型回复里抠出 JSON 文本（原 `CD` 38678）
  *
@@ -74,9 +76,10 @@ export function parseAnalyzeResult(reply: unknown): AnalyzeParseResult {
   } catch {
     return failed;
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return failed;
+  // ⚠️ 模型返回的 JSON ⇒ **不可信输入**：先过 `isRecord`（与原来的「非空 + 对象 + 非数组」三连判**等价**）
+  if (!isRecord(parsed)) return failed;
 
-  const p = parsed as Record<string, unknown>;
+  const p = parsed;
   const zh = typeof p.zh_prompt === 'string' && p.zh_prompt.trim() ? p.zh_prompt.trim() : raw;
   const en = typeof p.en_prompt === 'string' && p.en_prompt.trim() ? p.en_prompt.trim() : zh;
 
@@ -112,8 +115,8 @@ export interface ReplyReadOptions {
  *    `ui/` 下不得有测试文件 ⇒ 留在组件里就**永远没有单测**（假守卫）。
  */
 export function formatJsonPrompt(jsonPrompt: unknown): string | null {
-  if (!jsonPrompt || typeof jsonPrompt !== 'object' || Array.isArray(jsonPrompt)) return null;
-  return Object.entries(jsonPrompt as Record<string, unknown>)
+  if (!isRecord(jsonPrompt)) return null;
+  return Object.entries(jsonPrompt)
     .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('；') : String(v)}`)
     .join('\n');
 }

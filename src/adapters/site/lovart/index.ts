@@ -149,8 +149,9 @@ export function createLovartSite(host: HostPort): SitePort {
         return err('page-error', toMessage(e), e);
       }
       try {
-        const raw = (await webviewEval(view, '({ href: location.href })')) as { href?: string } | null;
-        const href = raw?.href ?? '';
+        // ⚠️ 页内 eval 的返回值是**不可信载荷** ⇒ 先 `asRecord` 收，再校验字段
+        const raw = asRecord(await webviewEval(view, '({ href: location.href })'));
+        const href = typeof raw.href === 'string' ? raw.href : '';
         // ⚠️ 不再内联正则：改走真源 `lovartPageKind`（含**域校验**，此前缺 ⇒ 非 lovart 域也判）
         const pageKind = lovartPageKind(href);
         // ★ 登录判据 = **停在站点内容页**（画布 / 广场）—— 未登录访问这两处会被重定向到登录页（那是 `other`）。

@@ -131,7 +131,8 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
   const materials = useMemo(() => {
     const map: Record<string, { name?: string; dataUrl?: string }> = {};
     for (const n of nodes) {
-      const d = n.data as Record<string, unknown>;
+      // `NodeDataBase` 自带索引签名 ⇒ `data` 本身就是 `Record<string, unknown>`，无需断言
+      const d = n.data;
       const url = typeof d.dataUrl === 'string' ? d.dataUrl : '';
       if (url) map[n.id] = { name: String(d.label ?? d.name ?? ''), dataUrl: url };
     }

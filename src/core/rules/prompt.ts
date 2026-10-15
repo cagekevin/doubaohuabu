@@ -16,6 +16,7 @@
  * ⚠️ **W8（风格）**：风格 = **纯前缀拼接**（`${stylePrefix}${body}`），无分隔符。
  */
 
+import { asRecord } from '@/lib/object';
 import {
   DEFAULT_VIDEO_DURATION,
   DEFAULT_VIDEO_MODEL,
@@ -315,7 +316,7 @@ export function resolveRefMaterial(
   }
 
   const node = map[refId];
-  const d = (node?.data ?? {}) as Record<string, unknown>;
+  const d = asRecord(node?.data);
   const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 
   // ②

@@ -8,6 +8,7 @@
 import { err, ok, toMessage, type Result } from '@/core/model/result';
 import { COMMON_TEXT, HOST_TEXT } from '@/constants/text';
 import type { SendFailKind } from '@/constants/failure';
+import { asRecord, isRecord } from '@/lib/object';
 import type { HostApi } from './window-api';
 
 /** 宿主缺失时的明确错误（**不返回假成功**）—— 文案真源 = `HOST_TEXT.apiMissing`（本处只转发） */
@@ -55,10 +56,10 @@ export interface BoundaryOpts {
 /** 把宿主返回的 `{ok:false,error}` 形态也归一成 `Result` */
 export function normalize<T>(raw: unknown, opts: BoundaryOpts = {}): Result<T> {
   if (raw && typeof raw === 'object') {
-    const r = raw as { ok?: unknown; error?: unknown };
+    const r = asRecord(raw);
     if (r.ok === false) {
       // ★ 与 `checkOk` 同口径：优先 `message`（用户可读原文），退回 `error`（码）—— TD-13-15
-      const m = (raw as { message?: unknown }).message;
+      const m = r.message;
       return err(
         'unknown',
         typeof m === 'string' && m
@@ -70,6 +71,8 @@ export function normalize<T>(raw: unknown, opts: BoundaryOpts = {}): Result<T> {
     }
   }
   // ★ `TD-04-10`：过了 `ok` 判定还要过**业务字段**守卫（缺字段 ⇒ 如实报错，不 `as T`）
+  // ⚠️ 本行**必须**保留 `raw && typeof raw === 'object'`（**不能**换 `isRecord`）：
+  //    它让**数组**原样进守卫；换成 `isRecord` 会把数组挡在外面 ⇒「以守卫为准」的通道语义就变了。
   if (opts.guard && !(raw && typeof raw === 'object' && opts.guard(raw as Record<string, unknown>))) {
     return err('unknown', COMMON_TEXT.boundaryViolation(opts.field ?? 'payload'));
   }
@@ -100,20 +103,22 @@ export function checkOk<T = Record<string, unknown>>(
     field,
   }: { reason?: SendFailKind; fallback?: string; guard?: PayloadGuard; field?: string } = {},
 ): Result<T> {
-  if (!raw || typeof raw !== 'object') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
-  const v = raw as { ok?: unknown; error?: unknown };
+  // ⚠️ `isRecord` 与原来的「非空 + `typeof === 'object'`」**等价**：数组两种写法都在这一步报同一个
+  //    `boundaryViolation('ok')`（数组没有布尔 `ok`）
+  if (!isRecord(raw)) return err(reason, COMMON_TEXT.boundaryViolation('ok'));
+  const v = raw;
   if (typeof v.ok !== 'boolean') return err(reason, COMMON_TEXT.boundaryViolation('ok'));
   if (v.ok !== true) {
     // ★ 后端两种错误形态：`{error:'码'}`（码即文案）与 `{error:'码', message:'用户可读原文'}`
     //   ⇒ **优先 `message`（原文）**，退回 `error`（码），再退回 `fallback`（TD-13-15）
-    const m = (raw as { message?: unknown }).message;
+    const m = v.message;
     const msg =
       typeof m === 'string' && m ? m : typeof v.error === 'string' && v.error ? v.error : fallback;
     return err(reason, msg);
   }
   // ★ `TD-04-10`：`ok:true` 之后再过一层**业务字段**守卫（后端把 `machineCode` 改名成 `code`
   //   这类漂移，在此**当场报错**，而不是让调用方 `typeof … === 'string' ? … : ''` 静默兜成空值）
-  if (guard && !guard(raw as Record<string, unknown>)) {
+  if (guard && !guard(v)) {
     return err(reason, COMMON_TEXT.boundaryViolation(field ?? 'payload'));
   }
   return ok(raw as T);

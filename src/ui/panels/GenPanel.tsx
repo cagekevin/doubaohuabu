@@ -317,12 +317,12 @@ export function GenPanel() {
       if (!r) return {};
       const lib = library.find((l) => l.id === r.id);
       const node = nodes.find((x) => x.id === r.id);
-      const d = (node?.data ?? {}) as Record<string, unknown>;
+      // ⚠️ `poster` 只长在 `video` 节点上 ⇒ 先按判别位收窄；`dataUrl` 走索引签名（`unknown`）
       const fallback =
-        node?.type === 'video' && typeof d.poster === 'string'
-          ? d.poster
-          : typeof d.dataUrl === 'string'
-            ? d.dataUrl
+        node?.type === 'video' && typeof node.data.poster === 'string'
+          ? node.data.poster
+          : typeof node?.data.dataUrl === 'string'
+            ? node.data.dataUrl
             : '';
       const dataUrl = typeof lib?.dataUrl === 'string' && lib.dataUrl ? lib.dataUrl : fallback;
       return { label: lib?.name ?? r.rawName, dataUrl };

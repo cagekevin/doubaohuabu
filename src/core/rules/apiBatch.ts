@@ -17,23 +17,17 @@
  *    唯一真源；`count` 用的是**过滤掉 `null` 之后**的条数（源同）。
  */
 
-import type { ApiBatchResult } from '@/stable/model/gen';
-
-/** 落进节点 `data.apiJob` 的批量摘要（源 `Ae({apiJob:{...}})` 的形状） */
-export interface VideoBatchApiJob {
-  /** 第一个成功的 `jobId`；全部失败 ⇒ `null`（源 `find(Boolean) || null`） */
-  jobId: string | null;
-  providerId: string;
-  providerName: string;
-  status: 'queued';
-  kind: 'video';
-  batch: true;
-}
+import type { ApiBatchResult, VideoApiJob } from '@/stable/model/gen';
 
 export interface VideoBatchLanding {
   /** 真正提交成功的任务数（源 `jobIds.filter(Boolean).length`） */
   count: number;
-  apiJob: VideoBatchApiJob;
+  /**
+   * 落进节点 `data.apiJob` 的批量摘要（源 `Ae({apiJob:{...}})` 的形状）
+   * ★ 形状真源 = `stable/model/gen.VideoApiJob`（本处只填其中批量分支那几项；
+   *   `jobId` 取**第一个成功的**，全部失败 ⇒ `null` —— 源 `find(Boolean) || null`）
+   */
+  apiJob: VideoApiJob;
 }
 
 /**

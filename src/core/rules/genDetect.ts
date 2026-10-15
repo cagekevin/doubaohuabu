@@ -13,6 +13,7 @@
 
 import { DETECT_BASELINE_WINDOW_MS } from '@/constants';
 import { parseSiteTimestamp } from '@/lib/time';
+import { popOrThrow } from '@/lib/array';
 
 /** 本规则需要的视频字段（结构化匹配 `DetectedVideo` —— 见 `core/ports/host.port`） */
 export interface DetectVideoLike {
@@ -135,8 +136,8 @@ export function hasVideoDescendant(
   const reached = new Set<string>();
   const queue: string[] = [nodeId];
   while (queue.length > 0) {
-    const cur = queue.pop();
-    for (const next of adjacency.get(cur ?? '') ?? []) {
+    const cur = popOrThrow(queue);
+    for (const next of adjacency.get(cur) ?? []) {
       if (!reached.has(next)) {
         reached.add(next);
         queue.push(next);

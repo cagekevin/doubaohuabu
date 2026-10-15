@@ -114,9 +114,8 @@ export function appendGenHistoryAttempt(
   attempt: unknown,
 ): Record<string, unknown> {
   if (!attempt) return data;
-  const history = data[GEN_HISTORY_KEY] as { attempts?: unknown } | undefined;
-  const prev = history && Array.isArray(history.attempts) ? history.attempts : [];
-  const attempts = [...prev, attempt].slice(-GEN_HISTORY_ATTEMPT_LIMIT);
+  const prev = asRecord(data[GEN_HISTORY_KEY]).attempts;
+  const attempts = [...(Array.isArray(prev) ? prev : []), attempt].slice(-GEN_HISTORY_ATTEMPT_LIMIT);
   return { ...data, [GEN_HISTORY_KEY]: { v: 1, attempts } };
 }
 
@@ -137,16 +136,13 @@ export function patchGenHistoryAttempt(
   attemptId: string,
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
-  const history = data[GEN_HISTORY_KEY];
-  if (!history || typeof history !== 'object') return data;
-
-  const h = history as { v?: unknown; attempts?: unknown };
+  const h = asRecord(data[GEN_HISTORY_KEY]);
   if (!Array.isArray(h.attempts)) return data;
 
   let hit = false;
   const attempts = h.attempts.map((item) => {
-    const a = item as { id?: unknown } | null;
-    if (!a || typeof a !== 'object' || a.id !== attemptId) return item;
+    const a = asRecord(item);
+    if (a.id !== attemptId) return item;
     hit = true;
     return { ...a, ...patch };
   });

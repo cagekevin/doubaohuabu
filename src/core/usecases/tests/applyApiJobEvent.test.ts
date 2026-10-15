@@ -19,8 +19,13 @@ import { applyApiJobEvent, type ApiJobDecisionInput } from '../applyApiJobEvent'
 import { API_TOAST_ERROR_MS, API_TOAST_QUOTA_MS } from '@/constants';
 import { GEN_HISTORY_KEY, type CanvasNode } from '@/stable/model/node';
 import type { ApiJobEvent } from '@/stable/model/gen';
+import { makeGenAttempt, type GenAttemptInput } from '@/core/rules/genHistory';
 
 const NOW = 1_700_000_000_000;
+
+/** 造一条**合法**尝试 —— 用唯一构造器 `makeGenAttempt`（`ApiJobAttempt` 的形状真源），只覆盖用例关心的字段 */
+const attempt = (over: Partial<GenAttemptInput> & Pick<GenAttemptInput, 'id'>) =>
+  makeGenAttempt({ at: NOW, ...over });
 
 const ev = (over: Partial<ApiJobEvent> & { jobId: string }): ApiJobEvent => ({
   kind: 'image',
@@ -149,7 +154,7 @@ describe('applyApiJobEvent · 有节点来源', () => {
           nodeId: 'gv_1',
           status: 'done',
           providerName: '可灵',
-          attempt: { id: 'at1', conversationId: 'c' },
+          attempt: attempt({ id: 'at1', conversationId: 'c' }),
           results: [{ type: 'video', url: 'https://v/1.mp4' }],
         }),
         [imgNode('gv_1', { label: '我的片' })],
@@ -160,7 +165,7 @@ describe('applyApiJobEvent · 有节点来源', () => {
       sourceNodeId: 'gv_1',
       name: '我的片',
       accountName: 'API · 可灵',
-      attempt: { id: 'at1', conversationId: 'c', status: 'success' },
+      attempt: { ...attempt({ id: 'at1', conversationId: 'c' }), status: 'success' },
     });
     expect(d?.library).toEqual([]);
     expect(d?.nodePatch?.nodeId).toBe('gv_1');
@@ -240,7 +245,7 @@ describe('applyApiJobEvent · 有节点来源', () => {
 
 describe('applyApiJobEvent · failed / cancelled（源 30814-30832）', () => {
   const withHistory = (): CanvasNode =>
-    imgNode('ig_1', { [GEN_HISTORY_KEY]: { v: 1, attempts: [{ id: 'at1', status: 'running' }] } });
+    imgNode('ig_1', { [GEN_HISTORY_KEY]: { v: 1, attempts: [attempt({ id: 'at1', status: 'running' })] } });
 
   it('★ failed + 有 attempt ⇒ 回写 genHistory（failed）+ 记 apiJob + 提示 5000ms', () => {
     const d = applyApiJobEvent(
@@ -249,7 +254,7 @@ describe('applyApiJobEvent · failed / cancelled（源 30814-30832）', () => {
           jobId: 'j1',
           nodeId: 'ig_1',
           status: 'failed',
-          attempt: { id: 'at1' },
+          attempt: attempt({ id: 'at1' }),
           error: { message: '服务端 500' },
         }),
         [withHistory()],
@@ -257,7 +262,7 @@ describe('applyApiJobEvent · failed / cancelled（源 30814-30832）', () => {
     );
     expect(d?.nodePatch?.patch[GEN_HISTORY_KEY]).toEqual({
       v: 1,
-      attempts: [{ id: 'at1', status: 'failed', note: '服务端 500' }],
+      attempts: [{ ...attempt({ id: 'at1' }), status: 'failed', note: '服务端 500' }],
     });
     expect((d?.nodePatch?.patch.apiJob as { error?: unknown }).error).toEqual({ message: '服务端 500' });
     expect(d?.toast).toEqual({ text: 'API 生成失败：服务端 500', level: 'error', durationMs: API_TOAST_ERROR_MS });
@@ -291,10 +296,10 @@ describe('applyApiJobEvent · failed / cancelled（源 30814-30832）', () => {
 
   it('★ cancelled ⇒ genHistory 记 cancelled 且 note「已取消」，**不提示**', () => {
     const d = applyApiJobEvent(
-      input(ev({ jobId: 'j1', nodeId: 'ig_1', status: 'cancelled', attempt: { id: 'at1' } }), [withHistory()]),
+      input(ev({ jobId: 'j1', nodeId: 'ig_1', status: 'cancelled', attempt: attempt({ id: 'at1' }) }), [withHistory()]),
     );
     expect((d?.nodePatch?.patch[GEN_HISTORY_KEY] as { attempts: unknown[] }).attempts[0]).toEqual({
-      id: 'at1',
+      ...attempt({ id: 'at1' }),
       status: 'cancelled',
       note: '已取消',
     });
@@ -309,7 +314,7 @@ describe('applyApiJobEvent · failed / cancelled（源 30814-30832）', () => {
 
     const missAttempt = applyApiJobEvent(
       input(
-        ev({ jobId: 'j1', nodeId: 'ig_1', status: 'failed', attempt: { id: 'nope' } }),
+        ev({ jobId: 'j1', nodeId: 'ig_1', status: 'failed', attempt: attempt({ id: 'nope' }) }),
         [withHistory()],
       ),
     );
@@ -319,7 +324,7 @@ describe('applyApiJobEvent · failed / cancelled（源 30814-30832）', () => {
   it('节点没有 genHistory 也不崩，照样记 apiJob', () => {
     const d = applyApiJobEvent(
       input(
-        ev({ jobId: 'j1', nodeId: 'ig_1', status: 'failed', attempt: { id: 'at1' } }),
+        ev({ jobId: 'j1', nodeId: 'ig_1', status: 'failed', attempt: attempt({ id: 'at1' }) }),
         [imgNode('ig_1')],
       ),
     );

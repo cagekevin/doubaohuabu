@@ -8,6 +8,9 @@
  * ⚠️ 字段名**冻结**（老数据兼容，docs/08 W2）。新增字段可以，**改名不行**。
  */
 
+import type { ApiJobAttempt, VideoApiJob } from './gen';
+import type { Recipe } from './recipe';
+
 export interface XY {
   x: number;
   y: number;
@@ -53,10 +56,13 @@ export interface AnalyzePromptState {
   [k: string]: unknown;
 }
 
-/** 生成历史（版本选择，原 31068 `selVer`） */
+/**
+ * 生成历史（版本选择，原 31068 `selVer`）
+ * ★ `attempts` 的元素形状真源 = `ApiJobAttempt`（构造器 `core/rules/genHistory.makeGenAttempt`）
+ */
 export interface GenHistory {
   v: 1;
-  attempts: unknown[];
+  attempts: ApiJobAttempt[];
 }
 
 /** 文生图单条结果（原 27264-27272） */
@@ -95,6 +101,16 @@ interface NodeBase {
   height?: number;
   style?: Record<string, unknown>;
   selected?: boolean;
+  /**
+   * **xyflow 的运行期量测尺寸**（框架写，本仓只读）
+   *
+   * ⚠️ 它**确实在本仓节点对象上**：`ui/canvas/CanvasHost.onNodesChange` 用
+   *   `applyNodeChanges(...)` 的结果**整表回写** store（那处 `as unknown as CanvasNode[]` 就是这个第三方边界）。
+   *   ⇒ 与 `selected` / `zIndex` / `extent` / `parentId` 同级：都是框架概念，但都在我们的节点对象上。
+   * ⚠️ **`width`/`height` 优先于它**（源 `o`/`N` 的兜底链逐级降级）；纯函数若只想读量测值，
+   *    仍各自声明自己的最小入参（那是**函数入参形状**，不是本字段的第二份）。
+   */
+  measured?: { width?: number; height?: number };
   /** 组内节点才有 */
   parentId?: string;
   /** 组内节点才有（限制在父节点内） */
@@ -156,10 +172,19 @@ export interface VideoNodeData extends NodeDataBase {
   poster?: string;
   accountId?: string;
   accountName?: string;
-  gridAnchor?: unknown;
-  gridSlot?: unknown;
-  gridPos?: unknown;
-  recipe?: unknown;
+  /**
+   * 网格锚点 = 源节点 id（网格新建时写 `String(源节点 id)`；无源 ⇒ `''` —— `apiLanding` 的唯一写点）
+   * ⚠️ 读取链是 `gridAnchor || sourceNodeId`（源 `fR` / `d0`）：旧数据可能只带后者
+   */
+  gridAnchor?: string;
+  /** 网格槽位（非负整数；网格新建时写入——`apiLanding` 的唯一写点） */
+  gridSlot?: number;
+  /** 网格坐标快照（判「该网格成员是否要跟着新行高重排」用） */
+  gridPos?: XY;
+  /** 旧数据里的来源节点 id（新写入走 `gridAnchor`） */
+  sourceNodeId?: string;
+  /** 生成配方（形状真源 = `./recipe` 的 `Recipe`；由 `apiLanding` 从 `nodeRecipes` 拷入） */
+  recipe?: Recipe;
   sourceLabel?: string;
   genHistory?: GenHistory;
 }
@@ -204,9 +229,20 @@ export interface GenVideoNodeData extends NodeDataBase {
   // ⚠️ 这里**没有** `generating` —— 它**只属 `imggen`**（见 `GenImageNodeData`）。
   //   `genvideo` 的生成态真源是 `core/rules/genVideo.genVideoWaiting`（由 `apiJob` / `_pendingAttempt` 推导）；
   //   真实样本 `doubao-projects.txt` 里 **2 个 `genvideo` 节点都不含该字段**。
-  apiJob?: unknown;
-  _pendingAttempt?: unknown;
-  _pendingAttempts?: unknown;
+  /** API 任务状态条（`applyApiJobEvent` 的 `nodePatch` / 批量落点写入；`core/rules/genVideo.apiJobLabel` 读） */
+  apiJob?: VideoApiJob;
+  /**
+   * 提示词分析结果（原 `yS` 写入；`ZL.jsx` / `GenVideoNode` 读）
+   *
+   * ★ **与 `GenImageNodeData` / `MaterialNodeData` 同源**：源版「分析提示词」浮动按钮在
+   *   **素材节点与生成节点**上是同一套，`state/analyze` 的 `revise` 也明确只对
+   *   `imggen | genvideo` 工作 ⇒ `genvideo` 上**确实**会写这个键，漏声明则读它只能拿到 `unknown`。
+   */
+  analyzePrompt?: AnalyzePromptState;
+  /** 本次会话的在途尝试（出片后清）—— 形状同 `genHistory.attempts` 的元素 */
+  _pendingAttempt?: ApiJobAttempt;
+  /** 按账号分槽的在途尝试（键 = `accountId`） */
+  _pendingAttempts?: Record<string, ApiJobAttempt>;
 }
 export type GenVideoNode = NodeBase & { type: 'genvideo'; data: GenVideoNodeData };
 

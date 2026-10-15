@@ -20,6 +20,7 @@ import {
 } from '../sendQueue';
 import { ok, err } from '@/core/model/result';
 import { BATCH_TEXT } from '@/constants/text';
+import { makeRecipe } from '@/core/rules/recipe';
 import type { Account } from '@/stable/model/account';
 import type { CanvasNode } from '@/stable/model/node';
 import type { SitePort } from '@/core/ports/site.port';
@@ -354,9 +355,11 @@ describe('sendOneNode（原 PS）', () => {
   });
 
   it('★ 成功 ⇒ 写 recipe + onSent + 成功态', async () => {
-    const t = makeOne({ prepare: () => ok({ account: acc('acc1'), site: siteStub, operation: {}, recipe: { r: 1 } }) });
+    // ★ 用**唯一构造器** `makeRecipe` 造配方（形状真源 = `stable/model/recipe`）
+    const recipe = makeRecipe({ body: 'x' }, 0);
+    const t = makeOne({ prepare: () => ok({ account: acc('acc1'), site: siteStub, operation: {}, recipe }) });
     const r = await sendOneNode(t.input);
-    expect(t.recipes).toEqual([['a', { r: 1 }]]);
+    expect(t.recipes).toEqual([['a', recipe]]);
     expect(t.sent).toEqual(['acc1']);
     expect(r).toMatchObject({ ok: true, accountId: 'acc1', accountName: '#acc1' });
     expect(t.states.at(-1)).toMatchObject({ status: 'success', msg: BATCH_TEXT.sentTo('#acc1') });

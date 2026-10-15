@@ -15,6 +15,7 @@ import {
   NODE_DEFAULT_RATIO_LABEL,
 } from '@/constants/models';
 import { GROUP_Z_INDEX } from '@/constants';
+import { asRecord } from '@/lib/object';
 
 /**
  * ★ 三类带比例的节点，默认比例一律 `NODE_DEFAULT_RATIO_LABEL`（= `'4:3'`）
@@ -110,8 +111,7 @@ export function inheritGenNodeData(
 ): Record<string, unknown> {
   const prev = [...nodes].reverse().find((n) => n.type === type);
   const raw = prev?.data;
-  const u: Record<string, unknown> =
-    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const u = asRecord(raw);
   const out: Record<string, unknown> = {};
   if (u.aspectRatio) out.aspectRatio = u.aspectRatio;
   if (u.sendAccount) out.sendAccount = u.sendAccount;

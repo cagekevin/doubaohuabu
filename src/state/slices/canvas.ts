@@ -50,6 +50,7 @@ import { planSplitWithPreset, type SplitPresetFailReason } from '@/core/rules/sp
 import { isGraphPreset } from '@/core/rules/preset';
 import { SPLIT_NODE_GAP, SPLIT_NODE_HEIGHT, SPLIT_NODE_WIDTH } from '@/constants';
 import { recipeTextNodePosition, RECIPE_TEXT_FALLBACKS, snapToGrid } from '@/core/rules/recipe';
+import type { Recipe } from '@/stable/model/recipe';
 import { findMaterialNodeByLibId, type MaterialAddInput } from '@/core/rules/materialNode';
 import { planMaterialRename, resolveMaterialLibId } from '@/core/rules/materialRename';
 import { planMaterialReplaceWithLib } from '@/core/rules/materialReplace';
@@ -182,7 +183,7 @@ export interface CanvasSlice extends ApiLandingActions {
    * **拷进新视频节点**的 `data.recipe` —— 视频节点的「配方 chip / 复制配方 / 按配方重跑」读它）。
    * ⚠️ **内存态**（源亦然）：视频节点上那份**副本**才随工程走。
    */
-  nodeRecipes: Record<string, unknown>;
+  nodeRecipes: Record<string, Recipe>;
   /**
    * ★ **图像生成已交付计数**（原 `imageGenDeliveredKeys`，`shared.js:27226`）
    *
@@ -436,7 +437,7 @@ export interface CanvasSlice extends ApiLandingActions {
    *
    * 逐字：`!nodeId` ⇒ 什么都不做；`recipe` 为**真** ⇒ 设键，为**假** ⇒ 删键（同一 action 两用）。
    */
-  setNodeRecipe: (nodeId: string, recipe: unknown) => void;
+  setNodeRecipe: (nodeId: string, recipe: Recipe | null | undefined) => void;
   /**
    * ★ **按配方重跑**（原 `addTextNodeFromRecipe` shared.js:29450-29494）
    *
@@ -1008,7 +1009,7 @@ export function createCanvasSlice(
       if (!anchor) return null;
       // 该视频**已产出**的截图数（源 28330-28332：按 `data.sourceVideoId` 数）
       const count = s.nodes.filter(
-        (n) => n.type === 'material' && (n.data as { sourceVideoId?: string }).sourceVideoId === input.sourceVideoId,
+        (n) => n.type === 'material' && n.data.sourceVideoId === input.sourceVideoId,
       ).length;
       const pos = screenshotNodePlacement(anchor, count);
       return get().addNode(
@@ -1065,7 +1066,8 @@ export function createCanvasSlice(
       // ② 撤销快照（原 `commit(\`replace-img-${n}\`)`）
       set({ undo: commitSnapshot(s.undo, takeSnapshot(current()), `replace-img-${nodeId}`, deps.now()) });
 
-      const d = node.data as Record<string, unknown>;
+      // `node.data` 已是 `MaterialNodeData`（判别联合收窄）⇒ 直接用
+      const d = node.data;
       const prefix = (typeof d.name === 'string' && d.name) || (typeof d.label === 'string' && d.label) || '素材';
       const name = (opts.name ?? '').trim() || `${prefix}${EDITED_SUFFIX}`;
       const libId = makeLibraryId(deps.now(), ++nodeSeq);
@@ -1109,8 +1111,8 @@ export function createCanvasSlice(
                   libId,
                   name,
                   label: name,
-                  natW: w || (n.data as Record<string, unknown>).natW,
-                  natH: h || (n.data as Record<string, unknown>).natH,
+                  natW: w || node.data.natW,
+                  natH: h || node.data.natH,
                 },
               } as CanvasNode)
             : n,
@@ -1124,12 +1126,13 @@ export function createCanvasSlice(
       const node = s.nodes.find((n) => n.id === nodeId);
       if (!node || node.type !== 'imggen' || !node.data || !dataUrl) return false;
 
-      const d = asRecord(node.data);
+      // `node.data` 已是 `GenImageNodeData`（判别联合收窄）⇒ 直接用；`Array.isArray` 留给**脏数据**
+      const d = node.data;
       // ① 找当前展示图（复用纯层 `genImageCurrentUrl`，判据 C1 —— 与 `GenImageNode` 同一判据）
       const currentUrl = genImageCurrentUrl({
         viewUrl: typeof d.viewUrl === 'string' ? d.viewUrl : undefined,
         resultUrl: typeof d.resultUrl === 'string' ? d.resultUrl : undefined,
-        results: Array.isArray(d.results) ? (d.results as Array<{ dataUrl?: string }>) : [],
+        results: Array.isArray(d.results) ? d.results : [],
       });
       if (!currentUrl) return false;
 
@@ -1151,7 +1154,7 @@ export function createCanvasSlice(
 
       // ⑥ 更新节点：`results` 里命中当前图的那张换 `dataUrl` + 三字段指向新图
       const results = (Array.isArray(d.results) ? d.results : []).map((item) =>
-        (asRecord(item).dataUrl === currentUrl ? { ...asRecord(item), dataUrl: stored } : item) as Record<string, unknown>,
+        item.dataUrl === currentUrl ? { ...item, dataUrl: stored } : item,
       );
 
       set({

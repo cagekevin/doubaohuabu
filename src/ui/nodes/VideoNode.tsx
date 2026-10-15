@@ -49,6 +49,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCapture, useHostOps, usePullResult, useStore } from '@/state';
 import { useCaptureElement } from '@/ui/common/useCaptureElement';
 import { log } from '@/lib/log';
+import { asRecord } from '@/lib/object';
 import { useReactFlow } from '@xyflow/react';
 import {
   formatClock,
@@ -56,6 +57,7 @@ import {
   readRecipe,
   recipeDetailLines,
   recipeSummaryLine,
+  sourceAnchorOf,
 } from '@/core/rules/recipe';
 import { normalizeModelLabel } from '@/core/rules/prompt';
 import { attemptsOf, attemptStats, attemptStatusLabel, pullTargetOf } from '@/core/rules/genHistory';
@@ -146,8 +148,8 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   const locateSource = useCallback(
     (e: { stopPropagation: () => void }) => {
       e.stopPropagation();
-      const anchor = data.gridAnchor || data.sourceNodeId;
-      if (!anchor || typeof anchor !== 'string') return;
+      const anchor = sourceAnchorOf(data);
+      if (!anchor) return;
       const src = nodes.find((n) => n.id === anchor);
       if (!src) {
         // 原 119：`H('源节点已不存在')`
@@ -478,7 +480,8 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
             <div className={styles.videoPanelBody}>
               {/* ⚠️ 源 `k.slice().reverse()` —— **新记录在最上**（原 456） */}
               {[...attempts].reverse().map((item, i) => {
-                const a = (item ?? {}) as Record<string, unknown>;
+                // ⚠️ 尝试表来自节点 data（**可能被磁盘改脏**）⇒ 走 `asRecord`，不自称形状
+                const a = asRecord(item);
                 const status = typeof a.status === 'string' ? a.status : '';
                 const at = typeof a.at === 'number' ? a.at : 0;
                 const account =

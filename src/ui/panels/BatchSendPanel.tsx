@@ -209,7 +209,7 @@ export function BatchSendPanel() {
               q.enqueue(
                 targetIds.map((id) => {
                   const n = allNodes.find((x) => x.id === id);
-                  const label = n ? String((n.data as { label?: string }).label || '') : '';
+                  const label = n ? String(n.data.label || '') : '';
                   // 名字与批量列表同口径：节点标签，缺则用类型名
                   return { nodeId: id, name: label || n?.type || '' };
                 }),

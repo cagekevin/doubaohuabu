@@ -18,9 +18,9 @@ import {
   recipeDetailLines,
   recipeSummaryLine,
   truncateText,
-  RECIPE_KEY,
   type RecipeViewLite,
 } from '../recipe';
+import { RECIPE_KEY } from '@/stable/model/recipe';
 
 const FULL: RecipeViewLite = {
   prompt: '海边日落',
@@ -375,11 +375,12 @@ describe('makeRecipe（原 `oR` 35525）', () => {
 
 describe('deriveNodeRecipe（原 `d0` 35676）', () => {
   const text = (id: string, data: Record<string, unknown>) => ({ id, type: 'text', data });
+  // ★ 用**唯一构造器** `makeRecipe` 造配方（`Recipe` 的形状真源）—— 别手搓半截对象
+  const rec = makeRecipe({ body: 'x' }, 0);
 
   it('★ `recipe` ← `nodeRecipes[源节点]`（无 ⇒ 不给该键）', () => {
-    const rec = { v: 1 };
     expect(deriveNodeRecipe([], { n1: rec }, 'n1').recipe).toBe(rec);
-    expect(deriveNodeRecipe([], { n1: 1 }, 'nope')).toEqual({});
+    expect(deriveNodeRecipe([], { n1: rec }, 'nope')).toEqual({});
     expect(deriveNodeRecipe([], null, 'n1').recipe).toBeUndefined();
   });
 
@@ -403,8 +404,8 @@ describe('deriveNodeRecipe（原 `d0` 35676）', () => {
   });
 
   it('★ 无 `sourceNodeId` / 找不到节点 ⇒ 不编造（空结果）', () => {
-    expect(deriveNodeRecipe([], { n1: 1 }, null)).toEqual({});
-    expect(deriveNodeRecipe([], { n1: 1 }, '')).toEqual({});
+    expect(deriveNodeRecipe([], { n1: rec }, null)).toEqual({});
+    expect(deriveNodeRecipe([], { n1: rec }, '')).toEqual({});
     expect(deriveNodeRecipe([text('n1', { text: 'x' })], null, 'nope')).toEqual({});
   });
 });

@@ -23,6 +23,7 @@ import { err, ok, type Result } from '@/core/model/result';
 import { classifyFailure } from '@/core/rules/failure';
 import { orderBatchTargetsOf, type BatchTarget } from '@/core/rules/batchTargets';
 import { BATCH_TEXT } from '@/constants/text';
+import type { Recipe } from '@/stable/model/recipe';
 
 // ─────────────────────────── 注入的函数契约（对应源 `jS` / `Bu`）───────────────────────────
 
@@ -40,8 +41,8 @@ export interface PreparedSend {
   site: SitePort;
   /** 待发送的报文（**不透明** —— 组装细节各站点自己知道） */
   operation: unknown;
-  /** 要写进节点的 recipe（原 `recipe`；`PS` 会 `setNodeRecipe`） */
-  recipe?: unknown;
+  /** 要写进节点的 recipe（原 `recipe`；`PS` 会 `setNodeRecipe`）—— 形状真源 = `stable/model/recipe` */
+  recipe?: Recipe;
 }
 
 export interface PrepareSendOptions {
@@ -394,7 +395,7 @@ export interface SendOneInput {
   /** 写节点发送态（原 `setNodeSendState`）；`PS` 每步都写 */
   setState: (e: NodeSendState) => void;
   /** 写 recipe（原 `setNodeRecipe`）；不给就跳过 */
-  setRecipe?: (nodeId: string, recipe: unknown) => void;
+  setRecipe?: (nodeId: string, recipe: Recipe) => void;
   /** 成功后要不要 toast（源 `PS` 会） */
   onSent?: (account: Account) => void;
 }

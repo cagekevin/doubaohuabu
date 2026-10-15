@@ -15,6 +15,7 @@
  */
 
 import type { CanvasNode, NodeType } from '@/stable/model/node';
+import { isRecord } from '@/lib/object';
 
 /** 一条不变量问题 */
 export interface NodeIssue {
@@ -71,14 +72,14 @@ export function validateNode(node: CanvasNode): NodeIssue[] {
     issues.push({ nodeId: String(node.id), type, field: 'id', message: 'id 为空' });
   }
 
-  // ③ position 必须是数值坐标
-  const pos = node.position as { x?: unknown; y?: unknown } | undefined;
-  if (!pos || !isNumber(pos.x) || !isNumber(pos.y)) {
+  // ③ position 必须是数值坐标（**入参可能是磁盘/旧版本的脏值** ⇒ 用 `isRecord` 收，不自称形状）
+  const pos = node.position;
+  if (!isRecord(pos) || !isNumber(pos.x) || !isNumber(pos.y)) {
     issues.push({ nodeId: node.id, type, field: 'position', message: 'position 缺失或坐标非数值' });
   }
 
-  // ④ data 必须存在
-  const data = node.data as Record<string, unknown> | undefined;
+  // ④ data 必须存在（`NodeDataBase` 自带索引签名 ⇒ 下面取字段不需要断言）
+  const data = node.data;
   if (!data || typeof data !== 'object') {
     issues.push({ nodeId: node.id, type, field: 'data', message: 'data 缺失' });
     return issues;

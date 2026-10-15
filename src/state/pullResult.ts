@@ -59,7 +59,8 @@ export function createPullResultController(
       // 句子真源 = `COMMON_TEXT.nodeGone`（同句另有 2 个域要用 ⇒ 见那里的说明）
       if (!node) return err('unknown', COMMON_TEXT.nodeGone);
 
-      const data = node.data as Record<string, unknown>;
+      // `CanvasNode` 的 `data` 是 `NodeDataBase`（自带索引签名）⇒ 直接就是 `Record<string, unknown>`，无需断言
+      const data = node.data;
       const target = pullTargetOf(data);
       // 不可拉（已有 `url` / 没有尝试 / 尝试里既无 vid 也无 conversationId）
       if (!target) return err('unknown', VIDEO_NODE_TEXT.pullNotAvailable);

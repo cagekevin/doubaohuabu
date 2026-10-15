@@ -21,5 +21,3 @@
 
 /** 是否开发/测试环境（Vite `DEV`；取不到时**按生产**处理 —— 宁可少打日志，不可多打） */
 export const IS_DEV: boolean = import.meta.env?.DEV === true;
-
-/** 是否生产构建产物（`IS_DEV` 的补集，显式给出免得各处写 `!IS_DEV`） */

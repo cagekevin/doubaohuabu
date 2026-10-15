@@ -28,6 +28,7 @@ import { QUEUE_PING_FIRST_MS } from '@/constants';
 import { REPLY_SENTINEL, classifyReply } from '@/core/rules/replyKind';
 import { queuePingText, shouldPingQueueProgress } from '@/core/rules/queuePing';
 import { log } from '@/lib/log';
+import { asRecord } from '@/lib/object';
 import { makeId } from '@/core/rules/project';
 import { isAccountUsable } from '@/stable/model/account';
 import { busyIdsOf, isAccountBusy } from '@/core/rules/accountBusy';
@@ -94,8 +95,11 @@ function readPanelPos(storage: StoragePort): { x: number; y: number } | null {
   // ★ TD-06-1：三态 —— `missing`（没存过）/ `corrupt`（坏了）都当"没有位置"
   //   （这是**面板位置**，丢了无害；且它不在 `persist` 的写回清单里 ⇒ 无覆盖风险）
   if (r.kind !== 'ok') return null;
-  const v = r.value as { x?: unknown; y?: unknown } | null;
-  if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return { x: v.x as number, y: v.y as number };
+  // ⚠️ 存进去的是**外部持久化值**（localStorage，可能被改脏）⇒ 走 `asRecord` 收，不自称形状
+  const { x, y } = asRecord(r.value);
+  if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
+    return { x, y };
+  }
   return null;
 }
 
@@ -124,7 +128,7 @@ function nodesForFingerprint(
   nodes: readonly { id: string; data?: unknown }[],
 ): readonly { id: string; data?: { text?: unknown } | null }[] {
   return nodes.map((n) => {
-    const d = (n.data ?? {}) as Record<string, unknown>;
+    const d = asRecord(n.data);
     return { id: n.id, data: { text: d.text } };
   });
 }
@@ -372,7 +376,7 @@ export function createSendQueueController(
         // 原 `$3`：把节点的 `sendAccount` 解析成"分配模式"
         modeOf: (nodeId) => {
           const n = st.nodes.find((x) => x.id === nodeId);
-          const d = (n?.data ?? {}) as Record<string, unknown>;
+          const d = asRecord(n?.data);
           return resolveSendMode(d.sendAccount);
         },
         // 原 42133：`(N.status || '已登录') !== '已登录'`（本工程的 `isAccountUsable` 就是它）

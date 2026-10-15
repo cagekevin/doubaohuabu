@@ -948,9 +948,11 @@ function patchJsonStringDuration(text) {
     const json = JSON.parse(text);
     const changed = patchDurationSelector(json);
     return changed ? JSON.stringify(json) : text;
-  } catch {
+    } catch (e) {
+    // ⚠️ 留痕（TD-13-25）：原样透传 = 该响应的时长选项**没被注入**（用户看不到注入项）
+    console.warn('[dola-media] action_bar 时长注入失败（原样透传该响应）:', (e && e.message) || e);
     return text;
-  }
+    }
 }
 
 function patchDurationSelector(value, seen = new Set()) {
@@ -1050,7 +1052,10 @@ function safeGetHost(wc) {
     // ★ 归一化收口到层 2（`normalizeHost`）—— 原先这里自带一套（小写 + 去尾点、**不去 `www.`**），
     //   是「host 归一化」在 electron 侧的第二个中心。
     return normalizeHost(hostOfUrl(wc.getURL() || ''));
-  } catch {
+  } catch (e) {
+    // ⚠️ 留痕（TD-13-25）：返回 '' 与「非目标域名」同形 ⇒ 静默不挂 debugger（无水印面板整个失效）。
+    //    调用点已先判过「guest 活着且有 URL」⇒ 这里抛出来就是异常，不能吞。
+    console.warn('[dola-media] safeGetHost 取 guest URL 失败（按未知 host 处理）:', (e && e.message) || e);
     return '';
   }
 }
@@ -1065,9 +1070,11 @@ const BYTEINTL_HINT = 'byteintl';
 function safeGetSession(wc) {
   try {
     return wc && wc.session ? wc.session : null;
-  } catch {
+    } catch (e) {
+    // ⚠️ 留痕（TD-13-25）：返回 null ⇒ 第二跳取直链退回 Node 网络栈（不同代理 / cookie jar）
+    console.warn('[dola-media] safeGetSession 取会话失败（第二跳将退回 Node 网络栈）:', (e && e.message) || e);
     return null;
-  }
+    }
 }
 
 /**
@@ -1114,9 +1121,11 @@ function shouldAttach(guest) {
     const host = safeGetHost(guest);
     // 子域规则（`host === base || host.endsWith('.' + base)`）的唯一实现在层 2
     return ATTACH_SOURCES.some((source) => isHostOf(host, source));
-  } catch {
+    } catch (e) {
+    // ⚠️ 留痕（TD-13-25）：这里吞掉 ⇒ 该 webview **不挂 debugger**（无水印面板静默失效）
+    console.warn('[dola-media] 目标域名判定失败（按「不挂 debugger」处理）:', (e && e.message) || e);
     return false;
-  }
+    }
 }
 
 /**
@@ -1369,7 +1378,10 @@ function findWebviewSessionForUrl(targetUrl) {
             console.log(`[dola-media] ${label}找到 webview：host=${hostOfUrl(url)} id=${wc.id} partition=${wc.session?.partition}`);
             return wc.session;
           }
-        } catch (_) { /* skip */ }
+        } catch (e) {
+          // ⚠️ 留痕（TD-13-25）：跳过这一条 = 可能漏掉真正持有目标会话的那个 webview
+          console.warn('[dola-media] 枚举 webview 时 getURL 失败（跳过该条）:', (e && e.message) || e);
+        }
       }
       return null;
     };

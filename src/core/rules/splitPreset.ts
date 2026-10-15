@@ -165,7 +165,8 @@ export function planSplitWithPreset(input: {
 
       // ⑥ 引用重写（源 28800-28833，**只处理 `text`**）
       if (node.type === 'text') {
-        const data = node.data as { text?: string; materialIds?: string[] };
+        // `node` 已收窄到 `text` ⇒ `data` 就是 `TextNodeData`（`text` / `materialIds` 都在里面）
+        const data = node.data;
         const patch: Record<string, unknown> = {};
         if (data.text) {
           const rewritten = data.text.replace(createRefChipRe(), (whole, oldId: string, name: string) => {

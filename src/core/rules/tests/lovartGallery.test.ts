@@ -23,9 +23,6 @@ import {
   type ImportedGalleryImage,
   isLovartJunk,
   LOVART_MIN_SIDE,
-  LOVART_SCOPE_NOT_CANVAS,
-  matchesLovartScope,
-  purgeLovartImages,
   removeLovartAccount,
   clearLovartGallery,
   ensureLovartGalleries,
@@ -253,58 +250,6 @@ describe('isLovartJunk（原 `Dc` 23537）', () => {
   it('★ 空条目 ⇒ **直接算垃圾**', () => {
     expect(isLovartJunk(null)).toBe(true);
     expect(isLovartJunk(undefined)).toBe(true);
-  });
-});
-
-describe('matchesLovartScope（原 29395-29397）', () => {
-  it('★ 哨兵 `!canvas` ⇒ **清掉所有非画布的**（保留 canvas）', () => {
-    expect(matchesLovartScope({ scope: 'canvas' }, LOVART_SCOPE_NOT_CANVAS)).toBe(false);
-    expect(matchesLovartScope({ scope: 'gallery' }, LOVART_SCOPE_NOT_CANVAS)).toBe(true);
-    expect(matchesLovartScope({ scope: '' }, LOVART_SCOPE_NOT_CANVAS)).toBe(true);
-  });
-
-  it('★ 显式 scope ⇒ **相等才算**（空 scope 不等于它）', () => {
-    expect(matchesLovartScope({ scope: 'canvas' }, 'canvas')).toBe(true);
-    expect(matchesLovartScope({ scope: 'gallery' }, 'canvas')).toBe(false);
-    expect(matchesLovartScope({ scope: '' }, 'canvas')).toBe(false);
-  });
-});
-
-describe('purgeLovartImages（原 `purgeLovartJunk` 29346 / `purgeLovartByScope` 29382 的公共体）', () => {
-  const mk = (id: string, scope = '') => ({ id, scope }) as never;
-
-  it('★ 不给账号 ⇒ **遍历全部键**', () => {
-    const r = purgeLovartImages({ a: [mk('1'), mk('2')], b: [mk('3')] }, null, () => true);
-    expect(r.removed).toBe(3);
-    expect(r.galleries).toEqual({ a: [], b: [] });
-  });
-
-  it('★ 给了账号 ⇒ **只看那一个键**', () => {
-    const g = { a: [mk('1')], b: [mk('2')] };
-    const r = purgeLovartImages(g, 'a', () => true);
-    expect(r.removed).toBe(1);
-    expect(r.galleries.b).toBe(g.b);
-  });
-
-  it('★ **不是数组 / 空数组 ⇒ 跳过**（⚠️ 空键留在原地，不被删）', () => {
-    const r = purgeLovartImages({ a: [], b: [mk('1')], c: 'x' as never }, null, () => true);
-    expect(r.removed).toBe(1);
-    expect(r.galleries.a).toEqual([]);
-    expect('c' in r.galleries).toBe(true);
-  });
-
-  it('★★ **无变化 ⇒ 返回原引用**（源版 `return {}` = 不写状态、不落盘）', () => {
-    const g = { a: [mk('1')] };
-    const r = purgeLovartImages(g, null, () => false);
-    expect(r.removed).toBe(0);
-    expect(r.galleries).toBe(g);
-  });
-
-  it('★ 与 scope 谓词联动：清掉非画布的', () => {
-    const g = { a: [mk('1', 'canvas'), mk('2', 'gallery'), mk('3', '')] };
-    const r = purgeLovartImages(g, null, (x) => matchesLovartScope(x, LOVART_SCOPE_NOT_CANVAS));
-    expect(r.removed).toBe(2);
-    expect(r.galleries.a!.map((x) => (x as { id: string }).id)).toEqual(['1']);
   });
 });
 

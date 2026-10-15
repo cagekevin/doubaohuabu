@@ -180,10 +180,10 @@ ui/panels/StyleLibraryModal（← ui/panels/GenPanel）
 - 失败 = `core/rules/failure.ts` 分类 → `decideByReason` → `give-up` / `retry-switch` / `retry`；`retry-switch` ⇒ `excluded.push(account.id)`；`retry` 上限 `FAILURE_MAX_RETRY`。
 - 报文 = `core/rules/payload.ts` 的 `buildImagePayload` / `buildVideoPayload` → `toSitePayload`（**唯一转换点**，产出品牌类型 `SiteSendPayload` = `SitePort.send` 入参）。
 - API 提交：图片 = `jobBatch(base, N 个 {})`（**N 张 = N 个任务**）；视频单发 = `jobSubmit`；视频批量 = `jobBatch(base, BATCH_RATIOS.map(…))`。报文形状真源 = `src/stable/model/gen.ts` 的 `ApiJobPayload` / `ApiJobVariant`（端口入参就用它 ⇒ 形状漂移**编译期**即拦）。
-- attempt 记录 = `core/rules/genHistory.ts`（`makeGenAttempt` / `patchGenHistoryAttempt` / `appendGenHistoryAttempt`）+ `state/generate.makeAttemptId`（时间经 `ClockPort`，序号在闭包内自增）。
+- attempt 记录 = `core/rules/genHistory.ts`（`makeGenAttempt` / `patchGenHistoryAttempt` / `appendGenHistoryAttempt`）+ `state/generate.makeAttemptId`（时间经 `ClockPort`，序号在闭包内自增）。★ **形状真源** = `src/stable/model/gen.ts` 的 `ApiJobAttempt`（唯一产生方 = `makeGenAttempt`）⇒ 写入侧类型与读侧同一份。
 - 发送管线的**五段**（`doubao/index.ts` 的 `send`，顺序即语义）：① 文本填入（原 Phase 1）→ ② **附图 = Phase 2 全段 + 2b**（`doubao/attachPhase2.ts`：CDP 主通路 + 8×1.2s 确认 → 剪贴板逐张回退 → 按键补充 → 2b 增量重试；纯判据住 `core/rules/attachRefImages.ts`）→ ③ 生成参数（Phase 2c）→ ④ **发送前完整性校验 = Phase 3a**（`core/rules/precheckAttach.ts` + `doubao/scripts.ts` 的指纹脚本）→ ⑤ Dola 面板（Phase 2d）→ ⑥ 点发送（Phase 3b）。
 - **Phase 3a 的硬闸只在 `autoSend` 分支**：只填入（`autoSend=false`）时照走 `ok` 带 `precheck.pass=false` ⇒ 账号节点反馈条显示成 `err` + 警告（`accountSendFeedback` 读 `precheck`，源 `OL.jsx:353-355`）。
-- `_pendingAttempt` / `_pendingAttempts` 的**写入方 = `state/pendingAttempt.ts`**（三条发送路径：`accountOps` 直调 · `generate.ts` 走 `GenDeps.onSent` 钩子 · `batchSend.transport` 直调），消费方 = `videoLanding` / `addVideoNode`（认领归属 + `conversationId`）。
+- `_pendingAttempt` / `_pendingAttempts` 的**写入方 = `state/pendingAttempt.ts`**（三条发送路径：`accountOps` 直调 · `generate.ts` 走 `GenDeps.onSent` 钩子 · `batchSend.transport` 直调），消费方 = `videoLanding` / `addVideoNode`（认领归属 + `conversationId`）。★ **形状真源** = `src/stable/model/node.ts` 的 `GenVideoNodeData._pendingAttempt?` / `_pendingAttempts?: Record<accountId, ApiJobAttempt>`（元素类型同 `genHistory.attempts`）。
 
 ---
 
@@ -584,6 +584,9 @@ deps 组装：state/sendDeps.sendToSiteDeps —— sites / backendPage / holdAcc
 分配（纯）：core/rules/media.matchVideosToNodes + filterLiveJobs（源 hR shared.js:35767 / Kk :35758）
         —— jobs 先按（nodeId 存在 ∧ 节点存活 ∧ now-sendTime ≤ maxAge）筛，再与视频按时间差做最小化总匹配（双向 DP，shared.js:35813-35905）
 落库：state/videoLanding.landVideo（源 Z() :1380-1441：addVideoShare + addVideoNode + patchVideoAttempt + updateNodeData + releaseAccountBusy）
+       ★ 失败契约 = `Result<void>`（2026-10-15 收口）：本函数是这条链错误的**产生方** ⇒ 内部一个 try/catch 收成 `err`；两个调用方（postSendDetect.handleVideo / dolaMedia.handleVideos）**只转发不加工**（`if (!r.ok) log.warn`）。
+         原先失败靠**抛**、调用方各写一个 try/catch + log.warn（同命题抄 2 处），且返回值 `boolean` **恒 true**（假契约）⇒ 已废。
+         ⚠️ 不保证原子性：①~⑤ 是五个具名 action 的顺序写，中途失败前几步已生效（与改前一致）。
 状态落点：state/postSendDetect.ts 的 seen（基线，懒种子 seedSeenKeys）/ jobs（{nodeId, sendTime, pull?}）/ running（在跑的账号）
           会话切换重建基线（seenProject + seedSeenKeys；同工程沿用同一份集）
 CDP 支（源 onDolaMedia :130-351 视频分支）：adapters/host/electron/media.onDolaMedia → state/subscriptions.ts

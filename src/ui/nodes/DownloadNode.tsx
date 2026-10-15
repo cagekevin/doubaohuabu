@@ -79,11 +79,11 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
     setStatus({});
 
     for (const target of targets) {
-      const url = String((target.data as Record<string, unknown> | undefined)?.url ?? '');
+      const url = String(target.data?.url ?? '');
       setStatus((prev) => ({ ...prev, [target.id]: 'downloading' }));
 
       try {
-        const name = downloadFileName(target.data as { label?: unknown; vid?: unknown });
+        const name = downloadFileName(target.data);
         // 原版用 `${folder}/${name}` 拼路径（宿主按平台再归一）
         const r = await hostOps.downloadFile(url, `${folder}/${name}`);
         if (r.ok) {
@@ -151,8 +151,7 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
         {targets.length > 0 ? (
           <div className={styles.downloadList}>
             {targets.map((t) => {
-              const d = (t.data ?? {}) as Record<string, unknown>;
-              const name = String(d.label || d.vid || DOWNLOAD_NODE_TEXT.untitled);
+              const name = String(t.data?.label || t.data?.vid || DOWNLOAD_NODE_TEXT.untitled);
               const st = status[t.id];
               return (
                 <div className={styles.downloadItem} key={`${t.id}-${name}`}>

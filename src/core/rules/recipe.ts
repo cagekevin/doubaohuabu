@@ -11,8 +11,9 @@
  *   images[{label,hash}], textRefs[{id,label}], accountId, accountName, createdAt}`）。
  *   ⚠️ `createdAt` 由**调用方注入**（原则 4）· `aR` 是**独立的一份**哈希（不是 `lib/hash.hash32`）。
  * ⚠️ **`d0`（35576-35706，从源节点派生 `{recipe, sourceLabel}` 给新视频节点）** = `deriveNodeRecipe`。
- * ⚠️ `stable/model/node.ts` 的 `recipe?: unknown` **有意不收窄**：写入走 `patchNodeData` 的
- *   `Record<string, unknown>` 通道，读侧由 `readRecipe` 收窄 ⇒ 不动冻结契约。
+ * ⚠️ **值形状真源 = `stable/model/recipe`**（`Recipe` ＋ `RECIPE_KEY`）：写入方 `makeRecipe`
+ *   产出它、`VideoNodeData.recipe` 声明它；读侧 `readRecipe` 只保证「是非空对象」并收成
+ *   `RecipeViewLite`（节点数据可能来自磁盘 ⇒ 读侧不假设形状合法）。
  *
  * ⚠️ 本模块**不接触** `window`/`document`/`Date`/随机（原则 4）。
  */
@@ -21,18 +22,14 @@ import { RECIPE_TEXT } from '@/constants/text';
 import { NODE_DEFAULT_RATIO_LABEL } from '@/constants/models';
 // ★ 文本节点默认标签的真源（`TD-16-149`：本文件原两处内联 `'文本框'`，与 `TEXT_NODE_LABEL` 同命题）
 import { TEXT_NODE_LABEL } from '@/stable/model/node';
+import { RECIPE_KEY, type Recipe } from '@/stable/model/recipe';
 import { pad2 } from '@/lib/time';
+import { asRecord } from '@/lib/object';
 import { normalizeModelLabel } from './prompt';
 
 /**
- * 配方在节点 `data` 上的**键名**（原 `iR` shared.js:35576，**逐字** `'recipe'`）
- * ⚠️ 提为常量而不是散落的字面量：`lR`/落盘（`oR`）/视频节点三处都要用它。
- */
-export const RECIPE_KEY = 'recipe';
-
-/**
  * 配方视图（只取本模块需要的字段）
- * ⚠️ 这是**读取用的宽松视图**，不是落盘形状 —— 落盘形状待 `oR` 落地时在 `stable/model` 定义
+ * ⚠️ 这是**读取用的宽松视图**（节点数据可能来自磁盘）—— 落盘形状的真源 = `stable/model/recipe.Recipe`
  */
 export interface RecipeViewLite {
   prompt?: string | null;
@@ -117,8 +114,7 @@ export function recipeDetailLines(recipe: RecipeViewLite | null | undefined): st
  * ⚠️ 返回的是**宽松视图**（只保证是对象）—— 调用方按 `RecipeViewLite` 的字段读。
  */
 export function readRecipe(data: unknown): RecipeViewLite | null {
-  if (!data || typeof data !== 'object') return null;
-  const raw = (data as Record<string, unknown>)[RECIPE_KEY];
+  const raw = asRecord(data)[RECIPE_KEY];
   if (!raw || typeof raw !== 'object') return null;
   return raw as RecipeViewLite;
 }
@@ -141,7 +137,39 @@ export function truncateText(text: unknown, max = 46): string {
 export interface ProvenanceNodeLike {
   id: string;
   type: string;
-  data?: Record<string, unknown> | null;
+  /** 该节点的 `data`（**不可信** —— 可能来自磁盘/旧版本）⇒ 读前过 `asRecord` */
+  data?: unknown;
+}
+
+/** 「来源锚点」派生所需的节点 `data`（只读最小面） */
+export interface SourceAnchorData {
+  /** 网格锚点（`VideoNodeData.gridAnchor`） */
+  gridAnchor?: string;
+  /** 旧数据里的来源节点 id（`VideoNodeData.sourceNodeId`） */
+  sourceNodeId?: string;
+}
+
+/**
+ * 「来源」判据所需的**发起节点** `data`（只读最小面）
+ * ★ 形状真源 = `stable/model` 的 `VideoNodeData`（`sourceLabel` / `gridAnchor` / `sourceNodeId`）
+ */
+export interface ProvenanceSourceData extends SourceAnchorData {
+  /** 显式来源名（`VideoNodeData.sourceLabel`） */
+  sourceLabel?: string;
+}
+
+/**
+ * 节点的**来源锚点**（源 `fR` 35706 / `d0` 35676 的 `d.gridAnchor || d.sourceNodeId`）—— ★ 纯函数
+ *
+ * ★ **唯一实现**（判据 C1「三振出局」的前置判断）：这条派生链此前**抄在 2 处** ——
+ *   本文件的 `provenanceLabel`（查锚点节点拿**来源标签**）与 `ui/nodes/VideoNode` 的
+ *   「定位到源节点」（查锚点节点**居中视口**）⇒ 收成一处。
+ * ⚠️ 两处**下游语义不同**、**取哪个 id 是同一命题** —— 所以要收的是「取 id」这半步，不是那两个动作。
+ * ⚠️ 空结果返回 `''`（源的两级 `||` 落空）；两个字段在类型上都已是 `string`（`VideoNodeData`），
+ *    对**脏值**的处置口径见 `docs/DATAFLOW.md` §二十一 与轮次文件「决策留痕」。
+ */
+export function sourceAnchorOf(data: SourceAnchorData | null | undefined): string {
+  return data?.gridAnchor || data?.sourceNodeId || '';
 }
 
 /**
@@ -161,22 +189,19 @@ export interface ProvenanceNodeLike {
  *   这里要的是"一眼能读的来源名"，不是正文归一，故**不合并**（合并会改行为）。
  */
 export function provenanceLabel(
-  data: unknown,
+  data: ProvenanceSourceData | null | undefined,
   nodes: readonly ProvenanceNodeLike[] = [],
 ): string {
-  if (!data || typeof data !== 'object') return '';
-  const d = data as Record<string, unknown>;
-
-  const explicit = typeof d.sourceLabel === 'string' ? d.sourceLabel : '';
+  const explicit = typeof data?.sourceLabel === 'string' ? data.sourceLabel : '';
   if (explicit) return explicit;
 
-  const anchor = d.gridAnchor || d.sourceNodeId;
-  if (typeof anchor !== 'string' || !anchor) return '';
+  const anchor = sourceAnchorOf(data);
+  if (!anchor) return '';
 
   const src = nodes.find((n) => n.id === anchor);
   if (!src) return '';
 
-  const sd = (src.data ?? {}) as Record<string, unknown>;
+  const sd = asRecord(src.data);
   const label = typeof sd.label === 'string' ? sd.label : '';
 
   if (src.type === 'text') {
@@ -268,39 +293,8 @@ export function recipeTextNodePosition(
 export const RECIPE_TEXT_FALLBACKS = { duration: 7, ratio: NODE_DEFAULT_RATIO_LABEL } as const;
 
 // ─────────── 配方对象（原 `oR` 35525-35563 ＋ 图片哈希 `aR` 35564-35575）───────────
-
-/** 配方里的一张参考图（原 `oR` 的 `images` 元素） */
-export interface RecipeImageRef {
-  /** 素材名（缺省 `'素材'`） */
-  label: string;
-  /** 源 `aR(dataUrl)` 的 DJB2 短哈希（`h<base36>`）—— 无 `dataUrl` ⇒ 空串 */
-  hash: string;
-}
-
-/** 配方里的一条引用文本（原 `oR` 的 `textRefs` 元素） */
-export interface RecipeTextRef {
-  id: string;
-  label: string;
-}
-
-/** 生成配方（原 `oR` 的产物形状）—— 落进节点 `data.recipe`，由 `readRecipe` 读回 */
-export interface Recipe {
-  /** 版本号（源固定 `1`） */
-  v: 1;
-  mediaType: string;
-  prompt: string;
-  model: string | null;
-  duration: number | null;
-  ratio: string | null;
-  styleId: string | null;
-  styleName: string;
-  images: RecipeImageRef[];
-  textRefs: RecipeTextRef[];
-  accountId: string | null;
-  accountName: string;
-  /** 构造时刻（源 `Date.now()` ⇒ 本仓**由调用方注入**，原则 4） */
-  createdAt: number;
-}
+// ⚠️ 值形状（`Recipe` / `RecipeImageRef` / `RecipeTextRef` / `RECIPE_KEY`）的**真源在 `stable/model/recipe`**
+//    （它是落进节点 `data.recipe` 的冻结契约，属 L1）—— 本文件只**引用**，不另立一份。
 
 /**
  * 配方里的图片哈希（原 `aR`，`shared.js:35564-35575`）—— ★ 纯函数
@@ -382,16 +376,16 @@ export function makeRecipe(input: MakeRecipeInput, now: number): Recipe {
  */
 export function deriveNodeRecipe(
   nodes: readonly ProvenanceNodeLike[],
-  nodeRecipes: Record<string, unknown> | null | undefined,
+  nodeRecipes: Record<string, Recipe> | null | undefined,
   sourceNodeId: string | null | undefined,
-): { recipe?: unknown; sourceLabel?: string } {
-  const out: { recipe?: unknown; sourceLabel?: string } = {};
+): { recipe?: Recipe; sourceLabel?: string } {
+  const out: { recipe?: Recipe; sourceLabel?: string } = {};
   if (!sourceNodeId) return out;
   const r = nodeRecipes ? nodeRecipes[sourceNodeId] : null;
   if (r) out.recipe = r;
   const s = nodes.find((n) => n.id === sourceNodeId);
-  if (!s || !s.data) return out;
-  const d = s.data;
+  if (!s) return out;
+  const d = asRecord(s.data);
   let label = '';
   if (s.type === 'text') {
     const raw = String(d.text || d.prompt || '')

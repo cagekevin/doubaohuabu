@@ -26,6 +26,7 @@ import type { DolaMediaController } from './dolaMedia';
 import type { AutoConfirmController } from './autoConfirm';
 import type { PendingAttemptController } from './pendingAttempt';
 import { hasVideoDescendant } from '@/core/rules/genDetect';
+import { asRecord } from '@/lib/object';
 import {
   applyProxyAssignments,
   prepareSession,
@@ -698,7 +699,7 @@ export function createAccountOps(
     async sendAccountNode(nodeId) {
       const s = store.useStore.getState();
       const node = s.nodes.find((n) => n.id === nodeId);
-      const data = (node?.data ?? {}) as Record<string, unknown>;
+      const data = asRecord(node?.data);
       const accountId = typeof data.accountId === 'string' ? data.accountId : '';
       const account = s.accounts.find((a) => a.id === accountId);
       // ① 守卫（原 `OL.jsx:295-308`）—— 两句文案逐字（`ACCOUNT_NODE_TEXT`）

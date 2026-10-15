@@ -21,6 +21,7 @@
  */
 
 import { COMMON_TEXT } from '@/constants/text';
+import { asRecord } from '@/lib/object';
 import { captureElementOf } from '@/lib/captureRegistry';
 import { formatClipTime, toCaptureRect } from '@/core/rules/capture';
 import type { AppStore } from './store';
@@ -73,12 +74,14 @@ export function createCaptureController(
       const node = s.nodes.find((n) => n.id === nodeId);
       // 句子真源 = `COMMON_TEXT.nodeGone`（`TD-11-8`：同句原先三处各写一遍）
       if (!node) return { ok: false, reason: COMMON_TEXT.nodeGone };
-      const d = node.data as { label?: string; vid?: string };
+      // ⚠️ 只读两个字段（`label` / `vid`），**且要兼容 `video` 与 `genvideo` 两类节点**
+      //   （后者无 `vid`）⇒ 不按判别联合收窄，走 `asRecord`（对**脏值也不自称形状**）
+      const d = asRecord(node.data);
 
       // ★ 播放位置**从元素上读**（原 32364：`s && s.currentTime || 0`）
       const media = el as HTMLVideoElement | null;
       const time = typeof media?.currentTime === 'number' && media.currentTime > 0 ? media.currentTime : 0;
-      const name = d.label || d.vid || '视频';
+      const name = String(d.label || d.vid || '视频');
       const label = `${name}_截图_${formatClipTime(time)}`;
 
       const id = s.addScreenshotMaterial({

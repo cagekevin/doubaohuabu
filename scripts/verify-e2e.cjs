@@ -96,7 +96,8 @@ const SEED = [
   }
 
   await new Promise((r) => server.listen(0, r));
-  const url = `http://127.0.0.1:${server.address().port}/index.html`;
+  // ⚠️ 必须带 `?devMock=1`：mock 宿主的 E 族（`license.getStatus`）被门控（见 mock/index.ts 头注清单）
+  const url = `http://127.0.0.1:${server.address().port}/index.html?devMock=1`;
 
   const browser = await launchBrowser();
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });

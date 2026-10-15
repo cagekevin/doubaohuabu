@@ -23,10 +23,10 @@
 import type { CanvasNode, XY } from '@/stable/model/node';
 // ★ 默认通道的唯一真源（数据层：`core/model/defaults`）
 import { DEFAULT_CHANNEL } from '@/core/model/defaults';
-import { GEN_HISTORY_KEY } from '@/stable/model/node';
 import type { LibraryItem } from '@/stable/model/project';
 import type { ApiJobAttempt } from '@/stable/model/gen';
-import { appendGenHistoryAttempt, patchGenHistoryAttempt } from '@/core/rules/genHistory';
+import type { Recipe } from '@/stable/model/recipe';
+import { appendGenHistoryAttempt, attemptsOf, patchGenHistoryAttempt } from '@/core/rules/genHistory';
 import { deriveNodeRecipe } from '@/core/rules/recipe';
 import {
   IMAGE_GEN_RESULT_LIMIT,
@@ -117,8 +117,8 @@ export interface VideoNodeInput {
   name: string;
   /** 源节点：是 `genvideo` ⇒ 更新它；否则（含 `null`）⇒ **网格新建** */
   sourceNodeId: string | null;
-  /** 原 `d0()` 派生的配方（网格分支落进 `data.recipe`） */
-  recipe?: unknown;
+  /** 原 `d0()` 派生的配方（网格分支落进 `data.recipe`）—— 形状真源 = `stable/model/recipe` */
+  recipe?: Recipe | null;
   /** 原 `d0()` 派生的来源标签（网格分支落进 `data.sourceLabel`） */
   sourceLabel?: string | null;
   /** 原 `attempt`（有 ⇒ 追加进 `genHistory`） */
@@ -198,7 +198,7 @@ interface ApiLandingReadable {
   nodes: CanvasNode[];
   library: LibraryItem[];
   /** 节点配方表（原 `nodeRecipes`）—— `addVideoNode` 的 `d0` 展开要读它 */
-  nodeRecipes: Record<string, unknown>;
+  nodeRecipes: Record<string, Recipe>;
   imageGenKeyParams: ImageGenKeyParams;
   imageGenDeliveredKeys: ImageGenDeliveredKeys;
   imageGenKeyNode: ImageGenKeyNodes;
@@ -460,10 +460,7 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
       } = input;
 
       // ① `vid` 去重（源 28020-28024）
-      if (
-        vid &&
-        s.nodes.some((n) => n.type === 'video' && (n.data as Record<string, unknown>).vid === vid)
-      ) {
+      if (vid && s.nodes.some((n) => n.type === 'video' && n.data.vid === vid)) {
         return null;
       }
 
@@ -475,7 +472,7 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
       /** 绝对坐标（源 `k`：有 `parentId` ⇒ 相对父节点） */
       const absPos = (n: CanvasNode): XY => {
         const pos = n.position ?? { x: 0, y: 0 };
-        const parentId = (n as { parentId?: string }).parentId;
+        const parentId = n.parentId;
         if (!parentId) return { x: pos.x || 0, y: pos.y || 0 };
         const parent = s.nodes.find((x) => x.id === parentId);
         if (!parent) return { x: pos.x || 0, y: pos.y || 0 };
@@ -486,7 +483,7 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
       };
       /** 尺寸（源 `N`：`width/height` 或 `measured`，兜 200×180） */
       const dims = (n: CanvasNode): { w: number; h: number } => {
-        const m = (n as { measured?: { width?: number; height?: number } }).measured;
+        const m = n.measured;
         return { w: n.width ?? m?.width ?? 200, h: n.height ?? m?.height ?? 180 };
       };
 
@@ -506,13 +503,14 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
 
       // ③ `genvideo` 源节点分支（源 28050-28111）—— 更新它，不新建
       if (sourceNode && sourceNode.type === 'genvideo') {
-        const prevData = sourceNode.data as Record<string, unknown>;
+        // `sourceNode.data` 已是 `GenVideoNodeData`（判别联合）⇒ 直接用它，不再擦宽成 `Record`
+        const prevData = sourceNode.data;
         let data: Record<string, unknown> = { ...prevData };
 
         if (attempt) {
           data = appendGenHistoryAttempt(data, attempt);
           data = patchGenHistoryAttempt(data, attempt.id, {
-            vid: vid || (attempt.vid as string | undefined) || null,
+            vid: vid || attempt.vid || null,
             status: 'success',
             url: url || null,
             poster: poster || null,
@@ -522,9 +520,7 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
           });
         }
 
-        const history = data[GEN_HISTORY_KEY] as { attempts?: unknown[] } | undefined;
-        const attempts = history && Array.isArray(history.attempts) ? history.attempts : [];
-        data.selVer = attempts.length - 1;
+        data.selVer = attemptsOf(data).length - 1;
         data.resultUrl = url || null;
         data.resultPoster = poster || null;
         data.resultVid = vid || null;
@@ -535,11 +531,8 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
 
         // `_pendingAttempt(s)` 清理（原 28091-28101）
         const hadPending = !!prevData._pendingAttempt;
-        const pending =
-          prevData._pendingAttempts && typeof prevData._pendingAttempts === 'object'
-            ? { ...(prevData._pendingAttempts as Record<string, unknown>) }
-            : null;
-        const acc = accountId || (attempt && (attempt.accountId as string | undefined)) || null;
+        const pending = prevData._pendingAttempts ? { ...prevData._pendingAttempts } : null;
+        const acc = accountId || attempt?.accountId || null;
         if (pending && acc && pending[acc]) delete pending[acc];
 
         get().commit('graph-add');
@@ -583,14 +576,13 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
         anchorY = 40;
       }
 
-      const mates = s.nodes.filter(
-        (n) =>
-          n.type === 'video' &&
-          (((n.data as Record<string, unknown>).gridAnchor as string) || '') === gridAnchor,
+      const mates: CanvasNode[] = s.nodes.filter(
+        (n) => n.type === 'video' && (n.data.gridAnchor || '') === gridAnchor,
       );
       const slotOf = (n: CanvasNode): number => {
-        const v = (n.data as Record<string, unknown>).gridSlot;
-        return typeof v === 'number' && v >= 0 ? v : -1;
+        if (n.type !== 'video') return -1;
+        const v = n.data.gridSlot;
+        return v != null && v >= 0 ? v : -1;
       };
       let maxSlot = -1;
       for (const n of mates) maxSlot = Math.max(maxSlot, slotOf(n));
@@ -620,7 +612,8 @@ source: input.source === 'dola' ? 'dola' : input.source || DEFAULT_CHANNEL,
       const approx = (a: XY, b: XY): boolean =>
         Math.abs((a.x || 0) - (b.x || 0)) <= 1 && Math.abs((a.y || 0) - (b.y || 0)) <= 1;
       const hasGridPos = (n: CanvasNode): boolean => {
-        const gp = (n.data as Record<string, unknown>).gridPos as XY | undefined;
+        if (n.type !== 'video') return false;
+        const gp = n.data.gridPos;
         return !!gp && approx(n.position, gp);
       };
 

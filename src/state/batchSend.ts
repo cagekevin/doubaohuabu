@@ -41,6 +41,7 @@ import {
 } from '@/core/rules/prompt';
 import { collectLinkedTexts } from '@/core/rules/graph';
 import { stripHtml } from '@/lib/text';
+import { asRecord } from '@/lib/object';
 import { resolveSendAccountForChain, type SendAccountChoice } from '@/core/usecases/sendToSite';
 import { resolveStyles } from '@/core/rules/style';
 import { makeRecipe } from '@/core/rules/recipe';
@@ -231,7 +232,7 @@ export function createSendPipeline(
     //   组装器从 `core/rules/payload.toSitePayload` 取（与 `usecases/generate` 同一份，判据 C1）。
     const sitePayload = toSitePayload(operation as WirePayload<Record<string, unknown>>);
     // ⚠️ `TransportFn` 的 `operation` 声明成 `unknown` ⇒ 这里只取一个字段（不做整对象断言）
-    const opNodeId = (operation as { sourceNodeId?: unknown }).sourceNodeId;
+    const opNodeId = asRecord(operation).sourceNodeId;
     const pendingNodeId = typeof opNodeId === 'string' ? opNodeId : '';
 
     // ★★ 源 `sendPayload` 的**发送半**（`:2838-3005`：读基线 → 发送 → 写 `_pendingAttempt` → 起生成确认）

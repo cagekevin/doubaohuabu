@@ -19,6 +19,7 @@ import { ACCOUNT_TRANSFER_TEXT } from '@/constants/text';
 // ⚠️ 2026-10-14：分区键的形状**收口到** `core/rules/partition.ts`（本文件原先也各写一种形状）
 import { makeImportedPartition } from './partition';
 import { capsOf } from './siteCaps';
+import { asRecord } from '@/lib/object';
 
 /**
  * 导入时的状态别名（原 `OP.jsx:624-628` 的 `Pe`）
@@ -144,7 +145,7 @@ export function selectImportableAccounts(
       skipped++;
       continue;
     }
-    const draft = toImportedAccount(raw as Record<string, unknown>, { ...opts, index: i });
+    const draft = toImportedAccount(asRecord(raw), { ...opts, index: i });
     const { account } = draft;
 
     if (used.ids.has(account.id) || used.names.has(account.name) || used.partitions.has(account.partition)) {
@@ -214,7 +215,7 @@ export function buildAccountsExportFile(
 export function readAccountsFromFile(parsed: unknown): unknown[] {
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === 'object') {
-    const list = (parsed as { accounts?: unknown }).accounts;
+    const list = asRecord(parsed).accounts;
     if (Array.isArray(list)) return list;
   }
   return [];

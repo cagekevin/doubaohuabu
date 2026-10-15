@@ -100,7 +100,8 @@ export function createAnalyzeController(store: AppStore, ports: Ports): AnalyzeC
         // ★ 与源 `yS` 一致：原图取自 **`data.dataUrl`**（不是 `resultUrl`）
         imageUrl: originalImageUrlOf(data),
         instruction,
-        previous: (data.analyzePrompt as Record<string, unknown> | undefined) ?? null,
+        // `AnalyzePromptState` 自带索引签名 ⇒ 本身就是 `Record<string, unknown>`，无需断言
+        previous: data.analyzePrompt ?? null,
         // ⚠️ `yS` 只用**原分析账号**（用例内部按 `previous.accountId` 找）⇒ 这里仍要传全量
         accounts: s.accounts,
         busy: busyIdsOf(s.accountBusy, ports.clock.now()),
