@@ -52,7 +52,12 @@ const createFile = (): FilePort => ({
   importFiles: async (): Promise<Result<PickedFile[]>> => {
     const r = await guard((api) => api.importFiles());
     if (!r.ok) return r;
-    const list = Array.isArray(r.value) ? (r.value as PickedFile[]) : [];
+    // ⚠️ 后端返的是 `{ name, fullName, dataUrl }`，端口 `PickedFile` 要 `{ name, path?, … }`
+    //   ⇒ **不谎报**：逐字段搬（`path` 缺席 —— 后端从来不传它，见 `PickedFile.path` 的登记）。
+    //   旧写法是 `r.value as PickedFile[]`（把 `unknown` 谎报过去），换面后当场红。
+    const list: PickedFile[] = Array.isArray(r.value)
+      ? r.value.map((f) => ({ name: f.name, dataUrl: f.dataUrl }))
+      : [];
     return ok(list);
   },
 
@@ -318,7 +323,10 @@ export function createElectronHost(): HostPort {
         if (!r.ok) return r;
         // ⚠️ **先判取消**：后端取消是 `{ok:false, canceled:true}`，而 `checkOk` 见到 `ok:false` 会判失败
         //   —— 取消是**如实结果**（用户主动关掉对话框），不是错误（与 `pickStorage` 同口径）
-        if (isRecord(r.value) && r.value.canceled === true) {
+        // ★ 换面后 `r.value` 已是精确联合（不再 `unknown`）⇒ 先收回 `unknown` 再判字段
+        //   （同一对象、同一判据；只是让"查一个联合里不存在的键"这件事在类型上成立）
+        const rawValue: unknown = r.value;
+        if (isRecord(rawValue) && rawValue.canceled === true) {
           return ok({ canceled: true });
         }
         const c = checkOk<{ path?: unknown; configured?: unknown }>(r.value, {

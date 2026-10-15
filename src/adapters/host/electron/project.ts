@@ -50,7 +50,9 @@ export function createElectronProjectPort(): ProjectPort {
         // 用户取消：**如实**返回 canceled（不是错误，也不是成功）
         //   ⚠️ 必须**先于** `checkOk` —— 后端取消时返 `{ok:false, canceled:true}`，
         //      那不是失败；顺序颠倒会把"用户点了取消"误报成错误。
-        if (isRecord(raw) && raw.canceled === true) return ok({ canceled: true });
+        // ★ 换面后 `api.pickProjectStorage` 的回执已是精确联合（不再 `unknown`）⇒ 先收回 `unknown` 再判字段
+        const rawAny: unknown = raw;
+        if (isRecord(rawAny) && rawAny.canceled === true) return ok({ canceled: true });
         // ★ TD-04-5：后端 `project-storage-pick` 的 4 条 return **都带 `ok`** ⇒ fail-closed
         const c = checkOk<{ path?: string; migrated?: AssetMigration }>(raw, {
           fallback: PROJECT_TEXT.unknownReason,

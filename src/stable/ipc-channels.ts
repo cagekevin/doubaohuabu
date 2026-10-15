@@ -23,6 +23,13 @@ export interface ChannelSpec {
    * B1 只锁名面（§5.2）⇒ 先留空；精确形状随各自 handler 的转换同批补（锚点用符号名，禁行号）。
    */
   readonly ret?: unknown;
+  /**
+   * 形参**元组**：**这个值的类型**就是形参元组（同 `ret` 的约定 —— 表只承载类型，运行时不经表）。
+   *
+   * 证据来源：**渲染层那张手写面的精确形参**（它是调用方依赖的形状）；缺省 ⇒ 该成员没有形参
+   * （派生面里落成 `never[]`，零参调用合法）。`params` 是**形参名**（顺序即调用序），本节是**类型**。
+   */
+  readonly arg?: unknown;
   readonly note?: string;
   /**
    * **后端注册、但未暴露给渲染层**的频道（如 `open-lovart-chrome`：原版亦如此，见其 note）。
@@ -57,48 +64,50 @@ export const IPC_CHANNELS = {
     kind: 'invoke',
     channel: 'import-files',
     params: [],
-    ret: [] as { name: string; fullName: string; dataUrl: unknown }[],
+    // `dataUrl` 在契约内恒为字符串：handler 传进 `persistImageDataUrl` 的**就是**模板串
+    //   （`data:${mime};base64,${…}`）⇒ 落盘成功得 `img://` 引用、非法输入才原样返回（边界外）。
+    ret: [] as { name: string; fullName: string; dataUrl: string }[],
   },
-  saveFile: { kind: 'invoke', channel: 'save-file', params: ['content'], ret: true as boolean | IpcFail },
+  saveFile: { kind: 'invoke', channel: 'save-file', params: ['content'], arg: [''] as [content: string], ret: true as boolean | IpcFail },
   loadFile: { kind: 'invoke', channel: 'load-file', params: [], ret: null as string | null | IpcFail },
-  saveProjectsBackup: { kind: 'send', channel: 'projects-backup', params: ['json'], ret: undefined as void },
+  saveProjectsBackup: { kind: 'send', channel: 'projects-backup', params: ['json'], arg: [''] as [json: string], ret: undefined as void },
   activateProjectStorage: {
     kind: 'sendSync',
     channel: 'project-storage-activate-sync',
-    params: ['payload'],
+    params: ['payload'], arg: [null] as [payload: unknown],
     note: '**不得 await**：`sendSync` 靠 `e.returnValue` 回值，渲染层拿到的是同步结果（首帧就要读对目录）',
     ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
   pickProjectStorage: {
     kind: 'invoke',
     channel: 'project-storage-pick',
-    params: ['payload'],
+    params: ['payload'], arg: [null] as [payload: unknown],
     ret: { ok: false, error: '' } as
       | { ok: false; canceled: true }
       | { ok: true; path: string; migrated: { images: number; videos: number } }
       | IpcFail,
   },
-  saveProjectSnapshot: { kind: 'send', channel: 'project-snapshot', params: ['project'], ret: undefined as void },
-  logProjectOperation: { kind: 'send', channel: 'project-operation', params: ['event'], ret: undefined as void },
+  saveProjectSnapshot: { kind: 'send', channel: 'project-snapshot', params: ['project'], arg: [null] as [project: unknown], ret: undefined as void },
+  logProjectOperation: { kind: 'send', channel: 'project-operation', params: ['event'], arg: [null] as [event: unknown], ret: undefined as void },
   revealProjectStorage: {
     kind: 'invoke',
     channel: 'project-storage-reveal',
-    params: ['storagePath'],
+    params: ['storagePath'], arg: [''] as [storagePath: string],
     ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
   getProjectStorageSize: {
     kind: 'invoke',
     channel: 'project-storage-size',
-    params: ['storagePath'],
+    params: ['storagePath'], arg: [''] as [storagePath: string],
     ret: { ok: false, error: '' } as
       | { ok: true; bytes: number; files: number; partial: boolean; elapsedMs: number }
       | IpcFail,
   },
-  openExternal: { kind: 'invoke', channel: 'open-external', params: ['url'], ret: true as boolean | IpcFail },
+  openExternal: { kind: 'invoke', channel: 'open-external', params: ['url'], arg: [''] as [url: string], ret: true as boolean | IpcFail },
   copyImageToClipboard: {
     kind: 'invoke',
     channel: 'copy-image-to-clipboard',
-    params: ['img', 'webContentsId'],
+    params: ['img', 'webContentsId'], arg: [null] as [img: unknown, webContentsId?: number],
     // 形状取自 `electron/clipboard-image.ts` 的 `copyImageToClipboard`（本文件不得 import 后端 ⇒ 形状写在表里）
     ret: { ok: false, error: '' } as
       | { ok: true; ext: string; via: 'main-native' | 'page-clipboard'; verified: boolean }
@@ -107,7 +116,7 @@ export const IPC_CHANNELS = {
   attachImagesToWebview: {
     kind: 'invoke',
     channel: 'attach-images-to-webview',
-    params: ['webContentsId', 'imgs'],
+    params: ['webContentsId', 'imgs'], arg: [0, null] as [webContentsId: number, imgs: unknown],
     ret: { ok: false, via: 'cdp-file-input', files: [], errors: [] } as {
       ok: boolean;
       via: string;
@@ -121,10 +130,10 @@ export const IPC_CHANNELS = {
   copyTextToClipboard: {
     kind: 'invoke',
     channel: 'copy-text-to-clipboard',
-    params: ['text'],
+    params: ['text'], arg: [''] as [text: string],
     ret: { ok: false, error: '' } as { ok: true; cleanedLen: number } | IpcFail,
   },
-  pasteToWebview: { kind: 'invoke', channel: 'paste-to-webview', params: ['id'], ret: { ok: true } as { ok: true } | IpcFail },
+  pasteToWebview: { kind: 'invoke', channel: 'paste-to-webview', params: ['id'], arg: [0] as [webContentsId: number], ret: { ok: true } as { ok: true } | IpcFail },
   readClipboardImage: {
     kind: 'invoke',
     channel: 'read-clipboard-image',
@@ -138,7 +147,7 @@ export const IPC_CHANNELS = {
   exportAccountCookies: {
     kind: 'invoke',
     channel: 'export-account-cookies',
-    params: ['partition'],
+    params: ['partition'], arg: [''] as [partition: string | null],
     ret: { ok: false, error: '' } as
       | {
           ok: true;
@@ -159,13 +168,13 @@ export const IPC_CHANNELS = {
   importAccountCookies: {
     kind: 'invoke',
     channel: 'import-account-cookies',
-    params: ['partition', 'cookies'],
+    params: ['partition', 'cookies'], arg: ['', []] as [partition: string, cookies: readonly unknown[]],
     ret: { ok: false, error: '' } as { ok: true; restored: number; total: number } | IpcFail,
   },
   saveAccountsFile: {
     kind: 'invoke',
     channel: 'save-accounts-file',
-    params: ['content'],
+    params: ['content'], arg: [''] as [content: string],
     ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
   loadAccountsFile: { kind: 'invoke', channel: 'load-accounts-file', params: [], ret: null as string | null | IpcFail },
@@ -173,20 +182,20 @@ export const IPC_CHANNELS = {
   downloadFile: {
     kind: 'invoke',
     channel: 'download-file',
-    params: ['url', 'fileName'],
+    params: ['url', 'fileName'], arg: [''] as [url: string, fileName?: string],
     ret: { ok: false, error: '' } as { ok: true; path: string; size: number } | IpcFail,
   },
   downloadFileAs: {
     kind: 'invoke',
     channel: 'download-file-as',
-    params: ['url', 'defaultName', 'filters'],
+    params: ['url', 'defaultName', 'filters'], arg: [''] as [url: string, defaultName?: string, filters?: unknown],
     ret: { ok: false, error: '' } as
       | { ok: false; canceled: true }
       | { ok: false; canceled: false; error: string }
       | { ok: true; canceled: false; path: string; size: number }
       | IpcFail,
   },
-  revealPath: { kind: 'invoke', channel: 'reveal-path', params: ['p'], ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail },
+  revealPath: { kind: 'invoke', channel: 'reveal-path', params: ['p'], arg: [''] as [path: string], ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail },
   getMachineCode: {
     kind: 'invoke',
     channel: 'get-machine-code',
@@ -217,7 +226,7 @@ export const IPC_CHANNELS = {
   activateWithCode: {
     kind: 'invoke',
     channel: 'activate-with-code',
-    params: ['code'],
+    params: ['code'], arg: [''] as [code: string],
     // 形状取自 `electron/license.ts` 的 `activateWithCode`（四个 return ＋ 成功分支）
     ret: { ok: false, status: 'invalid', error: '' } as
       | { ok: false; status: 'invalid'; error: string }
@@ -229,19 +238,19 @@ export const IPC_CHANNELS = {
   exportMachineCode: {
     kind: 'invoke',
     channel: 'export-machine-code',
-    params: ['machineCode'],
+    params: ['machineCode'], arg: [''] as [machineCode: string],
     ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
   captureRect: {
     kind: 'invoke',
     channel: 'capture-rect',
-    params: ['rect'],
+    params: ['rect'], arg: [null] as [rect: unknown],
     ret: { ok: false, error: '' } as { ok: true; dataUrl: string } | IpcFail,
   },
   detectVideos: {
     kind: 'invoke',
     channel: 'detect-videos',
-    params: ['webContentsId', 'seenKeys'],
+    params: ['webContentsId', 'seenKeys'], arg: [0, []] as [webContentsId: number, seenKeys: readonly string[]],
     // ⛔ 不在表里再写一份形状：回执由**页内注入脚本**（`DETECT_JS`，见 `electron/main.ts`）产出
     //   —— 成功是 `{ ok: true, videos: […], _diag }`、异常分支是 `{ ok: false, error, _diag? }`，
     //   而脚本跑在 guest 主世界 ⇒ 形状以**脚本字面量**为准（写第二份就是第二载体）。
@@ -250,7 +259,7 @@ export const IPC_CHANNELS = {
   detectErrors: {
     kind: 'invoke',
     channel: 'detect-errors',
-    params: ['webContentsId'],
+    params: ['webContentsId'], arg: [0] as [webContentsId: number],
     // 同上：形状出自 `ERROR_JS`（本仓源码里的字面量）⇒ 这里只记它写出来的那几个键
     ret: { ok: false, errors: [], error: '' } as
       | { ok: true; errors: { type: string; message: string }[] }
@@ -259,22 +268,24 @@ export const IPC_CHANNELS = {
   saveImageSync: {
     kind: 'sendSync',
     channel: 'img-save-sync',
-    params: ['dataUrl'],
+    params: ['dataUrl'], arg: [''] as [dataUrl: string],
     note: '**不得 await**（同 `activateProjectStorage`）：同步落盘后用 `img://` 引用',
-    // ⚠️ 处理器写的是 `persistImageDataUrl(dataUrl)`，其返回类型是 `unknown`（源里入参就是任意值）
-    //   ⇒ 表里如实写 `unknown`。渲染层手写面原写 `string` —— 要在 B1-b 定：收窄 handler 形参、还是渲染侧自行窄化。
-    ret: null as unknown,
+    // **本频道契约内的**入参与回执：渲染层给的是 `dataUrl` 字符串、回执是 `img://` 引用（或原值）。
+    //   ⚠️ 处理器签名是 `persistImageDataUrl(dataUrl: unknown): unknown`（它还服务 `import-files` /
+    //   `start-file-drag` 的任意入参，那两处**不能**收窄）⇒ 表按**本频道契约**写 `string`：
+    //   传非字符串属边界外输入（回执原样返回该值），不在契约内。
+    ret: '' as string,
   },
   saveVideoFromUrl: {
     kind: 'invoke',
     channel: 'save-video-from-url',
-    params: ['url', 'referer'],
+    params: ['url', 'referer'], arg: [''] as [url: string, referer?: string],
     ret: { ok: false, error: '' } as { ok: true; ref: string; size: number; cached?: boolean } | IpcFail,
   },
   imageFetchDataUrl: {
     kind: 'invoke',
     channel: 'image-fetch-dataurl',
-    params: ['url'],
+    params: ['url'], arg: [''] as [url: string],
     ret: { ok: false, error: '' } as { ok: true; mime: string; dataUrl: string } | IpcFail,
   },
   clearBrowserCache: {
@@ -283,17 +294,17 @@ export const IPC_CHANNELS = {
     params: [],
     ret: { ok: false, error: '' } as { ok: true; cleared: number; failed: number } | IpcFail,
   },
-  startFileDrag: { kind: 'send', channel: 'start-file-drag', params: ['payload'], ret: undefined as void },
+  startFileDrag: { kind: 'send', channel: 'start-file-drag', params: ['payload'], arg: [null] as [payload: unknown], ret: undefined as void },
   ensureFingerprint: {
     kind: 'invoke',
     channel: 'ensure-fingerprint',
-    params: ['acc'],
+    params: ['acc'], arg: [null] as [account: unknown],
     ret: { ok: false, error: '' } as { ok: true; preloadUrl: string } | IpcFail,
   },
   fpNetDiag: {
     kind: 'invoke',
     channel: 'fp-net-diag',
-    params: ['partition'],
+    params: ['partition'], arg: [''] as [partition: string],
     ret: { ok: false, error: '' } as
       | { ok: true; proxy: string; engineChrome: string; hostPlatform: string }
       | IpcFail,
@@ -301,13 +312,13 @@ export const IPC_CHANNELS = {
   ensurePlainSession: {
     kind: 'invoke',
     channel: 'ensure-plain-session',
-    params: ['acc'],
+    params: ['acc'], arg: [null] as [account: unknown],
     ret: { ok: false, error: '' } as { ok: true; userAgent: string; acceptLanguage: string } | IpcFail,
   },
   ensureLovartContainer: {
     kind: 'invoke',
     channel: 'ensure-lovart-container',
-    params: ['acc'],
+    params: ['acc'], arg: [null] as [account: unknown],
     ret: { ok: false, error: '' } as
       | { ok: true; userAgent: string; preloadUrl: null; proxy: string }
       | IpcFail,
@@ -315,25 +326,25 @@ export const IPC_CHANNELS = {
   clearAccountSession: {
     kind: 'invoke',
     channel: 'clear-account-session',
-    params: ['partition'],
+    params: ['partition'], arg: [''] as [partition: string],
     ret: { ok: false, error: '' } as { ok: true } | IpcFail,
   },
   setAccountProxy: {
     kind: 'invoke',
     channel: 'set-account-proxy',
-    params: ['partition', 'proxy'],
+    params: ['partition', 'proxy'], arg: ['', ''] as [partition: string, proxy: string],
     ret: { ok: false, error: '' } as { ok: true; applied: string } | IpcFail,
   },
   ensureLovartFirefoxProfile: {
     kind: 'invoke',
     channel: 'ensure-lovart-firefox-profile',
-    params: ['accountId'],
+    params: ['accountId'], arg: [''] as [accountId: string],
     ret: { ok: true } as { ok: true } | IpcFail,
   },
   openLovartFirefox: {
     kind: 'invoke',
     channel: 'open-lovart-firefox',
-    params: ['args'],
+    params: ['args'], arg: [null] as [args: unknown],
     // 形状取自 `electron/firefox.ts` 的 `launch`（`LaunchResult`）
     ret: { ok: false, error: '' } as
       | { ok: true; executable: string; profile: string; args: string[]; command: string }
@@ -342,7 +353,7 @@ export const IPC_CHANNELS = {
   removeLovartFirefoxProfile: {
     kind: 'invoke',
     channel: 'remove-lovart-firefox-profile',
-    params: ['accountId'],
+    params: ['accountId'], arg: [''] as [accountId: string],
     ret: { ok: true } as { ok: true } | IpcFail,
   },
   getFirefoxStatus: {
@@ -356,7 +367,7 @@ export const IPC_CHANNELS = {
   ensureLovartChrome: {
     kind: 'invoke',
     channel: 'ensure-lovart-chrome',
-    params: ['args'],
+    params: ['args'], arg: [null] as [args: unknown],
     // 形状取自 `electron/chrome-cdp.ts` 的 `ensureLovartChrome`（`EnsureResult`）
     ret: { ok: false, error: '' } as
       | { ok: true; alreadyOpen: true }
@@ -367,13 +378,13 @@ export const IPC_CHANNELS = {
   closeLovartChrome: {
     kind: 'invoke',
     channel: 'close-lovart-chrome',
-    params: ['args'],
+    params: ['args'], arg: [null] as [args: unknown],
     ret: { ok: false, error: '' } as { ok: true; wasOpen: boolean } | IpcFail,
   },
   syncLovartSession: {
     kind: 'invoke',
     channel: 'sync-lovart-session',
-    params: ['args'],
+    params: ['args'], arg: [null] as [args: unknown],
     ret: { ok: false, error: '' } as
       | { ok: false; error: string; message?: string }
       | { ok: true; count: number; total: number; rawTotal: number }
@@ -398,7 +409,7 @@ export const IPC_CHANNELS = {
   downloadDolaMedia: {
     kind: 'invoke',
     channel: 'dola-media-download',
-    params: ['url', 'mediaType'],
+    params: ['url', 'mediaType'], arg: [''] as [url: string, mediaType?: string],
     ret: { ok: false, error: '' } as
       | { ok: true; path: string; size: number; name: string; dir: string; configured: boolean }
       | IpcFail,
@@ -407,7 +418,7 @@ export const IPC_CHANNELS = {
   lovartFetchImages: {
     kind: 'invoke',
     channel: 'lovart-fetch-images',
-    params: ['args'],
+    params: ['args'], arg: [null] as [payload: unknown],
     ret: { ok: false, error: '' } as { ok: true; jobId: string; total: number } | IpcFail,
   },
   onLovartFetchItem: { kind: 'on', channel: 'lovart-fetch-item', params: ['cb'], ret: undefined as void },
@@ -415,14 +426,14 @@ export const IPC_CHANNELS = {
   lovartScanFrames: {
     kind: 'invoke',
     channel: 'lovart-scan-frames',
-    params: ['args'],
+    params: ['args'], arg: [null] as [args: unknown],
     // `frames` 的元素形状出自**按 frame 注入的采集脚本**（`electron/lovart-scan.ts`）⇒ 元素记 `unknown`
     ret: { ok: false, error: '' } as { ok: true; frames: unknown[]; logPath: string } | IpcFail,
   },
   lovartDiag: {
     kind: 'invoke',
     channel: 'lovart-diag',
-    params: ['payload'],
+    params: ['payload'], arg: [null] as [message: unknown],
     ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
   lovartDiagOpen: {
@@ -460,19 +471,19 @@ export const IPC_CHANNELS = {
   injectDolaDurationMain: {
     kind: 'invoke',
     channel: 'inject-dola-duration-main',
-    params: ['webContentsId'],
+    params: ['webContentsId'], arg: [0] as [webContentsId: number],
     ret: { ok: false, error: '' } as { ok: true } | IpcFail,
   },
   dolaDurationDiag: {
     kind: 'invoke',
     channel: 'dola-duration-diag',
-    params: ['message'],
+    params: ['message'], arg: [null] as [message: unknown],
     ret: { ok: false, error: '' } as { ok: true; path: string } | IpcFail,
   },
   attachDolaDebugger: {
     kind: 'invoke',
     channel: 'attach-dola-debugger',
-    params: ['webContentsId'],
+    params: ['webContentsId'], arg: [0] as [webContentsId: number],
     ret: { ok: false, error: '' } as { ok: true; url: string } | IpcFail,
   },
   apiProvidersList: {
@@ -493,7 +504,7 @@ export const IPC_CHANNELS = {
   apiConfigSet: {
     kind: 'invoke',
     channel: 'api-config:set',
-    params: ['providerId', 'patch'],
+    params: ['providerId', 'patch'], arg: ['', null] as [providerId: string, patch: unknown],
     // 后端的声明是 `Promise<OkReply | FailReply>`（`OkReply` 带索引签名、`FailReply` 的 error/message 皆可选）
     ret: { ok: false, error: '' } as
       | ({ ok: true } & Record<string, unknown>)
@@ -503,7 +514,7 @@ export const IPC_CHANNELS = {
   apiConfigSetKey: {
     kind: 'invoke',
     channel: 'api-config:set-key',
-    params: ['providerId', 'key'],
+    params: ['providerId', 'key'], arg: ['', ''] as [providerId: string, key: string],
     ret: { ok: false, error: '' } as
       | { ok: true; keyHint: unknown; maskedBy: string }
       | { ok: false; error?: string; message?: string }
@@ -512,28 +523,28 @@ export const IPC_CHANNELS = {
   apiConfigTest: {
     kind: 'invoke',
     channel: 'api-config:test',
-    params: ['providerId'],
+    params: ['providerId'], arg: [''] as [providerId: string],
     // 处理器**自带显式注解** `{ ok: boolean; message: string }`（回执用 `message`，与守卫的 `error` 不同）
     ret: { ok: false, message: '' } as { ok: boolean; message: string } | IpcFail,
   },
   apiJobSubmit: {
     kind: 'invoke',
     channel: 'api-job:submit',
-    params: ['payload'],
+    params: ['payload'], arg: [null] as [payload: unknown],
     // 处理器**自带显式注解** `Promise<unknown>`（透传 `jobManager?.submit(...)`）
     ret: null as unknown,
   },
   apiJobBatch: {
     kind: 'invoke',
     channel: 'api-job:batch',
-    params: ['basePayload', 'matrix'],
+    params: ['basePayload', 'matrix'], arg: [null, null] as [basePayload: unknown, matrix: unknown],
     // 同上（`Promise<unknown>`，透传 `jobManager?.submitBatch(...)`）
     ret: null as unknown,
   },
   apiJobCancel: {
     kind: 'invoke',
     channel: 'api-job:cancel',
-    params: ['jobId'],
+    params: ['jobId'], arg: [''] as [jobId: string],
     // 同上（`Promise<unknown>`，表达式体箭头 ⇒ 回执就是 `jobManager?.cancel(...)`）
     ret: null as unknown,
   },
@@ -552,13 +563,13 @@ export const IPC_CHANNELS = {
   apiSetupSet: {
     kind: 'invoke',
     channel: 'api-setup:set',
-    params: ['patch'],
+    params: ['patch'], arg: [null] as [patch: unknown],
     ret: { ok: false, error: '' } as { ok: true; setup: unknown } | IpcFail,
   },
   apiConfigSetSecret: {
     kind: 'invoke',
     channel: 'api-config:set-secret',
-    params: ['providerId', 'key'],
+    params: ['providerId', 'key'], arg: ['', ''] as [providerId: string, key: string],
     ret: { ok: false, error: '' } as
       | { ok: true; hasSecret: true }
       | { ok: false; error?: string; message?: string }
@@ -607,14 +618,18 @@ export type IpcChannelMap = typeof IPC_CHANNELS;
 export type WindowApi = {
   // `as` 子句做**类型层分区**：`backendOnly` 的条目留在表里（对账用），但不进渲染面
   readonly [K in keyof IpcChannelMap as IpcChannelMap[K] extends { backendOnly: true } ? never : K]: IpcChannelMap[K]['kind'] extends 'sendSync'
-    ? (...args: never[]) => IpcChannelMap[K] extends { ret: infer R } ? R : unknown
+    ? (...args: IpcChannelMap[K] extends { arg: infer A extends unknown[] } ? A : never[]) => IpcChannelMap[K] extends { ret: infer R }
+        ? R
+        : unknown
     : IpcChannelMap[K]['kind'] extends 'send'
-      ? (...args: never[]) => void
+      ? (...args: IpcChannelMap[K] extends { arg: infer A extends unknown[] } ? A : never[]) => void
       : IpcChannelMap[K]['kind'] extends 'on'
         ? (cb: (...a: unknown[]) => void) => () => void
         : IpcChannelMap[K]['kind'] extends 'value'
           ? IpcChannelMap[K] extends { ret: infer R } ? R : unknown
-          : (...args: never[]) => Promise<IpcChannelMap[K] extends { ret: infer R } ? R : unknown>;
+          : (...args: IpcChannelMap[K] extends { arg: infer A extends unknown[] } ? A : never[]) => Promise<
+              IpcChannelMap[K] extends { ret: infer R } ? R : unknown
+            >;
 };
 
 

@@ -712,7 +712,14 @@ export type Unsubscribe = () => void;
 
 export interface PickedFile {
   name: string;
-  path: string;
+  /**
+   * ⚠️ **契约不一致（2026-10-15 换面后由机器逮到，如实登记待裁）**：后端 `import-files` 的
+   * handler 只返 `{ name, fullName, dataUrl }` —— **从来没有 `path`**。此前靠适配层的
+   * `as PickedFile[]` 把 `unknown` 谎报成这个形状 ⇒ TS 看不见，运行期 `path` 一直是 `undefined`。
+   * 换面（`WindowApi` 派生）后该断言当场红。本批**不就地改业务**（转换期零逻辑改动）：
+   * 只把 `path` 标成可选**如实描述现状**；"是前端该改、还是后端该补字段"待裁（见 `日志.md`）。
+   */
+  path?: string;
   size?: number;
   type?: string;
   dataUrl?: string;
