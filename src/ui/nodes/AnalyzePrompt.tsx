@@ -22,7 +22,7 @@
  * ⚠️ 与源版一致：面板**只在已有 `analyzePrompt` 且已展开时**才渲染。
  */
 
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 // ★ 浮层壳走**共享件**（头三槽 / ✕ / 正文只有一种）—— 不带 `overlay`：它是**节点锚定浮层**
 import { PanelShell } from '@/ui/common/PanelShell';
 import { useAnalyze, useHostOps, useStore } from '@/state';
@@ -72,19 +72,53 @@ export function AnalyzePrompt({
   const [draft, setDraft] = useState('');
 
   const busy = state?.status === 'analyzing' || state?.status === 'revising';
+  /** 原 `ZL.jsx:194` 的 `I` —— **只**看 `analyzing`（`revising` 时按钮文案 / 禁用态都不变） */
+  const analyzing = state?.status === 'analyzing';
+  /**
+   * 原 `ZL.jsx:197` 的 `R` —— 「**已有可展示的结果**」：分析中 ∨ 调整中 ∨ 已完成且有内容。
+   * ★ 它决定点「分析提示词」是**重跑**还是**只展开面板**（源 `se():205-208`）。
+   */
+  const hasResult =
+    !!state &&
+    (state.status === 'analyzing' ||
+      state.status === 'revising' ||
+      (state.status === 'done' &&
+        (!!state.zh_prompt || !!state.en_prompt || !!state.json_prompt || !!state.raw)));
+
+  /** 面板卡片 ref（原 `ZL.jsx:202` 的 `J`）—— 判「点在外面」用 */
+  const popRef = useRef<HTMLDivElement>(null);
+  /**
+   * ★ **点面板外面 ⇒ 收起**（原 `ZL.jsx:229-243`）
+   *
+   * ⚠️ 只在「展开 **且** 有 `state`」时挂（源同：`if (!D || !j) return`）。
+   * ⚠️ 用**捕获**阶段（源第三参 `true`）—— 否则面板内部的 `stopPropagation` 会让它收不到。
+   * ⚠️ **一处简化（留痕）**：源同时排除「节点根」（`H`），本组件拿不到那个 ref ⇒ 只排除面板本身
+   *    （点节点会收起面板；源不会）。
+   */
+  useEffect(() => {
+    if (!open || !state) return;
+    const onDown = (e: MouseEvent): void => {
+      if (popRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
+  }, [open, state]);
 
   /** 原 `se()` 168-180 */
   const onAnalyze = (): void => {
+    if (!imageUrl) return; // 原 `if (d)` 守卫（源在它之内才展开面板）
     setOpen(true);
-    if (busy) return; // 已在分析 ⇒ **只展开面板**，不重复触发
-    if (!imageUrl) return; // 原 `if (d)` 守卫
+    // ★ 源 `:205-208`：**已有结果 ⇒ 只展开面板、不重跑**（本仓此前缺这一档 ⇒ 再点会白跑一遍）
+    if (hasResult) return;
     void analyze.analyze(nodeId, imageUrl);
   };
 
   /** 原 `ke()` 181-193 */
   const onRevise = (): void => {
     const v = draft.trim();
-    if (!v || busy) return;
+    // 源 `ke()`：`if (!!V && !z)` —— **只**拦 `revising`（不看 `analyzing`）
+    if (!v || state?.status === 'revising') return;
     void analyze.revise(nodeId, v).then((ok) => {
       if (ok) setDraft(''); // ★ 与源一致：**成功才清空输入**
     });
@@ -122,14 +156,15 @@ export function AnalyzePrompt({
             type="button"
             className={styles.analyzeBtn}
             title={ANALYZE_UI_TEXT.buttonTitle}
-            disabled={busy}
+            /* ⚠️ 源 `:308` 用的是 `I`（**只** `analyzing`）—— 写成 `busy` 会让「调整中」也禁用并改文案 */
+            disabled={analyzing}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               onAnalyze();
             }}
           >
-            {busy ? ANALYZE_UI_TEXT.buttonBusy : ANALYZE_UI_TEXT.buttonLabel}
+            {analyzing ? ANALYZE_UI_TEXT.buttonBusy : ANALYZE_UI_TEXT.buttonLabel}
           </button>
         </div>
       )}
@@ -144,6 +179,7 @@ export function AnalyzePrompt({
         <PanelShell
           className={`${styles.pop} nodrag nopan nowheel`}
           testId="analyze-prompt-pop"
+          wrapperRef={popRef}
           title={ANALYZE_UI_TEXT.panelTitle(state.accountName)}
           meta={
             <span
@@ -217,8 +253,9 @@ export function AnalyzePrompt({
             )}
           </Fragment>
 
-          {/* 原 389-407：调整区（`O` = 有分析结果时才有；这里等价于「非忙碌」） */}
-          {!busy && (
+          {/* 原 `:424`：调整区**只在 `status === 'done'` 时**出现（源 `O`）——
+              此前写成 `!busy` ⇒ `error` 态也会露出调整区（源里那时没有）。 */}
+          {state?.status === 'done' && (
             <div className={styles.revise}>
               <input
                 type="text"
@@ -231,7 +268,17 @@ export function AnalyzePrompt({
                   if (e.key === 'Enter') onRevise();
                 }}
               />
-              <button type="button" className={styles.reviseBtn} disabled={!draft.trim()} onClick={onRevise}>
+              {/*
+                ⚠️ 源 `:434/:440` 在按钮上还判了 `z`（`revising`）—— 但**调整区整体只在 `done` 时渲染**
+                （`:424` 的 `O`）⇒ `z` 在这里**恒为 false**，那两处是**源的死代码**。
+                ⇒ 本仓不照抄死代码（TS 也会直接报「`'done'` 与 `'revising'` 无交集」）。
+              */}
+              <button
+                type="button"
+                className={styles.reviseBtn}
+                disabled={!draft.trim()}
+                onClick={onRevise}
+              >
                 {ANALYZE_UI_TEXT.reviseSubmit}
               </button>
             </div>

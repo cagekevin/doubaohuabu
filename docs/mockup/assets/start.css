@@ -1,0 +1,369 @@
+/*
+ * 启动页设计稿 · 设计层（叠在 `spec/ui-real.css` 之上）
+ *
+ * ── 与真机的关系 ──
+ *   · 本文件 = **新设计**，同特异性靠书写顺序取胜 ⇒ 这里写的覆盖真机那份。
+ *   · 定稿后：① 设计层 token → `src/styles/tokens.css`；② 组件规则 → `StartPage.module.css`；
+ *             ③ 重跑 export ⇒ 两边一致。
+ *
+ * ── 这个页面**没动**的真机容器布局（碰它就是改错）──
+ *   · `.page` = 满高 + 居中 + 纵向 flex（`StartPage.module.css:9-16`）；
+ *   · `.history { min-width: 320px }`（`:22-27`）；
+ *   · `.projectItem` 一行两件：主区 `flex:1` + 删除钮（`:31-39`）；
+ *   · `.projectMain` 名左 / 相对时间右（`justify-content: space-between`，`:43-56`）。
+ *   只在它给的框里改皮肤：字号 · 行高 · 圆角 · 间距 · 配色 · 图标（字符 ⇒ 统一 SVG）。
+ */
+
+/*
+ * ★★ **mockup 专用，不进真机**
+ *   真机 `reset.css:12-17` 给 `html,body,#root { height:100% }`、`:26` 给 `body { overflow:hidden }`
+ *   （桌面应用不出现页面级滚动条 —— 那是**产品**的正确行为）。
+ *   设计稿在首屏之下还有「元素一览」⇒ 必须能滚，且 `#root` 那套 `height:100%` 在静态稿里不成立。
+ */
+html,
+body {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+}
+
+/*
+ * ★★ **这一行要回套真机**（与 `activate.css` 同一份修正，两处同源不同位置）
+ *
+ * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.btnGhost` / `.libIcon` …）整个住在
+ *       `@layer base`（`ui-real.css:1776`）；`reset.css:37-42` 的 `button{background:none;border:none;padding:0}`
+ *       是**未分层** ⇒ 按 CSS 规范「未分层 > 分层」⇒ **所有真机按钮丢掉底色、边框与内边距**
+ *       （实测：同一个 `btn btnPrimary` 挂 `<div>` 是蓝底白字，挂 `<button>` 全透明）。
+ * 解法：用 CSS 自己的 `revert-layer` 把这几个属性**交还给下一层** ⇒ 正好退回 `@layer base` 的按钮真源，
+ *       皮肤仍然只有**真源那一份**，设计层不抄第二遍。
+ * `color` 同理：`reset.css:29-35` 的 `color: inherit` 未分层，会压过 `.btn*` 的前景色。
+ */
+button {
+  background: revert-layer;
+  border: revert-layer;
+  padding: revert-layer;
+}
+
+button,
+input,
+textarea,
+select {
+  color: revert-layer;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   设计层 token
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --mk-brand-mark-size: 34px;
+  --mk-sheet-w: 1180px;
+  /* 启动页是"落地的一屏" ⇒ 历史区宽一些更好扫；真机只有下限 320px，这里给它一个视觉上限 */
+  --mk-history-w: 420px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   图标 / 开关条（设计稿外壳，不进真机）
+   ══════════════════════════════════════════════════════════════ */
+.mk-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mk-switchbar,
+.mk-stateswitch {
+  position: sticky;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mk-switchbar { top: 0; }
+
+.mk-stateswitch {
+  bottom: 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+}
+
+.mk-switchbar-label {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+}
+
+.mk-switchbar-note { color: var(--color-text-faint); }
+
+.mk-switchbar-link {
+  color: var(--color-action-primary);
+  text-decoration: none;
+}
+
+.mk-seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+}
+
+.mk-seg button {
+  padding: 3px 10px;
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mk-seg button.is-on {
+  background: var(--color-surface-raised);
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 1px 2px var(--color-shadow);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ① 真机形态 · 视觉重做
+   ══════════════════════════════════════════════════════════════ */
+.StartPage-page {
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-4);
+}
+
+/*
+ * 品牌行 —— 加一颗品牌标记。
+ * ★ 这一屏没有别的东西抢注意力：品牌是**唯一的大字**，不必再加分隔线 / 副卡去强调。
+ */
+.StartPage-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.StartPage-brandName {
+  font-size: var(--font-size-2xl);
+  letter-spacing: 0.02em;
+}
+
+.StartPage-brandTagline {
+  font-size: var(--font-size-sm);
+}
+
+.StartPage-history {
+  width: var(--mk-history-w);
+  gap: var(--space-1);
+}
+
+.StartPage-historyLabel {
+  padding: 0 var(--space-1);
+  font-weight: var(--font-weight-bold);
+}
+
+/*
+ * 工程行 —— 三条改动都落在"让它像一行可点的东西"：
+ *   ① 悬停由「底色 + 描边同时变」收敛为**只变底色 + 出现一个"打开"箭头**（真正的下一步提示）；
+ *   ② 名字给 `text-overflow`（长项目名是常态，不截断就会把右侧时间挤出去）；
+ *   ③ 行内不再有分隔线，靠间隔区分 —— 层级只靠三层底。
+ */
+.StartPage-projectItem {
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.StartPage-projectItem.is-hover {
+  background: var(--color-surface-hover);
+}
+
+.StartPage-projectMain {
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  /*
+   * 主区是"透明的可点区域"（真源 `.projectMain` 本来就写 `background: transparent`）。
+   * ⚠️ 上面那条 `revert-layer` 对**所有** button 生效，而它在 `@layer base` 里找不到
+   *    `.projectMain`（这条规则住 `StartPage.module.css`，未分层）⇒ 会退回初始值 —— 正好是透明。
+   *    此处显式写回，是为了让这个结果**不依赖那条推演**。
+   */
+  background: transparent;
+  border: 0;
+}
+
+.StartPage-projectMain > span:first-child {
+  overflow: hidden;
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.StartPage-projectMeta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 就地重命名：输入框替掉主区（真机 `editingId === p.id`）*/
+.StartPage-projectInput {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  font-weight: var(--font-weight-bold);
+}
+
+.mk-inline-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 var(--space-2);
+  color: var(--color-action-primary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.mk-list-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-1) var(--space-1) 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+}
+
+/*
+ * 两个动作 —— 固定宽度对齐成一列。
+ * ★ `newProject` 是**这一屏唯一的主色**（口径 ②）；`importProject` 是 ghost（透明底）⇒ 主次分明。
+ */
+.StartPage-newProject,
+.StartPage-importProject {
+  width: var(--mk-history-w);
+  height: 38px;
+  font-size: var(--font-size-md);
+}
+
+.StartPage-newProject {
+  font-weight: var(--font-weight-bold);
+}
+
+/* ── 列表状态演示：只留 `data-when` 命中当前模式的那一组 ── */
+.StartPage-page [data-when] { display: none; }
+
+body[data-mode="normal"] .StartPage-page [data-when~="normal"],
+body[data-mode="editing"] .StartPage-page [data-when~="editing"],
+body[data-mode="empty"] .StartPage-page [data-when~="empty"] {
+  display: flex;
+}
+
+/* history 是块级容器 */
+body[data-mode="normal"] .StartPage-page [data-when~="normal"].StartPage-history,
+body[data-mode="editing"] .StartPage-page [data-when~="editing"].StartPage-history {
+  display: flex;
+}
+
+/* editing 模式下那一行要正常显示（它不是独占的，与其余四行共存）*/
+body[data-mode="editing"] .StartPage-page [data-when~="editing"].StartPage-projectItem {
+  display: flex;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ② 元素一览（设计稿辅助视图，不是产品界面）
+   ══════════════════════════════════════════════════════════════ */
+.mk-sheet {
+  max-width: var(--mk-sheet-w);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) 96px;
+}
+
+.mk-sheet-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-lg);
+  color: var(--color-text-strong);
+}
+
+.mk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.mk-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-self: start;
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.mk-cell-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+}
+
+.mk-cell-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mk-cell-hint {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-faint);
+}
+
+.mk-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mk-row-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.mk-relrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.mk-cell code {
+  padding: 1px 4px;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* 一览里的两个动作恢复自适应宽度（不受"固定宽度对齐"那条影响）*/
+.mk-cell .StartPage-newProject,
+.mk-cell .StartPage-importProject {
+  width: auto;
+  min-width: 200px;
+}
+
+/* 删除钮的**悬停**态没法用真实 hover 截图 ⇒ 一个 `.is-danger` 把它摊开（与真机同色，来自 `.libIconDel:hover`）*/
+.StartPage-projectDelete.is-danger {
+  color: var(--color-danger-text);
+}

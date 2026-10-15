@@ -68,6 +68,16 @@ describe('filterPoolAccounts（原 `Bk` 34515）', () => {
     expect(filterPoolAccounts(list, { type: 'gpt' }).map((a) => a.id)).toEqual(['b']);
   });
 
+  it('★ ② `type` **缺失/未知** ⇒ 归一化为 `doubao`（与「显式账号」路径同一判据）', () => {
+    // 源里这两条路判据不一致（显式 `|| 'doubao'` / 池 `|| ''`）⇒ 同一账号两条路结论相反。
+    // 本仓收口为同一个 `normalizeAccountType`：`type` 为空的账号，池选号**也要能选中**。
+    // ⚠️ `Account.type` 是必填联合 ⇒ 这里用 `as` 造一份「盘上真可能出现的畸形数据」
+    //   （旧版本建的号 / 导入的号可能缺 `type`）—— 这正是本条要覆盖的场景。
+    const bare = { ...acc('a'), type: '' } as unknown as Account;
+    expect(filterPoolAccounts([bare], { type: 'doubao' }).map((a) => a.id)).toEqual(['a']);
+    expect(filterPoolAccounts([bare], { type: 'dola' }).map((a) => a.id)).toEqual([]);
+  });
+
   it('★ ③ `ungrouped` ⇒ **没有分组**的账号（`groupId` 为 null/空）', () => {
     const list = [acc('a', 'doubao', { groupId: null }), acc('b', 'doubao', { groupId: 'g1' })];
     expect(filterPoolAccounts(list, { groupId: UNGROUPED }).map((a) => a.id)).toEqual(['a']);

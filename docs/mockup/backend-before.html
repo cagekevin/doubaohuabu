@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<!--
+  豆包画布 · **豆包后台**界面设计稿（第二个界面）
+
+  打开即可（纯静态）：file:// 双击，或 `npx serve docs/mockup`
+  与 `index.html`（首页）**是两个互斥界面** —— 真机 `AppShell` 二选一，
+  「资源栏」属首页、「账号栏」属后台，两侧栏不共存（用户裁定）。
+
+  ── 与真机的关系（同首页）──
+    · 类名 = 真机类名（`AccountPanel-*` / `BackendView-*` …），可读前缀由
+      `npm run css -- export` 导出；`composes` 祖先必须一并写上（跑
+      `node docs/mockup/tools/check-classes.mjs backend.html` 校验）
+    · 文案 = `src/constants/*.ts` 逐字
+    · 视觉 = `assets/mockup.css`（共享设计语言）+ `assets/backend-before.css`（后台专用）
+
+  ⚠️ 后台的**弹窗特别多**（13 个）⇒ 页面下方单列「弹窗一览」区，逐个成格。
+-->
+<html lang="zh-CN" data-theme="light" data-brand="indigo" data-shape="standard" data-density="standard">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>豆包画布 · 豆包后台（设计稿）</title>
+<link rel="stylesheet" href="./spec/ui-real.css" />
+<link rel="stylesheet" href="./assets/mockup.css" />
+<link rel="stylesheet" href="./assets/backend-before.css" />
+</head>
+<body>
+
+<div class="mk-switchbar">
+  <span class="mk-switchbar-label">设计稿开关</span>
+  <span class="mk-seg" data-set="data-theme">
+    <button data-val="light" class="is-on">亮</button>
+    <button data-val="dark">暗</button>
+  </span>
+  <span class="mk-seg" data-set="data-brand">
+    <button data-val="indigo" class="is-on">靛</button>
+    <button data-val="blue">蓝</button>
+    <button data-val="violet">紫</button>
+    <button data-val="green">绿</button>
+  </span>
+  <span class="mk-seg" data-set="data-density">
+    <button data-val="compact">紧</button>
+    <button data-val="standard" class="is-on">标准</button>
+    <button data-val="loose">松</button>
+  </span>
+  <span class="mk-switchbar-note"><a href="./index.html">← 回首页设计稿</a></span>
+</div>
+
+<!-- 图标（与首页同一套；静态稿不便于跨文档引用，故本地一份）-->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M6.5 7 7.4 19a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 4.5V10H15"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M6 4v7a6 6 0 0 0 12 0V4"/><path d="M6 9.5h4M14 9.5h4"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20H4z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7.5 11 4.5 4.5L16.5 11"/><path d="M4.5 19.5h15"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 4.5-4.5 3.5 3.5 3-3 5 5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 5 6v6c0 4.2 2.9 7.4 7 8.5 4.1-1.1 7-4.3 7-8.5V6l-7-2.5Z"/><path d="m9.2 12 2 2 3.6-3.8"/></symbol>
+  <symbol id="i-group" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="8" height="8" rx="1.5"/><rect x="12.5" y="12.5" width="8" height="8" rx="1.5"/><path d="M11.5 7.5h5.5a1.5 1.5 0 0 1 1.5 1.5v3.5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.4 3.3 5.3 3.3 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.3-5.3-3.3-8.5S9.8 5.9 12 3.5Z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 13h6l-1 8 8-10h-6l1-8Z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></symbol>
+</svg>
+
+<div class="AppShell-app">
+
+  <!-- 错误横幅（后台同样有）-->
+  <div class="banner">
+    <span class="bannerMsg">lovart01 会话已失效，已跳过该账号</span>
+    <button class="btn btnSm btnGhost" title="关闭此提示">关闭此提示</button>
+    <button class="btn btnSm btnGhost" title="全部清除">全部清除</button>
+  </div>
+
+  <div class="AppShell-mainArea">
+    <div class="AppShell-pageRow">
+
+      <!-- ── 左栏：账号（**只属于后台界面**）── -->
+      <aside class="AppShell-side" aria-label="账号栏">
+        <button class="AppShell-sideToggle" title="收起账号栏" aria-label="收起账号栏">
+          <svg class="mk-icon"><use href="#i-chevron"/></svg>
+        </button>
+        <div class="AppShell-sideClip">
+          <div class="AccountPanel-column">
+
+            <!-- 有选中才出现（原 `OP.jsx:816-820`）-->
+            <div class="panelHead">
+              <span class="panelHeadActions">
+                <button class="btn btnSm btnGhost AccountPanel-deselectBtn" title="取消所有选中">取消 2 个选中</button>
+              </span>
+            </div>
+
+            <!-- 工具行（原 `.account-tool-row`）—— **真机 6 个**：导入 / 导出 / 指纹体检 / 出口代理 / 清理缓存 / 分组 -->
+            <div class="AccountPanel-toolRow">
+              <button class="btn btnPrimary btnBlock AccountPanel-addBtn">
+                <svg class="mk-icon"><use href="#i-plus"/></svg>＋ 添加账号
+              </button>
+              <button class="btn btnSm btnGhost AccountPanel-toolBtn" title="从备份文件导入豆包账号（含登录状态）">
+                <svg class="mk-icon"><use href="#i-download"/></svg>导入
+              </button>
+              <button class="btn btnSm btnGhost AccountPanel-toolBtn" title="导出已登录账号（含登录凭证）">
+                <svg class="mk-icon"><use href="#i-external"/></svg>导出
+              </button>
+              <button class="btn btnSm btnGhost AccountPanel-toolBtn" title="跨账号指纹关联扫描：看哪些账号的环境指纹高度重合（重合越多越像同一台设备）">
+                <svg class="mk-icon"><use href="#i-search"/></svg>指纹体检
+              </button>
+              <button class="btn btnSm btnGhost AccountPanel-toolBtn" title="配置 Lovart 出口代理">
+                <svg class="mk-icon"><use href="#i-globe"/></svg>🌐 出口代理
+              </button>
+              <button class="btn btnSm btnGhost AccountPanel-toolBtn" title="清理账号缓存">
+                <svg class="mk-icon"><use href="#i-trash"/></svg>清理缓存
+              </button>
+              <button class="btn btnSm btnGhost AccountPanel-toolBtn" title="管理账号分组（新建 / 重命名 / 颜色 / 自启动 / 移组）">
+                <svg class="mk-icon"><use href="#i-group"/></svg>分组
+              </button>
+            </div>
+
+            <!-- ★ 实时隔离体检条（原 `OP.jsx:854-858`）：账号 ≥2 才出现，自带三态摘要，
+                 与「指纹体检」打开**同一个**面板 -->
+            <button class="btn btnSm btnBlock AccountPanel-fpHealth AccountPanel-fpHealthWarn" title="实时隔离体检：点击查看跨账号指纹关联扫描详情">
+              🟡 隔离提示：2 对高度相似
+            </button>
+
+            <!-- 账号列表（每行的控件**按真机判据**出现，不是一律画满）-->
+            <ul class="AccountPanel-list">
+              <!-- ① 豆包01：已登录 ⇒ 无「检测登录」；doubao 不支持画廊 ⇒ 无 📷 -->
+              <li class="AccountPanel-row AccountPanel-rowActive">
+                <div class="AccountPanel-rowMain" title="当前选中 + 后台">
+                  <span class="AccountPanel-avatar">豆</span>
+                  <span class="AccountPanel-metaCol">
+                    <span class="AccountPanel-name">豆包01</span>
+                    <span class="AccountPanel-meta">doubao · 已登录</span>
+                  </span>
+                </div>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="指纹诊断（仅 Windows）">🔍</button>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="重新生成该账号浏览器指纹（生成后后台以全新身份出现）">↻</button>
+                <button class="AccountPanel-autoStartSwitch AccountPanel-autoStartOn" role="switch" aria-checked="true" title="本会话保持开启（下次启动仍默认关闭）— 点击恢复按需模式"><span class="AccountPanel-autoStartKnob"></span></button>
+                <button class="btn btnIcon btnGhost libIcon libIconDel AccountPanel-iconDel" title="移除账号（同时清理该账号的数据）"><svg class="mk-icon"><use href="#i-x"/></svg></button>
+              </li>
+
+              <!-- ② lovart01：未登录 ⇒ 有「检测登录」；lovart 支持画廊 ⇒ 有 📷 -->
+              <li class="AccountPanel-row">
+                <div class="AccountPanel-rowMain" title="点击选择账号（关闭时不加载页面）；Ctrl+点击多选；右键移动到分组">
+                  <span class="AccountPanel-avatar">L</span>
+                  <span class="AccountPanel-metaCol">
+                    <span class="AccountPanel-name">lovart01</span>
+                    <span class="AccountPanel-meta">lovart · 未登录</span>
+                  </span>
+                </div>
+                <button class="btn btnSm AccountPanel-rowBtn"><svg class="mk-icon"><use href="#i-search"/></svg>检测登录</button>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="打开「lovart01」的 Tapnow 画廊">📷</button>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="指纹诊断（仅 Windows）">🔍</button>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="重新生成该账号浏览器指纹（生成后后台以全新身份出现）">↻</button>
+                <button class="AccountPanel-autoStartSwitch" role="switch" aria-checked="false" title="按需模式：任务需要时自动加载，完成后释放 — 点击可在本会话保持开启"><span class="AccountPanel-autoStartKnob"></span></button>
+                <button class="btn btnIcon btnGhost libIcon libIconDel AccountPanel-iconDel" title="移除账号（同时清理该账号的数据）"><svg class="mk-icon"><use href="#i-x"/></svg></button>
+              </li>
+
+              <!-- ③ dola01：已登录 ⇒ 无「检测登录」；dola 不支持画廊 ⇒ 无 📷 -->
+              <li class="AccountPanel-row">
+                <div class="AccountPanel-rowMain" title="点击选择账号（关闭时不加载页面）；Ctrl+点击多选；右键移动到分组">
+                  <span class="AccountPanel-avatar">d</span>
+                  <span class="AccountPanel-metaCol">
+                    <span class="AccountPanel-name">dola01</span>
+                    <span class="AccountPanel-meta">dola · 已登录</span>
+                  </span>
+                </div>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="指纹诊断（仅 Windows）">🔍</button>
+                <button class="btn btnIcon btnGhost libIcon AccountPanel-iconBtn" title="重新生成该账号浏览器指纹（生成后后台以全新身份出现）">↻</button>
+                <button class="AccountPanel-autoStartSwitch" role="switch" aria-checked="false" title="按需模式：任务需要时自动加载，完成后释放 — 点击可在本会话保持开启"><span class="AccountPanel-autoStartKnob"></span></button>
+                <button class="btn btnIcon btnGhost libIcon libIconDel AccountPanel-iconDel" title="移除账号（同时清理该账号的数据）"><svg class="mk-icon"><use href="#i-x"/></svg></button>
+              </li>
+            </ul>
+
+            <!-- 面板底部操作条（原 `OP.jsx:925-941` 的 `.panel-foot`）-->
+            <div class="AccountPanel-foot">
+              <label class="mk-switch is-on" title="开启后节点移动自动吸附到网格线">
+                <span class="mk-switch-knob"></span>
+              </label>
+              <span class="mk-foot-label">网格吸附</span>
+              <span class="mk-foot-grow"></span>
+              <button class="btn btnSm btnGhost"><svg class="mk-icon"><use href="#i-home"/></svg>返回首页</button>
+              <button class="btn btnSm btnGhost"><svg class="mk-icon"><use href="#i-trash"/></svg>清空画布</button>
+            </div>
+
+            <!-- ★「API 服务」入口（原 `_Component48.jsx:155-159`）-->
+            <div class="AppShell-sideApiCol">
+              <button class="btn btnSm AppShell-sideApiBtn" title="配置 API 服务商与密钥">
+                <span class="AppShell-sideApiIcon">⚡</span>API 服务
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ── 中：后台视图（原 `_Component43`）── -->
+      <div class="AppShell-centerStage">
+        <div class="BackendView-view">
+
+          <!-- 头部工具栏（原 `.doubao-view-head`，`_Component43.jsx:3225-3271`）-->
+          <div class="BackendView-head">
+            <div class="BackendView-headClip">
+              <div class="BackendView-headInner">
+                <div class="BackendView-headTitle">豆包对话后台 · 豆包01</div>
+                <div class="BackendView-actions">
+                  <button class="btn btnSm BackendView-headBtn" title="刷新该账号页面">
+                    <svg class="mk-icon"><use href="#i-refresh"/></svg>刷新
+                  </button>
+                  <button class="btn btnSm BackendView-headBtn">
+                    <svg class="mk-icon"><use href="#i-external"/></svg>浏览器打开
+                  </button>
+                  <button class="btn btnSm BackendView-headBtn">
+                    <svg class="mk-icon"><use href="#i-image"/></svg>无水印资源（3）
+                  </button>
+                  <button class="btn btnSm btnPrimary BackendView-headBtnPrimary">
+                    <svg class="mk-icon" style="transform:rotate(180deg)"><use href="#i-external"/></svg>返回画布
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button class="btn btnSm btnGhost BackendView-headToggle" title="收起顶部工具栏" aria-label="收起顶部工具栏">∧</button>
+          </div>
+
+          <!-- webview 区（模拟豆包对话页；真机是 `<webview>`）-->
+          <div class="BackendView-webviews">
+            <div class="BackendView-webview BackendView-webviewActive">
+              <div class="bk-page">
+                <div class="bk-page-bar">
+                  <span class="bk-dot"></span><span class="bk-dot"></span><span class="bk-dot"></span>
+                  <span class="bk-url">www.doubao.com</span>
+                </div>
+                <div class="bk-page-body">
+                  <div class="bk-msg is-me">帮我写一段精华胶囊的产品文案</div>
+                  <div class="bk-msg">好的，这是一版偏功效向的文案…</div>
+                  <div class="bk-msg is-me">再给我一版更短的版本</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     后台的弹窗一览（**13 个**）—— 它们都要触发才出现，故单列成格
+     ══════════════════════════════════════════════════════════════════ -->
+<section class="mk-gallery">
+  <h2 class="mk-gallery-title">豆包后台的弹窗 / 浮层（13 个）</h2>
+  <div class="mk-gallery-grid">
+
+    <!-- ① 选择账号类型（真机 `.body` 是 **两列**网格；卡片走 `AccountTypePicker-card` 真源类）-->
+    <div class="mk-cell">
+      <div class="mk-cell-title">① 选择账号类型（点「＋ 添加账号」）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead"><span class="panelTitle">选择账号类型</span></div>
+          <div class="panelBody">
+            <div class="AccountTypePicker-body">
+              <button class="AccountTypePicker-card">
+                <span class="AccountTypePicker-emoji">🫘</span>
+                <span class="AccountTypePicker-name">豆包</span>
+                <span class="AccountTypePicker-desc">登录 www.doubao.com，沿用现有流程</span>
+              </button>
+              <button class="AccountTypePicker-card">
+                <span class="AccountTypePicker-emoji">🎬</span>
+                <span class="AccountTypePicker-name">dola</span>
+                <span class="AccountTypePicker-desc">登录 www.dola.com/chat/，操作逻辑与豆包一致</span>
+              </button>
+              <button class="AccountTypePicker-card">
+                <span class="AccountTypePicker-emoji">🎨</span>
+                <span class="AccountTypePicker-name">Lovart</span>
+                <span class="AccountTypePicker-desc">登录 www.lovart.ai/zh，用于登录与后台浏览</span>
+              </button>
+              <button class="AccountTypePicker-card">
+                <span class="AccountTypePicker-emoji">✨</span>
+                <span class="AccountTypePicker-name">Tapnow</span>
+                <span class="AccountTypePicker-desc">进入 app.tapnow.media/home，支持邮箱验证链接登录</span>
+              </button>
+              <button class="AccountTypePicker-card">
+                <span class="AccountTypePicker-emoji">🤖</span>
+                <span class="AccountTypePicker-name">GPT</span>
+                <span class="AccountTypePicker-desc">登录 chatgpt.com，登录后可在文生图面板选号（出图链路后续上线）</span>
+              </button>
+              <button class="AccountTypePicker-card">
+                <span class="AccountTypePicker-emoji">🌐</span>
+                <span class="AccountTypePicker-name">其他</span>
+                <span class="AccountTypePicker-desc">手动输入网址，进入任意网站（仅浏览，独立会话）</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ② 登录弹窗 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">② 登录弹窗（选平台之后）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead">
+            <span class="panelTitle">登录豆包账号</span>
+            <span class="panelHeadActions"><button class="btn btnIcon btnGhost panelClose">✕</button></span>
+          </div>
+          <div class="panelBody">
+            <div class="bk-page" style="height:120px"><div class="bk-page-body"><div class="bk-msg">请在下方完成登录</div></div></div>
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm">在浏览器打开</button>
+            <button class="btn btnSm btnPrimary">完成登录</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ 指纹体检（`FingerprintScanPanel`）：实时算的**体检报告**（不进 store，只有历史持久化）-->
+    <div class="mk-cell">
+      <div class="mk-cell-title">③ 指纹体检（关联扫描报告）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead"><span class="panelTitle">跨账号指纹关联扫描</span></div>
+          <div class="panelBody">
+            <div class="mk-cell-hint">扫描账号: 3 个（0 个无指纹记录已跳过）</div>
+            <div class="mk-cell-hint">比对配对: 3 对</div>
+            <div class="mk-fp-line is-crit">🔴 完全关联(全维重合): 1 对</div>
+            <div class="mk-fp-line is-warn">🟡 高度相似(≥70%重合): 1 对</div>
+            <div class="mk-fp-line">🔴 豆包01 ⇄ dola01：重合 6/6 维 [ua、语言、分辨率…]</div>
+            <div class="mk-fp-line">  分辨率: 1 个不同值 （无隔离力）</div>
+            <div class="mk-cell-hint">历史（1） · 3 账号 / 3 对</div>
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm">复制报告</button>
+            <button class="btn btnSm btnGhost">清空历史</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ 导出账号：勾选**已登录**账号 → 逐个取 cookie → 组 JSON → 保存 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">④ 导出账号（含登录凭证）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead"><span class="panelTitle">导出账号</span></div>
+          <div class="panelBody">
+            <button class="mk-menu-item" style="width:100%">豆包01</button>
+            <button class="mk-menu-item" style="width:100%">dola01</button>
+            <div class="mk-cell-hint">共 2 张</div>
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm btnGhost">全选</button>
+            <button class="btn btnSm btnGhost">取消全选</button>
+            <button class="btn btnSm btnPrimary">导出选中 (2)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑤ 出口代理池：每行一个代理，保存后**按序轮询分配独立出口 IP**；预览 = 已保存的分配 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑤ Lovart 出口代理池（按序分配独立 IP）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead"><span class="panelTitle">Lovart 出口代理池</span></div>
+          <div class="panelBody">
+            <textarea class="field textarea" style="width:100%">http://a:8080&#10;http://b:8080</textarea>
+            <div class="mk-cell-hint">已保存的分配（2 条）</div>
+            <div class="mk-menu-item">1 · http://a:8080<span class="mk-foot-grow"></span><span class="mk-chip">lovart01</span></div>
+            <div class="mk-menu-item">2 · http://b:8080<span class="mk-foot-grow"></span><span class="mk-chip">lovart02</span></div>
+          </div>
+          <div class="panelFoot"><button class="btn btnSm btnPrimary">保存并自动分配</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑥ 分组管理：新建 / 重命名 / 删除 / 颜色 / 自启动 + **账号移组** -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑥ 分组管理（颜色/自启动/移组）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead"><span class="panelTitle">分组管理</span></div>
+          <div class="panelBody">
+            <div class="mk-group-row">
+              <span class="mk-swatch" style="background:var(--color-node-material)" title="设置分组颜色"></span>
+              <span class="AccountPanel-name">主图系列</span>
+              <span class="mk-foot-grow"></span>
+              <span class="mk-chip">自启动</span>
+              <button class="btn btnIcon btnGhost libIcon" title="删除分组"><svg class="mk-icon"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="mk-form-row"><span class="mk-form-label">账号分组</span>
+              <span class="mk-picker">未分组<svg class="mk-icon"><use href="#i-chevron"/></svg></span>
+            </div>
+            <input class="field" style="width:100%" placeholder="输入分组名称" />
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm btnPrimary">新建分组</button>
+            <button class="btn btnSm btnGhost">完成</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑦ API 服务：**通道配置** + **每个 provider 一张卡**（开关 / 地址 / 密钥 / 保存 / 测试连接）-->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑦ API 服务（通道 + provider 卡）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead"><span class="panelTitle">API 服务</span></div>
+          <div class="panelBody">
+            <div class="mk-form-row"><span class="mk-form-label">图片通道</span><span class="mk-picker">OpenAI 兼容<svg class="mk-icon"><use href="#i-chevron"/></svg></span></div>
+            <div class="mk-form-row"><span class="mk-form-label">视频通道</span><span class="mk-picker">未启用<svg class="mk-icon"><use href="#i-chevron"/></svg></span></div>
+            <div class="mk-form-row"><span class="mk-form-label">并发</span><input class="field mk-number" value="3" /></div>
+            <div class="mk-cell-hint">今日额度 128 / 500</div>
+            <div class="mk-card">
+              <div class="mk-card-head">
+                <b>OpenAI 兼容</b><span class="mk-foot-grow"></span>
+                <button class="AccountPanel-autoStartSwitch AccountPanel-autoStartOn" role="switch" aria-checked="true"><span class="AccountPanel-autoStartKnob"></span></button>
+              </div>
+              <input class="field" style="width:100%" value="https://api.example.com/v1" />
+              <input class="field" style="width:100%" value="sk-••••••••" />
+            </div>
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm btnPrimary">保存</button>
+            <button class="btn btnSm btnGhost">测试连接</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑧ 无水印资源：数据源 = **CDP 捕获列表**（图 + 视频）；四动作：下载到（+更改）· 清空 · 下载 · 原链接 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑧ 无水印资源（CDP 捕获 · 图 + 视频）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead">
+            <span class="panelTitle">无水印资源</span>
+            <span class="panelHeadMid">图 2 · 视频 1</span>
+          </div>
+          <div class="panelBody">
+            <div class="mk-form-row">
+              <span class="mk-form-label">下载到：</span>
+              <span class="mk-picker">系统默认<svg class="mk-icon"><use href="#i-chevron"/></svg></span>
+              <button class="btn btnSm btnGhost">更改</button>
+            </div>
+            <div class="mk-picker-grid">
+              <span class="mk-picker-item mk-ph mk-ph-a"></span>
+              <span class="mk-picker-item mk-ph mk-ph-b"></span>
+            </div>
+            <div class="mk-menu-item">图片 · 2.1 MB<span class="mk-foot-grow"></span>
+              <button class="btn btnSm btnGhost">下载</button><button class="btn btnSm btnGhost">原链接</button></div>
+          </div>
+          <div class="panelFoot"><button class="btn btnSm btnGhost">清空</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑨ 账号画廊：**单账号**；勾选缩略图 → 底部「添加到画布 (N)」 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑨ 账号画廊（勾选 → 添加到画布）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead">
+            <span class="panelTitle">🎨 Tapnow 画廊 · lovart01</span>
+            <span class="panelHeadMid">已选 1 · 共 3 张</span>
+          </div>
+          <div class="panelBody">
+            <div class="mk-picker-grid">
+              <span class="mk-picker-item is-checked mk-ph mk-ph-d"></span>
+              <span class="mk-picker-item mk-ph mk-ph-a"></span>
+              <span class="mk-picker-item mk-ph mk-ph-c"><span class="mk-chip is-info">⚠ 大图</span></span>
+            </div>
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm btnPrimary">添加到画布 (1)</button>
+            <button class="btn btnSm btnGhost">清空</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑩ 账号右键菜单 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑩ 账号右键菜单（移动到…）</div>
+      <div class="mk-cell-body">
+        <div class="panel menu mk-menu mk-pop">
+          <div class="mk-menu-title">移动到… · 2 个账号</div>
+          <button class="mk-menu-item"><svg class="mk-icon"><use href="#i-group"/></svg>主图系列</button>
+          <button class="mk-menu-item"><svg class="mk-icon"><use href="#i-x"/></svg>移出分组（未分组）</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑪ 静默遮罩 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑪ 静默遮罩（页面暂停）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="mk-silent mk-pop">
+            <span class="mk-silent-resume"><svg class="mk-icon"><use href="#i-play"/></svg></span>
+            <div class="mk-cell-hint">「lovart01」处于静默状态 · 页面已暂停（不占用内存 / CPU），点击上方按钮恢复</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑫ 出新图条：**全账号图池聚合**；点缩略图即**发到画布**；带徽标 + 折叠/只留本画布/立即抓取 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑫ 出新图条（全账号聚合 → 点即发画布）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelHead">
+            <span class="panelTitle">出新图</span>
+            <span class="panelHeadActions">
+              <button class="btn btnSm btnGhost">只留本画布</button>
+              <button class="btn btnSm btnGhost" title="折叠">∧</button>
+            </span>
+          </div>
+          <div class="panelBody">
+            <div class="bk-nip">
+              <span class="bk-nip-item mk-ph mk-ph-a"><span class="mk-chip is-brand">NEW</span></span>
+              <span class="bk-nip-item mk-ph mk-ph-b"><span class="mk-chip is-ok">✓ 已发送</span></span>
+              <span class="bk-nip-item mk-ph mk-ph-c"><span class="mk-chip">lovart01</span></span>
+            </div>
+          </div>
+          <div class="panelFoot"><button class="btn btnSm btnPrimary">立即抓取</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑬ Lovart 会话条：内嵌 webview 会被设备信任识别 ⇒ 改用**本机真实 Chrome**（独立 profile）
+         人工登录，再把会话 cookie 同步进 webview 分区。三动作 = 登录 / 同步 / 关闭 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">⑬ Lovart 会话条（真实 Chrome 登录 + 同步）</div>
+      <div class="mk-cell-body">
+        <div class="panel mk-pop">
+          <div class="panelBody">
+            <div class="mk-cell-hint">内嵌视图会被识别，改用本机 Chrome 登录后同步会话</div>
+          </div>
+          <div class="panelFoot">
+            <button class="btn btnSm">在真实 Chrome 登录</button>
+            <button class="btn btnSm btnPrimary">同步会话到画布</button>
+            <button class="btn btnSm btnGhost">关闭 Chrome</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>  </div>
+</section>
+
+<!-- Toast（后台同款）-->
+<div class="toastHost">
+  <div class="toast toastSuccess">✓ 已登录豆包01</div>
+</div>
+
+<script>
+  // 开关条：只改 <html> 上的一个属性（与真机同机制）
+  document.querySelectorAll('.mk-seg').forEach((seg) => {
+    const attr = seg.dataset.set;
+    seg.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.documentElement.setAttribute(attr, b.dataset.val);
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('is-on', x === b));
+      });
+    });
+  });
+</script>
+</body>
+</html>

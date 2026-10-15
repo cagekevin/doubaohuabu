@@ -1,6 +1,8 @@
 # 豆包画布 · UI 设计稿
 
-> 两个界面，各一份（真机 `AppShell` 二选一、互斥）：
+> 四个界面，各一页（真机 `main.tsx` 状态机：**授权门 → 启动页 → 画布外壳**，外壳内首页/后台互斥）：
+> · **授权激活** `activate.html`（`ActivatePage`，只有 `status === 'ok'` 才放行进画布）
+> · **启动页** `start.html`（`StartPage`：历史项目 / 新建 / 导入 .json / 就地重命名 / 删除）
 > · **首页**（画布）`index.html`
 > · **豆包后台** `backend.html`
 > 打开即可（纯静态，`file://` 双击或 `npx serve docs/mockup`）。
@@ -31,6 +33,16 @@
 3. 重跑 `npm run css -- export` ⇒ 设计稿与真机回到同一份真源。
 
 ## 当前覆盖范围
+
+**授权激活**（`activate.html`）：品牌行 · **四条授权 banner**（ok / expired / invalid / tampered，一次只出一条，
+真机 `ActivatePage.tsx:205-261` 的条件渲染）· 重新检测（仅后三态出现）· 机器码区（生成中 / 已生成 /
+按钮禁用三态 + 复制 / 导出文件）· 激活码 textarea（`Cmd/Ctrl+Enter` 提交）· 主按钮三态
+（激活 / 验证中… / 重新激活，同一颗钮）· 页脚 · **msg 提示消息全量** · 元素一览。
+
+**启动页**（`start.html`）：品牌行 · 历史项目列表（名字 + 相对时间五档，`formatRelativeTime`）·
+**就地重命名态**（主区换输入框，删除钮与行不动）· 删除钮（`libIconDel` 悬停转危险色）·
+空态（`BRAND.emptyHistory`）· 导入项目文件（.json，ghost）· ＋ 新建项目（primary，本屏唯一主色）·
+三种列表状态切换 + 元素一览。
 
 **首页**（`index.html`）：顶栏（项目名 · 保存位置 · 授权 · 豆包后台）· 画布（**8 类节点** + 连线 +
 选择工具条 + 组连线锚点 + 批量发送触发条 + Controls + MiniMap）· 发送队列抽屉（两级折叠）· 状态栏 ·

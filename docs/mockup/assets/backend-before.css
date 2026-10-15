@@ -1,0 +1,181 @@
+/*
+ * 豆包后台界面 · 设计层（**第二个界面**；共享设计语言在 `mockup.css`）
+ *
+ * 与首页的关系：两个界面**互斥**（`AppShell` 二选一）——
+ *   · 资源栏只属首页、账号栏只属后台；顶栏 / 错误横幅 / Toast 两边共用。
+ * 本文件只写**后台独有**的形态：账号行卡、模拟 webview、指纹网格、出新图条…
+ */
+
+/* ── 左栏折叠钮：后台的左栏在**左边**，箭头方向与首页右栏相反 ── */
+.AppShell-side .AppShell-sideToggle { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+
+/* ── 账号行（真机 `.rowMain` 只有布局；设计层补"卡片感"与层次）── */
+.AccountPanel-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.AccountPanel-row {
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+.AccountPanel-row:hover { background: var(--color-surface-sunken); }
+/* 当前账号（后台正在显示的那一个）—— 用品牌色左边条，不用整块底色（底色会把列表糊成一片）*/
+.AccountPanel-rowActive {
+  background: var(--color-selection-bg);
+  border-color: var(--color-selected-border);
+}
+.AccountPanel-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-none);
+}
+.AccountPanel-rowActive .AccountPanel-avatar {
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+  border-color: transparent;
+}
+.AccountPanel-metaCol { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.AccountPanel-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-strong);
+}
+.AccountPanel-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-2xs);
+  color: var(--color-text-faint);
+}
+
+/* ── 面板底部操作条 ── */
+.AccountPanel-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.mk-foot-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+.mk-foot-grow { flex: 1; }
+
+/* ── 模拟 webview（真机是 `<webview>`，静态稿用 CSS 画一个"网页"）── */
+.BackendView-webviews { padding: var(--space-2); }
+.BackendView-webview {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  background: var(--color-surface-raised);
+}
+.BackendView-webviewActive { border-color: var(--color-selected-border); }
+.bk-page { display: flex; flex-direction: column; height: 100%; min-height: 160px; }
+.bk-page-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+}
+.bk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+}
+.bk-url {
+  margin-left: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  overflow: auto;
+}
+.bk-msg {
+  max-width: 70%;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-strong);
+}
+/* "我"发的气泡靠右 + 品牌色（对话里区分说话人）*/
+.bk-msg.is-me {
+  align-self: flex-end;
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+}
+
+/* ── 弹窗一览里用到的后台形态 ── */
+/* 选择账号类型：卡片网格 */
+.bk-type-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
+.bk-type {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: left;
+  cursor: pointer;
+}
+.bk-type:hover { border-color: var(--color-border-strong); background: var(--color-surface-sunken); }
+.bk-type-emoji { font-size: var(--font-size-lg); line-height: var(--line-height-none); }
+/* 指纹体检：重合度网格（红=高度重合 / 黄=偏重合 / 绿=正常）*/
+.bk-fp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
+.bk-fp { aspect-ratio: 1 / 1; border-radius: var(--radius-xs); background: var(--color-border); }
+.bk-fp.is-crit { background: var(--color-danger); }
+.bk-fp.is-warn { background: var(--color-warning); }
+.bk-fp.is-ok { background: var(--color-success); }
+/* 出新图条：横向缩略图 */
+.bk-nip { display: flex; gap: var(--space-1); overflow-x: auto; }
+.bk-nip-item {
+  position: relative;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+/* 静默遮罩 */
+.mk-silent {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  text-align: center;
+}
+.mk-silent-resume {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+  cursor: pointer;
+}
+.mk-gallery .mk-switchbar-note a { color: inherit; }

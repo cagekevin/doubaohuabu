@@ -59,6 +59,15 @@ export interface AnalyzeInput {
   /** 退级链（默认 `['doubao','dola']`） */
   chain?: readonly SiteType[];
   timeoutMs?: number;
+  /**
+   * ★ **中间态回调**（原 `gS`/`yS` 的 `onProgress` → `u({analyzePrompt:{status, phase, …}})`）
+   *
+   * ⚠️ 源在**选号完成之后、附图之前**就写第一段（`gS:39155-39168` / `yS:39362-39370`）——
+   *    没有它，用户点了「分析提示词」后**界面毫无反馈**（一直等到出结果或报错）。
+   * ⚠️ 第二段（附图后 / 提问前，`gS:39175` / `yS:39376`）发生在 `site.askWithImage`
+   *    **内部**，本仓这一层够不着 ⇒ 只落第一段（已足以让 UI 显示「生成中 + phase」）。
+   */
+  onProgress?: (patch: AnalyzePromptState) => void;
 }
 
 /** 账号执行信息（源版每次写状态都带上这仨） */
@@ -78,6 +87,10 @@ interface RunAskOptions {
    * ⚠️ 源版 `yS` 在账号忙时直接失败（`busy`），**不会**换号 ⇒ 这里必须单链
    */
   accountHint: Account | null;
+  /** ★ 中间态的状态名（分析 = `analyzing` / 调整 = `revising` —— 源同） */
+  progressStatus: 'analyzing' | 'revising';
+  /** ★ 中间态的 phase 文案（源 `gS:39158` / `yS:39365` 那两句） */
+  phaseAttach: string;
 }
 
 /** 内部：备好后台页 → 提问 → 解析回复 */
@@ -107,6 +120,13 @@ async function runAsk(
     },
     async (ctx) => {
       used = ctx.account;
+      // ★ **中间态第一段**（原 `gS:39155-39168` / `yS:39362-39370`）：选号完成 ⇒ 立刻让界面显示「在跑」
+      input.onProgress?.({
+        status: opts.progressStatus,
+        phase: opts.phaseAttach,
+        at: input.now,
+        ...accountFields(ctx.account),
+      });
       const ask = ctx.site.askWithImage;
       if (!ask) return err('unknown', SEND_TEXT.noCapability(ctx.site.kind, SITE_CAP_TEXT.analyzePrompt));
       const reply = await ask(
@@ -152,6 +172,8 @@ export async function analyzeNodePrompt(
     purpose: 'image-analysis',
     instruction: ANALYZE_INSTRUCTION,
     accountHint: null,
+    progressStatus: 'analyzing',
+    phaseAttach: ANALYZE_TEXT.phaseSendingImage,
   });
 
   if (!res.ok) {
@@ -257,6 +279,8 @@ export async function reviseNodePrompt(
       purpose: 'image-analysis-revision',
       instruction: buildReviseInstruction(base, instruction),
       accountHint: original,
+      progressStatus: 'revising',
+      phaseAttach: ANALYZE_TEXT.phaseReviseNewSession,
     },
   );
 

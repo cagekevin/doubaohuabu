@@ -690,18 +690,32 @@
   <h2 class="mk-gallery-title">首页可弹出的浮层（全套）</h2>
   <div class="mk-gallery-grid">
 
-    <!-- ① AI 提示词弹层 -->
+    <!-- ① AI 提示词弹层（`AnalyzePrompt`）
+         真机用途：**反推图片提示词**（用后台空闲豆包 / Dola 账号）⇒ 文生图 / 素材节点共用；
+         **文生视频节点没有这套**（源不碰 analyzePrompt）。
+         面板结构逐字对源：徽章四态 + 标题「AI 提示词 · 账号名」+ **三 tab（中文/英文/JSON）**
+         + 复制当前 tab + `<pre>` 正文 + 调整区 -->
     <div class="mk-cell">
-      <div class="mk-cell-title">AI 提示词弹层</div>
+      <div class="mk-cell-title">① AI 提示词弹层（反推图片提示词）</div>
       <div class="mk-cell-body">
         <div class="panel mk-pop">
           <div class="panelHead">
             <span class="panelTitle">AI 提示词 · 豆包01</span>
             <span class="panelHeadMid"><span class="mk-chip-status">完成</span></span>
-            <span class="panelHeadActions"><button class="btn btnIcon btnGhost panelClose">✕</button></span>
+            <span class="panelHeadActions">
+              <button class="btn btnSm btnGhost" title="收起">收起</button>
+              <button class="btn btnIcon btnGhost panelClose">✕</button>
+            </span>
           </div>
           <div class="panelBody">
-            <div class="mk-text">模特手持磨砂玻璃精华瓶，逆光勾勒轮廓，米色渐变背景，柔焦</div>
+            <div class="mk-tabs">
+              <button class="mk-tab is-on">中文</button>
+              <button class="mk-tab">英文</button>
+              <button class="mk-tab">JSON</button>
+              <span class="mk-foot-grow"></span>
+              <button class="btn btnSm btnGhost" title="复制中文">复制</button>
+            </div>
+            <pre class="mk-pre">模特手持磨砂玻璃精华瓶，逆光勾勒轮廓，米色渐变背景，柔焦</pre>
             <div class="mk-prompt-row">
               <input class="field" placeholder="想怎么改？如：改成夜景、换成俯拍镜头…" />
               <button class="btn btnSm btnPrimary">调整</button>
@@ -711,9 +725,12 @@
       </div>
     </div>
 
-    <!-- ② 遮脸参数面板 -->
+    <!-- ② 遮脸参数面板（`FaceMaskPanel`）
+         真机用途：**设遮脸参数**（方式四选一 + 强度 + 范围外扩），双击人脸角标打开。
+         ⚠️ 方式是**四颗按钮**（`FACE_MASK_EFFECT_LABEL`：马赛克/模糊/圆点/网格），
+         选中那颗下方给它的 hint —— 此前我画成下拉，是没搞清它干嘛 -->
     <div class="mk-cell">
-      <div class="mk-cell-title">遮脸参数面板</div>
+      <div class="mk-cell-title">② 遮脸参数面板（双击人脸角标打开）</div>
       <div class="mk-cell-body">
         <div class="panel mk-pop">
           <div class="panelHead">
@@ -721,7 +738,14 @@
             <span class="panelHeadActions"><button class="btn btnIcon btnGhost panelClose">✕</button></span>
           </div>
           <div class="panelBody">
-            <div class="mk-form-row"><span class="mk-form-label">遮脸方式</span><select class="mk-select"><option>马赛克</option></select></div>
+            <div class="mk-form-row"><span class="mk-form-label">遮脸方式</span></div>
+            <div class="mk-effect-grid">
+              <button class="mk-effect is-on">马赛克</button>
+              <button class="mk-effect">模糊</button>
+              <button class="mk-effect">圆点</button>
+              <button class="mk-effect">网格</button>
+            </div>
+            <div class="mk-cell-hint">块状像素化，最常用</div>
             <div class="mk-form-row"><span class="mk-form-label">强度</span><input type="range" class="mk-range" /></div>
             <div class="mk-form-row"><span class="mk-form-label">范围外扩</span><input type="range" class="mk-range" /></div>
             <div class="mk-cell-hint">单击角标即按此参数遮脸（当前 2 张脸）</div>
@@ -922,6 +946,25 @@
               <span>拖入图片</span><span class="mk-cell-hint">或点击「添加」</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑪b 动画（生成中 / 加载）—— 真机 `.gvw-dots` 只有静态样式，跳动在这里补 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">动画：生成中 / 加载</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="mk-waiting">
+            <span class="mk-dots"><span></span><span></span><span></span></span>
+            <span class="mk-waiting-text">正在生成 · 出图后展示在这里</span>
+          </div>
+          <div class="mk-form-row">
+            <span class="spinnerRing"></span>
+            <span class="spinnerText">生成中…</span>
+            <span class="mk-task-track" style="flex:1"><span class="mk-task-fill" style="width:40%"></span></span>
+          </div>
+          <div class="mk-cell-hint">三点跳动 1000ms 错峰 150ms · 圆环 800ms · 进度条宽度过渡</div>
         </div>
       </div>
     </div>

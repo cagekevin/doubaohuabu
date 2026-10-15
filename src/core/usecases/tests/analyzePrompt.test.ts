@@ -176,8 +176,22 @@ describe('analyzeNodePrompt · 成功与解析失败', () => {
     expect(asked[0]!.imageUrl).toBe('img://a.png');
     expect(asked[0]!.instruction).toContain('但最终只输出一个 JSON 对象');
     expect(asked[0]!.instruction).toContain('zh_prompt');
-    // 换行是 **CRLF**（源版 `.join('\r\n')`）—— 改了就是改了模型输入
-    expect(asked[0]!.instruction).toContain('\r\n');
+    // 换行是 **LF** —— 源版写的是 ``.join(`<真实换行>`)``（模板字符串），其值就是 `\n`。
+    // ⚠️ 此前这条断言锁的是 `'\r\n'`（与源相反）⇒ 已按源改正。
+    expect(asked[0]!.instruction).toContain('\n');
+    expect(asked[0]!.instruction).not.toContain('\r\n');
+  });
+
+  it('★ 中间态：选号完成 ⇒ 先写 `analyzing` + phase（原 `gS:39155-39168`）', async () => {
+    const { deps } = makeDeps();
+    const seen: unknown[] = [];
+    await analyzeNodePrompt(deps, { ...baseInput, onProgress: (p) => seen.push(p) });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      status: 'analyzing',
+      phase: ANALYZE_TEXT.phaseSendingImage,
+      accountId: 'a',
+    });
   });
 
   it('★ 页内失败 ⇒ 前缀 `分析失败：` + **原文**保留', async () => {

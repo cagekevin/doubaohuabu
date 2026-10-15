@@ -14,6 +14,43 @@
  *      不再靠"描边深浅 + 阴影多少"去区分 —— 那是界面显旧的主因。
  */
 
+/*
+ * ★★ **mockup 专用，不进真机**：真机 `reset.css` 有 `body{overflow:hidden}`
+ *   （"桌面应用：不出现页面级滚动条"）—— 那是**产品**的正确行为，
+ *   但设计稿在首屏之下还有「浮层一览 / 生成面板演示」⇒ 必须能滚，否则下面永远看不到。
+ */
+html,
+body {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+}
+
+/*
+ * ★★ **这一行要回套真机**（`start.css` / `activate.css` 同一份修正）
+ *
+ * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.btnGhost` / `.libIcon` …）整个住在
+ *       `@layer base`（`ui-real.css:1776`）；而 `reset.css:37-42` 的
+ *       `button{ background:none; border:none; padding:0 }` 与 `:29-35` 的 `color: inherit` 是
+ *       **未分层** ⇒ 按 CSS 规范「未分层 > 分层」⇒ reset 压过真源 ⇒ **所有真机按钮丢掉底色、边框、内边距**
+ *       （实测：同一个 `btn btnPrimary` 挂 `<div>` 是蓝底白字，挂 `<button>` 全透明深字。
+ *        本页修前有 **78 / 126** 个按钮是透明底，含顶栏保存路径钮 `AppShell-storageMain`）。
+ * 解法：用 CSS 自己的 `revert-layer` 把这几个属性**交还给下一层** ⇒ 正好退回 `@layer base` 的按钮真源。
+ *       ⇒ 皮肤仍然只有**真源那一份**，不在设计层抄第二遍（抄一份就必然漂移）。
+ */
+button {
+  background: revert-layer;
+  border: revert-layer;
+  padding: revert-layer;
+}
+
+button,
+input,
+textarea,
+select {
+  color: revert-layer;
+}
+
 /* ══════════════════════════════════════════════════════════════
    设计层 token（★ 定稿后整块搬进 src/styles/tokens.css）
    ══════════════════════════════════════════════════════════════ */
@@ -673,8 +710,7 @@
      会把 `height:auto` 的面板**拉回满高** —— 折叠了等于没折叠 */
 .mk-sq.is-collapsed { height: auto; align-self: flex-start; }
 
-/* ② 整个抽屉折叠 */
-.mk-drawer:not(.is-open) .mk-sq { display: none; }
+
 
 /*
  * ── 任务卡（发送队列的项）──
@@ -734,11 +770,6 @@
 .mk-task-state.is-queued { background: var(--color-border-strong); }
 .mk-task-state.is-done { background: var(--color-success); }
 .mk-task-state.is-failed { background: var(--color-danger); }
-/* 呼吸只动 opacity（合成属性，不触发 layout）*/
-@keyframes mkPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
 /* 分组标题（进行中 / 已完成）*/
 .mk-sq-group {
   color: var(--color-text-faint);
@@ -1139,6 +1170,71 @@
 }
 
 /* ══════════════════════════════════════════════════════════════
+   动画 —— **只动 transform / opacity**（判据 5.3：动 layout 属性会掉帧）
+
+   真机 `.gvw-dots` 只有**静态**样式（三个 5px 圆点、gap 3px），跳动动画没落；
+   但 `tokens.css` 备了 `--duration-bounce`(1000ms) 与 `--duration-bounce-step`(150ms)，
+   注明就是"三点跳动的错峰延迟" ⇒ 源版是跳动的，这里把它补出来。
+   ══════════════════════════════════════════════════════════════ */
+
+/* ① 三点跳动（生成中）*/
+@keyframes mkDotBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+.mk-dots { display: flex; align-items: center; gap: 3px; } /* gap 3px：逐字对源，不在刻度上故不 snap */
+.mk-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-action-primary);
+  animation: mkDotBounce var(--duration-bounce) var(--ease-out) infinite;
+}
+.mk-dots span:nth-child(2) { animation-delay: var(--duration-bounce-step); }
+.mk-dots span:nth-child(3) { animation-delay: calc(var(--duration-bounce-step) * 2); }
+
+/* ② 生成中浮层（盖住舞台，与"有结果"互斥）*/
+.mk-waiting {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  min-height: 90px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-scrim);
+  color: var(--color-on-scrim);
+  text-align: center;
+}
+.mk-waiting .mk-dots span { background: var(--color-on-scrim); }
+.mk-waiting-text { font-size: var(--font-size-xs); }
+
+/* ③ 呼吸（进行中的状态点）—— 只动 opacity */
+@keyframes mkPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ④ 抽屉展开 / 收起：用 `transform` 位移过渡（不用 display —— 它没法过渡）*/
+.mk-sq {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+.mk-drawer:not(.is-open) .mk-sq {
+  display: flex;
+  transform: translateX(-100%);
+}
+
+/* ⑤ 尊重系统的"减少动态效果"设置 */
+@media (prefers-reduced-motion: reduce) {
+  .mk-dots span,
+  .mk-task-state.is-running,
+  .spinnerRing {
+    animation: none;
+  }
+  .mk-sq { transition: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════
    控件族 —— **所有弹窗 / 面板里的小组件共用一个形态基座**
 
    此前每个弹窗各写一套（`.mk-form-row` / `.mk-param` / `.mk-picker` / `.mk-tabs` …），
@@ -1253,7 +1349,39 @@
 .mk-chip.is-ok { background: var(--color-success-bg); color: var(--color-success-text); }
 .mk-chip.is-brand { background: var(--color-action-primary); color: var(--color-text-on-brand); }
 
-/* ⑦ 缩略块（素材选择 / 画廊 / 出新图）—— 统一圆角与描边 */
+/* 遮脸方式：四选一的按钮组（不是下拉 —— 四档一眼看全才选得快）*/
+.mk-effect-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); }
+.mk-effect {
+  padding: var(--space-1) 0;
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  background: var(--field-bg);
+  color: var(--field-fg);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mk-effect:hover { border-color: var(--field-border-focus); }
+.mk-effect.is-on {
+  border-color: var(--color-action-primary);
+  background: var(--color-selection-bg);
+  color: var(--color-accent-text);
+}
+/* 提示词正文（`<pre>`，等宽 + 可滚动）*/
+.mk-pre {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow: auto;
+}
+/* ⑦ 缩略块（素材选择 / 画廊 / 出新图 / 素材引用）—— 统一圆角与描边 */
 .mk-picker-item,
 .mk-hist-thumb,
 .mk-group-child,

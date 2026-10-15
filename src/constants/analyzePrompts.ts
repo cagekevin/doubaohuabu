@@ -8,7 +8,8 @@
  *   `failure` / `models` / `inputLock` / `stylePresets` 等多个文件，是既有惯例）。
  *
  * ⚠️ **逐字回源抄录**（`shared.js:38664-38700` 与 `38720-38735`），含：
- *   · 换行符是 **`\r\n`**（源版 `.join(\`\\r\\n\`)`）—— 不是 `\n`，改动会变更模型输入
+ *   · 换行符是 **`\n`** —— 源版写的是 ``.join(`<真实换行>`)``（模板字符串），其值就是 `\n`。
+ *     ⚠️ 此前本仓写成 `'\r\n'`，且注释声称"源是 `\r\n`"（与源相反）⇒ 已按源改回 `\n`。
  *   · 全角标点、方括号、【】、引号一律原样
  */
 
@@ -36,7 +37,7 @@ export const ANALYZE_INSTRUCTION: string = [
   'json_prompt: 一个对象，包含 subject, style, composition, lighting, color, texture, effects, camera, quality 这 9 个字段；每个字段的值是字符串数组。',
   '要求：1. 中文和英文都要保留明确主体、画面风格、构图关系、光影关系、色彩倾向、材质细节、空间透视、视觉重心与商业情绪。2. 如果画面有商业广告感、海报感、产品质感、时尚感、电影感、科技感、奢华感，要明确写出来。3. 提示词不能过短，必须写成可直接用于出图的完整自然语言描述，并把零散分析结果总合并为一条高密度 prompt。4. 不要出现参数语法，不要出现多余解释文字。5. 只返回合法 JSON。',
   '额外要求：请尽可能详细、精确，用证据式描述替代泛泛形容词（例如不要只写“高级”，而要写“背景被刻意去环境化、主体占画幅 70%、高光集中在金属边缘”）。还原度优先于简洁。',
-].join('\r\n');
+].join('\n');
 
 /**
  * 按用户意见**调整**提示词的指令（原 `ED` shared.js:38720）
@@ -55,5 +56,5 @@ export function buildReviseInstruction(currentJson: unknown, instruction: string
     `用户修改意见：${String(instruction || '').trim()}`,
     '当前图像提示词 JSON：',
     String(currentJson ?? ''),
-  ].join('\r\n');
+  ].join('\n');
 }

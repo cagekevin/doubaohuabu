@@ -18,6 +18,7 @@ import type { Ports } from '@/core/ports';
 import type { AnalyzeDeps } from '@/core/usecases/analyzePrompt';
 import { analyzeNodePrompt, reviseNodePrompt } from '@/core/usecases/analyzePrompt';
 import { busyIdsOf } from '@/core/rules/accountBusy';
+import { log } from '@/lib/log';
 // ⚠️ 语气档的**唯一真源**在 `constants/text.ts` —— 本文件**不得**手写 `'info' | 'warn' | 'error'`
 //    （比真源少 `'success'`，一改真源就编译不过 = 重复定义，已收口）
 import type { ToastLevel } from '@/constants/text';
@@ -57,18 +58,31 @@ export function createAnalyzeController(store: AppStore, ports: Ports): AnalyzeC
   return {
     async analyze(nodeId, imageUrl) {
       const s = store.useStore.getState();
+      const accounts = s.accounts;
+      const busy = busyIdsOf(s.accountBusy, ports.clock.now());
       const res = await analyzeNodePrompt(deps, {
         nodeId,
         imageUrl,
-        accounts: s.accounts,
-        busy: busyIdsOf(s.accountBusy, ports.clock.now()),
+        accounts,
+        busy,
         strategy: s.poolStrategy,
         now: ports.clock.now(),
+        // ★ **中间态**（原 `gS:39155-39168`）：选号完成 ⇒ 立刻写「分析中」，让节点有反馈。
+        //   没有它 ⇒ 点「分析提示词」后界面一直没动静（`AnalyzePrompt` 的 `busy` 判的就是这个 status）。
+        onProgress: (patch) =>
+          store.useStore.getState().patchNodeData(nodeId, { analyzePrompt: patch }),
       });
       if (!res.ok) {
         // 用例层不该失败（它把一切失败都收进 patch）；真失败 ⇒ **如实上报**（原则 6）
         s.pushBackendError('unknown', res.message);
         return false;
+      }
+      // ★ **失败要留痕**（这条链此前**一个字日志都没有** ⇒ 出问题只能靠推）：
+      //   记「池子实况」—— 账号总数 / 忙的条数 —— 一眼分清"真没号"与"被筛掉了"。
+      if (res.value.patch?.status === 'error') {
+        log.warn(
+          `[analyze] 节点=${nodeId} 失败：${res.value.patch.error}｜账号总数=${accounts.length} 忙=${busy.length}`,
+        );
       }
       applyOutcome(nodeId, res.value);
       return true;
@@ -92,6 +106,9 @@ export function createAnalyzeController(store: AppStore, ports: Ports): AnalyzeC
         busy: busyIdsOf(s.accountBusy, ports.clock.now()),
         strategy: s.poolStrategy,
         now: ports.clock.now(),
+        // ★ **中间态**（原 `yS:39362-39370`）：写「调整中」—— 同 `analyze`，不给反馈就等于没在跑
+        onProgress: (patch) =>
+          store.useStore.getState().patchNodeData(nodeId, { analyzePrompt: patch }),
       });
       if (!res.ok) {
         s.pushBackendError('unknown', res.message);

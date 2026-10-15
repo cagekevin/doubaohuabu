@@ -110,8 +110,17 @@ const fail = (reason: SendAccountReason, note: string): SendAccountPick => ({
  *
  * 三层（**顺序即语义**）：
  *   ① 必须**可用**（`status === '已登录'`，与源 `(s.status || '已登录') !== '已登录'` 一致）
- *   ② 给了 `type` ⇒ `(a.type || '') === type`
+ *   ② 给了 `type` ⇒ `normalizeAccountType(a.type) === type`
  *   ③ 给了 `groupId` ⇒ `'ungrouped'` 表示**没有分组**（`!a.groupId`），否则**精确等于**
+ *
+ * ★★ **有意偏离源（留痕）**：源把 `type` 判据**写了两遍、且两遍不一致** ——
+ *   显式账号那条（`FS:42850`）是 `(a.type || 'doubao')`（**缺省 ⇒ 豆包**），
+ *   池选号这条（`Bk:34521`）是 `(s.type || '')`（**缺省 ⇒ 谁都匹配不上**）。
+ *   ⇒ 同一个账号、同一个 `type` 入参，两条路给出**相反**结论：
+ *     `type` 字段为空的账号，「显式指定」选得中、「池选号（`auto`）」选不中
+ *     ⇒ 表现就是「图片能生成，『分析提示词』却说『未配置已登录的豆包 / Dola 账号』」。
+ *   ⇒ 按正确性收口：**与显式那条用同一个 `normalizeAccountType`**（缺省 / 未知 ⇒ `doubao`）。
+ *   ⚠️ 只改判据写法，**不动三层筛选语义**；`type` 缺失的账号从此两条路**一致**。
  */
 export function filterPoolAccounts(
   accounts: readonly Account[],
@@ -120,7 +129,7 @@ export function filterPoolAccounts(
   const type = opts.type ?? '';
   const groupId = opts.groupId ?? '';
   return accounts.filter((a) => {
-    if (!isAccountUsable(a) || (type && (a.type || '') !== type)) return false;
+    if (!isAccountUsable(a) || (type && normalizeAccountType(a.type) !== type)) return false;
     if (groupId) {
       const g = a.groupId || null;
       if (groupId === UNGROUPED) return !g;

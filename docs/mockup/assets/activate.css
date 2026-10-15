@@ -1,0 +1,444 @@
+/*
+ * 授权激活页设计稿 · 设计层（叠在 `spec/ui-real.css` 之上）
+ *
+ * ── 与真机的关系 ──
+ *   · `spec/ui-real.css` = 真机 CSS 全量导出（`npm run css -- export`，**勿手改**）
+ *   · 本文件 = **新设计**。同特异性靠书写顺序取胜 ⇒ 这里写的覆盖真机那份。
+ *   · 定稿后：① 设计层 token → `src/styles/tokens.css`；② 组件规则 → `ActivatePage.module.css`；
+ *             ③ 重跑 export ⇒ 两边一致。
+ *
+ * ── 这个页面动了什么、没动什么（★ 先讲清边界）──
+ *   ✅ 动了（视觉层）：字号 / 行高 / 控件高度 / 间距 / 圆角 / 配色 / 图标（字符 ⇒ 统一 SVG）。
+ *   ❌ 没动（真机容器布局，碰它是**改错**）：
+ *      · `.ActivatePage-screen` = 居中 + `min-height:100vh`（`ActivatePage.module.css:6-13`）；
+ *      · `.card` composes `panel`、`width:100%`、`max-width:460px`（`:15-21`）；
+ *      · `.codeActions` / `.section` / `.codeBox` 的 flex 方向（`:87-107`）。
+ *      这三条是产品的形状，设计只在它给的框里改皮肤。
+ */
+
+/*
+ * ★★ **mockup 专用，不进真机**：真机 `reset.css` 有 `body{overflow:hidden}`
+ *   （桌面应用不出现页面级滚动条 —— 那是**产品**的正确行为）。
+ *   激活页在真机里是**满屏独一屏**，没有下一段；设计稿为了摊开全部状态才加了「元素一览」⇒ 必须能滚。
+ */
+html,
+body {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   设计层 token（★ 定稿后整块搬进 src/styles/tokens.css）
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --mk-brand-mark-size: 26px;
+  /* 卡片在真机是 460px 上限；这里只加个体差异 —— 阴影与留白，不动宽度 */
+  --mk-card-shadow: 0 8px 28px var(--color-shadow);
+  --mk-sheet-w: 1180px;
+
+  /**
+   * ★ 新增语义（定稿后迁回 tokens.css L2）：真机没有 `--color-brand-bg` / `--color-brand-mark`。
+   * ⚠️ **不能直接引 `--brand-500`**（那是 L1.5 品牌梯度，组件层不许直引）⇒ 在此收成两条语义：
+   *   · `brand-mark` 品牌标记的底（跨 500→600 的渐变）；
+   *   · `brand-bg`   品牌**光晕**的一层极淡底（全屏页用它把视线压到中间的卡上）。
+   */
+  --color-brand-mark: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+  --color-brand-bg: rgb(var(--brand-500-ch) / 0.07);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   图标 / 开关条（设计稿外壳，不进真机）
+   ══════════════════════════════════════════════════════════════ */
+.mk-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mk-switchbar,
+.mk-stateswitch {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mk-switchbar {
+  top: 0;
+}
+
+.mk-stateswitch {
+  top: auto;
+  bottom: 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+}
+
+.mk-switchbar-label {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+}
+
+.mk-switchbar-note {
+  color: var(--color-text-faint);
+}
+
+.mk-switchbar-link {
+  color: var(--color-action-primary);
+  text-decoration: none;
+}
+
+.mk-seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+}
+
+.mk-seg button {
+  padding: 3px 10px;
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mk-seg button.is-on {
+  background: var(--color-surface-raised);
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 1px 2px var(--color-shadow);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ① 真机形态 · 视觉重做
+   ══════════════════════════════════════════════════════════════ */
+
+/*
+ * 屏幕底 —— 真机是 `--color-surface-base` 一色到底。
+ * 设计层加一层极淡的品牌光晕：**把视线压到中间那张卡上**（全屏页最容易散的原因就是没有焦点）。
+ * ⚠️ 不动 `.screen` 的 flex 居中与 `min-height`（那是真机的）。
+ */
+.ActivatePage-screen {
+  background-image: radial-gradient(120% 80% at 50% 0%, var(--color-brand-bg), transparent 60%);
+}
+
+/* 卡片：三层底的最上层（raised）+ 一层柔阴影 —— 层级靠**底**不靠描边深浅 */
+.ActivatePage-card {
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--mk-card-shadow);
+}
+
+/* 品牌行：标记 + 名字同一排（真机 `.top` 就是 flex + gap，这里只补视觉） */
+.mk-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--mk-brand-mark-size);
+  height: var(--mk-brand-mark-size);
+  color: var(--color-text-on-brand);
+  background: var(--color-brand-mark);
+  border-radius: var(--radius-md);
+}
+
+.mk-brand-mark .mk-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.ActivatePage-brand {
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.02em;
+}
+
+.ActivatePage-sub {
+  margin-top: calc(-1 * var(--space-2));
+}
+
+/*
+ * banner —— 真机给了三态配色（`.ok/.warn/.err`）+ flex，设计层补三样：
+ *   ① 图标坐进圆片（原来的字符相邻正文，读起来像两个句子）；
+ *   ② 描述行用 relaxed 行距（篡改那条有 60 字，挤在一起最显旧）；
+ *   ③ 左侧一条 3px 竖条 ⇒ 状态在**边缘**就能认，不需要先读字。
+ */
+.ActivatePage-banner {
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-left: 3px solid currentColor;
+  border-radius: var(--radius-md);
+}
+
+.mk-banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--color-surface-base);
+  border-radius: var(--radius-full);
+}
+
+.ActivatePage-bTitle {
+  font-size: var(--font-size-sm);
+}
+
+.ActivatePage-bDesc {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+/*
+ * 机器码区 —— 它是本页**唯一要被复制走的东西**，所以做成一个明确的"取值块"：
+ * sunken 底 + 等宽字 + 整段可选，两颗动作钮右对齐（真机 `.codeActions` 是 flex，此处只排布下去）。
+ */
+.ActivatePage-codeBox {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
+.ActivatePage-codeText {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+.ActivatePage-codeActions {
+  justify-content: flex-end;
+}
+
+.ActivatePage-hint {
+  line-height: var(--line-height-relaxed);
+}
+
+/* 激活码输入框：等宽 + 宽松行高（激活码是一整段，挤着看会抄错行） */
+.ActivatePage-input {
+  min-height: 76px;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+/*
+ * ★★ **这一行要回套真机**（而不是在每个组件里抄一遍皮肤）
+ *
+ * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.field` / `.panel` …）整个住在
+ *       `@layer base`（级联层，`ui-real.css:1776`）；而 `reset.css:37-42` 的
+ *       `button{ background:none; border:none; padding:0 }` 是**未分层**的
+ *       ⇒ 按 CSS 规范「未分层 > 分层」⇒ reset 压过真源 ⇒ **所有真机按钮丢掉底色、边框与内边距**。
+ *       实测证据：同一个 `btn btnPrimary` 挂在 `<div>` 上是蓝底白字，挂在 `<button>` 上变全透明。
+ *
+ * 解法用 CSS 自己的 `revert-layer`：它把**指定的这几个属性**交还给**下一层**
+ *       ⇒ 正好退回 `@layer base` 里的 `.btn / .btnPrimary`
+ *       ⇒ 皮肤仍然只有**真源那一份**，不用在设计层再抄一遍（抄一份就必然漂移）。
+ *
+ * ⚠️ 只回退这三个属性：它们正是 reset 多写的那三样；其余（cursor / font）本就该归 reset。
+ */
+button {
+  background: revert-layer;
+  border: revert-layer;
+  padding: revert-layer;
+}
+
+/*
+ * 同上：`reset.css:29-35` 那一组（`button,input,textarea,select`）还写了 **`color: inherit`**，同样是
+ * 未分层 ⇒ 压过 `@layer base` 里 `.btn` / `.btnPrimary` 的前景色。
+ * 后果最直观的一处：**主按钮变蓝底深灰字**（实测 `rgb(79,70,229)` 底 + `rgb(31,35,41)` 字，对比度跌到读不清）
+ * ⇒ 这里用同一组选择器把 `color` 也交还真源。
+ */
+button,
+input,
+textarea,
+select {
+  color: revert-layer;
+}
+
+/*
+ * 主按钮 —— 全宽 + 一档大号；皮肤来自真源 `.btnPrimary`（经上面的 `revert-layer` 拿到）。
+ * ★ 它是**这一屏唯一的主色**（口径 ②）：上方四颗全是中性描边 ⇒ 「这里该点了」不需要再解释。
+ */
+.ActivatePage-primary {
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+}
+
+/*
+ * 副按钮（复制 / 导出文件 / 重新检测）—— 三者同为 `.btn btnSm`（`.sm` / `.recheck` 都 composes 它）
+ * ⇒ 不写第二份皮肤（判据「能一种的别搞两种」），只留 `.recheck` 真源里那一点悬停差异。
+ */
+
+.ActivatePage-foot {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── 状态演示：只留 `data-when` 命中当前状态的那些 ── */
+/* 用法与真机同源：真机是 `{ok && …}`，这里是 CSS 选择器 —— 同一个布尔，两种载体 */
+.ActivatePage-card [data-when] {
+  display: none;
+}
+
+body[data-status="none"] .ActivatePage-card [data-when~="none"],
+body[data-status="ok"] .ActivatePage-card [data-when~="ok"],
+body[data-status="expired"] .ActivatePage-card [data-when~="expired"],
+body[data-status="invalid"] .ActivatePage-card [data-when~="invalid"],
+body[data-status="tampered"] .ActivatePage-card [data-when~="tampered"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* banner 是块级 + 上下排布（它是卡片里的一整块，不是行内元件） */
+body[data-status="ok"] .ActivatePage-card [data-when~="ok"].ActivatePage-banner,
+body[data-status="expired"] .ActivatePage-card [data-when~="expired"].ActivatePage-banner,
+body[data-status="invalid"] .ActivatePage-card [data-when~="invalid"].ActivatePage-banner,
+body[data-status="tampered"] .ActivatePage-card [data-when~="tampered"].ActivatePage-banner {
+  display: flex;
+}
+
+/* 主按钮里的两个文案各自只有一个 span 命中 ⇒ 让命中的那个正常显示（inline-flex 会把它拉成块） */
+.ActivatePage-primary [data-when] {
+  gap: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ② 元素一览（设计稿辅助视图，不是产品界面）
+   ══════════════════════════════════════════════════════════════ */
+.mk-sheet {
+  max-width: var(--mk-sheet-w);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) 96px;
+}
+
+.mk-sheet-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-lg);
+  color: var(--color-text-strong);
+}
+
+.mk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.mk-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  align-self: start;
+}
+
+.mk-cell-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+}
+
+.mk-cell-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mk-cell-hint {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-faint);
+}
+
+.mk-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mk-row-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 一览里的组件要真机的**原始尺寸**（不受卡片压缩），故给回宽度约束 */
+.mk-cell .ActivatePage-primary {
+  width: auto;
+  min-width: 160px;
+}
+
+.mk-cell code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: 1px 4px;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * msg 行 —— 真机 `.msg` 只给了字号，**没有 ok/err 配色**（字号挡不住"成功还是失败"）。
+ * ⇒ 设计层补 `.is-ok / .is-err`（真机有 `msgKind` 这个状态，只是没接到颜色上）。
+ */
+.ActivatePage-msg {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  line-height: var(--line-height-snug);
+}
+
+.ActivatePage-msg.is-ok {
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+  border-left-color: var(--color-success);
+}
+
+.ActivatePage-msg.is-err {
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border-left-color: var(--color-danger-border);
+}
+
+/* 生成中：圆环（与 `shared.module.css` 的真机 `.spinnerRing` 同款，这里只给它一个尺寸上下文） */
+.spinnerRing {
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.85;
+  animation: mkSpin 800ms linear infinite;
+}
+
+@keyframes mkSpin {
+  to { transform: rotate(1turn); }
+}
+
+/* ── 动画：只动 transform（口径：transform / opacity 之外不许进关键帧）── */
+@media (prefers-reduced-motion: reduce) {
+  .spinnerRing { animation: none; }
+}

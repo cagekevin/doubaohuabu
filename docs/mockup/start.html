@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<!--
+  豆包画布 · 启动页设计稿（mockup）
+
+  ── 与真机的关系 ──
+    · 界面 = `src/ui/pages/StartPage.tsx`（原 `_Component47.jsx`，60 行）
+    · 类名 = 真机类名（`StartPage-*`），前缀由 `npm run css -- export` 机械导出（`spec/ui-real.css`，**勿手改**）
+    · 文案 = `src/constants/text.ts` 的 `BRAND` / `PROJECT_TEXT` / `RELATIVE_TIME_TEXT`，**逐字照搬**
+    · 视觉 = `assets/start.css`（设计层，叠在 ui-real.css 之上）
+
+  ── 这个界面在真机的位置（`bootstrap/main.tsx:110-120`）──
+    授权通过后、且 store 的 `started` 为假 ⇒ 渲染本页；一旦打开 / 新建项目就进画布外壳。
+    它是**整个应用的第二个落脚点**，也是唯一能「删项目 / 导入 .json」的地方。
+
+  ── 真机容器布局（设计层没动）──
+    `.page` = 满高居中纵向 flex（`StartPage.module.css:9-16`）
+    `.history { min-width: 320px }` · `.projectItem` 一行（主区 flex:1 + 删除钮）· `.projectMain` 名左时间右
+-->
+<html lang="zh-CN" data-theme="light" data-brand="indigo" data-shape="standard" data-density="standard">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>豆包画布 · 启动页（设计稿）</title>
+<link rel="stylesheet" href="./spec/ui-real.css" />
+<link rel="stylesheet" href="./assets/start.css" />
+</head>
+<body data-mode="normal">
+
+<!-- ══ 开关条（只看设计用，不是产品界面）══ -->
+<div class="mk-switchbar">
+  <span class="mk-switchbar-label">设计稿开关</span>
+  <span class="mk-seg" data-set="data-theme">
+    <button data-val="light" class="is-on">亮</button>
+    <button data-val="dark">暗</button>
+  </span>
+  <span class="mk-seg" data-set="data-shape">
+    <button data-val="square">方</button>
+    <button data-val="standard" class="is-on">标准</button>
+    <button data-val="round">圆</button>
+  </span>
+  <a class="mk-switchbar-link" href="./activate.html">← 授权激活</a>
+  <a class="mk-switchbar-link" href="./index.html">首页</a>
+  <a class="mk-switchbar-link" href="./backend.html">豆包后台</a>
+</div>
+
+<!-- ══ 图标（统一 24 格 · 描边 1.7 · currentColor）══ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 4.5V15"/><path d="M8 8.5 12 4.5l4 4"/><path d="M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M6.5 7 7.4 19a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 5.5 7 6.5-7 6.5"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M15.5 4.5 19.5 8.5"/><path d="M4.5 19.5 5 15.8l9.4-9.4 3.7 3.7-9.4 9.4-3.7.5Z"/></symbol>
+</svg>
+
+<!-- ══ ① 真机形态：启动页 ══ -->
+<div class="StartPage-page">
+
+  <div class="StartPage-brand">
+    <h1 class="StartPage-brandName">豆包画布</h1>
+    <p class="StartPage-brandTagline">无限画布 · 素材连线 · 智能创作</p>
+  </div>
+
+  <!-- 有历史：工程列表（`ordered.length !== 0`）-->
+  <div class="StartPage-history" data-when="normal editing">
+    <div class="StartPage-historyLabel">打开历史项目</div>
+
+    <div class="StartPage-projectItem">
+      <button type="button" class="StartPage-projectMain" title="双击重命名项目">
+        <span>未命名项目</span>
+        <span class="StartPage-projectMeta">刚刚</span>
+      </button>
+      <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+        <svg class="mk-icon"><use href="#i-trash"/></svg>
+      </button>
+    </div>
+
+    <div class="StartPage-projectItem">
+      <button type="button" class="StartPage-projectMain" title="双击重命名项目">
+        <span>产品宣传图 · 春日篇</span>
+        <span class="StartPage-projectMeta">12 分钟前</span>
+      </button>
+      <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+        <svg class="mk-icon"><use href="#i-trash"/></svg>
+      </button>
+    </div>
+
+    <!--
+      就地重命名态（真机 `editingId === p.id`，`StartPage.tsx:81-94`）：
+      `.projectMain` 整块换成输入框，其余（删除钮 / 行结构）不变 —— 所以这里用 `data-when="editing"` 演示。
+    -->
+    <div class="StartPage-projectItem" data-when="editing">
+      <span class="mk-inline-flag"><svg class="mk-icon"><use href="#i-pen"/></svg>重命名中</span>
+      <input class="field StartPage-projectInput" value="产品宣传图 · 春日篇" />
+      <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+        <svg class="mk-icon"><use href="#i-trash"/></svg>
+      </button>
+    </div>
+
+    <div class="StartPage-projectItem">
+      <button type="button" class="StartPage-projectMain" title="双击重命名项目">
+        <span>618 主视觉</span>
+        <span class="StartPage-projectMeta">3 天前</span>
+      </button>
+      <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+        <svg class="mk-icon"><use href="#i-trash"/></svg>
+      </button>
+    </div>
+
+    <div class="StartPage-projectItem">
+      <button type="button" class="StartPage-projectMain" title="双击重命名项目">
+        <span>去年活动复盘</span>
+        <span class="StartPage-projectMeta">2026-08-14</span>
+      </button>
+      <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+        <svg class="mk-icon"><use href="#i-trash"/></svg>
+      </button>
+    </div>
+
+    <div class="mk-list-foot">
+      <svg class="mk-icon"><use href="#i-chevron-right"/></svg>
+      列表按 updatedAt 倒序（源 <code>_Component47.jsx:25-27</code>）
+    </div>
+  </div>
+
+  <!-- 无历史：空态（`ordered.length === 0`，真机 `EmptyState`） -->
+  <div class="empty" data-when="empty">
+    <div class="emptyTitle">暂无历史项目，点击上方新建一个吧</div>
+  </div>
+
+  <button type="button" class="btn btnGhost StartPage-importProject">
+    <svg class="mk-icon"><use href="#i-import"/></svg>
+    导入项目文件（.json）
+  </button>
+
+  <button type="button" class="btn btnPrimary StartPage-newProject">
+    <svg class="mk-icon"><use href="#i-plus"/></svg>
+    ＋ 新建项目
+  </button>
+</div>
+
+<!-- ══ ② 状态切换（设计稿辅助）══ -->
+<div class="mk-stateswitch">
+  <span class="mk-switchbar-label">列表状态</span>
+  <span class="mk-seg" data-set-mode>
+    <button data-val="normal" class="is-on">有历史</button>
+    <button data-val="editing">就地重命名</button>
+    <button data-val="empty">空历史</button>
+  </span>
+  <span class="mk-switchbar-note">对应 <code>StartPage.tsx:74-126</code> 的 <code>ordered.length === 0</code> 与 <code>editingId === p.id</code></span>
+</div>
+
+<!-- ══ ③ 元素一览 ══ -->
+<section class="mk-sheet">
+  <h2 class="mk-sheet-title">启动页 · 元素一览</h2>
+  <div class="mk-grid">
+
+    <div class="mk-cell">
+      <div class="mk-cell-title">工程行（rest / hover / 就地重命名）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="StartPage-projectItem">
+            <button type="button" class="StartPage-projectMain" title="双击重命名项目">
+              <span>618 主视觉</span><span class="StartPage-projectMeta">3 天前</span>
+            </button>
+            <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+              <svg class="mk-icon"><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <div class="StartPage-projectItem is-hover">
+            <button type="button" class="StartPage-projectMain" title="双击重命名项目">
+              <span>618 主视觉</span><span class="StartPage-projectMeta">3 天前</span>
+            </button>
+            <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+              <svg class="mk-icon"><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <div class="StartPage-projectItem">
+            <input class="field StartPage-projectInput" value="618 主视觉" />
+            <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+              <svg class="mk-icon"><use href="#i-trash"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="mk-cell-hint">重命名时**只有主区**换成输入框，删除钮与行不动（真机 `StartPage.tsx:81-94`）；Enter / blur 提交、Esc 取消</div>
+      </div>
+    </div>
+
+    <div class="mk-cell">
+      <div class="mk-cell-title">删除钮（libIcon → btn btnIcon btnGhost）</div>
+      <div class="mk-cell-body">
+        <div class="mk-row-wrap">
+          <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete" title="删除项目" aria-label="删除项目">
+            <svg class="mk-icon"><use href="#i-trash"/></svg>
+          </button>
+          <button type="button" class="btn btnIcon btnGhost libIcon libIconDel StartPage-projectDelete is-danger" title="删除项目" aria-label="删除项目">
+            <svg class="mk-icon"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <div class="mk-cell-hint">rest 是中性灰、**悬停转危险色**（`.libIconDel:hover`，`shared.module.css:423`）；字符 `✕` 换成同一套 SVG（口径 ①）</div>
+      </div>
+    </div>
+
+    <div class="mk-cell">
+      <div class="mk-cell-title">相对时间五档（`formatRelativeTime`）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="mk-relrow"><span>刚刚</span><span class="mk-cell-hint">diff &lt; 1 分钟</span></div>
+          <div class="mk-relrow"><span>12 分钟前</span><span class="mk-cell-hint">&lt; 60 分钟</span></div>
+          <div class="mk-relrow"><span>3 小时前</span><span class="mk-cell-hint">&lt; 24 小时</span></div>
+          <div class="mk-relrow"><span>3 天前</span><span class="mk-cell-hint">&lt; 30 天</span></div>
+          <div class="mk-relrow"><span>2026-08-14</span><span class="mk-cell-hint">≥ 30 天 ⇒ 退化成 `formatLocalDate`</span></div>
+        </div>
+        <div class="mk-cell-hint">真值：`lib/time.ts:154-164`；四句文案在 `RELATIVE_TIME_TEXT`（`text.ts:165-170`）</div>
+      </div>
+    </div>
+
+    <div class="mk-cell">
+      <div class="mk-cell-title">两个动作按钮</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <button type="button" class="btn btnPrimary StartPage-newProject">
+            <svg class="mk-icon"><use href="#i-plus"/></svg>
+            ＋ 新建项目
+          </button>
+          <button type="button" class="btn btnGhost StartPage-importProject">
+            <svg class="mk-icon"><use href="#i-import"/></svg>
+            导入项目文件（.json）
+          </button>
+        </div>
+        <div class="mk-cell-hint">`newProject` = `btn btnPrimary`（**这一屏唯一的主色**）· `importProject` = `btn btnGhost`（次级，透明底）</div>
+      </div>
+    </div>
+
+    <div class="mk-cell">
+      <div class="mk-cell-title">空态（`EmptyState`）</div>
+      <div class="mk-cell-body">
+        <div class="empty">
+          <div class="emptyTitle">暂无历史项目，点击上方新建一个吧</div>
+        </div>
+        <div class="mk-cell-hint">文案 `BRAND.emptyHistory`（`text.ts:152`）；真机同款共用处还有画布空态 / 资源库空态（`EmptyState.tsx`）</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<script>
+  /* 列表状态演示：改 <body data-mode> —— 真机同一件事由 `StartPage.tsx:74-126` 的条件渲染完成 */
+  document.querySelectorAll('.mk-seg[data-set-mode]').forEach((seg) => {
+    seg.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.body.setAttribute('data-mode', b.dataset.val);
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('is-on', x === b));
+      });
+    });
+  });
+
+  // 外观开关条：只改 <html> 上的一个属性（与真机同机制）
+  document.querySelectorAll('.mk-seg[data-set]').forEach((seg) => {
+    const attr = seg.dataset.set;
+    seg.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.documentElement.setAttribute(attr, b.dataset.val);
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('is-on', x === b));
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -6,11 +6,110 @@
  * 本文件只写**后台独有**的形态：账号行卡、模拟 webview、指纹网格、出新图条…
  */
 
+/*
+ * ★★ **这一行要回套真机**（`start.css` / `activate.css` 同一份修正）
+ *
+ * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.btnGhost` / `.libIcon` …）整个住在
+ *       `@layer base`（`ui-real.css:1776`）；而 `reset.css:37-42` 的
+ *       `button{ background:none; border:none; padding:0 }` 与 `:29-35` 的 `color: inherit` 是
+ *       **未分层** ⇒ 按 CSS 规范「未分层 > 分层」⇒ reset 压过真源 ⇒ **所有真机按钮丢掉底色、边框、内边距**
+ *       （实测：同一个 `btn btnPrimary` 挂 `<div>` 是蓝底白字，挂 `<button>` 全透明深字。
+ *        本页修前有 **65 / 80** 个按钮是透明底，含主按钮 `AccountPanel-addBtn`「＋ 添加账号」）。
+ * 解法：用 CSS 自己的 `revert-layer` 把这几个属性**交还给下一层** ⇒ 正好退回 `@layer base` 的按钮真源。
+ *       ⇒ 皮肤仍然只有**真源那一份**，不在设计层抄第二遍（抄一份就必然漂移）。
+ */
+button {
+  background: revert-layer;
+  border: revert-layer;
+  padding: revert-layer;
+}
+
+button,
+input,
+textarea,
+select {
+  color: revert-layer;
+}
+
 /* ── 左栏折叠钮：后台的左栏在**左边**，箭头方向与首页右栏相反 ── */
 .AppShell-side .AppShell-sideToggle { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
 
+/*
+ * ── 按钮统一（这是"设计感"的头号来源）──
+ * 真机这些按钮一律 `composes: btn btnSm` ⇒ **11px 字 / 25.6px 高**，
+ * 一排按钮又挤又小、读起来像"附带的"，不像工具栏。
+ * 设计层统一：**12px 字 + 30px 高 + 图标 4px 间距**，一排按钮等高同字号。
+ */
+.BackendView-headBtn,
+.BackendView-headBtnPrimary,
+.BackendView-headToggle,
+.BackendView-sessionBtn,
+.BackendView-sessionBtnPrimary,
+.AccountPanel-toolBtn,
+.AccountPanel-rowBtn,
+.AccountPanel-deselectBtn {
+  height: 30px;
+  font-size: var(--font-size-sm); /* ★ 不用 btnSm 的 11px */
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+}
+/* 头部动作组：次要按钮彼此挨着，与主按钮拉开一档（动作层级看得出来）*/
+.BackendView-actions { gap: var(--space-1); }
+.BackendView-actions .BackendView-headBtnPrimary { margin-left: var(--space-2); }
+/* 账号行内的按钮比头部再小一档（但它仍是 12px 字，不再缩到 11）*/
+.AccountPanel-rowBtn { height: 26px; padding: 0 var(--space-2); }
+
+/*
+ * ── 账号行内的三件小控件（此前整排漏掉）──
+ * ① 静默开关（`.autostart-switch`）：开启态内联**分组色**作底（源 `style={{background: Ce}}`）；
+ * ② 🔍 指纹诊断（仅 Windows 出现）；③ ↻ 重新生成指纹。
+ * ⚠️ 三者都是 `role=switch` / 图标钮 ⇒ 不给它们加 `:active` 位移（状态变化本身就是反馈，判据 6.2）。
+ */
+.AccountPanel-autoStartSwitch {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  width: 30px;
+  height: 17px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  cursor: pointer;
+}
+.AccountPanel-autoStartSwitch.AccountPanel-autoStartOn {
+  background: var(--color-action-primary);
+  border-color: transparent;
+}
+.AccountPanel-autoStartKnob {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-full);
+  background: var(--color-switch-knob);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.AccountPanel-autoStartSwitch.AccountPanel-autoStartOn .AccountPanel-autoStartKnob { transform: translateX(13px); }
+
+/* 隔离体检条：三态（✅ 全隔离 / 🟡 高度相似 / 🔴 完全关联）—— 有风险才值得占这一行 */
+.AccountPanel-fpHealth {
+  justify-content: flex-start;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.AccountPanel-fpHealthOk { color: var(--color-success-text); }
+.AccountPanel-fpHealthWarn { color: var(--color-warning-text); background: var(--color-warning-bg); }
+.AccountPanel-fpHealthCrit { color: var(--color-danger-text); background: var(--color-danger-bg); }
+
+/*
+ * 工具行：**保持真机的 flex + flex-wrap 一行**（ 已是这个布局）。
+ * ⚠️ 此前我改成两列网格 —— 那是把对的改错了：真机就是一行、放不下自动换行。
+ * 设计层只补**按钮内部的排版**，不动容器布局。
+ */
+.AccountPanel-toolRow .AccountPanel-toolBtn { justify-content: flex-start; }
+
 /* ── 账号行（真机 `.rowMain` 只有布局；设计层补"卡片感"与层次）── */
-.AccountPanel-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .AccountPanel-row {
   border-radius: var(--radius-md);
   border: 1px solid transparent;
@@ -126,26 +225,43 @@
 }
 
 /* ── 弹窗一览里用到的后台形态 ── */
-/* 选择账号类型：卡片网格 */
-.bk-type-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
-.bk-type {
+/* 指纹体检：报告行（等宽，逐字对源的 `⇄ 重合 n/N 维` 要对齐）*/
+.mk-fp-line {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mk-fp-line.is-crit { color: var(--color-danger-text); }
+.mk-fp-line.is-warn { color: var(--color-warning-text); }
+
+/* 分组颜色块 / provider 卡（API 服务每个服务商一张）*/
+.mk-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+.mk-group-row { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.mk-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   padding: var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  text-align: left;
-  cursor: pointer;
+  background: var(--color-surface-sunken);
 }
-.bk-type:hover { border-color: var(--color-border-strong); background: var(--color-surface-sunken); }
-.bk-type-emoji { font-size: var(--font-size-lg); line-height: var(--line-height-none); }
-/* 指纹体检：重合度网格（红=高度重合 / 黄=偏重合 / 绿=正常）*/
-.bk-fp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
-.bk-fp { aspect-ratio: 1 / 1; border-radius: var(--radius-xs); background: var(--color-border); }
-.bk-fp.is-crit { background: var(--color-danger); }
-.bk-fp.is-warn { background: var(--color-warning); }
-.bk-fp.is-ok { background: var(--color-success); }
+.mk-card-head { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); }
+/* 画廊缩略图选中态（勾选后才算要"添加到画布"）*/
+.mk-picker-item.is-checked {
+  border-color: var(--color-selected-border);
+  box-shadow: 0 0 0 2px var(--color-selection-bg);
+}
 /* 出新图条：横向缩略图 */
 .bk-nip { display: flex; gap: var(--space-1); overflow-x: auto; }
 .bk-nip-item {

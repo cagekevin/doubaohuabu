@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<!--
+  豆包画布 · 授权激活页设计稿（mockup）
+
+  打开即可（纯静态）：file:// 双击，或 `npx serve docs/mockup`
+
+  ── 与真机的关系 ──
+    · 界面 = `src/ui/pages/ActivatePage.tsx`（原 `W3.jsx` 192 行）—— 授权门的**视图半**
+    · 类名 = 真机类名（`ActivatePage-*`），前缀由 `npm run css -- export` 机械导出（`spec/ui-real.css`，**勿手改**）
+    · 文案 = `src/constants/text.ts` 的 `LICENSE_TEXT` / `PERSIST_TEXT`，**逐字照搬**，不自造
+    · 视觉 = `assets/activate.css`（设计层，叠在 ui-real.css 之上）
+    · 定稿后：设计层 token → `src/styles/tokens.css`，组件规则 → `ActivatePage.module.css`，重跑 export
+
+  ── 这个界面为什么存在（★ 设计与实现共用同一句依据）──
+    只有 `status === 'ok'` 放行进画布，`none` / `invalid` / `expired` / `tampered` 一律落到这里
+    —— 判据在 `core/rules/license.ts`（有意 fail-close：「拿不到授权时宁可不进画布」），本页不重新定义它。
+
+  ── 排版为什么居中（`ActivatePage-screen` 是真机的，不是设计加的）──
+    `ActivatePage.module.css:6-13`：`flex + center + min-height:100vh`；卡片 `.card` composes `panel`、`max-width:460px`。
+    这两条都是**真机容器布局**，设计层没动它。
+-->
+<html lang="zh-CN" data-theme="light" data-brand="indigo" data-shape="standard" data-density="standard">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>豆包画布 · 授权激活（设计稿）</title>
+<link rel="stylesheet" href="./spec/ui-real.css" />
+<link rel="stylesheet" href="./assets/activate.css" />
+</head>
+<body data-status="none">
+
+<!-- ══ 开关条（只看设计用，不是产品界面）══ -->
+<div class="mk-switchbar">
+  <span class="mk-switchbar-label">设计稿开关</span>
+  <span class="mk-seg" data-set="data-theme">
+    <button data-val="light" class="is-on">亮</button>
+    <button data-val="dark">暗</button>
+  </span>
+  <span class="mk-seg" data-set="data-brand">
+    <button data-val="indigo" class="is-on">靛</button>
+    <button data-val="blue">蓝</button>
+    <button data-val="violet">紫</button>
+    <button data-val="green">绿</button>
+  </span>
+  <span class="mk-seg" data-set="data-shape">
+    <button data-val="square">方</button>
+    <button data-val="standard" class="is-on">标准</button>
+    <button data-val="round">圆</button>
+  </span>
+  <a class="mk-switchbar-link" href="./index.html">← 首页</a>
+  <a class="mk-switchbar-link" href="./backend.html">豆包后台</a>
+  <span class="mk-switchbar-note">改的是 &lt;html&gt; 上的一个属性 —— 真机同样成立</span>
+</div>
+
+<!-- ══ 图标（统一 24 格 · 描边 1.7 · currentColor）══ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.5 2.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4.5 21 19.5H3L12 4.5Z"/><path d="M12 10v4.5"/><path d="M12 17.2h.01"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V10h-5.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5A2.5 2.5 0 0 0 12.5 4H6.5A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V4.5"/><path d="M8 8.5 12 4.5l4 4"/><path d="M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v6c0 4-3 6.8-7 8.5-4-1.7-7-4.5-7-8.5V6l7-2.5Z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8.5" cy="8.5" r="3.5"/><path d="M11 11l8 8"/><path d="M16.5 16.5 19 14"/><path d="M14 14l1.5 1.5"/></symbol>
+</svg>
+
+<!-- ══ ① 真机形态：授权激活页（原样结构，只换视觉）══ -->
+<!-- ⚠️ `.ActivatePage-card` composes `panel` ⇒ 两个类都写（与真机 DOM 一致，少一个就丢真源样式） -->
+<div class="ActivatePage-screen">
+  <div class="panel ActivatePage-card">
+
+    <div class="ActivatePage-top">
+      <span class="mk-brand-mark"><svg class="mk-icon"><use href="#i-shield"/></svg></span>
+      <span class="ActivatePage-brand">豆包画布</span>
+    </div>
+    <div class="ActivatePage-sub">软件授权激活</div>
+
+    <!--
+      四条 banner —— 一次只出现一条（真机 `status.status` 四选一，`ActivatePage.tsx:205-261`）。
+      这里的 `data-when` 让设计稿能静态演示四态；真机由 `{ok && …}` 之类的条件渲染完成同一件事。
+      图标是真机内联的字符（✓ ⏱ ✕ ⚠）⇒ 设计层换成统一 SVG（口径 ①），语义与顺序不变。
+    -->
+    <div class="ActivatePage-banner ActivatePage-ok" data-when="ok">
+      <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-check"/></svg></span>
+      <div>
+        <div class="ActivatePage-bTitle">已激活</div>
+        <div class="ActivatePage-bDesc">有效期至 2027-03-15 10:24（剩余约 152 天）</div>
+      </div>
+    </div>
+
+    <div class="ActivatePage-banner ActivatePage-warn" data-when="expired">
+      <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-clock"/></svg></span>
+      <div>
+        <div class="ActivatePage-bTitle">授权已过期</div>
+        <div class="ActivatePage-bDesc">已于 2026-09-01 10:24 到期，请重新激活以继续使用</div>
+      </div>
+    </div>
+
+    <div class="ActivatePage-banner ActivatePage-err" data-when="invalid">
+      <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-close"/></svg></span>
+      <div>
+        <div class="ActivatePage-bTitle">授权无效</div>
+        <div class="ActivatePage-bDesc">授权文件异常，请重新激活</div>
+      </div>
+    </div>
+
+    <div class="ActivatePage-banner ActivatePage-err" data-when="tampered">
+      <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-warn"/></svg></span>
+      <div>
+        <div class="ActivatePage-bTitle">检测到系统时间篡改</div>
+        <div class="ActivatePage-bDesc">系统时间被回拨或发生异常跳变，已拒绝激活与验证（安全告警）。请恢复正确的系统时间后点击「重新检测」。</div>
+      </div>
+    </div>
+
+    <!-- 「重新检测授权状态」—— ★ 只在 expired / invalid / tampered 时出现（`ActivatePage.tsx:209` 的 `showRecheck`） -->
+    <button type="button" class="btn btnSm ActivatePage-recheck" data-when="expired invalid tampered">
+      <svg class="mk-icon"><use href="#i-refresh"/></svg>
+      重新检测授权状态
+    </button>
+
+    <div class="ActivatePage-section">
+      <div class="ActivatePage-label">本机机器码（发送给开发者以获取激活码）</div>
+      <div class="ActivatePage-codeBox">
+        <code class="ActivatePage-codeText">MC7F-2K9Q-4XPD-8LZT-A3RB-6HNV</code>
+        <div class="ActivatePage-codeActions">
+          <button type="button" class="btn btnSm ActivatePage-sm">
+            <svg class="mk-icon"><use href="#i-copy"/></svg>
+            复制
+          </button>
+          <button type="button" class="btn btnSm ActivatePage-sm ActivatePage-ghost">
+            <svg class="mk-icon"><use href="#i-export"/></svg>
+            导出文件
+          </button>
+        </div>
+      </div>
+      <div class="ActivatePage-hint">机器码由本机硬件信息离线生成，与设备绑定。请将它提供给开发者，获取对应时长的激活码。</div>
+    </div>
+
+    <div class="ActivatePage-section">
+      <div class="ActivatePage-label">输入激活码</div>
+      <!-- `.ActivatePage-input` composes `field textarea` ⇒ 三个类都写；真机是 textarea（多行），Cmd/Ctrl+Enter 提交 -->
+      <textarea class="field textarea ActivatePage-input" rows="3" placeholder="粘贴开发者提供的激活码" spellcheck="false"></textarea>
+      <!--
+        主按钮文案是三态（真机 `ActivatePage.tsx:316` 的三目）：busy ⇒ 验证中… / ok ⇒ 重新激活 / 否则 ⇒ 激活。
+        ⇒ 「已激活」态下它叫「重新激活」（同一颗钮，不是两个按钮）。
+      -->
+      <button type="button" class="btn btnPrimary ActivatePage-primary">
+        <svg class="mk-icon"><use href="#i-key"/></svg>
+        <span data-when="ok">重新激活</span>
+        <span data-when="none expired invalid tampered">激活</span>
+      </button>
+    </div>
+
+    <div class="ActivatePage-foot">激活状态已安全保存在本机，支持离线验证。</div>
+  </div>
+</div>
+
+<!-- ══ ② 状态切换（设计稿辅助，不是产品界面）══ -->
+<div class="mk-stateswitch">
+  <span class="mk-switchbar-label">授权状态</span>
+  <span class="mk-seg" data-set-status>
+    <button data-val="none" class="is-on">未激活 none</button>
+    <button data-val="ok">已激活 ok</button>
+    <button data-val="expired">已过期 expired</button>
+    <button data-val="invalid">无效 invalid</button>
+    <button data-val="tampered">篡改 tampered</button>
+  </span>
+  <span class="mk-switchbar-note">对应 <code>ActivatePage.tsx:205-209</code> 的 <code>ok / expired / invalid / tampered</code> —— 四条 banner 与「重新检测」随之显隐</span>
+</div>
+
+<!-- ══ ③ 元素一览：这个界面上所有会变的东西 ══ -->
+<section class="mk-sheet">
+  <h2 class="mk-sheet-title">激活页 · 元素一览</h2>
+
+  <div class="mk-grid">
+
+    <!-- 四条 banner（同一组件四种态） -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">四条 banner（一次只出一条）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="ActivatePage-banner ActivatePage-ok">
+            <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-check"/></svg></span>
+            <div>
+              <div class="ActivatePage-bTitle">已激活</div>
+              <div class="ActivatePage-bDesc">有效期至 2027-03-15 10:24（剩余约 152 天）</div>
+            </div>
+          </div>
+          <div class="ActivatePage-banner ActivatePage-warn">
+            <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-clock"/></svg></span>
+            <div>
+              <div class="ActivatePage-bTitle">授权已过期</div>
+              <div class="ActivatePage-bDesc">已于 2026-09-01 10:24 到期，请重新激活以继续使用</div>
+            </div>
+          </div>
+          <div class="ActivatePage-banner ActivatePage-err">
+            <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-close"/></svg></span>
+            <div>
+              <div class="ActivatePage-bTitle">授权无效</div>
+              <div class="ActivatePage-bDesc">授权文件异常，请重新激活</div>
+            </div>
+          </div>
+          <div class="ActivatePage-banner ActivatePage-err">
+            <span class="mk-banner-icon"><svg class="mk-icon"><use href="#i-warn"/></svg></span>
+            <div>
+              <div class="ActivatePage-bTitle">检测到系统时间篡改</div>
+              <div class="ActivatePage-bDesc">系统时间被回拨或发生异常跳变，已拒绝激活与验证（安全告警）。请恢复正确的系统时间后点击「重新检测」。</div>
+            </div>
+          </div>
+        </div>
+        <div class="mk-cell-hint">文案逐字来自 <code>LICENSE_TEXT.banner*</code>（源 <code>W3.jsx:121-149</code>）；日期格式真值 = <code>lib/time.ts:107</code> 的 <code>YYYY-MM-DD HH:mm</code></div>
+      </div>
+    </div>
+
+    <!-- 提示消息 msg -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">提示消息 msg（全部逐字）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="ActivatePage-msg is-ok">机器码已复制到剪贴板</div>
+          <div class="ActivatePage-msg is-err">复制失败，请手动选择复制</div>
+          <div class="ActivatePage-msg is-ok">机器码已导出：/Users/kevin/Desktop/豆包画布-机器码.txt</div>
+          <div class="ActivatePage-msg is-err">导出已取消</div>
+          <div class="ActivatePage-msg is-err">导出失败：写入文件被拒绝</div>
+          <div class="ActivatePage-msg is-ok">激活成功，有效期至 2027-03-15 10:24</div>
+          <div class="ActivatePage-msg is-err">请输入激活码</div>
+          <div class="ActivatePage-msg is-err">拒绝激活：检测到系统时间异常（时间篡改）。请恢复正确的系统时间后重试。</div>
+          <div class="ActivatePage-msg is-err">激活失败：该激活码已被使用，无法重复激活。每个激活码仅可成功激活一次，请使用新的激活码。</div>
+          <div class="ActivatePage-msg is-err">激活失败：未知错误</div>
+          <div class="ActivatePage-msg is-err">获取授权信息失败：端口未就绪</div>
+        </div>
+        <div class="mk-cell-hint"><code>LICENSE_TEXT.msg*</code>（<code>text.ts:228-243</code>，源 <code>W3.jsx:26/46/50/67-101</code> 的 <code>u(...)</code>）。导出路径 / 失败原因是**运行时值**，此处为示例</div>
+      </div>
+    </div>
+
+    <!-- 机器码区三态 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">机器码区（生成中 / 已生成 / 按钮禁用）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <div class="ActivatePage-codeBox">
+            <code class="ActivatePage-codeText">正在生成…</code>
+          </div>
+          <div class="ActivatePage-codeBox">
+            <code class="ActivatePage-codeText">MC7F-2K9Q-4XPD-8LZT-A3RB-6HNV</code>
+            <div class="ActivatePage-codeActions">
+              <button type="button" class="btn btnSm ActivatePage-sm" disabled>
+                <svg class="mk-icon"><use href="#i-copy"/></svg>
+                复制
+              </button>
+              <button type="button" class="btn btnSm ActivatePage-sm ActivatePage-ghost" disabled>
+                <svg class="mk-icon"><use href="#i-export"/></svg>
+                导出文件
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="mk-cell-hint">机器码没取到时两颗钮都是 <code>disabled</code>（<code>ActivatePage.tsx:280/287</code>），正文显示 <code>正在生成…</code></div>
+      </div>
+    </div>
+
+    <!-- 主按钮三态 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">主按钮三态（同一颗钮）</div>
+      <div class="mk-cell-body">
+        <div class="mk-stack">
+          <button type="button" class="btn btnPrimary ActivatePage-primary">
+            <svg class="mk-icon"><use href="#i-key"/></svg>
+            激活
+          </button>
+          <button type="button" class="btn btnPrimary ActivatePage-primary">
+            <span class="spinnerRing"></span>
+            验证中…
+          </button>
+          <button type="button" class="btn btnPrimary ActivatePage-primary">
+            <svg class="mk-icon"><use href="#i-key"/></svg>
+            重新激活
+          </button>
+        </div>
+        <div class="mk-cell-hint"><code>busy ? 验证中… : ok ? 重新激活 : 激活</code>（<code>ActivatePage.tsx:316</code>）。激活成功后真机会**等 600ms 再解锁**（源文件头注），否则这条成功消息一闪而过</div>
+      </div>
+    </div>
+
+    <!-- 两颗副钮 + 重新检测 -->
+    <div class="mk-cell">
+      <div class="mk-cell-title">副按钮（中性描边一族）</div>
+      <div class="mk-cell-body">
+        <div class="mk-row-wrap">
+          <button type="button" class="btn btnSm ActivatePage-sm">
+            <svg class="mk-icon"><use href="#i-copy"/></svg>
+            复制
+          </button>
+          <button type="button" class="btn btnSm ActivatePage-sm ActivatePage-ghost">
+            <svg class="mk-icon"><use href="#i-export"/></svg>
+            导出文件
+          </button>
+          <button type="button" class="btn btnSm ActivatePage-recheck">
+            <svg class="mk-icon"><use href="#i-refresh"/></svg>
+            重新检测授权状态
+          </button>
+        </div>
+        <div class="mk-cell-hint">三者同为 <code>btn btnSm</code>（<code>.sm/.recheck</code> 都 composes 它）⇒ 只有一种按钮形态，不搞第二套（判据「能一种的别搞两种」）</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<script>
+  /* 授权状态演示：改 <body data-status>，四条 banner / 「重新检测」/ 主按钮文案随之切换。
+     真机同一件事由 `ActivatePage.tsx:205-209` 的条件渲染完成，此处只是把四个分支摊开看。 */
+  document.querySelectorAll('.mk-seg[data-set-status]').forEach((seg) => {
+    seg.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.body.setAttribute('data-status', b.dataset.val);
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('is-on', x === b));
+      });
+    });
+  });
+
+  // 外观开关条：只改 <html> 上的一个属性（与真机同机制）
+  document.querySelectorAll('.mk-seg[data-set]').forEach((seg) => {
+    const attr = seg.dataset.set;
+    seg.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.documentElement.setAttribute(attr, b.dataset.val);
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('is-on', x === b));
+      });
+    });
+  });
+</script>
+</body>
+</html>
