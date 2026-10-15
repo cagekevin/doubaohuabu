@@ -16,11 +16,12 @@
 //   会去掉参数再取一次，挑尺寸更大的那份。
 // ============================================================
 
-const { session, nativeImage } = require('electron');
-const { URL } = require('url');
-const { handle } = require('./ipc');
+import { session, nativeImage, type Session } from 'electron';
+import { URL } from 'url';
+import { handle } from './ipc';
+import { asRecord } from './api/shape';
 // 诊断日志（同一个文件，便于一起取证）
-const { writeDiag } = require('./lovart-scan');
+import { writeDiag } from './lovart-scan';
 
 const MAX_BYTES = 30 * 1024 * 1024; // 单张 30MB 上限
 const TIMEOUT_MS = 25000; // 单张超时
@@ -30,7 +31,10 @@ const DEFAULT_LIMIT = 80; // 单次任务最多下载张数
 const PLACEHOLDER_SIDE = 200; // 长边 < 200px 视为占位/图标
 const PLACEHOLDER_BYTES = 4096; // < 4KB 且长边 < 512px 视为占位
 
-function isPlaceholderImage(bytes, natW, natH, opts) {
+/** 占位图判定结果（`placeholder:true` 时才带原因） */
+type PlaceholderVerdict = { placeholder: true; reason: string } | { placeholder: false };
+
+function isPlaceholderImage(bytes: number, natW: number, natH: number, opts?: { minSide?: number; minBytes?: number }): PlaceholderVerdict {
   const o = opts || {};
   const minSide = o.minSide || PLACEHOLDER_SIDE;
   const minBytes = o.minBytes || PLACEHOLDER_BYTES;
@@ -50,7 +54,8 @@ function isPlaceholderImage(bytes, natW, natH, opts) {
 const PROCESS_KEYS_RE = /^(x-oss-process|imageMogr2|imageView2|imageView|imgaot|image_process|resize|quality|thumbnail|thumb|w|h|width|height|q)(\/|$)/i;
 
 // ---- MIME 嗅探（content-type 不可靠时兜底）----
-function sniffMime(buf) {
+// 下面按字节下标取值时补 `?? 0`：本函数开头已挡掉 `length < 12`，`noUncheckedIndexedAccess` 不认这层判断
+function sniffMime(buf: Buffer): string {
   if (!buf || buf.length < 12) return '';
   const b = buf;
   if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
@@ -58,45 +63,49 @@ function sniffMime(buf) {
   if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif';
   if (b[0] === 0x42 && b[1] === 0x4d) return 'image/bmp';
   // RIFF....WEBP
-  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
-      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    return 'image/webp';
+  }
   // ftypheic / ftypheix / ftypavif / ftypmif1
   if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
-    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase();
+    const brand = String.fromCharCode(b[8] ?? 0, b[9] ?? 0, b[10] ?? 0, b[11] ?? 0).toLowerCase();
     if (brand.indexOf('avif') === 0) return 'image/avif';
     if (brand.indexOf('hei') === 0 || brand.indexOf('mif1') === 0 || brand.indexOf('msf1') === 0) return 'image/heic';
   }
   return '';
 }
 
-function isImageMime(ct) {
+function isImageMime(ct: unknown): boolean {
   if (typeof ct !== 'string') return false;
-  return /^image\//i.test(ct.trim().split(';')[0]);
+  return /^image\//i.test(ct.trim().split(';')[0] || '');
 }
 
 // 去掉已知的缩略图处理参数，得到「原图候选 URL」；无参数可去时返回 ''
-function stripProcessParams(rawUrl) {
+function stripProcessParams(rawUrl: unknown): string {
   try {
-    const u = new URL(rawUrl);
+    const u = new URL(String(rawUrl));
     let changed = false;
     for (const k of Array.from(u.searchParams.keys())) {
-      if (PROCESS_KEYS_RE.test(k)) { u.searchParams.delete(k); changed = true; }
+      if (PROCESS_KEYS_RE.test(k)) {
+        u.searchParams.delete(k);
+        changed = true;
+      }
     }
     return changed ? u.toString() : '';
-  } catch (e) {
+  } catch {
     return '';
   }
 }
 
-function safeNameFromUrl(rawUrl, idx) {
+function safeNameFromUrl(rawUrl: unknown, idx: number): string {
   try {
-    const u = new URL(rawUrl);
+    const u = new URL(String(rawUrl));
     const base = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || '');
     // 去掉 query 带来的噪声，限制长度
     const cleaned = base.replace(/[?#].*$/, '').slice(0, 80);
     if (cleaned && /\.(png|jpe?g|webp|gif|avif|bmp|tiff?|heic)$/i.test(cleaned)) return cleaned;
     return cleaned || `Lovart 图 ${idx + 1}`;
-  } catch (e) {
+  } catch {
     return `Lovart 图 ${idx + 1}`;
   }
 }
@@ -110,18 +119,25 @@ function safeNameFromUrl(rawUrl, idx) {
 const ACCEPT_IMG = 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8';
 const ACCEPT_LANG = 'zh-CN,zh;q=0.9,en;q=0.8';
 
-function headerProfiles(referer) {
-  const full = { accept: ACCEPT_IMG, 'accept-language': ACCEPT_LANG };
+/** 三档请求头（元组：档位顺序即降级顺序，下标有意义） */
+type HeaderProfile = Record<string, string>;
+
+function headerProfiles(referer: string): [HeaderProfile, HeaderProfile, HeaderProfile] {
+  const full: Record<string, string> = { accept: ACCEPT_IMG, 'accept-language': ACCEPT_LANG };
   if (referer) {
-    full.referer = referer;
-    try { full.origin = new URL(referer).origin; } catch (e) { /* referer 非法 ⇒ 不带 origin 头（其余头照发） */ }
+    full['referer'] = referer;
+    try {
+      full['origin'] = new URL(referer).origin;
+    } catch {
+      /* referer 非法 ⇒ 不带 origin 头（其余头照发） */
+    }
   }
   full['sec-fetch-dest'] = 'image';
   full['sec-fetch-mode'] = 'no-cors';
   full['sec-fetch-site'] = 'same-site';
 
-  const mid = { accept: ACCEPT_IMG, 'accept-language': ACCEPT_LANG };
-  if (referer) mid.referer = referer;
+  const mid: Record<string, string> = { accept: ACCEPT_IMG, 'accept-language': ACCEPT_LANG };
+  if (referer) mid['referer'] = referer;
 
   return [full, mid, { accept: '*/*' }];
 }
@@ -129,27 +145,33 @@ function headerProfiles(referer) {
 // 需要降档重试的状态码（鉴权 / 风控 / 拒绝）
 const RETRY_STATUS = [401, 403, 406, 429, 451];
 
+/** 单张下载的结果：成功 / 失败 / 跳过（占位图） */
+type FetchOutcome =
+  | { ok: true; dataUrl: string; sizeBytes: number; natW: number; natH: number; mime: string }
+  | { ok: false; error?: string; skipped?: undefined }
+  | { ok: false; skipped: true; reason: string; error?: string };
+
 // 单张下载：返回 { ok, dataUrl, sizeBytes, natW, natH, mime } / { ok:false, error } / { ok:false, skipped }
-async function fetchOne(ses, rawUrl, referer, minimalHeaders) {
+async function fetchOne(ses: Session, rawUrl: string, referer: string, minimalHeaders?: boolean): Promise<FetchOutcome> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const profiles = minimalHeaders ? [headerProfiles(referer)[1]] : headerProfiles(referer);
-  const errs = [];
+  const errs: string[] = [];
   try {
-    let res = null;
-    for (let i = 0; i < profiles.length; i++) {
+    let res: Response | null = null;
+    for (const [i, profile] of profiles.entries()) {
       try {
-        // eslint-disable-next-line no-await-in-loop
+        // 逐档串行试（档位有先后：风控类失败才降档）
         res = await ses.fetch(rawUrl, {
           method: 'GET',
           signal: controller.signal,
           credentials: 'include',
-          headers: profiles[i]
+          headers: profile,
         });
       } catch (e) {
         // 受限头（origin / sec-fetch-*）被网络栈拒绝时会抛错 → 直接降档
-        if (e && e.name === 'AbortError') throw e;
-        errs.push(`档${i + 1}:${(e && e.message) || '请求失败'}`);
+        if (e instanceof Error && e.name === 'AbortError') throw e;
+        errs.push(`档${i + 1}:${e instanceof Error ? e.message : '请求失败'}`);
         res = null;
         continue;
       }
@@ -170,7 +192,7 @@ async function fetchOne(ses, rawUrl, referer, minimalHeaders) {
       return { ok: false, error: `文件过大（${(ab.byteLength / 1024 / 1024).toFixed(1)}MB > ${MAX_BYTES / 1024 / 1024}MB）` };
     }
     const buf = Buffer.from(ab);
-    let mime = isImageMime(ct) ? ct.split(';')[0].trim() : sniffMime(buf);
+    let mime = isImageMime(ct) ? ct.split(';')[0]?.trim() || '' : sniffMime(buf);
     if (!mime) mime = sniffMime(buf);
     if (!mime) return { ok: false, error: '返回内容不是图片' };
 
@@ -183,7 +205,9 @@ async function fetchOne(ses, rawUrl, referer, minimalHeaders) {
         natW = sz.width || 0;
         natH = sz.height || 0;
       }
-    } catch (e) { /* 某些格式（avif/heic）nativeImage 解不了，尺寸留 0 不影响功能 */ }
+    } catch {
+      /* 某些格式（avif/heic）nativeImage 解不了，尺寸留 0 不影响功能 */
+    }
 
     // 占位图 / 站点杂图剔除：这是「抓到的不是生成的图」的第二道防线
     // （第一道在页面脚本内按 naturalWidth/Height 过滤）
@@ -198,10 +222,10 @@ async function fetchOne(ses, rawUrl, referer, minimalHeaders) {
       sizeBytes: ab.byteLength,
       natW,
       natH,
-      mime
+      mime,
     };
   } catch (e) {
-    const msg = (e && e.name === 'AbortError') ? `超时（${TIMEOUT_MS / 1000}s）` : ((e && e.message) || '未知网络错误');
+    const msg = e instanceof Error && e.name === 'AbortError' ? `超时（${TIMEOUT_MS / 1000}s）` : e instanceof Error ? e.message : '未知网络错误';
     return { ok: false, error: msg };
   } finally {
     clearTimeout(timer);
@@ -212,7 +236,7 @@ async function fetchOne(ses, rawUrl, referer, minimalHeaders) {
 // 关键修正：只要 URL 带服务端处理参数（x-oss-process / imageMogr2 等），
 // 一律**优先取去掉参数的原图**。旧实现「先取带参数的、尺寸 ≥1024 就接受」
 // 会把 1024 的 webp 缩略图当成原图存档 —— 与「保持原始分辨率与画质」相悖。
-async function fetchBest(ses, rawUrl, referer) {
+async function fetchBest(ses: Session, rawUrl: string, referer: string): Promise<FetchOutcome> {
   const alt = stripProcessParams(rawUrl);
   if (!alt) return fetchOne(ses, rawUrl, referer);
 
@@ -227,29 +251,43 @@ async function fetchBest(ses, rawUrl, referer) {
   return orig;
 }
 
+/** 宿主注入面：取主窗口（事件回推的目标之一） */
+interface LovartFetchDeps {
+  getMainWindow?: () => {
+    isDestroyed(): boolean;
+    webContents: { isDestroyed(): boolean; send(channel: string, data: unknown): void };
+  } | null;
+}
+
+/** IPC 事件对象上本文件用到的两个成员（`handle` 的形参是 `unknown`） */
+interface IpcEventLike {
+  sender?: { isDestroyed(): boolean; send(channel: string, data: unknown): void };
+}
+
 /**
  * 注册下载 IPC。
  * 渲染端调用 lovart-fetch-images 后立即拿到 { ok, jobId }，
  * 之后通过 'lovart-fetch-item'（每张完成）与 'lovart-fetch-done'（整批结束）接收结果。
  */
-function initLovartFetch({ getMainWindow }) {
+function initLovartFetch({ getMainWindow }: LovartFetchDeps): void {
   handle('lovart-fetch-images', async (event, args) => {
-    const payload = args || {};
-    const accountId = payload.accountId || '';
-    const partition = payload.partition || '';
-    const referer = payload.referer || 'https://www.lovart.ai/';
-    const limit = Math.max(1, Math.min(Number(payload.limit) || DEFAULT_LIMIT, 200));
-    const urls = Array.isArray(payload.urls) ? payload.urls.slice(0, limit) : [];
+    const payload = asRecord(args);
+    const accountId = String(payload['accountId'] || '');
+    const partition = String(payload['partition'] || '');
+    const referer = String(payload['referer'] || 'https://www.lovart.ai/');
+    const limit = Math.max(1, Math.min(Number(payload['limit']) || DEFAULT_LIMIT, 200));
+    // 载荷里的 URL 列表（源直接下标取用）
+    const urls = Array.isArray(payload['urls']) ? (payload['urls'] as string[]).slice(0, limit) : [];
 
     if (!accountId || urls.length === 0) {
       return { ok: false, error: '缺少账号或图片 URL 列表' };
     }
 
-    let ses;
+    let ses: Session;
     try {
       ses = partition ? session.fromPartition(partition) : session.defaultSession;
     } catch (e) {
-      return { ok: false, error: `无法打开会话分区：${(e && e.message) || e}` };
+      return { ok: false, error: `无法打开会话分区：${e instanceof Error ? e.message : String(e)}` };
     }
 
     const win = getMainWindow && getMainWindow();
@@ -260,11 +298,12 @@ function initLovartFetch({ getMainWindow }) {
      *    于是「先 `okCount++`、再推送」的写法会把**没送达**的图算成成功
      *    ⇒ 用户看到「已获取 N 张」而实际缺图（假成功）。
      */
-    const sender = (channel, data) => {
+    const sender = (channel: string, data: unknown): boolean => {
       try {
         // 优先回到发起请求的那个渲染进程；窗口已销毁则退回主窗口
-        const target = (event && event.sender && !event.sender.isDestroyed()) ? event.sender
-          : (win && !win.isDestroyed() ? win.webContents : null);
+        const ev = asRecord(event) as IpcEventLike;
+        const target =
+          ev.sender && !ev.sender.isDestroyed() ? ev.sender : win && !win.isDestroyed() ? win.webContents : null;
         if (target && !target.isDestroyed()) {
           target.send(channel, data);
           return true;
@@ -274,7 +313,7 @@ function initLovartFetch({ getMainWindow }) {
         return false;
       } catch (e) {
         // ★ TD-13-8：推送失败**不再静默**（原则 6）—— 否则调用方会把"没送到"算成成功
-        console.warn('[lovart-fetch] 进度推送失败:', channel, (e && e.message) || e);
+        console.warn('[lovart-fetch] 进度推送失败:', channel, e instanceof Error ? e.message : String(e));
         return false;
       }
     };
@@ -286,21 +325,21 @@ function initLovartFetch({ getMainWindow }) {
       let okCount = 0;
       let failCount = 0;
       let skipCount = 0;
-      const failures = [];
-      const skippedList = [];
+      const failures: { url: string; error: string }[] = [];
+      const skippedList: { url: string; reason: string }[] = [];
       let cursor = 0;
       const total = urls.length;
 
-      const worker = async () => {
-        while (true) {
+      const worker = async (): Promise<void> => {
+        for (;;) {
           const i = cursor++;
           if (i >= total) return;
-          const rawUrl = urls[i];
-          let r;
+          const rawUrl = urls[i] as string;
+          let r: FetchOutcome;
           try {
             r = await fetchBest(ses, rawUrl, referer);
           } catch (e) {
-            r = { ok: false, error: (e && e.message) || '未知错误' };
+            r = { ok: false, error: e instanceof Error ? e.message : '未知错误' };
           }
           if (r.ok) {
             // ★ **TD-13-8：先送、再计数** —— 送不到就不算成功。
@@ -318,8 +357,8 @@ function initLovartFetch({ getMainWindow }) {
                 natW: r.natW,
                 natH: r.natH,
                 sourceUrl: rawUrl,
-                source: 'capture'
-              }
+                source: 'capture',
+              },
             });
             if (delivered) {
               okCount++;
@@ -355,12 +394,17 @@ function initLovartFetch({ getMainWindow }) {
         failCount,
         skipCount,
         failures: failures.map((f) => ({ url: String(f.url).slice(0, 200), error: f.error })),
-        skipped: skippedList.map((s) => ({ url: String(s.url).slice(0, 200), reason: s.reason }))
+        skipped: skippedList.map((s) => ({ url: String(s.url).slice(0, 200), reason: s.reason })),
       });
-    })().catch((e) => {
+    })().catch((e: unknown) => {
       sender('lovart-fetch-done', {
-        jobId, accountId, total: urls.length, okCount: 0, failCount: urls.length, skipCount: 0,
-        failures: [{ url: '', error: (e && e.message) || '任务异常中断' }]
+        jobId,
+        accountId,
+        total: urls.length,
+        okCount: 0,
+        failCount: urls.length,
+        skipCount: 0,
+        failures: [{ url: '', error: e instanceof Error ? e.message : '任务异常中断' }],
       });
     });
 
@@ -375,4 +419,4 @@ function initLovartFetch({ getMainWindow }) {
 }
 
 // 导出面 = **宿主可用面**：只有 `initLovartFetch` 出本文件（下划线工具都是本文件内部实现）
-module.exports = { initLovartFetch };
+export { initLovartFetch };

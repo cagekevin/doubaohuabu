@@ -7,28 +7,28 @@
   },
   "measured": {
     "checkJs": true,
-    "errors": 644,
+    "errors": 565,
     "byCode": {
       "TS2314": 1,
       "TS2322": 2,
-      "TS2339": 131,
-      "TS2345": 47,
+      "TS2339": 100,
+      "TS2345": 42,
       "TS2532": 4,
       "TS2552": 1,
       "TS2698": 1,
       "TS2769": 12,
       "TS2783": 1,
       "TS4111": 6,
-      "TS6133": 11,
-      "TS7005": 57,
-      "TS7006": 287,
+      "TS6133": 7,
+      "TS7005": 51,
+      "TS7006": 263,
       "TS7016": 1,
       "TS7022": 1,
       "TS7023": 4,
       "TS7024": 1,
-      "TS7031": 8,
-      "TS7034": 20,
-      "TS7053": 10,
+      "TS7031": 6,
+      "TS7034": 16,
+      "TS7053": 7,
       "TS18046": 31,
       "TS18047": 4,
       "TS18048": 3
@@ -38,14 +38,12 @@
       "electron/dola-media.js": 226,
       "electron/fingerprint-preload.js": 1,
       "electron/license.js": 62,
-      "electron/lovart-fetch.js": 49,
-      "electron/lovart-scan.js": 30,
       "electron/main.js": 233
     }
   },
   "discipline": {
     "any": 1,
-    "as": 49,
+    "as": 56,
     "nonNull": 0,
     "tsIgnore": 0
   }
