@@ -204,6 +204,8 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 | 记录流水账 | `记一下.md` |
 | **删 + 做**（清障 —— 删与做必须同批） | `删.md` ★ |
 
+**专项任务**：**后端 `electron/**` JS → TS 迁移** —— 计划 / 日志 / 弯路 / 脚本同住 `docs/plan/后端TS迁移/`。动手前按该目录 `README.md` §6 的**读法**走（计划 → **`弯路.md` 必读** → `日志.md` 尾条）。
+
 **动手前先定数据流**：走既有唯一入口（端口 + adapters 唯一实现 + state 唯一写入点 + `constants/text.ts` 文案 + `stable/contracts/` 键与格式），**禁止自建旁路**；**禁裸字面量**（先查 §五）。文件移动/改名走 `scripts/mv-sync-refs.mjs`。
 
 **两条纪律**（都是踩出来的）：
