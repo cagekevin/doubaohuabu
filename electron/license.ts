@@ -188,6 +188,8 @@ function collectStableId(): StableId {
   // 注意：不包含 os.hostname()（DHCP/VPN 可动态修改主机名）
   // 不包含 MAC 地址（虚拟网卡随网络切换增删）
   try {
+    // 收成局部变量：源的 `os.cpus()[0] && os.cpus()[0].model` 里两次下标访问**不相关**
+    // （TS 不认第一次的守卫能收窄第二次）⇒ 这样才过得了 noUncheckedIndexedAccess
     const cpu = os.cpus()[0];
     fallback.push('cpu:' + ((cpu && cpu.model) || ''));
   } catch {
@@ -808,10 +810,12 @@ function initLicense(): void {
   });
 }
 
-/** 仅供测试注入可信时间（`_timeOverride`）—— 本仓当前无测试消费者，但删它会让该分支变死代码 */
-function __setTrustedTimeOverride(ms: number | null): void {
-  _timeOverride = ms;
-}
+// 导出面 = **宿主可用面**（`initLicense`）＋ 一个声明了用途的测试注入口（源即"属性＝箭头函数"形态）
+export { initLicense };
 
-// 导出面 = **宿主可用面**（`initLicense`）＋ 上面那个声明了用途的测试注入口
-export { initLicense, __setTrustedTimeOverride };
+/** 仅供测试注入可信时间（`_timeOverride`）—— 本仓当前无测试消费者，但删它会让该分支变死代码 */
+const __setTrustedTimeOverride = (ms: number | null): void => {
+  _timeOverride = ms;
+};
+
+export { __setTrustedTimeOverride };
