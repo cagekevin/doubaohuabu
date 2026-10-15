@@ -20,24 +20,22 @@ const QUOTED_RE = new RegExp(`((?:${KEY_WORDS})\\s*)("[^"]{8,}")`, 'gi');
  * 文本脱敏：`key=value` / `"key": "value"` / `key "value"` 形态的疑似密钥字段，
  * 值替换为 <redacted>。键名口径与噜噜同源公开协议形态：
  * authorization / api[_ -]key / token / secret / password / access[_ -]key / 裸 key。
- * @param {string} text
- * @returns {string}
+ *
+ * ⚠️ 入参写 `unknown` 而不是 `string`：**调用方实测**会直接塞捕获到的任意值（`catch` 的 err、后端字段），
+ *    这里 `String(...)` 收口与原来一致；写成 `string` 只会把窄化责任推给调用方（而它们没有类型）。
  */
-function redactText(text) {
+function redactText(text: unknown): string {
   const s0 = String(text || '');
   if (!s0) return s0;
-  return s0.replace(QUOTED_RE, (_m, head) => `${head}<redacted>`)
-           .replace(KV_RE, (_m, head) => `${head}<redacted>`);
+  return s0.replace(QUOTED_RE, (_m, head: string) => `${head}<redacted>`).replace(KV_RE, (_m, head: string) => `${head}<redacted>`);
 }
 
 /**
  * 请求头脱敏：键名命中敏感词的整个值替换为 <redacted>
  * （Authorization: Bearer sk-xxx → Authorization: <redacted>）。
- * @param {Record<string,string>} headers
- * @returns {Record<string,string>}
  */
-function redactHeaders(headers) {
-  const out = {};
+function redactHeaders(headers: Record<string, unknown> | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers || {})) {
     out[k] = /authorization|api-?key|access-?key|token|secret|password/i.test(k) ? '<redacted>' : String(v);
   }
@@ -47,17 +45,18 @@ function redactHeaders(headers) {
 /**
  * 任意值安全转日志字符串：对象 JSON 序列化后过 redactText，
  * 序列化失败（循环引用等）降级 String()。
- * @param {*} value
- * @returns {string}
+ *
+ * ⚠️ `JSON.stringify` 的返回类型含 `undefined`（`undefined`/函数/符号入参）⇒ 这里补 `?? ''`：
+ *    `redactText(undefined)` 本来就等价于 `redactText('')`（内部 `String(x || '')`）⇒ **行为不变**。
  */
-function redactForLog(value) {
-  let s;
+function redactForLog(value: unknown): string {
+  let s: string;
   try {
-    s = typeof value === 'string' ? value : JSON.stringify(value);
-  } catch (_) {
+    s = typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+  } catch {
     s = String(value);
   }
   return redactText(s);
 }
 
-module.exports = { redactText, redactHeaders, redactForLog };
+export { redactText, redactHeaders, redactForLog };

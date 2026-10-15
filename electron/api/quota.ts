@@ -9,35 +9,44 @@
 // 额度文案库是「数据不是逻辑」：adapter.quotaHints 可按实测热改补充。
 // ============================================================
 
+import type { QuotaHint } from './types';
+
 /** 引擎级默认文案库（各家通用的中/英文口径，适配器可再叠加） */
-const DEFAULT_QUOTA_HINTS = [
+const DEFAULT_QUOTA_HINTS: readonly QuotaHint[] = [
   {
     re: /生成(?:额度)?未扣除|额度未扣除|未扣除(?:额度|费用)/,
     kind: 'quota_not_deducted',
-    advice: '任务未计费，可直接重试'
+    advice: '任务未计费，可直接重试',
   },
   {
     re: /没额度|需要开通标准套餐|额度(?:已)?用完|额度不足|今日视频没额度|今日图片没额度/,
     kind: 'quota_exhausted',
-    advice: '额度已用完或套餐不足，请充值/开通后重试'
+    advice: '额度已用完或套餐不足，请充值/开通后重试',
   },
   {
     re: /insufficient[_ ]?quota|quota[_ ]?(?:exceeded|exhausted)|billing(?:_[_ ]?)?hard[_ ]?limit|余额不足|账户欠费/i,
     kind: 'quota_exhausted',
-    advice: '账户额度/余额不足，请充值后重试'
-  }
+    advice: '账户额度/余额不足，请充值后重试',
+  },
 ];
+
+/** 命中结果（渲染层可整条展示，`matched` 供诊断） */
+interface QuotaHit {
+  kind: string;
+  advice: string;
+  matched: string;
+}
 
 /**
  * 在文本中匹配额度信号。适配器 hints 优先（可覆盖默认口径），默认库兜底。
- * @param {import('./types').ProviderAdapter} adapter 可为 null（只用默认库）
- * @param {string} text  报错原文（响应体 text / outcome.error.message）
- * @returns {{kind:string, advice:string, matched:string}|null}
+ *
+ * @param adapter 可为 null（只用默认库）；**只读它的 `quotaHints`** —— 故这里只要求这一个字段
+ * @param text  报错原文（响应体 text / outcome.error.message）
  */
-function matchQuotaHint(adapter, text) {
+function matchQuotaHint(adapter: { quotaHints?: QuotaHint[] } | null, text: unknown): QuotaHit | null {
   const s = String(text || '');
   if (!s) return null;
-  const groups = [];
+  const groups: (readonly QuotaHint[])[] = [];
   if (adapter && Array.isArray(adapter.quotaHints)) groups.push(adapter.quotaHints);
   groups.push(DEFAULT_QUOTA_HINTS);
   for (const hints of groups) {
@@ -55,12 +64,11 @@ function matchQuotaHint(adapter, text) {
 /**
  * 把额度命中结果包装成「统一额度错误消息」：
  * 原文 + 归一建议，渲染层可直接整条展示。
- * @returns {string}
  */
-function quotaMessage(hit, rawMessage) {
+function quotaMessage(hit: { advice?: string } | null, rawMessage: unknown): string {
   const raw = String(rawMessage || '').trim();
   const advice = hit && hit.advice ? `（${hit.advice}）` : '';
   return raw ? `${raw}${advice}` : (hit && hit.advice) || '额度不足';
 }
 
-module.exports = { DEFAULT_QUOTA_HINTS, matchQuotaHint, quotaMessage };
+export { DEFAULT_QUOTA_HINTS, matchQuotaHint, quotaMessage };

@@ -7,13 +7,11 @@
 //    geeknow 的「额度未扣除」表）**留在各自文件**，不强行合并（那会改匹配语义）。
 // ============================================================
 
-'use strict';
-
 /**
  * 「瞬时网络错误」探测正则 —— 各 provider 共用（`executeJob` 据此判 retryable）。
  *
  * 覆盖：连接复位 / 中止 / 超时 / 半开 / 上游 DNS 抖动（undici 的 `UND_ERR`）。
  */
-const TRANSIENT_ERROR_HINTS = /ECONNRESET|ECONNABORTED|ETIMEDOUT|ESOCKETTIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR/i;
+const TRANSIENT_ERROR_HINTS: RegExp = /ECONNRESET|ECONNABORTED|ETIMEDOUT|ESOCKETTIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR/i;
 
-module.exports = { TRANSIENT_ERROR_HINTS };
+export { TRANSIENT_ERROR_HINTS };
