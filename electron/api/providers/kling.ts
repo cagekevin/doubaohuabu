@@ -19,7 +19,7 @@ import crypto from 'crypto';
 import { asRecord } from '../shape';
 import { requestJson } from '../http';
 import { TRANSIENT_ERROR_HINTS } from './_shared';
-import type { ProviderAdapter, ProviderRunConfig, ResultItem } from '../types';
+import type { AdapterWithDefaults, ProviderRunConfig, ResultItem } from '../types';
 
 const BASE = 'https://api.klingai.com/v1';
 
@@ -217,7 +217,7 @@ const adapter = {
     }
     return { ok: true, message: `连接成功（HTTP ${r.status}）` };
   },
-} satisfies ProviderAdapter;
+} satisfies AdapterWithDefaults;
 
 /**
  * ⚠️ 具名导出（源是 `module.exports = adapter` ＋ `module.exports.signKlingJwt = …` 的**双形态**）。

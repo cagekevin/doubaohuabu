@@ -12,7 +12,7 @@
 import { asRecord } from '../shape';
 import { requestJson } from '../http';
 import { TRANSIENT_ERROR_HINTS } from './_shared';
-import type { ProviderAdapter } from '../types';
+import type { AdapterWithDefaults } from '../types';
 
 const BASE = 'https://api.openai.com/v1';
 
@@ -97,7 +97,7 @@ const adapter = {
     }
     return { ok: true, message: `连接成功（HTTP ${r.status}）` };
   },
-} satisfies ProviderAdapter;
+} satisfies AdapterWithDefaults;
 
 // ⚠️ 具名导出（源是 `module.exports = adapter` 单值）：⛔ 不用 `export default`（本仓禁区）。
 //   ⇒ `bridge` 的 5 处 `registerProvider(require('./providers/x'))` 同批改成取 `.adapter`。

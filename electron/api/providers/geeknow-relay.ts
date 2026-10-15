@@ -25,7 +25,7 @@ import path from 'path';
 import { asRecord } from '../shape';
 import { requestJson } from '../http';
 import { TRANSIENT_ERROR_HINTS } from './_shared';
-import type { ProviderAdapter, ProviderRunConfig, ResultItem, SubmitRequest } from '../types';
+import type { AdapterWithDefaults, ProviderRunConfig, ResultItem, SubmitRequest } from '../types';
 
 // ---- 模型族正则（路由依据）----
 const RE_GENERATIONS = /^(gpt-image|nano-banana)/i; // OpenAI 兼容 generations
@@ -235,8 +235,8 @@ function parseSubmit(body: unknown): { taskId?: string; results?: ResultItem[] }
       const d = asRecord(raw);
       if (!(d['url'] || d['b64_json'])) continue;
       const r: ResultItem = { type: 'image', mime: d['mime'] ? String(d['mime']) : 'image/jpeg' };
-      // ⚠️ 与源的一处微差：源写 `url: d.url`（无 url 时该键值为 `undefined`）；这里**没有 url 就不放这个键**
-      //   —— `exactOptionalPropertyTypes` 不收显式 undefined。对使用方等价（两处都按 `r.url` 真假判）。
+      // 源写 `url: d.url`（可能显式 undefined，如 `d.url` 为 undefined 时）；`exactOptionalPropertyTypes` 不收
+      // 显式 undefined ⇒ 改为"无 url 时不放这个键"。
       if (d['url']) r.url = String(d['url']);
       if (d['b64_json']) r.b64 = String(d['b64_json']);
       results.push(r);
@@ -344,7 +344,7 @@ const adapter = {
     if (r.status === 0) return { ok: false, message: r.error === 'timeout' ? '连接超时' : '网络不可达' };
     return { ok: true, message: `连接成功（HTTP ${r.status}）` };
   },
-} satisfies ProviderAdapter;
+} satisfies AdapterWithDefaults;
 
 // ⚠️ 具名导出（源是 `module.exports = adapter` 单值）；⛔ 不用 `export default`（本仓禁区）
 export { adapter };

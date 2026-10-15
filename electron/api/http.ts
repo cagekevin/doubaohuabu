@@ -12,10 +12,7 @@ export interface JsonResult {
   ok: boolean;
   /** 0 = 网络层失败（不可达 / 超时 / DNS） */
   status: number;
-  /**
-   * 解析出的 JSON —— **形状未知**，故是 `unknown`：
-   * ⛔ 不写成 `object`／`Record<…>`（那等于替调用方谎报形状，本仓最贵的 bug 类就是它）。
-   */
+  /** 解析出的 JSON —— 外部响应的形状未知 ⇒ `unknown`，由各自的解析函数收窄 */
   body: unknown;
   /** 响应原文（回调给服务商自己的解析函数） */
   text: string;
@@ -41,9 +38,6 @@ export interface JsonRequestOptions {
  *   网络层失败 → `{ ok:false, status:0, error:'timeout'|'network' }`（`body` 为空对象）
  */
 async function requestJson(fetchImpl: FetchLike | null, url: string, { method = 'GET', headers = {}, body = '', timeoutMs = 30000 }: JsonRequestOptions = {}): Promise<JsonResult> {
-  // ⚠️ 保持源的 `||` 与 `global.`：审计（`audit-conversion.mjs`）把这两处点出来了 ——
-  //    它们不是类型必需（`||` 与 `??` 对函数入参等价，`global` 在 @types/node 里就是 globalThis），
-  //    ⇒ **非必需处不许偏离源**（改了既没理由、也让对账多两条噪声）。
   const f = fetchImpl || global.fetch;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -68,7 +62,6 @@ async function requestJson(fetchImpl: FetchLike | null, url: string, { method = 
     }
     return { ok: res.ok, status: res.status, body: parsed, text };
   } catch (err) {
-    // ⚠️ 收窄到 Error：原实现读 `err.message`，非 Error 的抛出物本来也就取不到 message（等价）
     const aborted = ctl !== null && err instanceof Error && (err.name === 'AbortError' || err.message.includes('abort'));
     return { ok: false, status: 0, body: {}, text: '', error: aborted ? 'timeout' : 'network' };
   } finally {
@@ -86,8 +79,7 @@ async function requestJson(fetchImpl: FetchLike | null, url: string, { method = 
  *   `via` = 实际成功的栈下标（诊断用）
  */
 async function requestJsonWithFallback(
-  // ⚠️ 数组里允许 `null`/`undefined`：**实现的契约如此**（下面按真值过滤），
-  //    引擎传下来的就是 `[fetchImpl]`（`fetchImpl` 默认为 `null`）—— ⛔ 不在调用侧补 filter。
+  // 数组元素允许 `null`/`undefined`（下面按真值过滤）
   fetchImpls: FetchLike | (FetchLike | null | undefined)[] | null | undefined,
   url: string,
   opts?: JsonRequestOptions,

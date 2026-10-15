@@ -26,7 +26,7 @@ import { matchQuotaHint, quotaMessage } from './quota';
 import { redactText } from './redact';
 import { asRecord, causeText } from './shape';
 import type { createConfigStore } from './config-store';
-import type { PollOutcome, ProviderAdapter, ProviderRunConfig, ResultItem } from './types';
+import type { PollOutcome, ProviderAdapter, ProviderRunConfig, ResultItem, SubmitOutcome } from './types';
 
 type ConfigStore = ReturnType<typeof createConfigStore>;
 
@@ -38,6 +38,14 @@ const POLL_MAX_NET_FAILURES = 5;
 const SUBMIT_RETRY_DELAYS = [2000, 8000, 30000];
 const DOWNLOAD_RETRY_DELAYS = [1500, 4000, 10000];
 const CONCURRENT_PER_PROVIDER = 3;
+
+/**
+ * `parseSubmit` / `parsePoll` 的兜底值 —— 源的写法是就地写对象字面量
+ * （`adapter.parseSubmit(res.body) || {}`、`adapter.parsePoll(res.body) || { status: 'running' }`）；
+ * 这里提成常量只为让类型落得下（行为同一件事：拿到空值时用这个）。
+ */
+const EMPTY_SUBMIT: SubmitOutcome = {};
+const RUNNING_POLL: PollOutcome = { status: 'running' };
 
 /** 任务状态机（终态：`done` / `failed` / `cancelled`） */
 type JobStatus = 'queued' | 'submitting' | 'running' | 'downloading' | 'done' | 'failed' | 'cancelled';
@@ -73,7 +81,8 @@ interface Job {
   results: NormalizedResult[];
   error: JobError | null;
   createdAt: number;
-  finishedAt: number | null;
+  /** 终态化时写（建 job 时不设 —— 源如此） */
+  finishedAt?: number | null;
   /** 是否走了兜底服务商（外发为 `usedFallback`） */
   _usedFallback?: boolean;
   /** 本次提交选中的域（轮询粘住它） */
@@ -285,7 +294,7 @@ function createJobManager(deps: JobManagerDeps) {
 
   function httpFail(res: { ok: boolean; status: number; body: unknown; text: string; error?: 'timeout' | 'network' }, where: string, adapter: ProviderAdapter): ApiError {
     const cls = classifyHttpError(res.status);
-    // ⚠️ `res.body` 是 `unknown`（外部 JSON）⇒ 逐层收窄（口径 6：方括号访问记录键）
+    // `res.body` 是外部 JSON（`unknown`）⇒ 逐层收窄
     const body = asRecord(res.body);
     const errField = body['error'];
     const errMsg = errField ? asRecord(errField)['message'] || errField : null;
@@ -355,8 +364,7 @@ function createJobManager(deps: JobManagerDeps) {
       const rawMsg = (errField ? asRecord(errField)['message'] || errField : null) || body['message'] || qh.matched;
       throw apiError('quota', quotaMessage(qh, typeof rawMsg === 'string' ? rawMsg : ''), res.status, false, qh.advice);
     }
-    // ⚠️ 去掉源的 `|| {}`：`parseSubmit` 的类型已是非空（编译器保证），该兜底**不可达**（口径 7）
-    const parsed = adapter.parseSubmit(res.body);
+    const parsed = adapter.parseSubmit(res.body) || EMPTY_SUBMIT;
     if (parsed.taskId) {
       job.taskId = parsed.taskId;
       return { mode: 'async' };
@@ -405,8 +413,7 @@ function createJobManager(deps: JobManagerDeps) {
         continue;
       }
       netFailures = 0;
-      // ⚠️ 去掉源的 `|| { status: 'running' }`：`parsePoll` 的类型已是非空（口径 7）
-      const outcome: PollOutcome = adapter.parsePoll(res.body);
+      const outcome: PollOutcome = adapter.parsePoll(res.body) || RUNNING_POLL;
       if (outcome.status === 'succeeded') {
         if (!Array.isArray(outcome.results) || !outcome.results.length) {
           throw apiError('bad_response', '任务成功但未返回任何结果', res.status, false);
@@ -510,9 +517,14 @@ function createJobManager(deps: JobManagerDeps) {
       fail(job, 'config', '未配置 API 密钥，请先到「API 服务」设置');
       return;
     }
-    // ⚠️ `params` 用 `?? {}`：`exactOptionalPropertyTypes` 不收显式 undefined；而 5 个 adapter 读参数
-    //    一律是 `params && params.x` ⇒ 空对象与 undefined 的**读取结果完全相同**（不是兜底改语义）。
-    const config: ProviderRunConfig = { baseUrl: cfgRow.baseUrl || '', model: cfgRow.model || '', params: cfgRow.params ?? {}, apiKey, secretKey };
+    const config: ProviderRunConfig = {
+      baseUrl: cfgRow.baseUrl || '',
+      model: cfgRow.model || '',
+      apiKey,
+      secretKey,
+      // 源是 `params: cfgRow.params`（可能 undefined）；`exactOptionalPropertyTypes` 不收显式 undefined ⇒ 按需展开
+      ...(cfgRow.params ? { params: cfgRow.params } : {}),
+    };
 
     let res = await executeJob(job, adapter, config);
 
@@ -539,7 +551,13 @@ function createJobManager(deps: JobManagerDeps) {
             job.taskId = null; // 全新提交，重置轮询上下文
             job.providerId = fbId;
             job.providerName = fbAdapter.name;
-            const fbConfig: ProviderRunConfig = { baseUrl: fbRow.baseUrl || '', model: fbRow.model || '', params: fbRow.params ?? {}, apiKey: fbKey, secretKey: fbSecret };
+            const fbConfig: ProviderRunConfig = {
+              baseUrl: fbRow.baseUrl || '',
+              model: fbRow.model || '',
+              apiKey: fbKey,
+              secretKey: fbSecret,
+              ...(fbRow.params ? { params: fbRow.params } : {}),
+            };
             setStatus(job, 'submitting', {
               error: {
                 kind: 'fallback',
@@ -570,9 +588,7 @@ function createJobManager(deps: JobManagerDeps) {
     const { providerId, kind, prompt, params, nodeId, refSources, attempt } = payload;
     const adapter = registry.getProvider(String(providerId));
     if (!adapter) return { ok: false, error: `未知服务商 ${String(providerId)}` };
-    // ⚠️ 用 `some(c => c === kind)` 而不是 `includes(kind === 'video' ? 'video' : 'image')`：
-    //    源的判定是「载荷给的 kind 在能力表里吗」——收紧成 image/video 会**改变行为**
-    //    （例如 kind='llm' 的合法载荷会被误拒）；`some` 保持逐字相同的判定，且不需要窄化类型。
+    // 源是 `adapter.capabilities.includes(kind)`；`kind` 取自载荷（非字面量联合）⇒ 逐项比较
     if (!adapter.capabilities || !adapter.capabilities.some((c) => c === kind)) {
       return { ok: false, error: `服务商「${adapter.name}」不支持 ${kind === 'video' ? '视频' : '图片'}生成` };
     }
@@ -607,9 +623,6 @@ function createJobManager(deps: JobManagerDeps) {
       results: [],
       error: null,
       createdAt: now(),
-      // ⚠️ 源的建 job 处**没有**这个字段（跑到终态才赋值）；这里显式置 `null`：
-      //    外发快照那句 `job.finishedAt || null` 对 undefined/null 是同一个结果 ⇒ 行为不变。
-      finishedAt: null,
     };
     jobs.set(job.jobId, job);
     emit(job);

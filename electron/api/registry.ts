@@ -5,7 +5,7 @@
 // 引擎（job-manager）、设置页、生成面板全部从 registry 取信息，零改动。
 // ============================================================
 
-import type { ProviderAdapter } from './types';
+import type { ParamField, ProviderAdapter } from './types';
 
 /** id → 适配器（进程级注册表；由 `bridge` 在启动时逐个注册） */
 const providers = new Map<string, ProviderAdapter>();
@@ -28,27 +28,21 @@ function listProviderIds(): string[] {
   return [...providers.keys()];
 }
 
-/**
- * 下发渲染层的元信息（不含密钥、不含请求头细节；`domains` 为公开端点地址，可下发）。
- *
- * ⚠️ 与源相比**少了两处 `|| []` / `|| {}` 兜底**：`capabilities` / `paramSchema` / `defaults`
- *    在类型上已是必填 ⇒ 那两个兜底**不可达**（类型层取代了运行期兜底，这正是本迁移的目的）。
- *    `domains` 仍可选 ⇒ 它的 `|| []` 保留。
- */
+/** 下发渲染层的元信息（不含密钥、不含请求头细节；`domains` 为公开端点地址，可下发） */
 function listProvidersMeta(): {
   id: string;
   name: string;
   capabilities: string[];
-  paramSchema: ProviderAdapter['paramSchema'];
-  defaults: ProviderAdapter['defaults'];
+  paramSchema: ParamField[];
+  defaults: Record<string, unknown>;
   domains: string[];
 }[] {
   return [...providers.values()].map((a) => ({
     id: a.id,
     name: a.name,
-    capabilities: [...a.capabilities],
-    paramSchema: a.paramSchema,
-    defaults: a.defaults,
+    capabilities: [...(a.capabilities || [])],
+    paramSchema: a.paramSchema || [],
+    defaults: a.defaults || {},
     domains: [...(a.domains || [])],
   }));
 }

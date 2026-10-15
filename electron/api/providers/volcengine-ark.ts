@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { asRecord } from '../shape';
 import { requestJson } from '../http';
-import type { ProviderAdapter, ResultItem } from '../types';
+import type { AdapterWithDefaults, ResultItem } from '../types';
 
 /** 参数尾缀：把 schema 参数拼成 Seedance 的文本指令（只在 video 用） */
 function buildParamSuffix(params: Record<string, unknown> | undefined): string {
@@ -184,7 +184,7 @@ const adapter = {
     // 400（参数错误）/ 200 / 其它 → 鉴权与网络都通了
     return { ok: true, message: `连接成功（HTTP ${r.status}）` };
   },
-} satisfies ProviderAdapter;
+} satisfies AdapterWithDefaults;
 
 // ⚠️ 具名导出（源是 `module.exports = adapter` 单值）；⛔ 不用 `export default`（本仓禁区）
 export { adapter };

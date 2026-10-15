@@ -46,8 +46,8 @@ function redactHeaders(headers: Record<string, unknown> | null | undefined): Rec
  * 任意值安全转日志字符串：对象 JSON 序列化后过 redactText，
  * 序列化失败（循环引用等）降级 String()。
  *
- * ⚠️ `JSON.stringify` 的返回类型含 `undefined`（`undefined`/函数/符号入参）⇒ 这里补 `?? ''`：
- *    `redactText(undefined)` 本来就等价于 `redactText('')`（内部 `String(x || '')`）⇒ **行为不变**。
+ * ⚠️ `JSON.stringify` 的返回类型含 `undefined`（`undefined`/函数/符号入参）⇒ 这里补 `?? ''`
+ *   （本文件 `redactText` 对空值返回 `''`）。
  */
 function redactForLog(value: unknown): string {
   let s: string;

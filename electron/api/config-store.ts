@@ -38,17 +38,13 @@ interface ProviderConfigRow {
 interface ApiConfigDoc {
   version?: number;
   providers: Record<string, ProviderConfigRow>;
-  /**
-   * ⚠️ `setup` / `usage` **故意留 `unknown`**：磁盘文件可能被手改成任意形状，
-   *    而这些读取口在源里就有 `typeof === 'object'` 守卫（审计抓到我一度用 `?? {}` 把它丢掉 ⇒
-   *    对**损坏文件**行为不同：源会回落空配置，丢守卫会把 `null`/字符串原样带出去）。
-   */
+  /** ⚠️ `setup` / `usage` 留 `unknown`：磁盘文件可被手改，读它们的地方带 `typeof === 'object'` 守卫（源如此） */
   setup?: unknown;
   usage?: unknown;
   [k: string]: unknown;
 }
 
-/** `ENOENT` 判定：用 `in` 收窄，⛔ 不用 `as NodeJS.ErrnoException` */
+/** `ENOENT` 判定（用 `in` 收窄，不用 `as`） */
 function isEnoent(err: unknown): boolean {
   return err instanceof Error && 'code' in err && err.code === 'ENOENT';
 }
@@ -123,9 +119,9 @@ function createConfigStore(userDataPath: string, safeStorage: SafeStorage | null
     if (!existing) {
       const created: ProviderConfigRow = {
         enabled: true,
-        baseUrl: adapter.defaults.baseUrl || '',
-        model: adapter.defaults.model || '',
-        params: adapter.defaults.params || {},
+        baseUrl: (adapter.defaults && adapter.defaults.baseUrl) || '',
+        model: (adapter.defaults && adapter.defaults.model) || '',
+        params: (adapter.defaults && adapter.defaults.params) || {},
         apiKeyEnc: '',
       };
       data.providers[adapter.id] = created;
@@ -300,9 +296,9 @@ function createConfigStore(userDataPath: string, safeStorage: SafeStorage | null
     if (!data.usage || typeof data.usage !== 'object') data.usage = {};
     const usage = data.usage as Record<string, Record<string, number>>;
     const key = todayKey(t);
-    // 源是 `if (!usage[key]) usage[key] = {…}`（等价：存在就复用同一对象、不存在才新建）
-    const row = usage[key] ?? { image: 0, video: 0 };
-    usage[key] = row;
+    if (!usage[key]) usage[key] = { image: 0, video: 0 };
+    // 上一行刚保证该键存在；`noUncheckedIndexedAccess` 不认这一点
+    const row = usage[key] as Record<string, number>;
     const ck = kind === 'image' ? 'image' : 'video';
     row[ck] = (row[ck] || 0) + 1;
     saveRaw();

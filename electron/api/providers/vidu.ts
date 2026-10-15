@@ -17,7 +17,7 @@
 import { asRecord } from '../shape';
 import { requestJson } from '../http';
 import { TRANSIENT_ERROR_HINTS } from './_shared';
-import type { ProviderAdapter, ResultItem } from '../types';
+import type { AdapterWithDefaults, ResultItem } from '../types';
 
 const BASE = 'https://api.vidu.cn/ent/v2';
 
@@ -161,7 +161,7 @@ const adapter = {
     }
     return { ok: true, message: `连接成功（HTTP ${r.status}）` };
   },
-} satisfies ProviderAdapter;
+} satisfies AdapterWithDefaults;
 
 // ⚠️ 具名导出（源是 `module.exports = adapter` 单值）；⛔ 不用 `export default`（本仓禁区）
 export { adapter };

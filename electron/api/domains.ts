@@ -12,11 +12,7 @@
 
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000;
 
-/**
- * 内部不变量被破坏时的**显式失败**（原则 6：不静默）。
- * 用在"类型说可能 undefined、但构造上不可能"的收窄点 —— ⛔ 不用 `!`、也不用 `?? 默认值` 蒙过去
- * （后者会把"游标越界"这种真 bug 变成一次静默的错域名）。
- */
+/** 收窄点用：类型说可能 `undefined` 时的显式失败（抛出，而不是返回一个默认值） */
 function invariant(what: string): never {
   throw new Error(`api/domains: 内部不变量被破坏（${what}）`);
 }
@@ -41,22 +37,17 @@ function createDomainRota(
   const all = (domains || []).map(String).filter(Boolean);
   if (all.length < 2) return null;
 
-  /**
-   * ★ **非空元组**：上面那句 `length < 2` 是**构造保证**，但 TS 不认 —— 用元组类型把它表达出来，
-   *   于是后面所有下标访问都是 `string` 而不是 `string | undefined`（⛔ 不用 `!`、也不用 `as`）。
-   */
+  // 非空元组：`length < 2` 之后用元组类型表达"至少一个元素"（避免 `!` / `as`）
   const head = all[0];
-  if (head === undefined) return null; // 与 `length < 2` 同义（只为收窄，不可达）
+  if (head === undefined) return null;
   const list: [string, ...string[]] = [head, ...all.slice(1)];
 
-  // ⚠️ 保持源的 `(opts && opts.x)` 形态：`??` 在这里不是类型必需（审计揪出的一处无理由偏离）
   const nowFn = (opts && opts.now) || (() => Date.now());
   const cooldownMs = opts && opts.cooldownMs != null ? opts.cooldownMs : DEFAULT_COOLDOWN_MS;
 
   let idx = 0;
-  // ⚠️ 用 `Array.from` 而不是 `new Array(n).fill(0)` —— 后者在 TS 里是 `any[]`（会踩 no-unsafe-*）。
-  // ⚠️ 下面的 `coldUntil[i] ?? 0`：**不是兜底**，是类型收窄 —— 这个数组由本行**等长填满**，
-  //    元素必然存在（`?? 0` 与真实值一致）；`noUncheckedIndexedAccess` 只是不认这层构造保证。
+  // `Array.from` 而不是 `new Array(n).fill(0)`：后者在 TS 里是 `any[]`。
+  // 下面读 `coldUntil[i]` 时补 `?? 0` —— 这个数组按 list.length 填满；`noUncheckedIndexedAccess` 要求显式处理 undefined。
   const coldUntil: number[] = Array.from({ length: list.length }, () => 0);
 
   /** 找到 url 对应的域下标（前缀匹配）；找不到 → -1 */
@@ -77,7 +68,7 @@ function createDomainRota(
         if (d !== undefined) return d;
       }
     }
-    // 全冷：游标域（`idx` 由构造保证落在 [0, len) ⇒ 这里只是把类型收窄，不是兜底）
+    // 全冷：取游标域。`?? invariant(...)` 只为满足 `noUncheckedIndexedAccess`
     return list[idx] ?? invariant('游标越界');
   }
 

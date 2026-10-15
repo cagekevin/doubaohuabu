@@ -10,12 +10,11 @@
 //
 // ★ 字段面（§5.2 的摊派）：本文件的 12 个 handler 的回执形状**就地**用局部类型写清；
 //   频道表的 `ret` 统一在 **B4** 填（那时 bridge ＋ main 的 handler 全在、渲染层面也同批换）
-//   —— 免得同一张表被"分两趟读两遍"（已改 README §5.2 的时机口径）。
+//   —— 免得同一张表被分两趟读两遍。
 // ============================================================
 
 import fs from 'fs';
-// ⚠️ `safeStorage` 从 **electron 模块**取（源的写法就是 `require('electron').safeStorage`）——
-//    ⛔ 不是 `app.safeStorage`（那是另一个东西，运行期会是 undefined ⇒ 密钥加密直接失效）。
+// `safeStorage` 从 electron 模块取（源的写法：`require('electron').safeStorage`）
 import { app, net, safeStorage } from 'electron';
 import { handle } from '../ipc';
 import { createConfigStore, maskKey } from './config-store';
@@ -127,8 +126,7 @@ function initApi({ getMainWindow, resolveImageRef }: ApiBridgeDeps): void {
     handle('api-config:get', async (): Promise<OkReply> => {
       const configs: Record<string, unknown> = {};
       for (const id of apiRegistry.listProviderIds()) {
-        // ⚠️ 断言只表达**注册表的不变量**：id 是从 `listProviderIds()` 拿的 ⇒ 必然取得到。
-        //    ⛔ 不写成 `if (!adapter) continue`（那是源里没有的分支，会静默少一项）。
+        // 断言：id 来自 `listProviderIds()`（源是直接传值，未判空）
         const adapter = apiRegistry.getProvider(id) as ProviderAdapter;
         configs[id] = configStore.publicOf(adapter);
       }

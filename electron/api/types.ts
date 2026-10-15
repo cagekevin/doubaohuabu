@@ -111,10 +111,15 @@ export type AdapterCapability = 'image' | 'video' | 'llm';
 export interface ProviderAdapter {
   id: string;
   name: string;
-  capabilities: AdapterCapability[];
-  paramSchema: ParamField[];
+  /**
+   * 可选：读这三处的地方都带运行期兜底（`registry.listProvidersMeta` 的 `|| []` / `|| {}`、
+   * `job-manager.submit` 的 `!adapter.capabilities`、`config-store.getProviderConfig` 的 `adapter.defaults &&`），
+   * 且 5 个 provider 都实际给出它们。
+   */
+  capabilities?: AdapterCapability[];
+  paramSchema?: ParamField[];
   /** baseUrl / model 等默认配置（用户未覆盖时使用） */
-  defaults: {
+  defaults?: {
     baseUrl: string;
     model: string;
     params?: Record<string, unknown>;
@@ -126,10 +131,9 @@ export interface ProviderAdapter {
    *     （已收口到 `providers/_shared.ts` 的 `TRANSIENT_ERROR_HINTS`）。
    */
   /**
-   * ★ 同族（也都不在原 JSDoc 里，同样是"照调用方取证"）：
-   *   · `domains` —— `factory` 按它建域轮换器（`job-manager` 读）、`registry` 下发给渲染层；
-   *   · `auth` / `frameSupport` —— **只有写、没有任何读者**（全仓 grep 实测）：属"登记在案的惰性元数据"，
-   *     ⛔ 本任务不删（照抄源）；它们"该不该有"与 `open-lovart-chrome` 同族，见 日志 B2-b。
+   * 同族（也不在原 JSDoc 里，取自调用方）：
+   *   · `domains` —— `job-manager.getRota` 按它建域轮换器、`registry` 下发给渲染层；
+   *   · `auth` / `frameSupport` —— 5 个 provider 里有 4/3 家写它，全仓 grep 未见读者（见 日志 B2-b）。
    */
   domains?: string[];
   auth?: { type: string; keyFields?: string[] };
@@ -144,6 +148,14 @@ export interface ProviderAdapter {
   /** 测试连接（`fetchImpl` 为测试注入点；`null` = 走运行时默认） */
   testConnection?(input: { config: ProviderRunConfig; fetchImpl: FetchLike | null }): Promise<{ ok: boolean; message: string }>;
 }
+
+/**
+ * 适配器**自身**的形状：`defaults` 必给。
+ * 适配器的方法里读 `this.defaults.x`（源如此，不带兜底）；而 `ProviderAdapter.defaults` 是**可选**的
+ * （读它的调用方 —— `registry.listProvidersMeta` / `config-store.getProviderConfig` —— 都带兜底）。
+ * ⇒ 各 provider 用它来 `satisfies`。
+ */
+export type AdapterWithDefaults = ProviderAdapter & { defaults: NonNullable<ProviderAdapter['defaults']> };
 
 /** 可注入的 fetch（测试注入点）—— 直接用运行时 `fetch` 自己的类型，⛔ 不手抄一份形状 */
 export type FetchLike = typeof fetch;
