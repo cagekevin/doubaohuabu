@@ -5,6 +5,26 @@
 
 ---
 
+## 〇、对话口径（**给 AI 的输出纪律 · 最高优先**）
+
+> 判据：**用户只读首尾就能行动**。做不到 ⇒ 重写。（反面样本：一次甩 4 张表 + 6 条机理 ⇒ 用户「没听懂」。）
+> 本节是本文件**唯一**的非索引内容 —— 它必须住这里：AI 只保证读入口文档。
+
+1. **第一行给动作**：开头是可执行命令 / 文件路径 / 结论；禁「让我看看 / 好的 / 我来分析」式铺垫。
+2. **多步就编号**（`1. 2. 3.`），每步一个动作；**列表 ≤5 项**，超了拆「先做 / 后做」。
+3. **结尾给一个下一步**（有事未了时）：ONE 个 ≤2 分钟能做的动作；不写「还需要我做什么吗」。
+4. **给选项就带代价**：结论＋代价，或**代价等价的真备选**（禁「看着有选择、其实一条路」）；推荐项排前。
+5. **每轮重述状态**：多步工作先说「第 N/M 步完成」；有任务列表工具就用它（同时只有一个 in-progress）。
+6. **给具体量**：说「约 15 分钟 / 改 3 处」，不写「一会儿 / 一些工作」。
+7. **成果可见**：做完直接说「现在能跑 `npm run check`」；不把结论埋进长总结。
+8. **报错就事论事**：给「原因 + 修法」，不写「哎呀 / 似乎有问题」。
+9. **禁废话**：删开场与结尾客套、无信息量副词；真有不确定才用「可能」。
+10. **一件事说完再说下一件**：第二个问题单独问，不塞同一段。
+
+**自发自查**：删掉「我要开始…」式开头与「还有别的事吗」式结尾；若只读第一行与最后一行就知道下一步干啥 ⇒ 发；否则改到能为止。
+
+---
+
 ## 一、这是什么
 
 - **Electron 桌面无限画布应用**的**渲染层重写**：从还原产物（`_ComponentNN.jsx` / 5,486 行单 store）改为**端口-适配器分层**的 TS/TSX。
@@ -38,7 +58,7 @@
 **绕行的显影（出现即停手回查）**：产物**只有增加、没有删除** —— 加兜底 · 加对齐 · 加对账 · 加指针 · 加一层壳 · 加注释；或**计数不降**（名字数 / 落点数 / 载体数）。
 ⇒ 每笔改动交两样：**改前/改后的计数** ＋ **那条错路现在为什么走不通**。交不出来 = 绕行。
 > ★★ **本仓不设机器闸** —— 闸只给绿灯，而"没人信任的绿灯比没有绿灯更危险"（本仓实证：8 个真 bug 曾全部门禁绿灯）；也不写对账脚本／额外守卫。
-> ★★ **代码的要求是「结构上不可能」**（让那条错路**没有位置可写**）：优先级 结构上不可能 ＞ 类型层 ＞ 唯一入口／唯一产生方 ＞ 派生 ＞ 文档留痕；**"我加了检查"不算还完**。
+> ★★ **代码的要求是「结构上不可能」**（让那条错路**没有位置可写**）：优先级 **删 ＞ 类型层 ＞ 唯一入口／唯一产生方 ＞ 目录／派生 ＞ 检查＋负例探针 ＞ 文档留痕（含诚实声明）**；**"我加了检查"不算还完** —— 但"有条闸守着"必须同时给出**负例探针**（造一个违规、验它真会红），"不能机器判定"必须写明并给人工判据。**落点表真源 = `docs/adr/ADR-0004`**。
 > ⚠️ 它是**手段层的形状判据，不是全部判据** —— 效力更高／并列的是：**① 正确性（本文件 §十一「最高判据是正确性」，源本身错时按正确性改并留痕）· ② SSOT 收口（`判据登记表` 的载体数 = 1）· ③ 契约／数据兼容／行为等价（`docs/架构与契约定稿` §六）**。**别用「结构上不可能」去顶替正确性或收口。**
 
 ---
@@ -49,23 +69,24 @@
 
 ```bash
 npm run dev              # Vite 开发服务器（5175）—— ★ 服务的是「浏览器 + mock 宿主」那条路（无 window.api ⇒ container 回落 mock），与 Electron 加载目标无关
-npm run build:watch      # 持续重建 dist/ —— Electron 侧的开发循环：改 src 自动重建，窗口内 Ctrl+R 即生效
-npm run build:watch:electron  # 持续重建后端产物（改 electron/** 才需要；窗口内 Ctrl+R 即生效）
-npm run build:electron   # 后端（宿主壳）产物 → electron/dist/ —— ★ 入口 main 指向它，改动 electron/** 后必须重跑
+npm run build:watch      # 持续重建 dist/（渲染层）—— 改 src 自动重建，窗口内 Ctrl+R 即生效
+npm run build:electron   # 后端（宿主壳）产物 → electron/dist/（build:shared → tsc → 拷同目录资源，带缺件自检）—— ★ 入口 main 指向它；改动 electron/** 后必须重跑并**重启 app**（Ctrl+R 只重载渲染层）
 npm run typecheck:electron    # 后端类型（满载档；未转的 .js 走 allowJs passthrough）
 npm run smoke:electron   # 后端最低限度冒烟（起产物 · 判存活/stderr/READY 标记）
 npm run build            # check + build:electron + vite build → dist/
-npm run check            # ★ 门禁（清单真源 scripts/gates.manifest.json）：typecheck + lint + boundaries + dead-code + gate-vitals + test
+npm run check            # 全量门禁（清单真源 scripts/gates.manifest.json）：typecheck + lint + boundaries + dead-code + gate-vitals + **test 全量** —— ⛔ 默认不跑，见下方口径
 npm run gate:status      # 闸开关注态（真源 = manifest 的 `disabled`；闸仍登记，只是被跳过）
 npm run gate:off -- <id> # 临时关某道闸（例 `npm run gate:off -- dead-code`）；恢复 `npm run gate:on -- <id>`
 npm run lint:gates       # 元层闸（闸的闸）：扫描根存在 + 基数自检 + 申诉口三问
 npm run lint:dead-code   # knip 死代码闸（基线「永不复涨」；新增即红）
-npm run test             # vitest run
+npm run test:affected    # ★ **默认测试入口**：按改动反查该跑哪几个测试（`--dry` 只算不跑 · `--json` 机器读 · `--files a,b` 手工指定）
+npm run test             # vitest run（**全量** ⇒ 验收动作，默认不跑）
 npm run spec:ui          # 生成 UI 对照表（产物）
 npm run pack:win         # 打包（另有 pack:dir / pack:mac / icon）
 ```
 
-> 改完代码**必跑 `npm run check`**。
+> ★★ **默认只跑射程（diff）**（用户裁定 2026-10-16）：改完代码跑 **`npm run test:affected`**（秒级；按改动反查、打印命中理由与「未命中」清单 —— **未命中 ≠ 安全**），静态闸照跑：`npm run typecheck` · `npm run lint` · `npm run lint:boundaries` · `npm run lint:dead-code` · `npm run lint:gates`。
+> **全量（`npm run test` · `npm run check` · `npm run build`）只在两种时候跑**：① 用户明确要求；② 发版 / 交付前。⛔ 别拿全量当**定位**工具（拿它找一个失败用例 = 白等）。**唯一例外**：首次上手（`npm install` → `npx playwright install chromium` → `npm run check` 应全绿）。
 
 治理工具（**走脚本，禁手写产物**）：
 
@@ -101,7 +122,7 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 
 ### 状态与接线约定
 
-- **单 slice ≤ 300 行（建议 · 人工把关）· state 字段 ≤ 25 个 · action 只编排**（业务在 `core/rules`/`usecases`）；~~`max-lines` 400 由 eslint 强制~~ **2026-10-11 已关闭**（行数是代理指标；留痕见 `eslint.config.js`）。
+- **单 slice ≤ 300 行 · state 字段 ≤ 25 个 · action 只编排**（业务在 `core/rules`/`usecases`）。其中**行数上限不由闸强制** —— 行数是代理指标，规模靠人工 review 把关（依据见 `eslint.config.js` 的 `max-lines` 处）。
 - `state/store.ts` 的 `setPartial` = **画布 → 工程（`projects[activeId].data`）的唯一镜像点**。
 - `state/subscriptions.ts` = **宿主事件订阅的唯一写入点**。
 
@@ -258,7 +279,7 @@ node scripts/99-build-spec.cjs    # 过期 ⇒ exit 1 ＋ 点名该补跑哪个�
 - **它不覆盖全部**：`00-总览.md` 的「**覆盖边界**」写明了 —— **组件看 `05-组件/`，`shared.js` 的任何东西看 `10-shared工具/`**（别以为"125 个组件文件"= `shared.js` 也覆盖了）。
 - **minified 局部名**（`n`/`r`/`l`）**不可恢复** ⇒ 照写时按语义改名。
 
-**完成定义（DoD）**：① 跑 `npm run check` 全绿（**改样式另按 `UI细节8查` 人工跑判据**）；② 给闸留「**先红后绿**」凭证（`scripts/probe.mjs`）；③ 每轮往 `daily/架构日志/<NN>-*.md` 追加一条（落点 / 判据 / 教训）；④ **判据 B5：不留「落了但没人调」**（没调用方就先别落，或同批落调用方）；⑤ **债号流转**走 `node scripts/debt.mjs`（别手写账本）＋ **回写三处**：`docs/DATAFLOW.md` 删对应断点句 · `docs/plan/13|14|15` 勾对应行 · `docs/plan/05` 断点表改类（**缺任一处 ⇒ 账立刻过期**）。
+**完成定义（DoD）**：① **默认跑射程**：`npm run test:affected` ＋ 相关静态闸（typecheck / lint / boundaries / dead-code / gate-vitals）全绿 —— **全量 `npm run check` 只在用户要求或发版前跑**（**改样式另按 `UI细节8查` 人工跑判据**）；② 给闸留「**先红后绿**」凭证（`scripts/probe.mjs`）；③ 每轮往 `daily/架构日志/<NN>-*.md` 追加一条（落点 / 判据 / 教训）；④ **判据 B5：不留「落了但没人调」**（没调用方就先别落，或同批落调用方）；⑤ **债号流转**走 `node scripts/debt.mjs`（别手写账本）＋ **回写三处**：`docs/DATAFLOW.md` 删对应断点句 · `docs/plan/13|14|15` 勾对应行 · `docs/plan/05` 断点表改类（**缺任一处 ⇒ 账立刻过期**）。
 
 **★ 清断点先问「有没有调用方」**（2026-10-13 两次踩到）：本仓的缺口**大量是「件都在、缺接线」** ——
 页内脚本落了没消费、纯判据落了没接线。⇒ 别先找"没落的文件"，先 grep 那个能力的**调用方**；
