@@ -25,13 +25,17 @@
  */
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { LibraryItem } from '@/stable/model/project';
+import { caretViewportRect } from '@/ui/lib/selection';
+import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
 import { REF_TEXT } from '@/constants/text';
 import {
   filterRefCandidates,
   matchRefTrigger,
   toRefMarker,
 } from '@/core/rules/refs';
+import { Icon } from '@/ui/common/Icon';
 import styles from './RefAutocomplete.module.css';
 
 /**
@@ -45,21 +49,41 @@ export interface RefAutocompleteProps {
   /** 当前查询词（`null` = 不显示下拉） */
   query: string | null;
   library: readonly LibraryItem[];
+  /**
+   * 锚点（**视口坐标**，浮层贴在这个点的下方）。
+   * 不给就自己从**当前选区**取 —— 浮层正是在"刚打完 `@`"那一刻打开的，选区就在光标上；
+   * 调用方若在"点按钮打开"那条路上拿得到更准的位置，再传进来覆盖。
+   */
+  anchor?: { x: number; y: number } | null;
   /** 选中一条 ⇒ 调用方负责把 `[start, caret)` 那段替换成标记 */
   onPick: (item: LibraryItem) => void;
   /** 主动关掉（`Esc` / 采纳后） */
   onClose: () => void;
 }
 
-export function RefAutocomplete({ query, library, onPick, onClose }: RefAutocompleteProps) {
+export function RefAutocomplete({ query, library, anchor, onPick, onClose }: RefAutocompleteProps) {
   /** 键盘高亮的下标（原 `j`/`I`） */
   const [active, setActive] = useState(0);
+  /**
+   * 摆位全部交给**浮层定位原语**（`useAnchoredLayer`：size → flip → shift）——
+   * 本件不再自己夹坐标、不再自己挂滚动监听（那是一类问题的公共解，不该每个浮层各写一遍）。
+   * 锚点：调用方给的优先，否则从**当前选区**取（浮层正是在"刚打完 `@`"那一刻打开的）。
+   */
+  const { ref, style } = useAnchoredLayer({
+    open: query !== null,
+    anchor: query === null ? null : (anchor ?? caretViewportRect()),
+    depsKey: query ?? '',
+  });
 
   if (query === null) return null;
   const items = filterRefCandidates(library, query);
 
-  return (
-    <div className={styles.pop} data-testid="ref-autocomplete">
+  /*
+   * ★ **portal 到 `body`**（不是就地渲染）：正文容器有 `overflow: hidden`，就地渲染会被裁掉；
+   *   而 `fixed` 定位在 portal 之后才真正以**视口**为基准（见 `.pop` 的注释）。
+   */
+  return createPortal(
+    <div ref={ref} className={styles.pop} data-testid="ref-autocomplete" style={style}>
       {items.length === 0 ? (
         <div className={styles.empty}>{REF_TEXT.noMatch}</div>
       ) : (
@@ -88,8 +112,9 @@ export function RefAutocomplete({ query, library, onPick, onClose }: RefAutocomp
       <div className={styles.hint}>{REF_TEXT.pickHint}</div>
       {/* `Esc` 关闭由**调用方正文编辑器**的 `onKeyDown` 处理（`contentEditable`；这里只给个鼠标出口） */}
       <button type="button" className={styles.close} title={REF_TEXT.close} onClick={onClose}>
-        ×
+        <Icon name="x" />
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }

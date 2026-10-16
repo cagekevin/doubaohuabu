@@ -12,10 +12,14 @@
   cursor: pointer;
 }
 
-/* 选中态（原 `.lovart-card.selected`）—— 加在缩略图边框上 */
+/* 选中态（原 `.lovart-card.selected`）—— 加在缩略图边框上。
+   ★ 真值 = 设计稿 ⑨ 的 **`.mk-picker-item.is-checked`**（`backend.css:242-246`）：
+     描边 `--color-selected-border` + `box-shadow: 0 0 0 2px var(--color-selection-bg)`。
+   ⚠️ **形态本来就对，错的是 token 语义**：原来用 `--node-selected-border/-ring` —— 那是
+      **画布节点**的选中色，而画廊格子**不是节点**（它是 `ui/panels` 里的一格浮层内容）。 */
 .cardSelected .thumbWrap {
-  border-color: var(--node-selected-border);
-  box-shadow: 0 0 0 2px var(--node-selected-ring);
+  border-color: var(--color-selected-border);
+  box-shadow: 0 0 0 2px var(--color-selection-bg);
 }
 
 /* 原 `.lovart-card-check`（左上角复选框，独立于缩略图） */
@@ -34,25 +38,30 @@
   cursor: pointer;
 }
 
-/* 原 `.lovart-card-badge`（`⚠ 大图`，右下角） */
+/*
+ * 角标「⚠ 大图」（原 `.lovart-card-badge`，右下角）
+ * ★ 真值 = 设计稿 ⑨ 里那个 **`.mk-chip.is-info`**（`backend.html:478`）—— 它是**通用 chip**
+ *   的一档（软底彩字），不是本件自造的"警告色小方块"。
+ * ⚠️ 两处差异：① 语气 **info**（设计稿明写 `is-info`；原来用 warning —— 而"大图"是**提示**
+ *   不是警告，设计稿也选了 info）② 字号 `xs` → 真源的 `2xs`（`--badge-font-size`）。
+ * ⇒ 走真源 `.pill` + `.pillInfo`（本行新补的第 4 档），**本地只留定位**。
+ */
 .bigBadge {
+  composes: pill pillInfo from '../common/shared.module.css';
   position: absolute;
   right: var(--space-half);
   bottom: var(--space-half);
-  padding: 0 var(--space-1);
-  color: var(--color-warning-text);
-  background: var(--color-warning-bg);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
 }
 
+/* 图块 —— ★ 皮走真源 **`.thumbTile`**（`B04e` 的 ⑦：`mockup.css:1368-1375` 那一组；
+   三处同形已收口 —— 本处 / 素材选择器 / 出新图）；本地只留形状与裁切。
+   ⚠️ 悬停（描边加深）现在由 `.thumbTile:hover` 提供（特异性 0,1,1）⇒ 选中态
+      `.cardSelected .thumbWrap`（0,2,0）**必然赢**，不再依赖书写顺序。 */
 .thumbWrap {
+  composes: thumbTile from '../common/shared.module.css';
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
 }
 
 .thumb {

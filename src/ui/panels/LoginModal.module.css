@@ -26,16 +26,12 @@
   gap: var(--space-2);
 }
 
+/* 验证链接输入框 —— ★ **收口到真源 `.field`**：原来把输入框的皮（高/内距/描边/圆角/底/字色/
+   字号）**整套自写了一遍**（全库那条"输入框走真源"的铁律）。本地只留真源未设的弹性与 `outline`。 */
 .verifyInput {
+  composes: field from '../common/shared.module.css';
   flex: 1;
   min-width: 0;
-  height: 32px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-raised);
-  color: var(--color-text-strong);
-  font-size: var(--font-size-sm);
   outline: none;
 }
 

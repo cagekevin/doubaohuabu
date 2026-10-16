@@ -34,6 +34,7 @@ import { formatElapsed, timerBand, type TimerBand } from '@/core/rules/nodeStatu
 import { hasVideoDescendant } from '@/core/rules/genDetect';
 import { ACCOUNT_NODE_TEXT } from '@/constants/text';
 import type { RFNodeProps } from './types';
+import { Icon } from '@/ui/common/Icon';
 import styles from './shared.module.css';
 
 /** 「已过时长」的重渲染心跳（ms，原 `OL.jsx:240` 的 `setInterval(V, 250)`） */
@@ -148,11 +149,20 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
               {formatElapsed(elapsed)}
             </span>
           )}
-          <label className={styles.autoSend} title={ACCOUNT_NODE_TEXT.autoSendTitle}>
+          <label
+            className={`${styles.autoSend}${data.autoSend ? ` ${styles.autoSendOn}` : ''}`}
+            title={ACCOUNT_NODE_TEXT.autoSendTitle}
+          >
+            {/* 视觉 = 设计稿 `.mk-switch`（滑块）；checkbox 只留语义与键盘可达性 */}
             <input
               type="checkbox"
+              className={styles.autoSendInput}
               checked={!!data.autoSend}
               onChange={(e) => patchNodeData(id, { autoSend: e.target.checked })}
+            />
+            {/* 滑块右移由**独立的状态类**表达（真源 `.switchKnobOn`，与账号栏同一个实现）*/}
+            <span
+              className={`${styles.autoSendKnob}${data.autoSend ? ` ${styles.autoSendKnobOn}` : ''}`}
             />
           </label>
         </>
@@ -185,12 +195,16 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
           >
             {status === 'sending' ? (
               <>
-                <span className={styles.sendSpinner}>⟳</span>
+                <span className={styles.sendSpinner}>
+                  <Icon name="refresh" />
+                </span>
                 {ACCOUNT_NODE_TEXT.sendBusy}
               </>
             ) : (
               <>
-                <span className={styles.sendIcon}>↑</span>
+                <span className={styles.sendIcon}>
+                  <Icon name="send" />
+                </span>
                 {ACCOUNT_NODE_TEXT.send}
               </>
             )}
@@ -212,7 +226,7 @@ export function AccountNode({ id, data, selected }: RFNodeProps<'account'>) {
                   accountOps.dismissAccountFeedback(id);
                 }}
               >
-                ×
+                <Icon name="x" />
               </button>
             )}
           </div>

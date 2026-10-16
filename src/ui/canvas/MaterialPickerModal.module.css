@@ -10,44 +10,47 @@
  * ⚠️ `.panel` 只留**真源未设的**差异（计划 §5 刀 6 铁律：本地覆盖会被真源盖掉、且不报错）：
  *   居中 / `display` / `flex-direction` 归 `PanelShell` 的 `.overlay` 与真源 `.panel`。
  */
+/*
+ * ⚠️ 原来这里还有两条**死类**（与 `C25` 的 `.head` 同一个坑）：
+ *   · `.title { composes: panelTitle; padding: … }` —— `PanelShell` 内部渲染 `shared.panelHead`
+ *     ＋ `panelTitle`，本地这个类**从没被传进去**（要靠 `headProps` 才接得上）；而且它那条
+ *     `padding` 会与真源头部的内距**叠成双份** ⇒ 删。
+ *   · `.foot { border-top; padding-top; justify-end }` —— 同理（`PanelShell` 的 `footer` prop
+ *     渲染的是真源 `.panelFoot`）⇒ 删。
+ */
 .panel {
-  composes: panel from '../common/shared.module.css';
+  /* 壳走真源（`PanelShell` 已渲染 `.panel`），本地只追加**真源未设**的尺寸；
+     ⚠️ 原来还写了 `padding: var(--space-3)` —— 它与真源 `.panelBody` 的内距、以及网格自己那份
+        内距**三层叠加**（同一段间距三个来源）⇒ 删，内距只归 `.panelBody`。 */
   width: min(560px, 92vw);
   max-height: 80vh;
-  padding: var(--space-3);
 }
 
-.title {
-  composes: panelTitle from '../common/shared.module.css';
-  /* 仅追加真源未设的属性 */
-  padding: var(--space-1) var(--space-2);
-}
-
+/* 网格 —— ★ 真值 = 设计稿的 `.mk-picker-grid`：**固定 4 列** + `gap: space-1`
+   （原 `auto-fill minmax(96px,1fr)` 在 560 宽里会排出 5 列，与设计不符）。
+   ⚠️ 它**不给自己内距**（归真源 `.panelBody`）—— 原来那份 `padding: space-2` 是第三层。 */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
   overflow-y: auto;
-  padding: var(--space-2);
 }
 
+/* 项（图 + 名字）—— ★ 描边与圆角**归图块那一层**（真值 = 设计稿的 `.mk-picker-item`：
+   `aspect-ratio: 1/1` + `radius-sm` + `1px solid --color-border`，悬停加深到 `--color-border-strong`）。
+   ⚠️ 原来自写在 `.item` 上的是 `1px solid transparent` + 悬停 `--field-border-focus`：
+      `--field-border-focus` 是**输入框聚焦**色（语义是"我在编辑这个字段"），用在图块悬停上不对。 */
 .item {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-1);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: 0;
   background: transparent;
   color: var(--color-text-strong);
   font-size: var(--font-size-xs);
   cursor: pointer;
-}
-
-.item:hover {
-  background: var(--color-surface-sunken);
-  border-color: var(--field-border-focus);
 }
 
 .item > span {
@@ -58,19 +61,14 @@
   text-align: center;
 }
 
+/* 图块 —— 设计稿里被画成 `.mk-picker-item` 的就是它（方图 + 1px 描边 + `radius-sm`）。
+   ★ 皮走真源 **`.thumbTile`**（`B04e` 的 ⑦：三处同形已收口 —— 本处 / 画廊 / 出新图）；
+   本地只留尺寸与裁切（`width` 撑满网格单元 + `object-fit`）。 */
 .thumb {
+  composes: thumbTile from '../common/shared.module.css';
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
-  border-radius: var(--radius-sm);
-}
-
-.foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
 }
 
 

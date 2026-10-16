@@ -37,27 +37,6 @@
   font-weight: 400;
 }
 
-.tabs {
-  display: flex;
-  gap: var(--space-half);
-}
-
-.tab {
-  padding: var(--space-half) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
-}
-
-.tabActive {
-  border-color: var(--color-action-primary);
-  background: var(--color-action-primary);
-  color: var(--color-text-on-brand);
-}
-
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -67,36 +46,33 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+/* 表单行（标签 + 控件）—— ★ 收口到真源 `.formRow` / `.formLabel`
+   （真值 = 设计稿的 `.mk-form-row` / `.mk-form-label`；`FaceMaskPanel` 用的是同一份）。
+   ⚠️ 原来本地是 `gap: space-1` 且标签不设宽 ⇒ 与遮脸面板那一份**同形不同值**。 */
 .group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+  composes: formRow from '../common/shared.module.css';
 }
 
 .groupLabel {
-  color: var(--color-text-muted);
-  white-space: nowrap;
+  composes: formLabel from '../common/shared.module.css';
 }
 
+/*
+ * 分段控件（一键遮脸 / 裁剪）—— ★ 真值 = 设计稿的 `.mk-tabs` / `.mk-tab` / `.is-on`
+ * ⇒ 收口到真源 `.tabs` / `.tab` / `.isOn`（`B04a` 落的，`ImageEditor` 本来就是它的源头之一）。
+ * ⚠️ 原来自写的那套选中态是**实心品牌底 + 白字**；真源是**浅底 + 品牌字**（软底彩字）
+ *    —— 与 `B04f` 给 `.pill`、`C33` 给方式钮的裁定同一条口径。
+ */
 .seg {
-  display: flex;
-  gap: var(--space-half);
+  composes: tabs from '../common/shared.module.css';
 }
 
 .segBtn {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
+  composes: tab from '../common/shared.module.css';
 }
 
 .segActive {
-  border-color: var(--color-action-primary);
-  background: var(--color-action-primary);
-  color: var(--color-text-on-brand);
+  composes: isOn from '../common/shared.module.css';
 }
 
 .divider {
@@ -106,6 +82,8 @@
 }
 
 .range {
+  composes: range from '../common/shared.module.css';
+  /* 真差异：工具栏里只需一小段宽度 */
   width: 96px;
 }
 
@@ -257,9 +235,17 @@
  *   源版这行的三块是「提示（左）· 缩放（中）· 动作（右）」⇒ 提示靠 `margin-right: auto` 顶到左边
  *   （真源没设 `margin`，属"只追加真源未设的属性"）。
  */
+/*
+ * 说明行 —— ★ **补足**（**不是**"收口"）。
+ * ⚠️ 这里我一度写成「收口到真源，真值 = 设计稿的 `.mk-cell-hint`」—— **依据错了**：
+ *    设计稿 ⑦ 图片编辑器那一格**根本不含** `.mk-cell-hint`（只有 tabs + 舞台 + 三行表单 + 脚）。
+ *    设计稿未覆盖 ⇒ 按本仓口径走**补足**：它与 `.mk-cell-hint` 同性质（一句"当前怎么操作"的旁注）
+ *    ⇒ 取**同一档**（`faint` + `2xs`）。这是**判断**，不是对表 —— 记在这里以备复核。
+ * 本地另留真源未设的一处：把它推到工具栏左侧（右侧留给缩放控件）。
+ */
 .hint {
+  composes: hint from '../common/shared.module.css';
   margin-right: auto;
-  color: var(--color-text-faint);
 }
 
 .zoom {

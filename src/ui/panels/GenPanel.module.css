@@ -25,6 +25,9 @@
   position: fixed;
   width: min(860px, 92vw);
   max-height: 78vh;
+  /* ★ 真值 = `mockup.css` 的 `.mk-genpanel`：补 `overflow: hidden`（原缺 —— 面板内的长内容
+     会从圆角里溢出来，且 `max-height` 形同虚设）*/
+  overflow: hidden;
 }
 
 /**
@@ -126,7 +129,10 @@
 .toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  /* ★ 真值 = 设计稿的注释「**单行**工具条」（`index.html:655`）：`@ · 风格 · 参考 · 比例 ·
+     [分辨率/张数] · 执行账号 · [模型/时长] · grow · 生成 · 批量出片` 排一行
+     ⇒ 不换行（原 `flex-wrap: wrap` 会在窄面板里折成两行、"生成"跑出预期位置）。 */
+  flex-wrap: nowrap;
   gap: var(--space-2);
 }
 
@@ -154,41 +160,26 @@
   composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
-/* 下拉的外壳：只为摆那个 `⌄`（原生 `<select>` 的箭头已被 `appearance:none` 关掉） */
+/* 下拉的外壳：现在只当个简单的行内包装（不再自画箭头）*/
 .dropdown {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
-.dropdown::after {
-  content: '';
-  position: absolute;
-  right: var(--space-2);
-  width: 0;
-  height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 4px solid var(--color-text-muted);
-  pointer-events: none;
-}
 
-/* 下拉本体（`<select>`）—— 走真源按钮类，只追加真源未设的属性 */
+/*
+ * 下拉本体（`<select>`）—— ★ **D18 / `B04c` 落地**：真值 = `mockup.css` 的
+ * `.mk-genpanel .GenPanel-select`（设计层原话：「生成面板的下拉**也统一到控件族**
+ * （真机它 `composes: btn` ⇒ 与弹窗里的下拉两种形态；设计层改用 field 视觉，**全库下拉一致**）」）。
+ * ⇒ 走真源 `.select`（与 `.field` 同套 token + 下拉专属的 `cursor` / `nowrap` / 省略号）。
+ * ⚠️ 随形态一并删掉两样：`appearance: none` 与 `padding-right`（它们是为**自画箭头**留位的），
+ *    以及上面那条 `.dropdown::after` 三角 —— 设计层不给 `appearance: none` ⇒ **原生箭头保留**。
+ */
 .select {
-  composes: btn btnSm from '../common/shared.module.css';
-  appearance: none;
-  padding-right: var(--space-5);
+  composes: select from '../common/shared.module.css';
 }
 
-/* 工具条上的 `⌄`（风格按钮用） */
-.caret {
-  display: inline-block;
-  width: 0;
-  height: 0;
-  margin-left: var(--space-1);
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 4px solid currentColor;
-}
+
 
 /* 张数输入（文生图） */
 .count {

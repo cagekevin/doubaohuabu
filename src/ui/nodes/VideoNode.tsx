@@ -251,6 +251,7 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
   return (
     <NodeShell
       type="video"
+      icon="video"
       title={
         /*
          * 改名收口到 `NodeTitle`（原 86-105 的进入/提交两态）。

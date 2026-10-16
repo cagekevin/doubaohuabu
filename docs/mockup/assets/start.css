@@ -28,28 +28,11 @@ body {
 }
 
 /*
- * ★★ **这一行要回套真机**（与 `activate.css` 同一份修正，两处同源不同位置）
- *
- * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.btnGhost` / `.libIcon` …）整个住在
- *       `@layer base`（`ui-real.css:1776`）；`reset.css:37-42` 的 `button{background:none;border:none;padding:0}`
- *       是**未分层** ⇒ 按 CSS 规范「未分层 > 分层」⇒ **所有真机按钮丢掉底色、边框与内边距**
- *       （实测：同一个 `btn btnPrimary` 挂 `<div>` 是蓝底白字，挂 `<button>` 全透明）。
- * 解法：用 CSS 自己的 `revert-layer` 把这几个属性**交还给下一层** ⇒ 正好退回 `@layer base` 的按钮真源，
- *       皮肤仍然只有**真源那一份**，设计层不抄第二遍。
- * `color` 同理：`reset.css:29-35` 的 `color: inherit` 未分层，会压过 `.btn*` 的前景色。
+ * ★ 按钮皮肤只有**真源那一份**：归一（`reset.css`）与真源（`.btn` / `.btnPrimary` / `.libIcon` …）
+ *   现在**同住 `@layer base`** ⇒ 层内按**特异性**分胜负（`button` 0,0,1 < `.btn` 0,1,0）⇒ 真源赢。
+ *   ⇒ 此处**不需要任何补丁**（`revert-layer` 是"归一跑到真源上面去了"的补丁，层摆对了就没有它）。
+ *   口径：`docs/CSS规范.md` §1.4「层叠阶梯」。
  */
-button {
-  background: revert-layer;
-  border: revert-layer;
-  padding: revert-layer;
-}
-
-button,
-input,
-textarea,
-select {
-  color: revert-layer;
-}
 
 /* ══════════════════════════════════════════════════════════════
    设计层 token
@@ -194,9 +177,8 @@ select {
   min-width: 0;
   /*
    * 主区是"透明的可点区域"（真源 `.projectMain` 本来就写 `background: transparent`）。
-   * ⚠️ 上面那条 `revert-layer` 对**所有** button 生效，而它在 `@layer base` 里找不到
-   *    `.projectMain`（这条规则住 `StartPage.module.css`，未分层）⇒ 会退回初始值 —— 正好是透明。
-   *    此处显式写回，是为了让这个结果**不依赖那条推演**。
+   * ⚠️ 这里是 `<button>`：归一（`@layer base` 里的 `button{ background:none; border:none }`）给它
+   *    透明底 + 无描边 —— 但显式写回，免得这个结果**依赖归一的推演**。
    */
   background: transparent;
   border: 0;

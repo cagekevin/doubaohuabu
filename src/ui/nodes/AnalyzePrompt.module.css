@@ -76,25 +76,15 @@
 
 
 /* ── tab 区（原 `.mpp-tabs` / `.mpp-content` / `.mpp-pre`）── */
+/* 分段控件（中文 / 英文 / JSON）—— 形态归真源：设计稿 `index.html:711-714` 用的就是 `mk-tabs`
+   ⚠️ 本地只追加一条真源未设的：`margin-bottom`（面板身不给行距，这块要自己留呼吸）
+   选中态走真源 `.tab.isOn`（TSX 直接加 `shared.isOn`），本地不再有 `.on` */
 .tabs {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+  composes: tabs from '../common/shared.module.css';
   margin-bottom: var(--space-1);
 }
-
-/* ★ 查 6：原为元素选择器 `.tabs button`（`composes` 不支持单一类以外）
-   ⇒ 给 TSX 的三个 tab 按钮加了 `styles.tab`，走共享真源。 */
 .tab {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
-  padding: 0 var(--space-1);
-}
-
-/* 激活态（原 `.tabs button.on`；现在是独立类，TSX 直接加在按钮上）
-   ⚠️ 必须定义在 `.tab` **之后** —— 同优先级下靠书写顺序取胜。 */
-.on {
-  color: var(--tab-active-fg);
-  border-color: var(--tab-active-border);
+  composes: tab from '../common/shared.module.css';
 }
 
 .tabsGap {
@@ -106,25 +96,31 @@
 }
 
 .content {
-  max-height: 220px;
+  /* ★ 真值 = `mockup.css` 的 `.mk-pre`（设计稿把"壳"与"文本"写成一条，真机分了两层 ⇒ 值并到壳上）：
+     `padding: --space-2`（原 `--space-1`）· `radius-md`（原 `radius-sm`）· **`max-height: 120px`**（原 220
+     —— 提示词正文是"看一眼就复制"的块，220 会把浮层撑得比节点还高）。 */
+  max-height: 120px;
   overflow: auto;
-  padding: var(--space-1);
+  padding: var(--space-2);
   background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: inherit;
+  /* ★ 真值 = `.mk-pre`：**等宽**（原 `inherit`）—— 这一块里既有英文提示词也有 JSON tab，
+     等宽才对齐得起来；`line-height` 也按设计取放松档。 */
+  font-family: var(--font-mono);
+  line-height: var(--line-height-relaxed);
 }
 
 /* ── 调整区（原 `.mpp-revise` / `.mpp-revise-input` / `.mpp-revise-btn`）── */
+/* 调整行 —— ★ 与"节点内提示词行"**同一个形态**（设计稿里两处都是 `.mk-prompt-row`）
+   ⇒ `composes` 那一份，别各写一遍；内距归 `.panelBody`（原写 `padding: 0 space-2 space-2`）。 */
 .revise {
-  display: flex;
-  gap: var(--space-1);
-  padding: 0 var(--space-2) var(--space-2);
+  composes: promptRow from './shared.module.css';
 }
 
 .reviseInput {

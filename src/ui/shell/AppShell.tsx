@@ -16,6 +16,7 @@ import { ToastHost } from '@/ui/common/ToastHost';
 import { ApiSettings } from '@/ui/panels/ApiSettings';
 import { HomePage } from '@/ui/pages/HomePage';
 import { BackendPage } from '@/ui/pages/BackendPage';
+import { TopBar } from '@/ui/shell/TopBar';
 import { pickActiveAccountFallback } from '@/core/rules/accountPick';
 import { useStore } from '@/state';
 import styles from './AppShell.module.css';
@@ -75,9 +76,13 @@ export function AppShell({ canvas }: AppShellProps) {
         onClearAll={clearBackendErrors}
       />
 
+      {/* ★ 顶栏 —— **两个界面共用一份**（设计稿：全宽应用栏；此前它住在首页画布里、是浮动胶囊条）
+          ⚠️ 位置在 `mainArea` **之上**：它现在是布局里的条（不是浮层），两页都看得见 */}
+      <TopBar onOpenDoubaoView={openDoubaoView} />
+
       <div className={styles.mainArea}>
-        {/* 首页界面（画布 + 顶栏｜资源库）—— 切到后台时 `display:none`（画布无 guest，可安全收起） */}
-        <HomePage canvas={canvas} onOpenBackend={openDoubaoView} hidden={isBackend} />
+        {/* 首页界面（画布｜资源库）—— 切到后台时 `display:none`（画布无 guest，可安全收起） */}
+        <HomePage canvas={canvas} hidden={isBackend} />
         {/* 豆包后台界面（账号栏｜后台视图）—— ★ 常驻（`<webview>` 宿主，切走只停靠） */}
         <BackendPage
           visible={isBackend}

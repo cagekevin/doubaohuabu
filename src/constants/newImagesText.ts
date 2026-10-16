@@ -53,7 +53,9 @@ export const NEW_IMAGES_TEXT = {
   thumbTitle: (name: string, dims: string, from: string) =>
     `点击发送到画布；长按拖拽可放入后台页面（Lovart / Tapnow / 其他网站）：${name}${dims ? `（${dims}）` : ''}\n来自：${from}`,
   /** 缩略图悬停遮罩（原 636，逐字） */
-  overlay: '＋ 发送到画布 · 长按可拖入',
+  /* ⚠️ 原为 `'＋ 发送到画布 · 长按可拖入'` —— 那个 `＋` 是**全角加号字符**
+     （✗ 字符图标，违反 G01）。按 §7-D11 拆开：**文案只留字**，加号由拖拽浮层挂 `Icon`。 */
+  overlay: '发送到画布 · 长按可拖入',
   /** 「NEW」徽标（原 637） */
   badgeNew: 'NEW',
   /** 「已发送」徽标（原 638，逐字） */

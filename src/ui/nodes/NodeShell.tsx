@@ -30,6 +30,7 @@ import type {
 } from 'react';
 import { NodeResizer, useNodeId } from '@xyflow/react';
 import { ErrorBoundary } from '@/ui/shell/ErrorBoundary';
+import { Icon, type IconName } from '@/ui/common/Icon';
 import { SHELL_TEXT } from '@/constants/text';
 import { CustomHandle, type CustomHandleVariant } from './CustomHandle';
 import { useNodeHeight, useNodeWidth, useSizeSync } from './useNodeSize';
@@ -38,6 +39,14 @@ import styles from './shared.module.css';
 export interface NodeShellProps {
   /** 节点类型（决定 `data-type` 属性 + 类型圆点色）—— `text/material/account/video/download/group/genvideo/imggen` */
   type: string;
+  /**
+   * 头部**类型图标**（★ 真值 = 设计稿的 8 个头：全是 `圆点 + 图标 + 标题`）。
+   *
+   * 它**不是**圆点的替代品，两者并存、各管一条通道：
+   *   · 圆点 = **颜色**语言（与连线 / 端口 / 小地图同一套类型色 ⇒ 扫视层）
+   *   · 图标 = **形状**语言（可辨认、不依赖记颜色 ⇒ 阅读层）
+   */
+  icon?: IconName;
   /** 头部左侧标题（如「文本」「账号」） */
   title: ReactNode;
   /** 中槽（状态 / 倒计时 / 账号 / 时长 / 数量）；不给则中槽为空 */
@@ -113,6 +122,7 @@ export interface NodeShellProps {
 /** 节点外壳：外框 + 选中态 + 连接点 + 缩放边框 + 四槽头 + 正文 */
 export function NodeShell({
   type,
+  icon,
   title,
   meta,
   actions,
@@ -185,6 +195,7 @@ export function NodeShell({
       )}
       <div className={styles.nodeHead}>
         <span className={styles.nodeDot}>{dot}</span>
+        {icon !== undefined && <Icon name={icon} className={styles.nodeIcon} />}
         <span className={styles.nodeTitle}>{title}</span>
         {meta != null && <span className={styles.nodeHeadMid}>{meta}</span>}
         {actions != null && <span className={styles.nodeHeadActions}>{actions}</span>}

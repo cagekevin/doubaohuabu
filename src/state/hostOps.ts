@@ -18,7 +18,8 @@
  *   | `openExternal` | `host.file.openExternal` | `GalleryLightbox`（打开原图） |
  *   | `getDolaMediaDownloadSettings` · `pickDolaMediaDownloadPath` · `downloadDolaMedia` · `clearDolaMedia` | `host.media.*` | `WatermarkPanel`（无水印资源面板，源 `SD.jsx` 的 4 个专用宿主方法） |
  *
- * ⚠️ 与 `licenseOps` / `sendQueue.readPanelPos` 同法：**只转发 + 归一**，不写第二份业务判据
+ * ⚠️ 与 `licenseOps` 同法：**只转发 + 归一**，不写第二份业务判据
+ * （原先这里还引了 `sendQueue.readPanelPos` 当例子 —— 它已随"浮窗 → 抽屉"删除，见 `C25`）
  *    （业务在 `core/rules` / `usecases`；这些调用都**无编排**，故不包 `core/usecases` ——
  *    那会成"纯中转层"，见 `16-跨区-收窄ui端口可用面-批2` §四）。
  *

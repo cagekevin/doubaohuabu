@@ -7,13 +7,14 @@
  * ⚠️ 按钮走 `ui/common/shared.module.css` **真源**（`composes`），不自造第二份。
  */
 
+/* 说明行 —— ★ 收口到真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`：`faint` + `2xs`）*/
 .sub {
+  composes: hint from '../common/shared.module.css';
   margin-bottom: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
 }
 
+/* 当前关键词回显 —— ★ **补足**（设计稿 ⑤ 那格没有这一件）：它是"将按这些词拆"的关键信息，
+   比说明行**略强**一档才读得出（`muted` vs hint 的 `faint`）。 */
 .kw {
   color: var(--color-text-muted);
 }
@@ -26,27 +27,20 @@
   overflow-y: auto;
 }
 
+/*
+ * 列表项 —— ★ 真值 = 设计稿 ⑤ 的 `.mk-menu-item`（`width: 100%`）：
+ *   **单行**（名字 + 元信息同排），与右键菜单/建节点浮层**同一张皮**。
+ * ⚠️ 原来是自己写的一套（`composes: btn btnBlock` + 竖排 + `gap: 2px`）⇒ 看着像"两块按钮"
+ *    而不是一个菜单；`.itemName` 的 `sm` 与真源重复、`.itemDirect` 的**虚线框**设计稿也没给
+ *    （设计稿里"直接拆分"与预设项**同款**）⇒ 三者一并删，TSX 同步去掉那两个 className。
+ */
 .item {
-  composes: btn btnBlock from '../common/shared.module.css';
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  text-align: left;
+  composes: menuItem from '../common/shared.module.css';
 }
 
-/* 「直接拆分（不使用预设）」—— 与预设项区分（源 `split-preset-direct` 也是独立一项） */
-.itemDirect {
-  border-style: dashed;
-}
-
-.itemName {
-  font-size: var(--font-size-sm);
-}
-
+/* 项的元信息（`3 节点 · 2 连线`）—— 与说明行同档（设计稿那格用的就是 `.mk-cell-hint`）*/
 .itemMeta {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  composes: hint from '../common/shared.module.css';
 }
 
 .btnGhost {

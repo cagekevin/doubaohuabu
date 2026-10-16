@@ -29,19 +29,7 @@
 }
 
 /* 原 `.gp-caret`：菜单打开时翻转 */
-.caret {
-  flex: 0 0 auto;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid currentColor;
-  transition: transform var(--duration-fast) ease;
-}
 
-.caretOpen {
-  transform: rotate(180deg);
-}
 
 /* 原 `.gp-acc-menu`（portal 到 body ⇒ 固定定位） */
 .menu {

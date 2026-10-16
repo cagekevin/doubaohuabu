@@ -2,6 +2,12 @@
  * 无水印资源面板样式（原 `SD.jsx` 的 `.dola-media-panel` / `.dmp-*`）
  *
  * ⚠️ **mockup 未收录这一族** ⇒ 全部为**推断样式**（只用 token）—— 登记 **`TD-16-87`**（母体）。
+ *
+ * ★ 2026-10-16（`§6 F13`）**复核过这个前提**（因为前几次 `F` 行里"未收录"被证伪过三回）：
+ *   · 搜 `Watermark` ⇒ 只命中 `backend.html:218` 的**入口按钮**（BackendView 头部的
+ *     「无水印资源（3）」，属 `F04`），**没有本面板**；
+ *   · 又搜了 `WatermarkPanel`（万一它像别处那样是"**用真机类名画**"的）⇒ 同样 0 命中。
+ *   ⇒ **这次"未收录"成立**（不是搜错前缀那种误判）⇒ 走**补足**路径逐条核验（结论见下）。
  */
 
 .panel {
@@ -78,16 +84,17 @@
 
 /* 「下载到：」那一行（原 `SD.jsx` 的 `.dmp-path-row` / `.dmp-path-label` / `.dmp-path` / `.dmp-path-tag`）
    —— 按钮不在这里自造：走真源 `shared.btn / btnGhost / btnSm`。 */
+/* 「下载到：<路径>」那一行 —— ★ 真值 = 设计稿 ⑧ 的 **`.mk-form-row`**（`backend.html:448-452`）：
+   标签（**固定最小宽 52**）+ 值 ⇒ 走真源 `.formRow` / `.formLabel`（`C34` 落的那一对）。
+   ⚠️ 设计稿那一行还有一颗「更改」钮 + 可选目录的 `.mk-picker`（field 皮）—— 真机的路径是
+      **只读展示**、没有"更改"这条交互 ⇒ **不新增功能**（那是产品决策，不是皮肤统一）；
+      本行只把**形态**对齐（标签档 + 行距）。 */
 .pathRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
+  composes: formRow from '../common/shared.module.css';
 }
 
 .pathLabel {
-  color: var(--color-text-muted);
-  flex-shrink: 0;
+  composes: formLabel from '../common/shared.module.css';
 }
 
 .pathText {
@@ -98,10 +105,17 @@
   white-space: nowrap;
 }
 
+/*
+ * 「默认目录」标签 —— ★ **补足收口**：它是**静态标签**（不可点），而全仓那一类只有一份实现
+ *   = 真源 `.pill`（真值 = 设计稿的 **`.mk-chip`**：`sunken` 底 + `muted` + `2xs`，
+ *   **不带描边**）。
+ * ⚠️ 原来本地自写的是**描边版**（`1px solid --color-border` + `faint`）—— 那是设计稿里
+ *   **另一种**东西的形态：**可点的** `.mk-chipbtn`（描边 + 22 高 + raised 底）。
+ *   本件不可点 ⇒ 归 `.mk-chip` 那一档，不归 `.mk-chipbtn`。
+ * ⚠️ 补一句（`§8-G10` 之后复核过）：设计稿 ⑧ 那一行**没有 tag 这件东西**（它是
+ *   `mk-form-label` + `mk-picker` + 「更改」钮）⇒ **本件是"补足"**：它是真机的信息（"当前是
+ *   系统默认目录"），**档**取自设计层的 `.mk-chip`（即真源 `.pill`）。
+ */
 .pathTag {
-  flex-shrink: 0;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-faint);
+  composes: pill from '../common/shared.module.css';
 }

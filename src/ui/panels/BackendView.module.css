@@ -145,11 +145,20 @@
   gap: var(--space-3);
 }
 
-/* 68×68 恢复钮（`docs/mockup/README.md` §「后台管理的真实状态」） */
+/*
+ * 恢复钮 —— ★ 颜色/形态真值 = 设计稿 ⑪ 的 **`.mk-silent-resume`**（`backend.css:269-278`）：
+ *   **圆形 · 品牌底 · `on-brand` 字 · `cursor: pointer`** ⇒ 补上底与字色
+ *   （原来只 `composes: btn btnIcon`，在暗罩上是一颗**中性底**的钮，不够显眼）。
+ * ⚠️ **尺寸两个真源打架**：`backend.css` 写 **44×44**，而 `docs/mockup/README.md`
+ *   §「后台管理的真实状态」说 **68×68** ⇒ **保留 68**（README 是设计层自己的文字口径，
+ *   且本件要盖在暗罩中心、44 偏小），把冲突记在这里，待设计层澄清后再定。
+ */
 .silentResume {
   composes: btn btnIcon from '../common/shared.module.css';
   width: 68px;
   height: 68px;
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
 }
 
 .silentPauseIcon {
@@ -166,9 +175,10 @@
   background: currentColor;
 }
 
+/* ★ 真值 = 设计稿 ⑪ 那句 **`.mk-cell-hint`**（`backend.html:508`）⇒ 收口真源 `.hint`
+   （`faint` + `2xs`；原来 `muted` + `sm` 是"正文档"，比旁注重）。 */
 .silentTip {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  composes: hint from '../common/shared.module.css';
 }
 
 /*
@@ -252,22 +262,31 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-2);
+  /* ★ 设计层 `BackendView-actions`：次要按钮彼此挨紧一档 */
+  gap: var(--space-1);
+}
+
+/* ★ 设计层给主按钮**拉开一档**（`margin-left: space-2`）—— 让"动作层级"看得出来：
+   一排次要钮 + 一颗主钮，主钮不该和它们等距。 */
+.actions .headBtnPrimary {
+  margin-left: var(--space-2);
 }
 
 /* ★ 逐字对源：源里这些是全局 `btn sm`（`_Component43.jsx:3235` / `:3246` / `:3255`），
-   「返回画布」是 `btn sm primary`（`:3262`）⇒ 一律走真源 `.btn`，不自造小按钮。 */
+   「返回画布」是 `btn sm primary`（`:3262`）⇒ 一律走真源 `.btn`，不自造小按钮。
+   ★ 2026-10-16（§6 `F04`）：档位从 `btnSm` 换成 **`btnMd`** —— 真值 = 设计层
+     「按钮统一」那一组（它原话：`btnSm` 的 11px 字/25.6 高「又挤又小、像附带的」）。 */
 .headBtn {
-  composes: btn btnSm from '../common/shared.module.css';
+  composes: btn btnMd from '../common/shared.module.css';
 }
 
 .headBtnPrimary {
-  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+  composes: btn btnMd btnPrimary from '../common/shared.module.css';
 }
 
 /* 折叠钮（原 `.dv-head-toggle`）—— 悬在头部下缘居中；宽度 = 原版（`mockup.css:1837`，推断值待校） */
 .headToggle {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: btn btnMd btnGhost from '../common/shared.module.css';
   position: absolute;
   left: 50%;
   top: 100%;
@@ -306,11 +325,13 @@
   flex-wrap: wrap;
 }
 
+/* 说明行 —— ★ 真值 = 设计稿 ⑬（`backend.html:545`）的 **`.mk-cell-hint`**：
+   「内嵌视图会被识别，改用本机 Chrome 登录后同步会话」⇒ 收口真源 `.hint`
+   （`faint` + `2xs`；原来 `muted` + `sm` 是"正文档"，比旁注重）。本地只留弹性。 */
 .sessionHint {
+  composes: hint from '../common/shared.module.css';
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
 }
 
 .sessionActions {
@@ -320,13 +341,14 @@
   gap: var(--space-2);
 }
 
-/* ★ 逐字对源：源里是 `lsb-btn` / `lsb-btn lsb-primary` ⇒ 走共享真源 `.btn`，不自造小按钮 */
+/* ★ 逐字对源：源里是 `lsb-btn` / `lsb-btn lsb-primary` ⇒ 走共享真源 `.btn`，不自造小按钮
+   ★ 档位同 `F04`：`btnSm` → **`btnMd`**（设计层「按钮统一」那一组把这类工具栏钮也含在内）*/
 .sessionBtn {
-  composes: btn btnSm from '../common/shared.module.css';
+  composes: btn btnMd from '../common/shared.module.css';
 }
 
 .sessionBtnPrimary {
-  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+  composes: btn btnMd btnPrimary from '../common/shared.module.css';
 }
 
 /* 错误行（原 `.lsb-status` / `.lsb-err`）—— 占满一整行（`flex-wrap` 下自然换行） */

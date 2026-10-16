@@ -19,6 +19,8 @@ import { AccountPanel } from '@/ui/panels/AccountPanel';
 import { BackendView } from '@/ui/panels/BackendView';
 import { API_SETTINGS_TEXT, SHELL_TEXT } from '@/constants/text';
 // ★ 布局词汇（`.centerStage` / `.side` / …）住 shell 的模块，两个界面共用同一套
+import { Icon } from '@/ui/common/Icon';
+import shared from '@/ui/common/shared.module.css';
 import styles from '@/ui/shell/AppShell.module.css';
 
 export interface BackendPageProps {
@@ -52,12 +54,14 @@ export function BackendPage({ visible, onClose, onOpenApi }: BackendPageProps) {
                 title={API_SETTINGS_TEXT.entryTitle}
                 onClick={onOpenApi}
               >
-                <span className={styles.sideApiIcon}>⚡</span>
+                <span className={styles.sideApiIcon}>
+                  <Icon name="bolt" />
+                </span>
                 {API_SETTINGS_TEXT.entryLabel}
               </button>
             </div>
           </div>
-          {/* ★ 折叠钮（原 `_Component48.jsx:163-169` 的 `.side-toggle`）—— 22×52 骑马钮 */}
+          {/* ★ 折叠钮（原 `_Component48.jsx:163-169` 的 `.side-toggle`）—— 贴边箭头 */}
           <button
             type="button"
             className={styles.sideToggle}
@@ -65,7 +69,8 @@ export function BackendPage({ visible, onClose, onOpenApi }: BackendPageProps) {
             aria-label={leftCollapsed ? SHELL_TEXT.expandAccounts : SHELL_TEXT.collapseAccounts}
             onClick={() => setLeftCollapsed((v) => !v)}
           >
-            {leftCollapsed ? '»' : '«'}
+            {/* 方向 = **旋转同一颗箭头**：展开态朝左（`«`）、收起态朝右（`»`）*/}
+            <Icon name="chevron" className={leftCollapsed ? undefined : shared.iconLeft} />
           </button>
         </aside>
       )}

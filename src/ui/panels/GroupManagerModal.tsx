@@ -19,6 +19,7 @@ import { Modal } from '@/ui/common/Modal';
 import { useStore } from '@/state';
 import { GROUP_PALETTE } from '@/constants/groupPalette';
 import { GROUP_MANAGER_TEXT } from '@/constants/text';
+import { Icon } from '@/ui/common/Icon';
 import styles from './GroupManagerModal.module.css';
 
 export interface GroupManagerModalProps {
@@ -130,7 +131,7 @@ export function GroupManagerModal({ onClose }: GroupManagerModalProps) {
                     if (window.confirm(GROUP_MANAGER_TEXT.deleteConfirm(g.name))) deleteGroup(g.id);
                   }}
                 >
-                  ✕
+                  <Icon name="x" />
                 </button>
 
                 {paletteFor === g.id && (
@@ -174,7 +175,9 @@ export function GroupManagerModal({ onClose }: GroupManagerModalProps) {
         <ul className={styles.list}>
           {accounts.map((a) => (
             <li key={a.id} className={styles.accountRow}>
-              <span className={styles.name}>{a.name}</span>
+              {/* ★ 名字的样子与组名一致，但**不能共用 `.name`** —— 那个类带 `flex: 1`
+                  （组名要撑开），用在这里会把右侧下拉挤窄；撑满归 `formRow` 的末位。 */}
+              <span className={styles.accountName}>{a.name}</span>
               <select
                 className={styles.select}
                 value={a.groupId ?? ''}

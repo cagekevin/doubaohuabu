@@ -4,6 +4,13 @@
  * ⚠️ 原则 5（SSOT）：**只引用 L2 / L3 token**，不写字面量色值 / 间距。
  * ⚠️ 原实现这 9 处是 inline style —— 没有基础件可用只能内联拼，
  *    现在收进 CSS Modules，改视觉只需动本文件。
+ *
+ * ★ 2026-10-16（§4 `D01`–`D08`）：按**设计层** `docs/mockup/assets/start.css` 对表。
+ *   真值就在它那份里 —— 它叠在 `spec/ui-real.css`（真机 CSS 的机械导出）之上，
+ *   同特异性靠书写顺序取胜 ⇒ 设计层写的覆盖真机那份。
+ * ⚠️ 设计层自己列了 4 条「**没动的真机容器布局，碰它就是改错**」：`.page` 的满高居中 ·
+ *   `.history` 的 `min-width: 320px` · `.projectItem` 的一行两件 · `.projectMain` 的名左时间右
+ *   ⇒ 这些只加"皮肤"（字号 / 行高 / 圆角 / 间距 / 配色 / 图标），**不动布局机制**。
  */
 
 .page {
@@ -12,38 +19,84 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-5);
+  /* ★ 设计层 `StartPage-page`：行距收一档（`space-5` → `space-4`）+ 四周留白 */
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-4);
+  /* ★ 品牌标记在这一屏是 **34px** —— 设计稿给的是**各页个体值**（见 §7-D14：
+     首页顶栏 22 / 激活页 26 / 启动页 34）⇒ 在本页**根类**上覆盖该 token，不新开第二个。 */
+  --brand-mark-size: 34px;
 }
 
-.brand { text-align: center; }
-.brandName { margin: 0 0 var(--space-2); font-size: var(--font-size-xl); }
-.brandTagline { margin: 0; color: var(--color-text-muted); }
+/* 品牌行 —— ★ 设计层：由"居中文字"改成**竖排一组**（标记 + 名 + 副标题），间距归 `gap` */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brandName {
+  margin: 0;
+  /* ★ 设计层 `StartPage-brandName`：`xl` → **`2xl`** + 字距。
+     ⚠️ 原 `margin: 0 0 space-2` 的那个下间距**删** —— 间距归 `.brand` 的 `gap`
+        （同一段间距不许两个来源）。 */
+  font-size: var(--font-size-2xl);
+  letter-spacing: 0.02em;
+}
+
+.brandTagline {
+  margin: 0;
+  color: var(--color-text-muted);
+  /* ★ 设计层给的 `sm`（原来只给色、没给字号 ⇒ 落在默认档上） */
+  font-size: var(--font-size-sm);
+}
 
 .history {
+  /*
+   * ⚠️ 设计层代码写的是 `width: var(--mk-history-w)`（420），而它的**注释**说这条的用意是
+   *    "给它一个**视觉上限**"；同时它把 `.history { min-width: 320px }` 列进"碰它就是改错"。
+   *    ⇒ 两条都留：`width` 定这一屏的视觉宽（与下面两颗动作钮同宽、对齐成一列），
+   *      `min-width` 作窗口极窄时的兜底。
+   */
+  width: var(--history-width);
   min-width: 320px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  /* ★ 设计层：列表行距收一档 */
+  gap: var(--space-1);
 }
-.historyLabel { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+.historyLabel {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  /* ★ 设计层：与列表的左右边缘对齐（自己的内距）+ 加粗一档 */
+  padding: 0 var(--space-1);
+  font-weight: var(--font-weight-bold);
+}
 
 /* 工程项：卡片（原 `.startup-proj`）—— 主区可点开 + 右侧删除钮 */
 .projectItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+  /* ★ 设计层 `StartPage-projectItem`：`gap` 收一档 · 内距改成**左重右轻**（给名字让位）·
+     悬停底色加过渡（原来底色是瞬变） */
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
-.projectItem:hover { background: var(--color-surface-hover); }
+.projectItem:hover {
+  background: var(--color-surface-hover);
+}
 
 /* 主区（原 `.startup-proj-main`）—— 名左 · **相对时间**右；点开 / 双击重命名 */
 .projectMain {
   flex: 1;
   min-width: 0;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   padding: 0;
@@ -54,17 +107,55 @@
   text-align: left;
   cursor: pointer;
 }
-.projectMeta { color: var(--color-text-faint); font-size: var(--font-size-sm); }
+
+/* 项目名 —— ★ 设计层 `StartPage-projectMain > span:first-child` 那几条：
+   强色 + 加粗 + **过长截断**（长项目名是常态，不截断就会把右侧时间挤出去）。
+   ⚠️ 设计层用的是**位置选择器**（`> span:first-child`，对着真机 DOM 写的）；
+      这里改成**明确的类** —— 靠 DOM 顺序的选择器一改结构就**静默失效**。 */
+.projectName {
+  overflow: hidden;
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.projectMeta {
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-sm);
+  /* ★ 设计层：时间用**等宽数字**（相对时间跳动时宽度不抖） */
+  font-variant-numeric: tabular-nums;
+}
 
 /*
-  就地重命名输入框（原 `.startup-proj-input`）—— 走共享输入框真源（判据「能一种的别搞两种」）。
-  ⚠️ 本地只加**真源没设**的两条（`flex`/`min-width`）：真源的 `padding/height/颜色` 不可在此覆盖
-     （构建产物里使用方规则在真源之前 ⇒ 覆盖静默失效，见 `docs/17` §3.1）。
-*/
+ * 「打开」提示箭头 —— ★ **补足**：设计层**注释**里明确要求「悬停 … + 出现一个"打开"箭头」，
+ * 而它自己的 CSS / 标记 **都没有落地这一条**（只改了底色与间距）。
+ * ⇒ 由本仓按同一套语言补：同一颗 `chevron`（不新造箭头）、常驻占位**只切 `opacity`**
+ *    （插入/移除节点会让行内元素抖动）、悬停淡入。
+ */
+.projectArrow {
+  flex: none;
+  color: var(--color-text-faint);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.projectItem:hover .projectArrow {
+  opacity: 1;
+}
+
+/*
+ * 就地重命名输入框（原 `.startup-proj-input`）—— 走共享输入框真源（判据「能一种的别搞两种」）。
+ * ⚠️ 本地只加**真源没设**的：`flex` / `min-width` / `height` / `font-weight`
+ *    （真源的 `padding` / 颜色不可在此覆盖 —— 构建产物里使用方规则在真源之前 ⇒ 覆盖**静默失效**，
+ *     见 `docs/17` §3.1）。
+ */
 .projectInput {
   composes: field from '../common/shared.module.css';
   flex: 1;
   min-width: 0;
+  height: 30px;
+  font-weight: var(--font-weight-bold);
 }
 
 /* 删除钮（原 `.lib-icon del`）—— 共享图标钮真源（`ui/common`，判据「能一种的别搞两种」） */
@@ -72,9 +163,21 @@
   composes: libIcon libIconDel from '../common/shared.module.css';
 }
 
+/*
+ * 两个动作 —— ★ 设计层：**固定同宽、对齐成一列**（与 `.history` 同宽）+ 比标准高一档。
+ * ★ `newProject` 是**这一屏唯一的主色**（口径 ②）；`importProject` 是 ghost（透明底）⇒ 主次分明。
+ */
+.newProject,
+.importProject {
+  width: var(--history-width);
+  height: 38px;
+  font-size: var(--font-size-md);
+}
+
 /* ★ 查 6：主按钮走共享真源（原本内联拼了 4 个属性、又自造了 5 条规则）*/
 .newProject {
   composes: btn btnPrimary from '../common/shared.module.css';
+  font-weight: var(--font-weight-bold);
 }
 
 /* 「导入项目文件（.json）」—— 次级按钮（同走共享真源，不新造视觉） */

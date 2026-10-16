@@ -69,7 +69,6 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
       selected={selected}
       minWidth={140}
       minHeight={100}
-      padded={false}
       testId="material-node"
     >
 

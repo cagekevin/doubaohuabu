@@ -29,9 +29,15 @@
   white-space: nowrap;
 }
 
-/* ★ 查 6：按钮走真源（工具条上要显眼，覆盖回 text-strong）*/
+/* ★ 查 6：按钮走真源（工具条上要显眼，覆盖回 text-strong）
+   ★ 真值 = `mockup.css:596-600` 的 `.mk-selbar .SelectionToolbar-btn`：**收成小号**（26 高）
+   —— 设计层原话「把按钮收成小号，**贴住选区**」：工具条浮在选区上，标准高 32 的按钮
+     会把它撑得比选区还宽。 */
 .btn {
   composes: btn btnGhost from '../common/shared.module.css';
+  height: 26px;
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
   color: var(--color-text-strong);
 }
 

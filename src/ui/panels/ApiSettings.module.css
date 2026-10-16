@@ -22,16 +22,25 @@
 
 /* 原 `.api-settings-sub{ flex:1 1 auto; font-size:12px; color:#64748b }`
    —— ⚠️ 原版它住**头部**（`title + sub + ✕` 一行）；本仓走 `Modal` 后住正文首行。 */
+/* 弹窗首行说明 —— ★ 收口真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`）。
+   设计稿 ⑦ 那一格没画这件 ⇒ **补足**：与 `C31` 三个弹窗的首行说明同档。 */
 .sub {
+  composes: hint from '../common/shared.module.css';
   margin: 0 0 var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
 }
 
 /* 原 `.api-section-title{ font-size:13px; font-weight:700; color:#0f172a; margin-bottom:10px }` */
 .sectionTitle {
-  composes: sectionTitle from '../common/shared.module.css';
+  /*
+   * ★ `F12`：节标题走**小节副题**那一档（弹窗里的小节标题不该用"页面级节标题"的强度）。
+   *
+   * ⚠️ **这里我犯过一个错、已修**：原先按检查项的措辞写成 `composes: sectionTitle isSub` ——
+   *    而真源里**根本没有 `.isSub`**：`sectionTitleSub` 是**独立的一档**
+   *    （`xs` + `normal` + `faint`，**不带** `composes: sectionTitle`）。
+   * ⚠️ **`composes` 引用不存在的类名不会报错**（build / lint 都抓不住，静默失效）——
+   *    这条已记进 §8（`G09`）。正确写法是直接 `composes: sectionTitleSub`。
+   */
+  composes: sectionTitleSub from '../common/shared.module.css';
   /* 仅追加真源未设的属性 */
   margin-bottom: var(--space-2);
 }
@@ -73,10 +82,10 @@
 }
 
 /* 原 `.api-usage{ margin-top:10px; font-size:12px; color:#475569 }` */
+/* 用量说明 —— ★ 同上收口真源 `.hint`（旁注档）*/
 .usage {
+  composes: hint from '../common/shared.module.css';
   margin: var(--space-2) 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
 }
 
 /* 原 `.api-settings-empty{ padding:32px 0; text-align:center; color:#94a3b8; font-size:13px }` */
@@ -91,19 +100,36 @@
    ⚠️ **不再 `composes: panel`** —— 那是"面板壳"的词汇（raised 底 + 面板圆角），
    而原版这张是**内嵌卡片**（sunken 底 + 12px 圆角）⇒ 两者不是同一个东西。 */
 .card {
-  padding: var(--space-3) var(--space-4);
+  /*
+   * ★ 2026-10-16（`§6 F12`）：两张卡（通道配置 / provider）的真值 = 设计层 `backend.css:232-240`
+   *   的 **`.mk-card`** —— `padding: **space-2**`（原 `space-3 space-4`）· `radius-**md**`
+   *    （原 `radius-lg`）· `background: sunken` ✓ · `1px solid --color-border` ✓。
+   * ⚠️ **`display: flex` + `gap: space-1` 暂不采纳**（登记为待办）：真机卡内的行距由各件自己给
+   *    （`.cardHead` 的 `margin-bottom` / `.row` 的 `margin-bottom` / `.usage` 的 `margin-top`），
+   *    改成 `gap` 要同时删那几处 margin —— 而**同一批 margin 还被"通道配置"那一段共用**
+   *    （`.row` / `.usage` 在 `.channelConfig` 里也出现）⇒ 顺手改会把另一段一起动。
+   *    这是"同一段间距两种来源"的既有问题，**逐段收口**，不顺手。
+   */
+  padding: var(--space-2);
   margin-bottom: var(--space-3);
   background: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
 }
 
 /* 原 `.api-card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px }`
    ⚠️ **不再 `composes: panelHead`** —— 那是"面板头"（带下边框 + 加粗）；原版卡片头**没有下边框**。 */
 .cardHead {
+  /* ★ 真值 = 设计层 `.mk-card-head`：`flex` + `center` + `gap: space-2` + **`font-size: sm`**
+     （原来**缺 gap 与字号** ⇒ 卡头里的"名称 + 开关"贴在一起、卡片题也没有自己的档）。
+     ⚠️ `justify-content: space-between` 是**真机独有**（设计层没给）⇒ 保留：卡头左右两端
+        （左：名称/开关；右：能力标记）需要它。
+     ⚠️ 它的 `margin-bottom` 保留（卡内的行距来源之一，见 `.card` 的待办说明）。 */
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
   margin-bottom: var(--space-2);
 }
 

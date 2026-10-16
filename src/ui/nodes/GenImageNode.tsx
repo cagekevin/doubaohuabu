@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useHostOps, useStore } from '@/state';
 import { Thumb } from '@/ui/common/Thumb';
+import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
 import { COMMON_TEXT, GEN_IMAGE_TEXT, MATERIAL_NODE_TEXT } from '@/constants/text';
 import { isCardClick } from '@/core/rules/cardClick';
 import { genImageCurrentUrl, imageApiChipLabel, imageChannelLabel, imageVersionView } from '@/core/rules/genImage';
@@ -35,6 +36,13 @@ import { formatMonthDayMinute } from '@/lib/time';
 import { NodeShell } from './NodeShell';
 import { AnalyzePrompt } from './AnalyzePrompt';
 import type { RFNodeProps } from './types';
+import { useGen } from '@/state';
+import { PROJECT_TEXT } from '@/constants/text';
+import { GEN_PANEL_TEXT } from '@/constants/sendPanelText';
+import { parseRefChips } from '@/core/rules/refs';
+import { stripHtml } from '@/lib/text';
+import { Icon } from '@/ui/common/Icon';
+import { PromptLine, usePromptLookup } from './PromptLine';
 import styles from './shared.module.css';
 
 export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
@@ -43,6 +51,15 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   const pushToast = useStore((s) => s.pushToast);
   const openImageGenPanel = useStore((s) => s.openImageGenPanel);
   const patchNodeData = useStore((s) => s.patchNodeData);
+  /**
+   * 身内**提示词行**（`PromptLine`）的三件依赖 —— 全部走**既有真源**，不新增状态：
+   *   · 生成动作 = `useGen().runForNode(id)`（与浮层 `GenPanel` 里那颗「生成」**同一条路**）
+   *   · 提示词字段 = `data.text`（与面板**同一个字段**；面板也是 `patchNodeData` 写它）
+   *   · 芯片查表 = 共享 hook `usePromptLookup`
+   */
+  const gen = useGen();
+  const promptSeed = parseRefChips(stripHtml(data.text ?? ''));
+  const promptLookup = usePromptLookup(promptSeed.refs);
   const openImageEditor = useStore((s) => s.openImageEditor);
   // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
   const hostOps = useHostOps();
@@ -57,25 +74,31 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   /** `ig-chip-status` 文案（原 218-220）—— `null` = 不渲染 */
   const chipText = imageApiChipLabel(data.apiJob);
   const [histOpen, setHistOpen] = useState(false);
-  const [histPos, setHistPos] = useState<{ left: number; top: number } | null>(null);
   const histBtnRef = useRef<HTMLButtonElement>(null);
-  const histPopRef = useRef<HTMLDivElement>(null);
+  /**
+   * ★ 历史弹层的摆位交给**浮层定位原语**（`B06`「一类问题一处解」）。
+   * ⚠️ 原来这里手算 `Math.max(8, Math.min(rect.left, innerWidth - 264 - 8))` —— 把**面板宽 264
+   *    硬编码进了夹取**（改面板宽就得改这行）。原语按**实测**收边，还顺带给了
+   *    "下方放不下翻到上方 / 打开期间跟滚动与尺寸变化"。
+   * ⚠️ `histPopRef` 也由原语提供（点外面关闭要用 `ref.current.contains`，是同一个元素）。
+   */
+  const [histAnchor, setHistAnchor] = useState<{ x: number; y: number } | null>(null);
+  const { ref: histPopRef, style: histStyle } = useAnchoredLayer({
+    open: histOpen,
+    anchor: histAnchor,
+    depsKey: '',
+  });
 
-  /** 开合历史弹层（原 `C`，`ZL.jsx` 与 `YL.jsx:407-422` 同法） */
+  /** 开合历史弹层（原 `C`，`ZL.jsx` 与 `YL.jsx:407-422` 同法）—— 位置归原语，这里只量**锚点** */
   const toggleHistory = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    if (histOpen) {
-      setHistOpen(false);
-      return;
+    if (!histOpen) {
+      // ⚠️ 锚点必须在**事件里**量：渲染期（含 `useMemo`）读 `ref.current` 违反 React 规则
+      //    —— `react-hooks/refs` 会拦（本处正是被它拦下来才改成这样）。
+      const r = histBtnRef.current?.getBoundingClientRect();
+      setHistAnchor(r ? { x: r.left, y: r.bottom + 8 } : null);
     }
-    const rect = histBtnRef.current?.getBoundingClientRect();
-    if (rect) {
-      setHistPos({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 264 - 8)),
-        top: rect.bottom + 8,
-      });
-    }
-    setHistOpen(true);
+    setHistOpen((v) => !v);
   };
 
   /** 弹层开着时：点外面关掉（与 `YL.jsx:423-438` 同法） */
@@ -88,7 +111,8 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [histOpen]);
+    // ⚠️ `histPopRef` 进依赖：它现在由**原语**提供（仍来自 `useRef` ⇒ 稳定引用）
+  }, [histOpen, histPopRef]);
 
   /**
    * 切换到某一张（原 `E`，`ZL.jsx:100-107`）
@@ -214,20 +238,7 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
               void download();
             }}
           >
-            <svg
-              viewBox="0 0 24 24"
-              width="15"
-              height="15"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 3v12" />
-              <path d="m7 11 5 5 5-5" />
-              <path d="M4 20h16" />
-            </svg>
+            <Icon name="download" />
           </button>
         ) : null}
           {/*
@@ -274,6 +285,20 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           {data.aspectRatio || GEN_IMAGE_TEXT.metaDefaultRatio}
           {versions.length > 0 ? GEN_IMAGE_TEXT.metaOutput(versions.length) : ''}
         </div>
+        {/* ★ 提示词行（设计稿新增件）—— 修的是**真机空态文案自相矛盾**：
+            文案写着「文生图 · 在下方输入提示词」，而下方原本没有框。 */}
+        <PromptLine
+          text={data.text}
+          lookup={promptLookup}
+          onCommit={(next) => patchNodeData(id, { text: next })}
+          onGenerate={() => gen.runForNode(id)}
+          busy={chipText !== null}
+          /* 占位符 = **面板同一句**（`GEN_PANEL_TEXT.promptPlaceholderImage`，SSOT）*/
+          placeholder={GEN_PANEL_TEXT.promptPlaceholderImage}
+          generateLabel={
+            versions.length > 0 ? PROJECT_TEXT.regenerating : PROJECT_TEXT.generate
+          }
+        />
       </NodeShell>
       {/* `gv-hist-pop`（原 288-314）：历史版本弹层（portal 到 body，按按钮位置定位） */}
       {histOpen && versions.length > 0
@@ -281,7 +306,7 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
             <div
               ref={histPopRef}
               className={styles.gvHistPop}
-              style={histPos ?? undefined}
+              style={histStyle}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >

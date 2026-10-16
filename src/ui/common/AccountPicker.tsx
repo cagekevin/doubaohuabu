@@ -45,6 +45,8 @@ import {
 } from '@/core/rules/accountPick';
 import { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT } from '@/constants/text';
 import { useEscapeKey } from './useEscapeKey';
+import { Icon } from './Icon';
+import shared from './shared.module.css';
 import styles from './AccountPicker.module.css';
 
 /** 未分组在**筛选入参**里的哨兵是 `'ungrouped'`；`buildAccountGroups` 给的是 `gid: null` */
@@ -299,7 +301,9 @@ export function AccountPicker({
         onKeyDown={onEscape}
       >
         {label}
-        <span className={`${styles.caret} ${open ? styles.caretOpen : ''}`} />
+        {/* 方向 = **旋转同一颗 `chevron`**（原为 CSS 画的三角 + `rotate(180deg)`，见 `A28`）——
+            设计稿的 `.mk-picker` 用的就是 `#i-chevron` */}
+        <Icon name="chevron" className={open ? shared.iconUp : shared.iconDown} />
       </button>
       {menu ? createPortal(menu, document.body) : null}
     </>

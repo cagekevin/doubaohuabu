@@ -54,7 +54,11 @@ export default tseslint.config(
       'public/**', // ★ 第三方静态资源（mediapipe：wasm 加载器 + .tflite 模型），非重写范围
       'docs/**', // 设计文档（Markdown + 少量脚本）
       '.codebuddy/**', // 工作区命令/技能
-      '.tmp/**', // ★ 本地临时验证脚本（Playwright 截图 / 探针，未追踪、非交付物）
+      // ★ 本地临时验证脚本（Playwright 截图 / 探针）与**打补丁工作区**，均未追踪、非交付物。
+      // ⚠️ 用 `.tmp*/**` 而不是 `.tmp/**` —— 原来只匹配 `.tmp/` 一个目录名，
+      //    `.tmp-patch/`（内含 electron 的 CommonJS `main.js` 副本）照旧被扫 ⇒
+      //    成片 `no-require-imports` 报错，把"仓库 lint 红"记在应用代码头上（`C35` 时踩到）。
+      '.tmp*/**',
       '*.log',
     ],
   },

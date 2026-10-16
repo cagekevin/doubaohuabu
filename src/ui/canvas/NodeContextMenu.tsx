@@ -94,24 +94,52 @@ export function NodeContextMenu({
     if (!r.ok) log.warn('[NodeContextMenu] 打开文件位置失败:', r.message);
   }, [canReveal, dataUrl, hostOps]);
 
-  /** 项清单（**顺序即语义**，逐条对源）；渲染/开合/键盘导航全交共享件 */
+  /**
+   * 项清单（**顺序即语义**，逐条对源）；渲染/开合/键盘导航全交共享件。
+   *
+   * ★ 图标与分组真值 = 设计稿的右键菜单（`index.html:378-403`）：六项**各挂一颗图标**
+   *   （`i-arrange` / `i-swap` / `i-external` / `i-copy` / `i-save` / `i-paste`），
+   *   且「更换素材 · 打开文件所在位置」那一组与「复制 · 保存预设 · 粘贴」之间**有一条分隔线**。
+   * ⚠️ 分隔线**放进条件组之内**：那两项只在 `material` 节点出现，若把线放在组外，
+   *   非素材节点的菜单会**以一条分隔线开头**。
+   * ⚠️ 设计稿这一格**没有危险项**（六项都不是删除）⇒ `danger` 在本菜单用不上，
+   *   它的首个消费者在账号栏菜单（`F01`）。
+   */
   const items: MenuItem[] = [
-    { key: 'arrange', label: NODE_CTX_TEXT.arrange, onSelect: () => void arrangeSelectedNodes() },
+    {
+      key: 'arrange',
+      icon: 'arrange',
+      label: NODE_CTX_TEXT.arrange,
+      onSelect: () => void arrangeSelectedNodes(),
+    },
     ...(node?.type === 'material'
       ? ([
-          { key: 'replace', label: NODE_CTX_TEXT.replaceMaterial, onSelect: onReplaceMaterial },
+          {
+            key: 'replace',
+            icon: 'swap',
+            label: NODE_CTX_TEXT.replaceMaterial,
+            onSelect: onReplaceMaterial,
+          },
           {
             key: 'reveal',
+            icon: 'external',
             label: NODE_CTX_TEXT.reveal,
             title: NODE_CTX_TEXT.revealTitle,
             disabled: !canReveal,
             onSelect: () => void onReveal(),
           },
+          { key: 'sep', separator: true },
         ] satisfies MenuItem[])
       : []),
-    { key: 'copy', label: NODE_CTX_TEXT.copy, onSelect: onCopy },
-    { key: 'preset', label: NODE_CTX_TEXT.saveNodePreset, onSelect: onSaveAsPreset },
-    { key: 'paste', label: NODE_CTX_TEXT.paste, disabled: !hasClipboard, onSelect: onPaste },
+    { key: 'copy', icon: 'copy', label: NODE_CTX_TEXT.copy, onSelect: onCopy },
+    { key: 'preset', icon: 'save', label: NODE_CTX_TEXT.saveNodePreset, onSelect: onSaveAsPreset },
+    {
+      key: 'paste',
+      icon: 'paste',
+      label: NODE_CTX_TEXT.paste,
+      disabled: !hasClipboard,
+      onSelect: onPaste,
+    },
   ];
 
   return <ContextMenu x={state.x} y={state.y} items={items} onClose={onClose} />;

@@ -14,16 +14,16 @@
   gap: var(--space-1);
 }
 
-/* ★ 查 6：走共享真源；浮动入口比特例保留「更大 + 投影」*/
+/*
+ * 触发钮 —— ★ 真值 = 设计稿的标记 `class="btn btnPrimary BatchSendPanel-trigger"`：
+ *   设计层**没有为它写任何规则**（`mockup.css` 里 `BatchSendPanel` 只在注释里出现过一次）
+ *   ⇒ 它就该是**标准主按钮**。
+ * ⚠️ 原来自定的「更大 + 投影」三处覆盖（`height: auto` / `padding: space-2 space-3` /
+ *    `box-shadow`）**没有设计依据**，删 —— 设计稿对浮在画布上的工具条是**收小**
+ *    （见 `.mk-selbar` 把按钮压到 26 高），不是放大。`:hover` 也交回真源（`.btnPrimary` 自带）。
+ */
 .trigger {
   composes: btn btnPrimary from '../common/shared.module.css';
-  height: auto;
-  padding: var(--space-2) var(--space-3);
-  box-shadow: var(--shadow-md);
-}
-
-.trigger:hover {
-  background: var(--btn-primary-bg-hover);
 }
 
 /* ── 卡片（原 `.bs-card`）── 遮罩/头/关闭钮/正文全归 `PanelShell`，本模块只留尺寸 */
@@ -86,22 +86,26 @@
   font-size: var(--font-size-xs);
 }
 
-/* 状态底色（原 `.bs-${status}`）
-   ⚠️ `composes` 只允许单个类选择器 ⇒ 这里是后代选择器，只能本地写；
-      但色值统一走 token（原先混用 --color-surface-raised 当文字色）。*/
+/*
+ * 状态底色（原 `.bs-${status}`）
+ * ⚠️ `composes` 只允许单个类选择器 ⇒ 这里是后代选择器，只能本地写。
+ * ★ **补足**（设计稿未收录本面板 ⇒ 按同一套语言）：状态 chip 走**软底彩字** ——
+ *   与设计稿的 `.mk-chip-status`（进行中 = info 软底彩字）和 `B04f` 对 `.pill` 三档的裁定**同一口径**；
+ *   原来三档都是**实心底 + 白字**（与那套口径相反，且实心底在列表里比内容还抢眼）。
+ */
 .st_success .chip {
-  color: var(--color-text-on-brand);
-  background: var(--color-success);
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
 }
 
 .st_error .chip {
-  color: var(--color-text-on-danger);
-  background: var(--color-danger);
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
 }
 
 .st_sending .chip {
-  color: var(--color-text-on-brand);
-  background: var(--btn-primary-bg);
+  color: var(--color-info-text);
+  background: var(--color-info-bg);
 }
 
 /* ── 决策区（原 `.bs-decision`）── */
@@ -127,8 +131,9 @@
 }
 
 .hint {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  /* ★ 收口真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`：`faint` + **`2xs`**；
+     原来自写 `faint` + `xs` ⇒ 比真源大一档） */
+  composes: hint from '../common/shared.module.css';
 }
 
 /* ── 汇总（原 `.bs-summary`）── */
@@ -139,6 +144,6 @@
 }
 
 .note {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+  /* ★ 同上收口真源 `.hint`（"注意事项"也是旁注）*/
+  composes: hint from '../common/shared.module.css';
 }

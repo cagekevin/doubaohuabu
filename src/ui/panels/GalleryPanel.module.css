@@ -19,15 +19,24 @@
 
 
 
-/* 原 `.lovart-gallery-sub` */
+/*
+ * 原 `.lovart-gallery-sub` —— ★ **它是面板头的「中槽」，不是说明行**。
+ *
+ * ⚠️ 这里我改错过一次、已修：光看名字（`sub`）我把它当成"旁注"、收口到了真源 `.hint`
+ *    （`faint` + `2xs`）—— 但 TSX 里的用法是
+ *    **`meta={<span className={styles.sub}>已选 N · 共 M 张</span>}`** ⇒ 它渲染在
+ *    **`PanelShell` 的头部中间槽**，正是设计稿 ⑨ 那格的 **`panelHeadMid`**「已选 1 · 共 3 张」。
+ * ⇒ 应走真源 **`.panelHeadMid`**（头部副题档），不是 `.hint`（旁注档）。
+ * ⚠️ 教训与 `G07`/`C32` 同源：**判断一个类属于哪一档，要看它渲染在哪个槽 / 哪个位置，
+ *    不能看名字。**
+ */
 .sub {
+  composes: panelHeadMid from '../common/shared.module.css';
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
 }
 
 .actions {
@@ -55,10 +64,13 @@
 }
 
 
+/* 网格 —— ★ 真值 = 设计稿 ⑨ 的 **`.mk-picker-grid`**：**固定 4 列** + `gap: space-1`
+   （原 `auto-fill minmax(120px, 1fr)` 在 880 宽里会排出 **6~7 列**，与设计不符
+   —— 与 `C32` 素材选择器同一处判断、同一个真值）。 */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
 }
 
 /* 原 `.lovart-gallery-more`（分页「加载更多」） */
@@ -76,11 +88,12 @@
  *   （`flex` + `justify-content: flex-end` + `gap` + 上下边框）。源版这行是「提示（左）· 按钮（右）」
  *   ⇒ 提示靠 `margin-right: auto` 顶到左边（真源没设 `margin`，属"只追加真源未设的属性"）。
  */
+/* 脚部提示 —— ★ 这一件**才是**说明行：收口到真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`）。
+   本地只留真源未设的：靠 `margin-right: auto` 顶到左边（真源 `.panelFoot` 是 `flex-end`）。 */
 .footHint {
+  composes: hint from '../common/shared.module.css';
   margin-right: auto;
   min-width: 0;
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
 }
 
 /* ★ 查 6：底部两个按钮走共享真源 */

@@ -1,6 +1,13 @@
 /**
  * 账号面板（原 `OP.jsx` 的 `.account-panel` / `.account-actions` / `.account-row` 子集）
  * ⚠️ 原则 5：色值只走 token。
+ *
+ * ★ 2026-10-16（§6 `F02` / `F03`）：按**设计层** `docs/mockup/assets/backend.css` 对表。
+ *   真值就在它那份里 —— 它叠在 `spec/ui-real.css`（真机 CSS 的机械导出）之上。
+ * ⚠️ 设计层对**按钮档位**有一句纲领（原话）：
+ *    「真机这些按钮一律 `composes: btn btnSm` ⇒ **11px 字 / 25.6px 高**，一排按钮又挤又小、
+ *      读起来像"附带的"，不像工具栏」⇒ 它把 8 个工具栏/行内按钮统一成 **30/12px**
+ *    ⇒ 落成**真源新档 `.btnMd`**（见 `ui/common/shared.module.css`），本文件只 `composes`。
  */
 
 /** ★ 改名（原 `.panel`）：与「浮层卡片」同名不同物 —— 本类是**栏容器**，没有视觉壳。 */
@@ -13,25 +20,33 @@
   overflow: auto;
 }
 
-/* 「取消 N 个选中」（原 `OP.jsx:816-820` 的 `.panel-head .btn.sm.ghost`）—— 有选中才显示 */
+/* 「取消 N 个选中」（原 `OP.jsx:816-820` 的 `.panel-head .btn.sm.ghost`）—— 有选中才显示
+   ★ 档位随设计层的「按钮统一」：`btnSm` → `btnMd` */
 .deselectBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: btn btnMd btnGhost from '../common/shared.module.css';
 }
 
-/* 右键菜单标题里的选中计数（原 `.ctx-menu-count`） */
+/*
+ * 「移动到… · N 个账号」—— ★ **它是菜单标题**（设计稿 ⑩ 那格的 `.mk-menu-title`），
+ * 不是"计数标签"（原来的名字 `moveCount` 骗了人）。
+ * ⚠️ 真值 = `mockup.css:1140-1145`：`padding: space-1 space-2` + `faint` + **`2xs`**
+ *   ⇒ 走真源 `.menuTitle`（真源那份与设计层**逐字相同** ✓）；本地只留"标题右侧计数"的间距。
+ */
 .moveCount {
+  composes: menuTitle from '../common/shared.module.css';
   margin-left: var(--space-1);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
 }
 
 /* ── 「＋ 添加账号」（原 `OP.jsx:822-827` 的 `.account-actions` 主按钮）── */
-/* ★ 查 6：主按钮不再自造 —— 引用共享真源 */
+/* ★ 查 6：主按钮不再自造 —— 引用共享真源。
+   ⚠️ 设计层的「按钮统一」那组**不含**它（它是这一栏的**主**按钮，不是工具栏钮）⇒ 档位不动。 */
 .addBtn {
   composes: btn btnPrimary btnBlock from '../common/shared.module.css';
 }
 
-/* ── 工具条（原 `.account-tool-row`：导入 / 导出 / 关联扫描 / 出口代理）── */
+/* ── 工具条（原 `.account-tool-row`：导入 / 导出 / 关联扫描 / 出口代理）──
+   ★ 设计层明确要求**保持真机的 flex + flex-wrap 一行**（它自己的注释：此前改成两列网格
+     "那是把对的改错了：真机就是一行、放不下自动换行"）⇒ 容器布局未动。 */
 .toolRow {
   display: flex;
   flex-wrap: wrap;
@@ -39,8 +54,10 @@
 }
 
 .toolBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: btn btnMd btnGhost from '../common/shared.module.css';
   flex: 1 1 auto;
+  /* ★ 设计层：工具行里的按钮**文字左对齐**（`flex: 1` 拉开后居中会晃）*/
+  justify-content: flex-start;
 }
 
 .toolMsg {
@@ -48,9 +65,18 @@
   font-size: var(--font-size-sm);
 }
 
-/* ── 实时隔离体检状态按钮（原 `.fp-health`，三态：crit / warn / ok）── */
+/*
+ * ── 实时隔离体检状态按钮（原 `.fp-health`，三态：crit / warn / ok）──
+ * ★ 设计层 `AccountPanel-fpHealth`：`justify-content: flex-start` + `xs` 字 + 不换行 + 截断。
+ * ⚠️ 它**不在**「按钮统一」那一组里 ⇒ 档位仍是 `btnSm`（这是有据的不动，不是漏改）。
+ */
 .fpHealth {
   composes: btn btnSm btnBlock from '../common/shared.module.css';
+  justify-content: flex-start;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fpHealthCrit {
@@ -83,17 +109,33 @@
   list-style: none;
 }
 
+/*
+ * 账号行 —— ★ 设计层 `AccountPanel-row` 补"**卡片感**"：
+ *   `radius-md` + **1px 透明描边**（描边先在位，悬停/选中时只换色 ⇒ 不跳动）+ 悬停底。
+ */
 .row {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
 }
-
-.rowActive {
+.row:hover {
   background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
 }
 
+/*
+ * 当前账号（后台正在显示的那一个）。
+ * ⚠️ **设计层的注释与代码不一致**：注释说「用**品牌色左边条**，不用整块底色（底色会把列表糊成一片）」，
+ *    而它给的 CSS 是 `background: selection-bg` + `border-color: selected-border`（**整块底色**）。
+ *    ⇒ 按**可执行的代码**落（左边条未实现）；若要左边条，等设计层补规则再改。
+ */
+.rowActive {
+  background: var(--color-selection-bg);
+  border-color: var(--color-selected-border);
+}
+
+/* 主区（整行可点） */
 .rowMain {
   flex: 1;
   min-width: 0;
@@ -104,7 +146,7 @@
   color: var(--color-text-strong);
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm); /* ★ 三态扫描补：hover 底色需要一个圆角 */
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 /* ★ 三态扫描补：点整行会进详情，却没有 hover 提示 */
@@ -112,52 +154,76 @@
   background: var(--color-surface-hover);
 }
 
-/* 头像（原 `OP.jsx:720-725` 的 `.account-avatar`）—— 分组色作底，字是名字里的数字 */
+/*
+ * 头像（原 `OP.jsx:720-725` 的 `.account-avatar`）—— 分组色作底，字是名字里的数字。
+ * ★ 设计层 `AccountPanel-avatar`：尺寸 **28**（原 `--dim-6` = 32）+ **补 1px 描边**；
+ *   并给**当前账号**的头像反色（品牌底 + 白字 + 去描边）—— 原来只有行的底色在变、头像不变。
+ * ⚠️ `font-weight: bold` 与 `user-select: none` 是**本仓独有**（设计层没提）⇒ 保留。
+ */
 .avatar {
   flex: none;
   display: grid;
   place-items: center;
-  width: var(--dim-6);
-  height: var(--dim-6);
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-full);
   background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
   color: var(--color-text-strong);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-none);
   user-select: none;
 }
+.rowActive .avatar {
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+  border-color: transparent;
+}
 
-/* 名字 + 状态（原 `.account-meta`）—— **必须 `min-width: 0`**，否则 flex 不肯缩、文字竖排 */
+/* 名字 + 状态（原 `.account-meta`）—— **必须 `min-width: 0`**，否则 flex 不肯缩、文字竖排
+   ★ 设计层：补 `gap: 2px`（名字与状态两行贴太近时读成一行）*/
 .metaCol {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 2px;
 }
 
+/* ★ 设计层 `AccountPanel-name`：`sm` 字 + 强色（原来色靠继承、字号也靠继承）*/
 .name {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-strong);
 }
 
+/* ★ 设计层 `AccountPanel-meta`：字号 `xs` → **`2xs`**（它是名字下面的一行附注）*/
 .meta {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-2xs);
 }
 
-/* 「检测登录」（本工程新增：未登录账号才有）—— 文字钮，窄一点 */
+/*
+ * 「检测登录」（本工程新增：未登录账号才有）—— 文字钮。
+ * ★ 设计层：档位 `btnMd`（12px 字，不再缩到 11）+ **行内再小一档**（`height: 26px` ·
+ *   `padding: 0 space-2`）。
+ * ⚠️ `background: transparent` 是本仓的**有意差异**：源码注释说设计层**没提**它的底 —— 它是行内
+ *    的"文字动作"，走透明底；这一点已记在 `F03` 行里。
+ */
 .rowBtn {
-  composes: btn btnSm from '../common/shared.module.css';
+  composes: btn btnMd from '../common/shared.module.css';
   flex: none;
-  padding: 0 var(--space-1);
+  height: 26px;
+  padding: 0 var(--space-2);
   background: transparent;
 }
 
@@ -171,14 +237,19 @@
   composes: libIconDel from '../common/shared.module.css';
 }
 
-/* ── 面板底部操作条（原 `.panel-foot`）── */
-/* ⚠️ 位置偏离：源版 footer 固定在面板底（列表区单独滚动）；本工程随栏滚动（`margin-top: auto` 贴底） */
+/*
+ * ── 面板底部操作条（原 `.panel-foot`）──
+ * ★ 设计层 `AccountPanel-foot`：内距 `space-2 space-3`（原只给 `padding-top`）。
+ * ⚠️ **结构有意保留真机的竖排**（设计层画的是横排一行）：真机这里装的是 `snapToggle` +
+ *    两颗 **`btnBlock`**（满宽）按钮 ⇒ 改横排会把满宽按钮撑开、反而更乱。
+ *    `margin-top: auto` 也是真机独有（底部操作条贴栏底）⇒ 保留。
+ */
 .foot {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   margin-top: auto;
-  padding-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--color-border);
 }
 
@@ -206,37 +277,26 @@
 
 /*
  * ── 静默开关（原 `.autostart-switch` + `.autostart-knob`，`OP.jsx:767-772`）──
- * ⚠️ `mockup.css` **未收录**这两条 ⇒ 按 token 自写（同 `.timerInline` 的先例：不假装有真身）。
- * ⚠️ 开启态的底色：源是**内联分组色**（`style={{ background: Ce }}`）；没有分组色时走这里的 `--color-brand`。
+ * ★ **形态收口到真源 `.switch`**（`§6 F03`）：同一个"开/关滑块"在节点侧（`.autoSend`）还有一份
+ *   **值不一样**的实现（高 17 vs 16 · knob 13 vs 12 · 有无边框），设计层 `backend.css` 又给了
+ *   第三份 ⇒ 三份并成 `ui/common` 的一档（值取通用件 `.mk-switch`）。
+ * ⚠️ 开启态的底色：源是**内联分组色**（`style={{ background: tint }}`）—— 那是**数据驱动**的
+ *    （分组色），仍在 TSX 里；这里的 `.switchOn` 只是没有分组色时的兜底。
  */
 .autoStartSwitch {
-  position: relative;
-  flex: none;
-  width: 30px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  background: var(--color-border-strong);
-  transition: background 0.15s ease;
+  composes: switch from '../common/shared.module.css';
 }
 
 .autoStartOn {
-  background: var(--color-action-primary);
+  composes: switchOn from '../common/shared.module.css';
 }
 
 .autoStartKnob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-raised);
-  transition: transform 0.15s ease;
+  composes: switchKnob from '../common/shared.module.css';
 }
 
-.autoStartOn .autoStartKnob {
-  transform: translateX(14px);
+/* 滑块右移 —— 位移写成**独立类**（真源 `.switchKnobOn`），不用后代选择器：
+   `composes` 只搬运单个类的声明，`X .Y` 那种规则**搬不过来**（消费方用的是自己的类名）。 */
+.autoStartKnobOn {
+  composes: switchKnobOn from '../common/shared.module.css';
 }

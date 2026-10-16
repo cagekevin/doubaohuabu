@@ -254,7 +254,11 @@ export function LoginModal({ type, onClose }: LoginModalProps) {
       bodyClassName={styles.body}
       testId="login-modal"
       title={title}
-      actions={
+      /*
+       * ★ 真值 = 设计稿 ②（`backend.html:315-318`）：**两颗动作钮在 `panelFoot`（脚）**，
+       *   头部右槽只留 `panelClose`。真机原来把它们放在 `actions`（头部右槽）⇒ 移过来。
+       */
+      footer={
         <>
           {/* tapnow **没有**「在浏览器打开」那一颗（原 `$P.jsx:255` 的 `!a && …`） */}
           {capsOf(type).loginCanOpenInBrowser && (

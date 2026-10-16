@@ -81,7 +81,6 @@ npm run lint:gates       # 元层闸（闸的闸）：扫描根存在 + 基数�
 npm run lint:dead-code   # knip 死代码闸（基线「永不复涨」；新增即红）
 npm run test:affected    # ★ **默认测试入口**：按改动反查该跑哪几个测试（`--dry` 只算不跑 · `--json` 机器读 · `--files a,b` 手工指定）
 npm run test             # vitest run（**全量** ⇒ 验收动作，默认不跑）
-npm run spec:ui          # 生成 UI 对照表（产物）
 npm run pack:win         # 打包（另有 pack:dir / pack:mac / icon）
 ```
 

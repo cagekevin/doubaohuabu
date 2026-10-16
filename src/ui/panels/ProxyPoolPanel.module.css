@@ -4,11 +4,12 @@
  * ⚠️ 查 6：按钮 / 输入框 / 空态走 `ui/common/shared.module.css` 真源，不自造。
  */
 
+/* 操作说明 —— ★ 说明行收口到真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`）。
+   设计稿 ⑤ 那一格只画了「已保存的分配」那一处说明（见 `.assignTitle`），本件是**补足**：
+   同一个面板里的**同类旁注**取同档（"能一种的别搞两种"）。本地只留真源未设的间距。 */
 .tip {
+  composes: hint from '../common/shared.module.css';
   margin: 0 0 var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
 }
 
 .input {
@@ -16,6 +17,11 @@
   width: 100%;
 }
 
+/*
+ * 操作反馈（「已保存 2 条」/「已清空」）—— ⚠️ **有意不收口到 `.hint`**：
+ * 它不是旁注，而是**操作结果**，用户要一眼看到 ⇒ 保留 `muted` + `sm` 的强度
+ * （降到 `faint` + `2xs` 会读不出"我刚才那下生效了没"）。`min-height` 是防跳动。
+ */
 .status {
   min-height: 18px;
   margin: var(--space-1) 0;
@@ -23,8 +29,15 @@
   font-size: var(--font-size-sm);
 }
 
+/*
+ * 「已保存的分配（N 条）」—— ★ 真值 = 设计稿 ⑤ 的 **`.mk-cell-hint`**（不是节标题！）
+ *   ⇒ 收口到真源 `.hint`。
+ * ⚠️ **更正本行检查项**：原写「节标题走 `sectionTitle isSub`」—— 与设计稿不符：
+ *    设计稿那一行用的就是 `.mk-cell-hint`（旁注），真机此前却当成 `sectionTitleSub`（节副题，
+ *    更大更强）⇒ 把旁注抬成了标题。**检查项也要核，不能照抄。**
+ */
 .assignTitle {
-  composes: sectionTitleSub from '../common/shared.module.css';
+  composes: hint from '../common/shared.module.css';
   /* 仅追加真源未设的属性 */
   margin-top: var(--space-2);
 }
@@ -42,21 +55,37 @@
   list-style: none;
 }
 
+/*
+ * 分配行 —— ★ 真值 = 设计稿 ⑤ 的 **`.mk-menu-item`**（`width: 100%`）：30 高 · 图标槽 ·
+ *   `sm` 字 · 悬停 sunken ⇒ 走真源 `.menuItem`（与右键菜单 / 建节点浮层**同一张皮**）。
+ * ⚠️ 保留 `justify-content: space-between`：设计稿靠一个 `.mk-foot-grow` 撑开，等价。
+ * ⚠️ 本地原来那条 `gap: space-2` **删**（真源 `.menuItem` 已给 `gap` —— 同一个数不许两处）。
+ */
 .row {
-  display: flex;
-  align-items: center;
+  composes: menuItem from '../common/shared.module.css';
   justify-content: space-between;
-  gap: var(--space-2);
 }
 
+/*
+ * 左件 = **代理地址**（设计稿那行就是 `1 · http://a:8080` —— 代理在**左**）。
+ * ⇒ 它是这一行的**主信息**，用项的默认文字色（不再自降成 `muted` + `xs`）。
+ * ⚠️ 设计稿左件还带一个序号前缀（`1 · `）—— **不加**：那是它为了演示"按序轮询"画的，
+ *    真实列表本就按序排列，加序号要动文案 SSOT（收益不成比例）。
+ */
+.net {
+  flex: none;
+}
+
+/*
+ * 右件 = 分配到的**账号名** —— ★ 真值 = 设计稿的 **`.mk-chip`**（软底彩字）
+ *   ⇒ 走真源 `.pill`（`B04f` 已把语气改成软底彩字，与 `.mk-chip-status` 同形）。
+ * ⚠️ `.direct`（没有可用代理 ⇒ 显示「直连」）是**另一种状态**：它不是账号名，也不是地址，
+ *    而是一句"当前直连"的注脚 ⇒ **不套 pill**，保留 `muted` + `xs`。
+ */
 .name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  composes: pill from '../common/shared.module.css';
 }
 
-.net,
 .direct {
   flex: none;
   color: var(--color-text-muted);

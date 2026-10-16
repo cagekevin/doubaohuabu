@@ -9735,7 +9735,7 @@
           "decls": {
             "position": "absolute",
             "inset": "0",
-            "background-image": "linear-gradient(var(--color-text-on-brand) 1px, transparent 1px),\n    linear-gradient(90deg, var(--color-text-on-brand) 1px, transparent 1px)",
+            "background-image": "linear-gradient(var(--color-text-on-brand) 1px, transparent 1px),\r\n    linear-gradient(90deg, var(--color-text-on-brand) 1px, transparent 1px)",
             "background-size": "33.33% 33.33%",
             "opacity": "0.25"
           },

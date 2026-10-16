@@ -239,41 +239,15 @@ body {
 }
 
 /*
- * ★★ **这一行要回套真机**（而不是在每个组件里抄一遍皮肤）
- *
- * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.field` / `.panel` …）整个住在
- *       `@layer base`（级联层，`ui-real.css:1776`）；而 `reset.css:37-42` 的
- *       `button{ background:none; border:none; padding:0 }` 是**未分层**的
- *       ⇒ 按 CSS 规范「未分层 > 分层」⇒ reset 压过真源 ⇒ **所有真机按钮丢掉底色、边框与内边距**。
- *       实测证据：同一个 `btn btnPrimary` 挂在 `<div>` 上是蓝底白字，挂在 `<button>` 上变全透明。
- *
- * 解法用 CSS 自己的 `revert-layer`：它把**指定的这几个属性**交还给**下一层**
- *       ⇒ 正好退回 `@layer base` 里的 `.btn / .btnPrimary`
- *       ⇒ 皮肤仍然只有**真源那一份**，不用在设计层再抄一遍（抄一份就必然漂移）。
- *
- * ⚠️ 只回退这三个属性：它们正是 reset 多写的那三样；其余（cursor / font）本就该归 reset。
+ * ★ 按钮 / 输入框皮肤只有**真源那一份**：归一（`reset.css` 的 `button{…}` 与 `color: inherit`）
+ *   与真源（`.btn` / `.btnPrimary` / `.field` …）现在**同住 `@layer base`**
+ *   ⇒ 层内按**特异性**分胜负（`button` 0,0,1 < `.btn` 0,1,0）⇒ 真源赢。
+ *   ⇒ 此处**不需要任何补丁**（`revert-layer` 是"归一跑到真源上面去了"的补丁，层摆对了就没有它）。
+ *   口径：`docs/CSS规范.md` §1.4「层叠阶梯」。
  */
-button {
-  background: revert-layer;
-  border: revert-layer;
-  padding: revert-layer;
-}
 
 /*
- * 同上：`reset.css:29-35` 那一组（`button,input,textarea,select`）还写了 **`color: inherit`**，同样是
- * 未分层 ⇒ 压过 `@layer base` 里 `.btn` / `.btnPrimary` 的前景色。
- * 后果最直观的一处：**主按钮变蓝底深灰字**（实测 `rgb(79,70,229)` 底 + `rgb(31,35,41)` 字，对比度跌到读不清）
- * ⇒ 这里用同一组选择器把 `color` 也交还真源。
- */
-button,
-input,
-textarea,
-select {
-  color: revert-layer;
-}
-
-/*
- * 主按钮 —— 全宽 + 一档大号；皮肤来自真源 `.btnPrimary`（经上面的 `revert-layer` 拿到）。
+ * 主按钮 —— 全宽 + 一档大号；皮肤来自真源 `.btnPrimary`。
  * ★ 它是**这一屏唯一的主色**（口径 ②）：上方四颗全是中性描边 ⇒ 「这里该点了」不需要再解释。
  */
 .ActivatePage-primary {

@@ -33,19 +33,26 @@
   list-style: none;
 }
 
+/* 分组行 —— ★ 真值 = 设计稿 ⑥ 的 `.mk-group-row`（`backend.css:231`）：
+   `flex` + `center` + `gap: space-1` + **`min-width: 0`**（原缺 —— 长组名会把行撑破）。
+   ⚠️ 本机多保留一条 `flex-wrap: wrap`：真机这行还挂着**调色板**（`.palette`，`flex: 1 1 100%`）
+      与"重命名输入框"，设计稿那一格只有五件 ⇒ 放不下要能折行。 */
 .groupRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
+  min-width: 0;
 }
 
+/* 组色点 —— ★ 真值 = 设计稿 ⑥ 的 **`.mk-swatch`**（`backend.css:223-230`）：14×14（同）
+   + **`radius-xs`**（原是 `radius-full` ⇒ 圆点，设计是**小方角**）+ 1px 描边 + `cursor: pointer`。 */
 .colorDot {
   flex: none;
   width: 14px;
   height: 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 /* ★ 三态扫描补：可点但无 hover 反馈 */
@@ -58,27 +65,35 @@
   border-style: dashed;
 }
 
+/* 组名 —— ★ 真值 = 设计稿 ⑥ 的行内用的是 **`AccountPanel-name`**（那件真机本来就存在）
+   ⇒ 对齐它的档：**`sm` 字** + 强色（原来只有色、字号靠继承）+ ellipsis。 */
 .name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--font-size-sm);
   color: var(--color-text-strong);
 }
 
+/* 成员数 —— ★ **补足**（设计稿那一格没有这一件）：它是组名后的一句附注
+   ⇒ 与全仓的旁注同档（真源 `.hint`：`faint` + `2xs`）。 */
 .count {
+  composes: hint from '../common/shared.module.css';
   flex: none;
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
 }
 
 .autoBtn {
   composes: btn btnSm btnGhost from '../common/shared.module.css';
 }
 
+/* 「自启动」—— ⚠️ 设计稿 ⑥ 把它画成一个 **`.mk-chip`**（状态展示），真机是**可切的按钮**
+   （`data-on` 两态 + 点击切换）⇒ **保留功能形态**（把可切的东西画成不可点的 chip 是退步），
+   只把**开态的颜色对齐 chip 的口径**：软底彩字（与 `B04f` 对 `.pill` 的裁定一致）。 */
 .autoBtn[data-on='true'] {
   color: var(--color-success-text);
+  background: var(--color-success-bg);
 }
 
 .delBtn {
@@ -118,17 +133,33 @@
   margin: var(--space-3) 0 var(--space-1);
 }
 
+/* 「账号移组」的一行 —— ★ 真值 = 设计稿 ⑥ 的 **`.mk-form-row`**（本仓已把它落成真源
+   `.formRow`，见 `C34`）：`flex` + `center` + `gap: space-2` + **末位子元素 `flex: 1`**。
+   ⇒ 下拉**撑满剩余宽**（设计稿的 `.mk-picker` 就是这么摆的）。
+   ⚠️ **改判一条**：原来 `.select` 写的是「真差异：行里不许被拉满」（`flex: none` +
+      `max-width: 55%`）—— 那是自定的，设计稿要的恰恰是撑满 ⇒ 两条删除。 */
 .accountRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  composes: formRow from '../common/shared.module.css';
+}
+
+/*
+ * 移组行里的**账号名** —— ⚠️ 它与上面「组名」**不能共用一个类**：
+ *   组名要 `flex: 1`（撑开、把后三件推右），账号名**不能** `flex: 1`（那会把右侧下拉挤窄，
+ *   而 `formRow` 已经把"撑满"给了末位）。
+ * ⇒ 拆出本类：名字的样子（`sm` + 强色 + 截断）与组名一致，但**不吃弹性宽度**。
+ */
+.accountName {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-strong);
 }
 
 .select {
-  composes: field from '../common/shared.module.css';
-  flex: none;
-  max-width: 55%;
+  composes: select from '../common/shared.module.css';
 }
 
 

@@ -21,6 +21,7 @@
 import { useEffect } from 'react';
 import { PERSIST_TEXT } from '@/constants/text';
 import { useStore } from '@/state';
+import { Icon } from './Icon';
 import styles from './shared.module.css';
 
 /** 自动消失延时（原 `Z0.jsx:15-17` 的 `8000`，逐字） */
@@ -41,15 +42,15 @@ export function SaveErrorBanner() {
 
   return (
     <div className={styles.saveErrorBanner} role="alert">
-      {/* `⚠️` 是源版就内联在 JSX 里的装饰前缀（不是可复用文案） */}
-      <span className={styles.saveErrorText}>⚠️ {saveError.message}</span>
+      {/* 正文 = **原始 message 原样**（原则 6），设计稿不画任何前缀图标 */}
+      <span className={styles.saveErrorText}>{saveError.message}</span>
       <button
         type="button"
         className={`${styles.panelClose} ${styles.isDanger}`}
         title={PERSIST_TEXT.close}
         onClick={() => setSaveError(null)}
       >
-        ×
+        <Icon name="x" />
       </button>
     </div>
   );

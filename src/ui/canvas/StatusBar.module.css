@@ -1,0 +1,54 @@
+/**
+ * 状态栏（画布的身份条）—— 真值 = `docs/mockup/assets/mockup.css` 的 `.mk-statusbar` 一族。
+ * 只读画布的事实：节点数 · 连线数 · 缩放 · 网格吸附开关（开关写的是工程级 `snap`）。
+ */
+
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--statusbar-height);
+  padding: 0 var(--space-4);
+  background: var(--color-surface-raised);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* 一项（数字比标签重一档，扫读先看数） */
+.item b {
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+/* 项间的细分隔（12 = `--dim-3`）*/
+.sep {
+  width: 1px;
+  height: var(--dim-3);
+  background: var(--color-border);
+}
+
+/* 弹性空隙：把开关推到最右 */
+.spacer {
+  flex: 1;
+}
+
+/* 开关（吸附）—— 关态中性、开态"选中底 + 品牌字" */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.toggle:hover {
+  background: var(--color-surface-hover);
+}
+.on {
+  color: var(--color-accent-text);
+  background: var(--color-selection-bg);
+}

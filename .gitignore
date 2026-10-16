@@ -17,6 +17,11 @@ docs/豆包画布原版参考/outputs/
 
 # ── 探针 / 临时产物（不变量检查的 journal）──
 .probe/
+#   `.tmp-patch/` 那类**打补丁时的工作区**（内含 electron main.js 副本 + node_modules）——
+#   ⚠️ 它会被 eslint 扫到并报 `no-require-imports`（CommonJS 主进程），故 `eslint.config.js`
+#      里也要一并 ignore；两处都加，缺一处就漏。
+.tmp*
+
 
 # ── 环境变量 ──
 .env

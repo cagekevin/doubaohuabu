@@ -147,7 +147,9 @@ export const COMMON_TEXT = {
 export const BRAND = {
   name: '豆包画布',
   tagline: '无限画布 · 素材连线 · 智能创作',
-  newProject: '＋ 新建项目',
+  /* ⚠️ 原为 `'＋ 新建项目'` —— 那个 `＋` 是**全角加号字符**（✗ 字符图标，违反 G01）。
+     已按 §7-D11 拆开：**文案只留字**，加号由按钮挂 `<Icon name="plus" />` 承担。 */
+  newProject: '新建项目',
   openHistory: '打开历史项目',
   emptyHistory: '暂无历史项目，点击上方新建一个吧',
   importProject: '导入项目文件（.json）',
@@ -346,6 +348,12 @@ export const CANVAS_TEXT = {
   pastedImageName: (clock: string) => `粘贴图片 ${clock}`,
   /** 组连线锚点的 title（原 `_Component37.jsx:184`，逐字） */
   groupConnectHint: '拖拽此锚点，将所选节点一次性连接到目标节点',
+  /* ── 状态栏（设计稿新增的画布身份条）—— 三个标签 ──
+     ⚠️ 它的「网格吸附」开关**复用** `ACCOUNT_PANEL_TEXT.snapLabel` / `snapTitle`：
+        两处写的是**同一个 store 开关**（`snap`）⇒ 文案只许一处（SSOT）。 */
+  statusNodes: '节点',
+  statusEdges: '连线',
+  statusZoom: '缩放',
 } as const;
 
 /**
@@ -475,7 +483,8 @@ export const LIBRARY_TEXT = {
   /** 面板标题（原 `RT.jsx:254` 的 `<span className="library-title">资源库</span>`，逐字） */
   title: '资源库',
   /** 头部「＋ 添加」（原 `RT.jsx:257`，逐字含全角 `＋`） */
-  add: '＋ 添加',
+  /* ⚠️ 原为 `'＋ 添加'`（全角加号字符）—— 见 `newProject` 同注：文案只留字，加号走 `Icon`。 */
+  add: '添加',
   /** 列表空态第一行（原 `RT.jsx:263`，逐字） */
   dropHint: '拖入图片',
   /** 列表空态第二行（原 `RT.jsx:265`，逐字含全角引号） */
@@ -1230,7 +1239,8 @@ export const ACCOUNT_PANEL_TEXT = {
   /** 源版空态提示（`_Component43.jsx:3297`，逐字） */
   emptyHint: '请先在左侧添加并登录账号',
   /** 原 `OP.jsx:827` 的按钮（**逐字**，含全角 `＋`） */
-  addAccount: '＋ 添加账号',
+  /* ⚠️ 原为 `'＋ 添加账号'`（全角加号字符）—— 见 `newProject` 同注。 */
+  addAccount: '添加账号',
   /**
    * 探针按钮（用既有 `SitePort.probe`，不是新机制）
    *

@@ -31,6 +31,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAccountOps, useStore } from '@/state';
 import { ACCOUNT_STATUS, isAccountUsable, type Account, type SiteType } from '@/stable/model/account';
 import { ContextMenu, type MenuItem } from '@/ui/common/ContextMenu';
+import { Icon } from '@/ui/common/Icon';
 // ⚠️ 头像字是**纯规则**（原 `OP.jsx:724`）⇒ 住 `core/rules`，不在组件里内联
 import { accountAvatarText } from '@/core/rules/accountName';
 // ★ 画廊的站点能力判据 + 站点名（原 `OP.jsx:710-711` 的 `fe`/`Te`）—— 真源在画廊领域模块
@@ -251,10 +252,25 @@ export function AccountPanel() {
   };
 
   /** 右键菜单项（原 `OP.jsx:967-988`：标题 + 各分组 + 分隔线 + 移出分组） */
+  /**
+   * 「移动到…」菜单项（设计稿 ⑩ `backend.html:491-497`）：**两项各挂一颗图标** ——
+   *   组项 `#i-group`（`group`）、「移出分组」`#i-x`（`x`）；标题走 `menuTitle` 那一档。
+   * ⚠️ 设计稿那格**没有危险项**（两项都不是删除）⇒ 本菜单用不上 `danger`。
+   */
   const menuItems: MenuItem[] = [
-    ...groups.map<MenuItem>((g) => ({ key: g.id, label: g.name, onSelect: () => moveSelected(g.id) })),
+    ...groups.map<MenuItem>((g) => ({
+      key: g.id,
+      icon: 'group',
+      label: g.name,
+      onSelect: () => moveSelected(g.id),
+    })),
     { key: '__sep__', separator: true as const },
-    { key: '__ungroup__', label: ACCOUNT_PANEL_TEXT.moveUngrouped, onSelect: () => moveSelected(null) },
+    {
+      key: '__ungroup__',
+      icon: 'x',
+      label: ACCOUNT_PANEL_TEXT.moveUngrouped,
+      onSelect: () => moveSelected(null),
+    },
   ];
 
   /** 已登录账号数（原 `OP.jsx:835-837` 的导出按钮禁用判据） */
@@ -330,6 +346,8 @@ export function AccountPanel() {
         </button>
       )}
       <button type="button" className={styles.addBtn} onClick={() => setPicking(true)}>
+        {/* ★ §7-D11：加号由**图标**承担（原来它是 `ACCOUNT_PANEL_TEXT.addAccount` 里的全角字符 `＋`）*/}
+        <Icon name="plus" />
         {ACCOUNT_PANEL_TEXT.addAccount}
       </button>
       {/* ★ 工具条（原 `OP.jsx:829-843` 的 `.account-tool-row`）：导入 / 导出 / 关联扫描 */}
@@ -535,7 +553,11 @@ export function AccountPanel() {
                     void accountOps.toggleAutoStart(a.id);
                   }}
                 >
-                  <span className={styles.autoStartKnob} />
+                  {/* 滑块右移由**独立的状态类**表达（真源 `.switchKnobOn`）—— 不用后代选择器：
+                      `composes` 搬不动 `X .Y` 那种规则 */}
+                  <span
+                    className={`${styles.autoStartKnob}${a.autoStart === true ? ` ${styles.autoStartKnobOn}` : ''}`}
+                  />
                 </button>
                 <button
                   type="button"

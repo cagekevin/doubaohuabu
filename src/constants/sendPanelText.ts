@@ -953,7 +953,7 @@ export const SEND_QUEUE_TEXT = {
   /** 「查看」的 `title`（原逐字：`定位到画布上的出片结果`） */
   viewTitle: '定位到画布上的出片结果',
   /** 拖动 `title`（原 196，逐字） */
-  dragTitle: '拖动可移动面板位置',
+
   /** 账号未分配（原 233，逐字） */
   accountPending: '待分配',
   /** 第 N 次重试（原 236：`· 第{N}次`） */

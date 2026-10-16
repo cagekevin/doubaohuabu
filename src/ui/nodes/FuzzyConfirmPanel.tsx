@@ -37,6 +37,7 @@ import {
 } from '@/core/rules/fuzzyMatch';
 import { FUZZY_TEXT } from '@/constants/text';
 import { rectsForMatch, zoomScaleOf, type FuzzyRect } from './fuzzyRects';
+import { Icon } from '@/ui/common/Icon';
 import styles from './FuzzyConfirmPanel.module.css';
 
 export interface FuzzyConfirmPanelProps {
@@ -253,18 +254,7 @@ export function FuzzyConfirmPanel({ text, library, onWrite, editorRef }: FuzzyCo
                 />
               ) : (
                 <div className={styles.fuzzyThumbPlaceholder}>
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <rect x="3" y="3" width="18" height="18" rx="2.5" />
-                    <circle cx="9" cy="10" r="2" />
-                    <path d="M21 15l-3.5-4.5L14 15l-1.5 2H21v-2z" />
-                  </svg>
+                  <Icon name="image" />
                   <span>{FUZZY_TEXT.noPreview}</span>
                 </div>
               )}

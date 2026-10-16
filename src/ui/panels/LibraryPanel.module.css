@@ -13,12 +13,17 @@
 
 .head {
   composes: panelHead from '../common/shared.module.css';
+  /* 真值 = `mockup.css` 的 `.LibraryPanel-head`：侧栏头部是**常驻工具条**，
+     而真源 `.panelHead` 那套（12/16 内距 + 14 字）是给**弹窗**的 ⇒ 压到"一行" */
+  padding: var(--space-2) var(--space-3);
+  min-height: 36px;
   color: var(--color-text-muted);
 }
 
-/* ★ 面板题（原 `.library-title`）—— 走真源 `panelTitle`（只有一种题） */
+/* ★ 面板题（原 `.library-title`）—— 走真源 `panelTitle`（只有一种题），比弹窗那档小一号 */
 .title {
   composes: panelTitle from '../common/shared.module.css';
+  font-size: var(--font-size-sm);
 }
 
 /* ★ 查 6：原为元素选择器 `.head button`（`composes` 不支持）⇒ TSX 加了 `styles.addBtn` */
@@ -31,16 +36,20 @@
 
 /**
  * 列表容器（原 `.library-list`）—— 整块是**外部图片文件的落点**。
- * ⚠️ 行是**横向一行**（缩略图 · 名字 · ☆ · ✕），不是卡片网格。
+ * ★ 设计稿：**卡片网格**（原"一行一个缩略图"信息密度太低）。真值 = `mockup.css` 的 `.LibraryPanel-list`。
+ * ⚠️ `align-content: start` **必须有**：grid 默认 `stretch` 会把 auto 行**平分剩余高度**
+ *    ⇒ 4 张卡在 600px 的列表里被拉成每行 300px 高。
+ * ⚠️ 列数走 `auto-fill`：栏宽随 `--side-width-right` 变，列数自己跟着变（不写死 2）。
  */
 .list {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-3);
 }
 
 /* 有文件悬停（原 `.library-list.drag-over`）—— 只改底色，不动布局 */
@@ -48,8 +57,9 @@
   background: var(--color-surface-sunken);
 }
 
-/* 空态（原 `.library-empty`，逐字两行） */
+/* 空态（原 `.library-empty`，逐字两行）—— 在网格里要**跨满整行** */
 .dropHint {
+  grid-column: 1 / -1;
   margin: auto;
   padding: var(--space-5) var(--space-2);
   color: var(--color-text-faint);
@@ -58,28 +68,45 @@
   line-height: var(--line-height-relaxed);
 }
 
-/* 一行（原 `.lib-row`） */
-.row {
+/* 卡片（原 `.lib-row`）—— 真值 = `mockup.css` 的 `.mk-lib-card`：竖排（图 + 一行脚），
+   **壳没了**（描边与圆角归缩略图那一层），整卡仍可拖出（`cursor: grab`） */
+.card {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  align-self: start;
   cursor: grab;
 }
-.row:active {
+.card:active {
   cursor: grabbing;
 }
 
-/* 缩略图（原 `.lib-thumb`）—— 小方块，行内不撑高 */
+/* 缩略图壳（原 `.lib-thumb` 直接挂在 `<img>` 上 ⇒ 现在它是**外套**，`<img>` 住里面）*/
 .thumb {
-  flex: none;
-  width: 36px;
-  height: 36px;
+  position: relative;
+  aspect-ratio: var(--lib-thumb-ratio);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.card:hover .thumb {
+  border-color: var(--color-border-strong);
+}
+
+/* 缩略图本体 —— 铺满外套 */
+.thumbImg {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: var(--radius-xs);
+}
+
+/* 卡片脚：名字（占满）+ 删除钮 */
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 /* 条目名（原 `.lib-name`，`title` = 双击重命名） */
@@ -87,7 +114,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--font-size-xs);
-  color: var(--color-text-strong);
+  color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -103,14 +130,28 @@
   font-size: var(--font-size-xs);
 }
 
-/* ☆ / ✕（原 `.lib-icon`）—— ★ 收口到 `ui/common` 的共享图标钮真源（判据「能一种的别搞两种」） */
-.icon {
-  composes: libIcon from '../common/shared.module.css';
-}
-
-/* 已收藏（原 `.lib-icon.fav`）—— 用警告色把 ★ 点亮 */
+/* 收藏钮（真值 = `mockup.css` 的 `.mk-lib-fav`）—— 压在缩略图右下角：
+   常态**透明**（只在悬停/点亮时出现），底色走媒体遮罩 `--color-scrim`、字恒白（`--color-on-scrim`）*/
 .fav {
+  composes: libIcon from '../common/shared.module.css';
+  position: absolute;
+  right: var(--space-1);
+  bottom: var(--space-1);
+  border-radius: var(--radius-full);
+  color: var(--color-on-scrim);
+  background: var(--color-scrim);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.card:hover .fav {
+  opacity: 1;
+}
+/* 已收藏（点亮）—— 白底 + 警告色星；`.favOn` 与悬停的显隐无关（它恒显示）*/
+.favOn {
   composes: libIconFav from '../common/shared.module.css';
+  color: var(--color-warning-text);
+  background: var(--color-surface-raised);
+  opacity: 1;
 }
 
 /* 删除（原 `.lib-icon.del`）—— 悬停走危险色 */
@@ -118,12 +159,12 @@
   composes: libIconDel from '../common/shared.module.css';
 }
 
-/* 底部提示（原 `.library-tip`） */
+/* 底部提示（真值 = `.LibraryPanel-tip`：次要小字 + 上分隔线，左对齐） */
 .tip {
   flex: none;
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--color-border);
   color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
-  text-align: center;
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-snug);
 }

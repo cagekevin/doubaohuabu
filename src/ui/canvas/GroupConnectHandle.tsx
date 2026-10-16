@@ -21,6 +21,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { getBezierPath, Position, useReactFlow, ViewportPortal } from '@xyflow/react';
 import { useStore } from '@/state';
 import { CANVAS_TEXT } from '@/constants/text';
+import { Icon } from '@/ui/common/Icon';
 import styles from './GroupConnectHandle.module.css';
 
 /** 选中节点外接框 + 锚点几何（原 `:21-48` 的 `o`） */
@@ -210,11 +211,7 @@ export function GroupConnectHandle({ onGroupConnectEnd }: GroupConnectHandleProp
         role="button"
         tabIndex={-1}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M9 12h6" />
-          <path d="M13 8l4 4-4 4" />
-          <circle cx="6" cy="12" r="2.4" />
-        </svg>
+        <Icon name="group" />
       </div>
     </ViewportPortal>
   );

@@ -72,8 +72,10 @@ export function ProxyPoolPanel({ onClose }: ProxyPoolPanelProps) {
             const proxy = pool.length ? (pool[i % pool.length] ?? '') : '';
             return (
               <li key={a.id} className={styles.row}>
-                <span className={styles.name}>{a.name}</span>
+                {/* ★ 左右对调（真值 = 设计稿 ⑤：**代理在左、账号名 chip 在右**）——
+                    这一行讲的是"这个代理分配给了谁"，代理是主信息、账号名是标签。 */}
                 <span className={proxy ? styles.net : styles.direct}>{proxy || PROXY_TEXT.direct}</span>
+                <span className={styles.name}>{a.name}</span>
               </li>
             );
           })}

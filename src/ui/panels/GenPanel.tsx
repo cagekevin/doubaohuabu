@@ -54,6 +54,8 @@ import { nodeAccountLabel } from '@/core/rules/genVideo';
 import { normalizeModelLabel } from '@/core/rules/prompt';
 import { AccountPicker } from '@/ui/common/AccountPicker';
 import { RefAutocomplete, matchRefTrigger } from '@/ui/nodes/RefAutocomplete';
+import { Icon } from '@/ui/common/Icon';
+import shared from '@/ui/common/shared.module.css';
 // ⚠️ `Esc` 处理**必须**走 `ui/common`（`原则8/rule-of-three`）
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import { clamp } from '@/lib/math';
@@ -606,7 +608,8 @@ export function GenPanel() {
                 onClick={() => setStyleLibOpen(true)}
               >
                 {GEN_PANEL_TEXT.styleIdle}
-                <span className={styles.caret} />
+                {/* 方向 = **旋转同一颗 `chevron`**（原为 CSS 画的三角，见 `A28`）*/}
+            <Icon name="chevron" className={shared.iconDown} />
               </button>
             ) : (
               styleChips.map((s) => (

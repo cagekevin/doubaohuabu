@@ -45,9 +45,10 @@
 }
 
 /* 「聚合 N 个账号」徽标（原 `.nip-agg-head`） */
+/* 聚合说明 —— ★ 说明行收口到真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`；
+   设计稿 ⑫ 那格的说明件就是它同族）。本地只留真源未设的那一条字重。 */
 .agg {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  composes: hint from '../common/shared.module.css';
   font-weight: var(--font-weight-normal);
 }
 
@@ -110,15 +111,15 @@
 
 /* 缩略图本体（可点 ⇒ 有 `:hover` 反馈，`docs/17` §8.2） */
 .thumbBtn {
+  /* ★ 皮走真源 **`.thumbTile`**（`B04e` 的 ⑦：三处同形已收口 —— 本处 / 画廊 / 素材选择器）；
+     本地只留尺寸（真值 = 设计稿 ⑫ 的 `.bk-nip-item { width: 64px }`，原 72）与交互。 */
+  composes: thumbTile from '../common/shared.module.css';
   position: relative;
   display: block;
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   padding: 0;
   overflow: hidden;
-  background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 

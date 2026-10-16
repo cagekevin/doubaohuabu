@@ -50,6 +50,8 @@ import { createCanvas, createTmpState, drawMaskEffect, type TmpState } from '@/l
 import { clamp } from '@/lib/math';
 // ★ 浮层壳走**共享件**（遮罩 / 卡片 / 头三槽 / 关闭钮 / 正文 / 脚只有一种）
 import { PanelShell } from '@/ui/common/PanelShell';
+import { Icon } from '@/ui/common/Icon';
+import shared from '@/ui/common/shared.module.css';
 import styles from './ImageEditor.module.css';
 
 /** 脸框最小边（源 `El` = 16，`shared.js:42649`） */
@@ -688,17 +690,17 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
         </>
       }
       meta={
-        <div className={styles.tabs}>
+        <div className={shared.tabs}>
           <button
             type="button"
-            className={`${styles.tab}${mode === 'mask' ? ` ${styles.tabActive}` : ''}`}
+            className={`${shared.tab}${mode === 'mask' ? ` ${shared.isOn}` : ''}`}
             onClick={() => setMode('mask')}
           >
             {IMAGE_EDITOR_TEXT.tabMask}
           </button>
           <button
             type="button"
-            className={`${styles.tab}${mode === 'crop' ? ` ${styles.tabActive}` : ''}`}
+            className={`${shared.tab}${mode === 'crop' ? ` ${shared.isOn}` : ''}`}
             onClick={() => setMode('crop')}
           >
             {IMAGE_EDITOR_TEXT.tabCrop}
@@ -710,11 +712,11 @@ export function ImageEditor({ imgRef, label, onClose, onSaved }: ImageEditorProp
           <div className={styles.hint}>{loaded ? `${hint}  ·  ${size.w}×${size.h}` : ''}</div>
           <div className={styles.zoom}>
             <button type="button" className={styles.zoomBtn} onClick={() => setZoom((z) => clamp(z / 1.15, ZOOM_MIN, ZOOM_MAX))}>
-              −
+              <Icon name="zoomOut" />
             </button>
             <span className={styles.zoomVal}>{zoomPercent}%</span>
             <button type="button" className={styles.zoomBtn} onClick={() => setZoom((z) => clamp(z * 1.15, ZOOM_MIN, ZOOM_MAX))}>
-              +
+              <Icon name="zoomIn" />
             </button>
             <button type="button" className={`${styles.zoomBtn} ${styles.zoomFit}`} onClick={() => fitView(size.w, size.h)}>
               {IMAGE_EDITOR_TEXT.fit}

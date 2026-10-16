@@ -15,7 +15,17 @@
 /**
  * 标准化基础样式（normalize 精简版 + 项目基线）
  * 依据：docs/11 §2.1「CSS 必须标准」
+ *
+ * ★ **整份住 `@layer base`** —— 与真源（`ui/common/shared.module.css`）**同层**。
+ *   本文件的选择器全是**裸元素**（`button` 0,0,1 · `*` 0,0,0），真源是类（`.btn` 0,1,0）
+ *   ⇒ 层内靠**特异性**分胜负：真源压过归一，而**没被真源接管的元素**照旧拿到归一兜底。
+ *   ★ 同层还有一条硬性质：**层序与文件加载顺序无关**（换两层就会依赖谁先加载）。
+ *
+ *   ⚠️ 此前**未分层** ⇒ 按「未分层 > 分层」反过来压过 `@layer base` 的 `.btn` 一族
+ *   ⇒ 所有真机按钮丢掉底色 / 描边 / 内边距 / 字号。
+ *   口径：`docs/CSS规范.md` §1.4「层叠阶梯」。
  */
+@layer base {
 
 *,
 *::before,
@@ -76,6 +86,7 @@ video {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
 }
 
 /* ── src/styles/tokens.css（全局 · 原样）── */
@@ -1768,10 +1779,10 @@ svg.react-flow__connectionline {
 
 /* ── src/ui/common/shared.module.css · 前缀 （无 · 真源） ── */
 /*
- * ★ 整个真源住 `@layer base`（级联层）。
+ * ★ 真源住 `@layer base`（级联层），与浏览器归一（`src/styles/reset.css`）**同层**。
  *   组件样式**未分层** ⇒ 按 CSS 规范「未分层 > 分层（同特异性）」⇒ **组件天然压过真源**。
  *   即：本地写 `background: red` 就生效（＝所有人的直觉写法），**不需要任何人记得一条反直觉的规矩**。
- *   口径见 docs/17 §5。
+ *   口径见 docs/CSS规范.md §1.4。
  */
 @layer base {
 /**
@@ -3067,87 +3078,6 @@ svg.react-flow__connectionline {
   position: absolute;
   right: var(--space-1);
   top: var(--space-1);
-}
-
-/* ── src/ui/nodes/SplitKeywordModal.module.css · 前缀 SplitKeywordModal- ── */
-/**
- * 「按关键词拆分」弹窗（原 `.modal-sub` / `.split-keyword-input` / `.split-keyword-actions`）
- * ⚠️ 原则 5：色值只走 token。
- * ⚠️ 查 6：输入框 / 按钮走 `ui/common/shared.module.css` 真源，不自造。
- */
-
-.SplitKeywordModal-sub {
-  margin-bottom: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
-}
-
-.SplitKeywordModal-input {
-  width: 100%;
-}
-
-.SplitKeywordModal-btn {
-}
-
-.SplitKeywordModal-btnPrimary {
-}
-
-.SplitKeywordModal-btnGhost {
-}
-
-/* ── src/ui/nodes/SplitPresetPickerModal.module.css · 前缀 SplitPresetPickerModal- ── */
-/**
- * 「拆分并套用节点预设」弹窗（原 `.split-preset-list` / `.split-preset-item` / `.split-preset-name` / `.split-preset-meta`）
- *
- * ⚠️ **源样式无真源可对**：`docs/mockup/assets/mockup.css` 里**没有** `.split-preset-*`
- *   （抽取 mockup 时未收这几个类）⇒ 按 token 自写。若日后补上 mockup 真身，这里要回改。
- * ⚠️ 原则 5：色值只走 token。
- * ⚠️ 按钮走 `ui/common/shared.module.css` **真源**（`composes`），不自造第二份。
- */
-
-.SplitPresetPickerModal-sub {
-  margin-bottom: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
-}
-
-.SplitPresetPickerModal-kw {
-  color: var(--color-text-muted);
-}
-
-.SplitPresetPickerModal-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.SplitPresetPickerModal-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  text-align: left;
-}
-
-/* 「直接拆分（不使用预设）」—— 与预设项区分（源 `split-preset-direct` 也是独立一项） */
-.SplitPresetPickerModal-itemDirect {
-  border-style: dashed;
-}
-
-.SplitPresetPickerModal-itemName {
-  font-size: var(--font-size-sm);
-}
-
-.SplitPresetPickerModal-itemMeta {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-}
-
-.SplitPresetPickerModal-btnGhost {
 }
 
 /* ── src/ui/nodes/shared.module.css · 前缀 nodesShared- ── */
@@ -4672,6 +4602,87 @@ svg.react-flow__connectionline {
 
 .nodesShared-switchFailed {
   color: var(--color-danger-text);
+}
+
+/* ── src/ui/nodes/SplitKeywordModal.module.css · 前缀 SplitKeywordModal- ── */
+/**
+ * 「按关键词拆分」弹窗（原 `.modal-sub` / `.split-keyword-input` / `.split-keyword-actions`）
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 查 6：输入框 / 按钮走 `ui/common/shared.module.css` 真源，不自造。
+ */
+
+.SplitKeywordModal-sub {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.SplitKeywordModal-input {
+  width: 100%;
+}
+
+.SplitKeywordModal-btn {
+}
+
+.SplitKeywordModal-btnPrimary {
+}
+
+.SplitKeywordModal-btnGhost {
+}
+
+/* ── src/ui/nodes/SplitPresetPickerModal.module.css · 前缀 SplitPresetPickerModal- ── */
+/**
+ * 「拆分并套用节点预设」弹窗（原 `.split-preset-list` / `.split-preset-item` / `.split-preset-name` / `.split-preset-meta`）
+ *
+ * ⚠️ **源样式无真源可对**：`docs/mockup/assets/mockup.css` 里**没有** `.split-preset-*`
+ *   （抽取 mockup 时未收这几个类）⇒ 按 token 自写。若日后补上 mockup 真身，这里要回改。
+ * ⚠️ 原则 5：色值只走 token。
+ * ⚠️ 按钮走 `ui/common/shared.module.css` **真源**（`composes`），不自造第二份。
+ */
+
+.SplitPresetPickerModal-sub {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.SplitPresetPickerModal-kw {
+  color: var(--color-text-muted);
+}
+
+.SplitPresetPickerModal-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.SplitPresetPickerModal-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+/* 「直接拆分（不使用预设）」—— 与预设项区分（源 `split-preset-direct` 也是独立一项） */
+.SplitPresetPickerModal-itemDirect {
+  border-style: dashed;
+}
+
+.SplitPresetPickerModal-itemName {
+  font-size: var(--font-size-sm);
+}
+
+.SplitPresetPickerModal-itemMeta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.SplitPresetPickerModal-btnGhost {
 }
 
 /* ── src/ui/pages/ActivatePage.module.css · 前缀 ActivatePage- ── */

@@ -1,8 +1,12 @@
 /**
  * 自绘连接端口的视觉层（`CustomHandle`）
  *
+ * ★ 设计稿**未覆盖连接点** ⇒ 本文件按**同一套设计语言**补足（不是"保持原机"）：
+ *   · 可动作的东西 = **品牌色**（与 `.btnPrimary` / 选中的 tab / 开关同一条口径）；
+ *   · 常驻尺寸取**圆点那一档 6px**（`mockup.css` 的 `.mk-node-dot`）。
+ *   ⚠️ 此前是一圈**白**环 + **白**加号 —— 真机画布是浅色的，那套反馈**在浅底上看不见**。
  * ⚠️ 端口几何（6 / 32 / 18px 等）是**端口自身的形状**，不是间距刻度 —— 逐字对源保留。
- * ⚠️ 颜色一律走 token（`--p-white-ch` 是白色通道，避免硬编码 `rgba(255,255,255,…)`）。
+ * ⚠️ 动效 ms 值（160–280）同样是**端口专属刻度**：设计稿未覆盖，未换成 `--duration-*`。
  * ⚠️ `connectingto` / `connectingfrom` 是 ReactFlow 挂在 `Handle` 上的**全局类名** ⇒ 用 `:global`。
  */
 
@@ -27,14 +31,16 @@
   transform-origin: center;
 }
 
-/* 常驻小圆点（未悬停时的可见形态） */
+/* 常驻小圆点（未悬停时的可见形态）——
+   ★ 尺寸与配色按**节点圆点那一档**（`mockup.css` 的 `.mk-node-dot` = 6px）取；
+     色走 `--color-border-strong`：贴在卡片边上**看得见、又不跟类型色抢**。 */
 .dot {
   top: 50%;
   left: var(--cust-anchor-x);
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
-  background: var(--color-text-faint);
+  background: var(--color-border-strong);
   transform: translate(-50%, -50%) scale(1);
   opacity: 1;
   transition:
@@ -42,14 +48,16 @@
     transform 220ms ease;
 }
 
-/* 悬停外环 */
+/* 悬停外环 —— ★ 走**品牌色**而不是白：
+   真机画布是浅色的（`--color-canvas`），原来那圈白色外环 + 白色加号**在浅底上等于看不见**
+   （设计稿未覆盖端口，此处按同一套语言补：可动作 = 品牌色）。 */
 .ring {
   top: 50%;
   left: var(--cust-anchor-x);
   width: 32px;
   height: 32px;
   border-radius: var(--radius-full);
-  border: 2px solid rgb(var(--p-white-ch) / 0.7);
+  border: 2px solid var(--color-action-primary);
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.6);
   transition:
@@ -59,7 +67,7 @@
     border-color 220ms ease;
 }
 
-/* 悬停十字（跟随鼠标轻微位移） */
+/* 悬停十字（跟随鼠标轻微位移）—— 与环同色系 */
 .plus {
   top: 50%;
   left: var(--cust-anchor-x);
@@ -67,7 +75,7 @@
   height: 18px;
   transform: translate(calc(-50% + var(--cust-shift-x)), calc(-50% + var(--cust-shift-y))) scale(0.3);
   opacity: 0;
-  color: var(--color-text-on-brand);
+  color: var(--color-action-primary);
   transition:
     opacity 200ms ease,
     transform 220ms ease;
@@ -103,11 +111,9 @@
 .wrap:hover .ring {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
-  border-color: rgb(var(--p-white-ch) / 0.85);
-  box-shadow:
-    0 0 16px rgb(var(--p-white-ch) / 0.35),
-    0 0 36px rgb(var(--p-white-ch) / 0.15);
-  background: rgb(var(--p-white-ch) / 0.08);
+  /* 晕染走 `--color-selection-bg`（选中底，浅到不糊住节点） + 品牌色外发光 */
+  background: var(--color-selection-bg);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-action-primary) 35%, transparent);
 }
 
 .wrap:hover .plus {
@@ -115,16 +121,15 @@
   transform: translate(calc(-50% + var(--cust-shift-x)), calc(-50% + var(--cust-shift-y))) scale(1);
 }
 
-/* 正在拉线 / 按下：环再放大一档 */
+/* 正在拉线 / 按下：环再放大一档、发光更实（"我已经接上了"要比悬停更强）
+   ★ 加宽写成 `border-width` 而不是换颜色：颜色已经在悬停态是品牌色，换色看不出变化。 */
 .wrap:active .ring,
 .wrap :global(.react-flow__handle.connectingto) ~ .ring,
 .wrap :global(.react-flow__handle.connectingfrom) ~ .ring {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1.15);
-  border-color: var(--color-text-on-brand);
-  box-shadow:
-    0 0 22px rgb(var(--p-white-ch) / 0.6),
-    0 0 48px rgb(var(--p-white-ch) / 0.25);
+  border-width: 3px;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-action-primary) 55%, transparent);
 }
 
 .wrap :global(.react-flow__handle.connectingto) ~ .plus,
@@ -138,12 +143,9 @@
   opacity: 0;
 }
 
-/* 小号变体（文本 / 素材类节点） */
-.isSmall .dot {
-  width: 8px;
-  height: 8px;
-}
-
+/* 小号变体（文本 / 素材类节点）—— 只缩**加号**。
+   ⚠️ 原来这里还把常驻圆点放大到 8px（比大号变体的 6px 还大）—— 与"小号"自相矛盾，
+      且与 `.plus` 的缩法相反 ⇒ 按圆点那一档统一 6px（尺寸只有一个来源）。 */
 .isSmall .plus {
   width: 14px;
   height: 14px;

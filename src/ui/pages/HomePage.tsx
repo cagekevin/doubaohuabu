@@ -10,7 +10,8 @@
  */
 
 import { useState } from 'react';
-import { TopBar } from '@/ui/shell/TopBar';
+import { Icon } from '@/ui/common/Icon';
+import shared from '@/ui/common/shared.module.css';
 import { ErrorBoundary } from '@/ui/shell/ErrorBoundary';
 import { LibraryPanel } from '@/ui/panels/LibraryPanel';
 import { SendQueuePanel } from '@/ui/panels/SendQueuePanel';
@@ -21,21 +22,18 @@ import styles from '@/ui/shell/AppShell.module.css';
 export interface HomePageProps {
   /** 中间画布区（M2 接 ReactFlow） */
   canvas: React.ReactNode;
-  /** 顶栏「豆包后台」入口被点（切到后台界面；宿主负责补齐当前账号） */
-  onOpenBackend: () => void;
   /** 本页是否被切走（切走 ⇒ 整体 `display:none`） */
   hidden: boolean;
 }
 
-export function HomePage({ canvas, onOpenBackend, hidden }: HomePageProps) {
+export function HomePage({ canvas, hidden }: HomePageProps) {
   /** 右栏（资源库）收起态 —— 组件局部 state（源 `_Component48.jsx:56` 的 `useState`，不入 store） */
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
   return (
     <div className={`${styles.pageRow}${hidden ? ` ${styles.pageHidden}` : ''}`}>
       <div className={styles.centerStage}>
-        {/* ★ 顶栏是**画布的头**（项目名 / 保存路径 / 豆包后台入口）—— 后台界面自带头部，不用它 */}
-        <TopBar onOpenDoubaoView={onOpenBackend} />
+        {/* ★ 顶栏不在这里 —— 它是**全宽应用栏**、由 `AppShell` 渲染（两页共用）。 */}
         {/* 画布级错误边界（docs/11 §9.9 的第二级） */}
         <ErrorBoundary area={SHELL_TEXT.areaCanvas}>
           {canvas}
@@ -56,7 +54,13 @@ export function HomePage({ canvas, onOpenBackend, hidden }: HomePageProps) {
           aria-label={rightCollapsed ? SHELL_TEXT.expandLibrary : SHELL_TEXT.collapseLibrary}
           onClick={() => setRightCollapsed((v) => !v)}
         >
-          {rightCollapsed ? '«' : '»'}
+          {/* 方向 = **旋转同一颗箭头**。
+              ★ 这里原写「展开态朝左、收起态朝右」—— **反了**：这一栏在**右边**，
+              "收起"是把栏**往右**收 ⇒ 收起态该朝右（`»` = 箭头默认向）、**展开**态朝左（`«`）。
+              几何验证：栏收起后钮仍在栏的**左**缘（`.sideRight .sideToggle { right: 100% }`）——
+              朝左才是"把它拉出来"。⚠️ 左栏（后台的账号栏）**是相反的那一套**，
+              两处表达式**必须不同**（此前两处逐字相同 ⇒ 必有一处错；按几何，后台那处是对的）。 */}
+          <Icon name="chevron" className={rightCollapsed ? shared.iconLeft : undefined} />
         </button>
         <div className={styles.sideClip}>
           <LibraryPanel />

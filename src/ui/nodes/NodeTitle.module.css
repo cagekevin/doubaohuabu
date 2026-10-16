@@ -9,17 +9,21 @@
   gap: var(--space-1);
   min-width: 0;
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  /* ★ 颜色**归槽**（`.nodeTitle` = `text-strong` + 一档字重，真值 = `mockup.css` 的 `.mk-node-title`）。
+     此处原写死 `text-muted` ⇒ 节点名在头里渲染成弱色，与设计稿不符（它比中槽更重）。 */
+  color: inherit;
   /* 标题行是拖动把手（原 `.node-title` 的 drag-handle） */
   cursor: move;
 }
 
-/* 浮层模式：绝对定位到节点上方（原 `absolute -top-6 left-0 z-30`） */
+/* 浮层模式：绝对定位到节点上方（原 `absolute -top-6 left-0 z-30`）——
+   它脱离了头部底（画布底/节点框外），弱色更合适，故这一档自己给色。 */
 .floating {
   position: absolute;
   left: 0;
   top: calc(-1 * var(--space-5));
   z-index: var(--z-overlay);
+  color: var(--color-text-muted);
 }
 
 /* 图标（11px / faint）在此**唯一**定义 —— 调用方只声明"我是哪个图标" */

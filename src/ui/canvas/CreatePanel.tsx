@@ -23,6 +23,7 @@
 import { useStore } from '@/state';
 import type { NodeType } from '@/stable/model/node';
 import { CREATE_PANEL_TEXT } from '@/constants/text';
+import { Icon } from '@/ui/common/Icon';
 // ⚠️ 尺寸表**只有一处真源**（原则 5）：`core/model/defaults.ts` 的 `NODE_CREATE_SIZES`。
 //    这里**只读**它（`ui` 读 `core/model` 的数据是允许的方向；不得反向）。
 import { nodeCreateSize } from '@/core/model/defaults';
@@ -188,13 +189,17 @@ export function CreatePanel({ state, onClose }: CreatePanelProps) {
       <div className={styles.backdrop} onMouseDown={onClose} />
       <div className={styles.panel} style={{ left: state.x, top: state.y }} data-testid="create-panel">
         <div className={styles.title}>{title}</div>
+        {/* 三个选项各挂一颗图标（真值 = 设计稿 `index.html:403-406`：`i-image` / `i-video` / `i-text`） */}
         <button type="button" className={styles.option} onClick={() => create('imggen')}>
+          <Icon name="image" />
           {CREATE_PANEL_TEXT.image}
         </button>
         <button type="button" className={styles.option} onClick={() => create('genvideo')}>
+          <Icon name="video" />
           {CREATE_PANEL_TEXT.video}
         </button>
         <button type="button" className={styles.option} onClick={() => create('text')}>
+          <Icon name="text" />
           {CREATE_PANEL_TEXT.text}
         </button>
       </div>

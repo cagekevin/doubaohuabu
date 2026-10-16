@@ -52,8 +52,9 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useHostOps, useStore } from '@/state';
-import { COMMON_TEXT, GEN_VIDEO_TEXT, MEDIA_PLAYER_TEXT } from '@/constants/text';
+import { useGen, useHostOps, useStore } from '@/state';
+import { COMMON_TEXT, GEN_VIDEO_TEXT, MEDIA_PLAYER_TEXT, PROJECT_TEXT } from '@/constants/text';
+import { GEN_PANEL_TEXT } from '@/constants/sendPanelText';
 import { DEFAULT_VIDEO_DURATION } from '@/constants/models';
 import { countInputs } from '@/core/rules/linkedMaterials';
 import { isCardClick } from '@/core/rules/cardClick';
@@ -87,6 +88,11 @@ import { generateVideoPoster } from '@/ui/lib/videoPoster';
 import { withThumb } from '@/stable/protocols/img';
 import { NodeShell } from './NodeShell';
 import type { RFNodeProps } from './types';
+import { Icon } from '@/ui/common/Icon';
+import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
+import { parseRefChips } from '@/core/rules/refs';
+import { stripHtml } from '@/lib/text';
+import { PromptLine, usePromptLookup } from './PromptLine';
 import styles from './shared.module.css';
 
 /**
@@ -122,6 +128,16 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
 
   /** 有结果（原 `h` = `!!resultUrl || !!resultPoster`） */
   const produced = hasResult(data);
+  /**
+   * 身内**提示词行**（`PromptLine`）的依赖 —— 全部走**既有真源**，不新增状态：
+   *   · 生成动作 = `useGen().runForNode(id)`（与浮层 `GenPanel` 里那颗「生成」**同一条路**）
+   *   · 提示词字段 = `data.text`（与面板**同一个字段**）
+   *   · 芯片查表 = 共享 hook `usePromptLookup`
+   */
+  const gen = useGen();
+  const patchNodeData = useStore((s) => s.patchNodeData);
+  const promptSeed = parseRefChips(stripHtml(data.text ?? ''));
+  const promptLookup = usePromptLookup(promptSeed.refs);
 
   // ── `gv-waiting`（原 `m` + `p`，`YL.jsx:43-67,488-497`）────────────────────────
   /**
@@ -184,28 +200,27 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
   /** 当前版本下标（原 `pe`） */
   const curVer = currentVersionIndex(asRecord(data));
   const [histOpen, setHistOpen] = useState(false);
-  const [histPos, setHistPos] = useState<{ left: number; top: number } | null>(null);
   const histBtnRef = useRef<HTMLButtonElement>(null);
-  const histPopRef = useRef<HTMLDivElement>(null);
+  /* ★ 摆位交给**浮层定位原语**（`B06`）—— 见 `GenImageNode` 同处的说明：
+     原来手算 `innerWidth - 264 - 8`（把面板宽硬编码进夹取）。 */
+  const [histAnchor, setHistAnchor] = useState<{ x: number; y: number } | null>(null);
+  const { ref: histPopRef, style: histStyle } = useAnchoredLayer({
+    open: histOpen,
+    anchor: histAnchor,
+    depsKey: '',
+  });
   /** 已发起过海报生成的 attempt url（原 `le` 的 `Set`）—— 避免重复发起 */
   const posterTriedRef = useRef<Set<string>>(new Set());
 
-  /** 开合弹层（原 `De`，`YL.jsx:407-422`） */
+  /** 开合弹层（原 `De`，`YL.jsx:407-422`）—— 位置归原语，这里只量**锚点** */
   const toggleHistory = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    if (histOpen) {
-      setHistOpen(false);
-      return;
+    if (!histOpen) {
+      // ⚠️ 锚点必须在**事件里**量（渲染期读 ref 违反 React 规则，`react-hooks/refs` 会拦）
+      const r = histBtnRef.current?.getBoundingClientRect();
+      setHistAnchor(r ? { x: r.left, y: r.bottom + 8 } : null);
     }
-    const rect = histBtnRef.current?.getBoundingClientRect();
-    if (rect) {
-      // 原：`left = max(8, min(rect.left, innerWidth - 264 - 8))`；`top = rect.bottom + 8`
-      setHistPos({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 264 - 8)),
-        top: rect.bottom + 8,
-      });
-    }
-    setHistOpen(true);
+    setHistOpen((v) => !v);
   };
 
   /** 弹层开着时：点外面关掉（原 `YL.jsx:423-438`） */
@@ -218,7 +233,8 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [histOpen]);
+    // ⚠️ `histPopRef` 进依赖：它现在由**原语**提供（仍来自 `useRef` ⇒ 稳定引用）
+  }, [histOpen, histPopRef]);
 
   /** 弹层开着时：给「有 `url` 但没海报」的尝试**懒生成**海报（原 `YL.jsx:439-459`） */
   useEffect(() => {
@@ -585,23 +601,11 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
               void download();
             }}
           >
-            <svg
-              viewBox="0 0 24 24"
-              width="15"
-              height="15"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 3v12" />
-              <path d="m7 11 5 5 5-5" />
-              <path d="M4 20h16" />
-            </svg>
+            <Icon name="download" />
           </button>
         ) : null}
-        {/* `gv-tl`（原 525-555）：可拖动时间线 */}
+        {/* `gv-tl`（原 525-555）：舞台内的播放进度 —— ★ 形态 = 设计稿的 `.mk-stage-timeline`
+            （**贴舞台底边的细条**，无圆角、无旋钮）；拖动 / 点击定位仍挂在本元素上（`seekFromPointer`）。 */}
         {produced && data.resultUrl ? (
           <div
             className={`${styles.gvTl} nodrag`}
@@ -629,7 +633,6 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
           >
             <div className={styles.gvTlTrack}>
               <div className={styles.gvTlFill} style={{ width: `${percent}%` }} />
-              <span className={styles.gvTlKnob} style={{ left: `${percent}%` }} />
             </div>
           </div>
         ) : null}
@@ -671,6 +674,17 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
           </button>
         </div>
       ) : null}
+      {/* ★ 提示词行（设计稿新增件）—— 修的是**真机空态文案自相矛盾**：
+          文案写着「文生视频 · 在下方输入提示词」，而下方原本没有框。 */}
+      <PromptLine
+        text={data.text}
+        lookup={promptLookup}
+        onCommit={(next) => patchNodeData(id, { text: next })}
+        onGenerate={() => gen.runForNode(id)}
+        busy={apiJobStatus === 'running'}
+        placeholder={GEN_PANEL_TEXT.promptPlaceholderVideo}
+        generateLabel={produced ? PROJECT_TEXT.regenerating : PROJECT_TEXT.generate}
+      />
       </NodeShell>
       {/* `gv-hist-pop`（原 585-620）：历史版本弹层（portal 到 body，按按钮位置定位） */}
       {histOpen && attempts.length > 0
@@ -678,7 +692,7 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
             <div
               ref={histPopRef}
               className={styles.gvHistPop}
-              style={histPos ?? undefined}
+              style={histStyle}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >

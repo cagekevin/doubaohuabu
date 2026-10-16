@@ -31,22 +31,11 @@ export function GroupNode({ id, data, selected }: RFNodeProps<'group'>) {
   const ungroupNodes = useStore((s) => s.ungroupNodes);
 
   return (
+    // ★ 组节点也**照默认给圆点**，组图标走 `icon` 槽 ——
+    //   设计稿的组头是「圆点 + `#i-group` 图标 + 标题」，不是"拿图标冒充圆点"
     <NodeShell
       type="group"
-      dot={
-        <span className={styles.groupIcon} aria-hidden="true">
-          {/* 原 22-24 的文件夹图标（`viewBox 0 0 24 24`，`stroke` 描边不填充） */}
-          <svg width="12" height="12" viewBox="0 0 24 24">
-            <path
-              d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      }
+      icon="group"
       title={data.label || GROUP_NODE_TEXT.defaultLabel}
       meta={<span className={styles.nodeCount} title={GROUP_NODE_TEXT.countTitle}>{count}</span>}
       actions={

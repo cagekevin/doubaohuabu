@@ -6,7 +6,7 @@
  * ── 骨架（**逐行对源** `RT.jsx:252-335`）──
  *   `.library-panel`
  *     → `.library-head`（标题「资源库」＋「＋ 添加」）
- *     → `.library-list`（**列表行**：缩略图 · 名字 · ☆ · ✕；空态「拖入图片 / 或点击「添加」」；
+ *     → `.library-list`（**卡片网格**：缩略图（悬浮 ☆）+ 卡片脚（名字 · ✕）；空态「拖入图片 / 或点击「添加」」；
  *        整块可接**外部拖入的图片文件**）
  *     → `.library-tip`（有素材时：`拖拽素材到画布生成节点 · 长按拖入后台页面 · 列表内拖动调整顺序`）
  *
@@ -33,6 +33,7 @@ import { countLibRefs, sortLibrary } from '@/core/rules/libraryEdit';
 import { readImageFile } from '@/lib/readDroppedFile';
 import { dragLeftContainer } from '@/lib/dragHover';
 import type { LibraryItem } from '@/stable/model/project';
+import { Icon } from '@/ui/common/Icon';
 import styles from './LibraryPanel.module.css';
 
 /** 右键菜单的锚点（原 `x`，`RT.jsx:43`）—— 屏幕坐标 + 条目 id */
@@ -205,6 +206,8 @@ export function LibraryPanel() {
       <div className={styles.head}>
         <span className={styles.title}>{LIBRARY_TEXT.title}</span>
         <button type="button" className={styles.addBtn} onClick={() => void addFromFile()} disabled={busy}>
+          {/* ★ §7-D11：加号由**图标**承担（原来它是 `LIBRARY_TEXT.add` 里的全角字符 `＋`）*/}
+          <Icon name="plus" />
           {LIBRARY_TEXT.add}
         </button>
       </div>
@@ -234,7 +237,7 @@ export function LibraryPanel() {
         {ordered.map((it) => (
           <div
             key={it.id}
-            className={styles.row}
+            className={styles.card}
             draggable
             onDragStart={(e) => {
               // ★ 与原实现一致的 MIME（画布 onDrop 靠它识别素材）
@@ -247,42 +250,49 @@ export function LibraryPanel() {
               setMenu({ id: it.id, x: e.clientX, y: e.clientY });
             }}
           >
-            <Thumb src={it.dataUrl} alt={it.name} width={240} className={styles.thumb} />
-            {renamingId === it.id ? (
-              <input
-                className={styles.renameInput}
-                value={renameDraft}
-                autoFocus
-                onChange={(e) => setRenameDraft(e.target.value)}
-                onBlur={commitRename}
-                onMouseDown={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitRename();
-                  else if (e.key === 'Escape') setRenamingId(null);
-                }}
-              />
-            ) : (
-              <div className={styles.name} title={LIBRARY_TEXT.libRenameHint} onDoubleClick={() => startRename(it)}>
-                {it.name}
-              </div>
-            )}
-            <button
-              type="button"
-              className={`${styles.icon}${it.favorite ? ` ${styles.fav}` : ''}`}
-              title={it.favorite ? LIBRARY_TEXT.unfavorite : LIBRARY_TEXT.favorite}
-              onClick={() => toggleFavorite(it.id)}
-            >
-              {it.favorite ? '★' : '☆'}
-            </button>
-            <button
-              type="button"
-              className={`${styles.icon} ${styles.del}`}
-              title={LIBRARY_TEXT.deleteAria}
-              aria-label={LIBRARY_TEXT.deleteAria}
-              onClick={() => remove(it.id, it.name)}
-            >
-              ✕
-            </button>
+            {/* 缩略图壳 —— 设计稿：收藏钮**压在图上**（悬停或已收藏才显形）*/}
+            <div className={styles.thumb}>
+              <Thumb src={it.dataUrl} alt={it.name} width={240} className={styles.thumbImg} />
+              <button
+                type="button"
+                className={`${styles.fav}${it.favorite ? ` ${styles.favOn}` : ''}`}
+                title={it.favorite ? LIBRARY_TEXT.unfavorite : LIBRARY_TEXT.favorite}
+                onClick={() => toggleFavorite(it.id)}
+              >
+                <Icon name="star" />
+              </button>
+            </div>
+
+            {/* 卡片脚：名字（双击改名）＋ 删除钮 */}
+            <div className={styles.foot}>
+              {renamingId === it.id ? (
+                <input
+                  className={styles.renameInput}
+                  value={renameDraft}
+                  autoFocus
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename();
+                    else if (e.key === 'Escape') setRenamingId(null);
+                  }}
+                />
+              ) : (
+                <div className={styles.name} title={LIBRARY_TEXT.libRenameHint} onDoubleClick={() => startRename(it)}>
+                  {it.name}
+                </div>
+              )}
+              <button
+                type="button"
+                className={styles.del}
+                title={LIBRARY_TEXT.deleteAria}
+                aria-label={LIBRARY_TEXT.deleteAria}
+                onClick={() => remove(it.id, it.name)}
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
           </div>
         ))}
       </div>

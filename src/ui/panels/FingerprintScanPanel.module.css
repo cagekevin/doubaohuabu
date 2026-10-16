@@ -49,21 +49,41 @@
   border-top: 1px solid var(--color-border);
 }
 
-.dim {
-  color: var(--color-text-faint);
+/*
+ * ★ **报告行的公共皮**（收口：`.dim` / `.critical` / `.warn` 原来各自抄了一遍 `mono`）——
+ *   真值 = 设计层 `docs/mockup/assets/backend.css:210-220` 的 `.mk-fp-line`：
+ *   `mono` · **`2xs`** · 行高 `relaxed` · **`muted`** · **`white-space: pre-wrap`** · `break-all`。
+ * ⚠️ `pre-wrap` **是必须的**：报告行靠**前导空格**做缩进（如「  分辨率: 1 个不同值」），
+ *    不给它 ⇒ 前导空格被折叠、层级就没了（原来那几类**都没写**）。
+ * ⚠️ 字号 `2xs` 也是设计层给的（真机原来靠 `.body` 的 `xs` 继承）。
+ */
+.line {
   font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 维度明细行 —— 比结论行**淡一档**（它是明细，不是结论）*/
+.dim {
+  composes: line;
+  color: var(--color-text-faint);
 }
 
 .critical {
+  composes: line;
   color: var(--color-danger-text);
-  font-family: var(--font-mono);
 }
 
 .warn {
+  composes: line;
   color: var(--color-warning-text);
-  font-family: var(--font-mono);
 }
 
+/* ⚠️ 设计层的 `.mk-fp-line` **只有 crit / warn 两个修饰符**（没有 ok）⇒ `.ok` 不是报告行
+   （它是别处的一句结论）⇒ **不收口**，保留原样（这是有据的不动，不是漏改）。 */
 .ok {
   color: var(--color-success-text);
 }

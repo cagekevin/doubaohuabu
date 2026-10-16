@@ -26,10 +26,15 @@
   overflow: auto;
 }
 
+/*
+ * 行 —— ★ 真值 = 设计稿 ④ 那两条 **`.mk-menu-item`**（`backend.html:353-354`）：
+ *   30 高 · 左对齐 · 悬停 sunken ⇒ 走真源 **`.menuItem`**。
+ * ⚠️ 原来是 `listItem listItemClickable`（"内容行"档：无定高、靠内容撑）—— 设计稿明用
+ *   `.mk-menu-item` ⇒ 换成菜单项那一档（与右键菜单 / 建节点浮层 / 拆分预设**同一张皮**）。
+ * ⚠️ 这一改还**顺带补上了 hover**：`.menuItem` 此前没有悬停反馈（见 `F14` 里补的那条）。
+ */
 .row {
-  /* ★ 查 6.1：它是**可点行**（原手写 cursor:pointer）⇒ 应走 `listItemClickable`
-     —— 那个修饰符自带 hover 反馈；只 composes 基础形状会缺 hover。 */
-  composes: listItem listItemClickable from '../common/shared.module.css';
+  composes: menuItem from '../common/shared.module.css';
 }
 
 .name {

@@ -48,20 +48,21 @@
 }
 
 /**
- * 栏容器（原 `.side.left-side` / `.side.right-side`）—— 真值 = `docs/mockup/assets/mockup.css:1928-1944`：
- *  左栏 **256px**、右栏 **248px**，两栏均可收起（`.collapsed` ⇒ 宽 0）。
+ * 栏容器（原 `.side.left-side` / `.side.right-side`）—— 真值 = `docs/mockup/assets/mockup.css`
+ * 的 `.AppShell-side` / `.AppShell-sideRight`：两栏宽都走 **token**（左 `--side-width` · 右 `--side-width-right`），
+ * 两栏均可收起（`.sideCollapsed` ⇒ 宽 0）。
  * ⚠️ `position: relative` 是**折叠钮**（绝对定位）的定位上下文。
  */
 .side {
   position: relative;
   flex-shrink: 0;
-  width: 256px;
+  width: var(--side-width);
   background: var(--color-surface-raised);
   border-right: 1px solid var(--color-border);
 }
 
 .sideRight {
-  width: 248px;
+  width: var(--side-width-right);
   border-right: none;
   border-left: 1px solid var(--color-border);
 }
@@ -87,8 +88,10 @@
 }
 
 /**
- * 折叠钮（原 `.side-toggle`）—— **22×52 骑马钮**，贴在栏边上（`mockup.css:1934-1944`）。
+ * 折叠钮（原 `.side-toggle`）—— 真值 = `mockup.css` 的 `.AppShell-sideToggle`：
+ *   **贴边的箭头**（20×44 · 无阴影 · 次级色），不是"22×52 骑马钮"（那是最显旧的一处）。
  * ⚠️ 基类 = **左栏**的落点（`left: 100%`）；右栏在下方覆盖成 `right: 100%`。
+ * ⚠️ 箭头方向由 TSX 用 `.iconLeft` **旋转同一颗 `chevron`** 表达（不为左/右各造一个箭头）。
  */
 .sideToggle {
   position: absolute;
@@ -96,19 +99,16 @@
   transform: translateY(-50%);
   left: 100%;
   margin-left: 2px;
-  width: 22px;
-  height: 52px;
+  width: 20px;
+  height: 44px;
   display: grid;
   place-items: center;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
   cursor: pointer;
-  box-shadow: var(--panel-shadow);
   z-index: var(--z-panel);
-  font-size: var(--font-size-md);
-  line-height: var(--line-height-none);
 }
 
 .sideRight .sideToggle {
@@ -143,93 +143,95 @@
 }
 
 /*
- * ★★ **画布顶栏**（原 `.canvas-topbar`，`_Component42.jsx:1563`）——
- *    **不是全宽条**：它**浮在画布上方、水平居中**，且自身不吃指针（`pointer-events: none`，
- *    由每个子项自己开）。样式真值 = `docs/mockup/assets/mockup.css:1892-1896`。
- * ⚠️ 它靠 `.centerStage` 的 `position: relative` 定位（与画布同一个定位上下文）。
+ * ★★ **顶栏**（原 `.canvas-topbar`，`_Component42.jsx:1563`）——
+ *    设计稿改成**全宽应用栏**：浮动条会被节点盖住，且吃掉画布顶部一条；固定栏才有"工具栏"的身份。
+ *    真值 = `docs/mockup/assets/mockup.css` 的 `.AppShell-topbar`（按选择器指名，不引行号）。
+ * ⚠️ 它由 `AppShell` 渲染（**两页共用**），是 `.mainArea` **之上**的布局条，不再是浮层。
+ * ⚠️ `position: relative` 不是装饰：`.brand` 要 absolute 钉在最左，这里必须是它的定位祖先。
+ * ★ 三件（项目名 / 存储 / 后台入口）**居中成一组**；设计稿的第四件「授权」真机**不做**（plan §7-D19）。
  */
 .topbar {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: var(--z-panel);
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  height: var(--topbar-height);
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  pointer-events: none;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  justify-content: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* 品牌标记（真值 = `.mk-brand` / `.mk-brand-mark`）—— 产品身份，**脱离 flex 流**钉在最左，不参与居中那一组 */
+.brand {
+  position: absolute;
+  left: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+/* 品牌标记 —— ★ 已提成**真源** `.brandMark`（启动页 / 激活页是第二、三个消费者） */
+.brandMark {
+  composes: brandMark from '../common/shared.module.css';
 }
 
 /* 项目名（原 `.topbar-project-name` / `.topbar-project-label`）—— 双击重命名 */
 .topbarProjectName {
-  pointer-events: auto;
   display: flex;
   align-items: center;
 }
 
 /*
- * ⚠️ 原版 CSS 未入库、mockup 只给了 `padding: 0 16px`（无底无框）；而**参考截图**
- *   （`docs/参考-原版界面/01`）里项目名 / 存储 / 后台入口都是**同一款胶囊**（浅底 + 描边 + 阴影）
- *   ⇒ 三者统一走 `.topbar-toggle` 那款（判据「能一种的别搞两种」）。
+ * ★ 设计稿定稿：项目名**去胶囊**，回到"文字"本身（标题就该是标题，不是按钮）。
+ *   真值 = `mockup.css` 的 `.AppShell-topbarProjectLabel`。
+ * ⚠️ 因此它**不再被 `.topbarToggle` composes**（那条是旧口径：三者同一款胶囊）。
  */
 .topbarProjectLabel {
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: 36px;
-  padding: 0 var(--space-4);
   color: var(--color-text-strong);
+  font-size: var(--font-size-md);
   font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
   white-space: nowrap;
   user-select: none;
   cursor: default;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-full);
-  box-shadow: var(--panel-shadow);
 }
 
 /*
  * 顶栏「豆包后台」入口（原 `.topbar-toggle` / `.topbar-icon`，`_Component42.jsx:1606`）
- * ★ 与项目名 / 存储区**同一款胶囊**（判据「能一种的别搞两种」）——
- *   只留 button 特有的差异（可点 / 手型 / 悬停），其余 composes 自 `.topbarProjectLabel`。
- * ⚠️ 缺 `white-space: nowrap` 时顶栏一挤，文字会竖排（`nowrap` 由真源带来）。
+ * ★ 设计稿：它是**顶栏里唯一的主动作** ⇒ 走真源主按钮（品牌底 + 白字），不再与项目名同款胶囊。
+ *   真值 = `mockup.css` 的 `.AppShell-topbarToggle`：高度 **30**（顶栏 44 里上下各留 7 的呼吸）。
  */
 .topbarToggle {
-  composes: topbarProjectLabel;
-  pointer-events: auto;
+  composes: btn btnPrimary from '../common/shared.module.css';
+  height: 30px;
   gap: var(--space-1);
-  cursor: pointer;
 }
-
-.topbarToggle:hover {
-  background: var(--color-surface-hover);
-}
-
-.topbarIcon {
-  font-size: var(--font-size-md);
-  line-height: var(--line-height-none);
+.topbarToggle:active {
+  transform: translateY(1px);
 }
 
 /*
  * 顶栏「项目保存路径」区（原 `.topbar-project-storage`）
- * 真值 = `docs/mockup/assets/mockup.css:1903-1913`。
- * ⚠️ 图标是**内联 svg**（viewBox 20×20，path 逐字抄源 `_Component42.jsx:1593`）⇒ 只给尺寸与 `fill`。
+ * 真值 = `docs/mockup/assets/mockup.css` 的 `.AppShell-storage`：它顶栏里是**状态**不是动作
+ * ⇒ 降级成内嵌 chip（sunken 底 + 无描边 + 28 高 + 一档小字），不再是醒目的胶囊。
  */
 .storage {
-  pointer-events: auto;
   display: inline-flex;
   align-items: stretch;
-  min-width: 132px;
-  max-width: 260px;
-  height: 36px;
+  min-width: 0;
+  max-width: 320px;
+  height: 28px;
   overflow: hidden;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-full);
-  box-shadow: var(--panel-shadow);
+  background: var(--color-surface-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
 }
 
 .storageMain {
@@ -238,13 +240,17 @@
   gap: var(--space-1);
   min-width: 0;
   flex: 1 1 auto;
-  padding: 0 var(--space-3) 0 var(--space-4);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
   border: none;
   background: transparent;
-  color: var(--color-text-strong);
+  color: var(--color-text-muted);
   cursor: pointer;
+}
+.storageMain:hover {
+  background: var(--color-surface-hover);
 }
 
 .storageLabel {
@@ -259,27 +265,25 @@
   color: var(--color-warning-text);
 }
 
+/* 图标只给尺寸：描边 / 填充归真源 `.icon`（真值 = `.AppShell-storageIcon` 的 14）*/
 .storageIcon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.4;
 }
 
 .storageReveal {
-  flex: 0 0 31px;
+  flex: 0 0 28px;
   display: inline-grid;
   place-items: center;
   padding: 0;
   border: none;
-  border-left: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-muted);
-  font-size: var(--font-size-md);
-  line-height: var(--line-height-none);
   cursor: pointer;
+}
+.storageReveal:hover {
+  color: var(--color-text-strong);
 }
 
 /*

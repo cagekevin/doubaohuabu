@@ -113,7 +113,7 @@ export function SplitPresetPickerModal({
             className={styles.item}
             onClick={() => applyPreset(p.id)}
           >
-            <span className={styles.itemName}>{p.name}</span>
+            <span>{p.name}</span>
             <span className={styles.itemMeta}>
               {SPLIT_TEXT.presetMeta(p.nodes.length, p.edges.length)}
             </span>
@@ -121,10 +121,10 @@ export function SplitPresetPickerModal({
         ))}
         <button
           type="button"
-          className={`${styles.item} ${styles.itemDirect}`}
+          className={styles.item}
           onClick={runDirect}
         >
-          <span className={styles.itemName}>{SPLIT_TEXT.presetDirect}</span>
+          <span>{SPLIT_TEXT.presetDirect}</span>
           <span className={styles.itemMeta}>
             {SPLIT_TEXT.presetDirectMeta(keywords.length > 0)}
           </span>

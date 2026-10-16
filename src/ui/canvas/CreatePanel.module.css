@@ -13,29 +13,28 @@
   z-index: var(--z-overlay);
 }
 
-/* ★ 真源归位：与 `ui/common` 的 `.menu`（右键菜单壳）**逐字同形** ⇒ 委托它，不再写第二份 */
+/* ★ 真源归位：与 `ui/common` 的 `.menu`（右键菜单壳）**逐字同形** ⇒ 委托它，不再写第二份。
+   ⚠️ 例外一条（**明写**，因为它违反 §6「本地只许追加真源未设的属性」）：设计稿给建节点浮层的
+      `min-width` 是 **168**（`.mk-createpanel`），而右键菜单是 200（`.mk-menu`）—— 设计层自己
+      分了两档（本浮层的选项只有三四个字，168 够；右键菜单有长句）。按 mockup 取 168，
+      真源 `.menu` 仍是基类。 */
 .panel {
   composes: menu from '../common/shared.module.css';
+  min-width: 168px;
 }
 
+/* 标题 —— ★ 真值 = 设计稿的 `.mk-menu-title`（菜单内的小节标题），
+   而不是 `.panelTitle`（那是**弹窗**的题，更大更重）。走 `B05` 落的真源 `.menuTitle`。 */
 .title {
-  composes: panelTitle from '../common/shared.module.css';
-  /* 仅追加真源未设的属性 */
-  padding: var(--space-1) var(--space-2);
+  composes: menuTitle from '../common/shared.module.css';
 }
 
+/* 选项 —— ★ 真值 = 设计稿的 `.mk-menu-item`：与右键菜单**逐条同形**
+   （30 高 · 图标槽 · `sm` 字 · 悬停 sunken）⇒ 走 `B05` 落的真源 `.menuItem`。
+   ⚠️ 只追加两条真源未设的：`<button>` 的默认底与边框（真源 `.menuItem` 也用在
+      `<button>` 上，但那里由全局 reset 兜着；这里显式写一遍更稳）。 */
 .option {
-  display: block;
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  text-align: left;
-  color: var(--color-text-strong);
-  font-size: var(--font-size-md);
+  composes: menuItem from '../common/shared.module.css';
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm);
-}
-
-.option:hover {
-  background: var(--color-surface-sunken);
 }

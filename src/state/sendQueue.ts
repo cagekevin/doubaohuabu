@@ -49,9 +49,7 @@ import { createSendPipeline } from './batchSend';
 import type { AutoConfirmController } from './autoConfirm';
 import type { PendingAttemptController } from './pendingAttempt';
 import type { AppStore } from './store';
-import type { Ports, StoragePort } from '@/core/ports';
-import { LS_SENDQUEUE_POS } from '@/stable/contracts/keys';
-import { PERSIST } from './persistKeys';
+import type { Ports } from '@/core/ports';
 
 /** 泵的节流窗口（ms）—— 原 `M3` 42038 的 `50` */
 const PUMP_THROTTLE_MS = 50;
@@ -73,47 +71,6 @@ export interface SendQueueController {
   start(): void;
   /** 停泵并把代次 +1（在途结果作废） */
   stop(): void;
-  /**
-   * 读回面板位置（原 `U3` 42570-42585）—— 解析失败 / 字段不是有限数 ⇒ `null`
-   *
-   * ⚠️ 归本控制器是因为**读盘要走端口**：`ui` 不得持 `Ports`（TD-16-8）。
-   *    位置**不进 store** —— 它不是画布状态，只是这个面板的显示偏好。
-   */
-  readPanelPos(): { x: number; y: number } | null;
-  /** 记住面板位置（原 `Pp`）—— 写失败**不影响使用**，只影响「下次记住位置」 */
-  writePanelPos(pos: { x: number; y: number }): void;
-}
-
-/**
- * 读回面板位置（原 `U3` 42570-42585）—— 解析失败 / 字段不是有限数 ⇒ `null`
- *
- * ⚠️ **保留「字段必须是有限数」的校验**：端口只负责取值，坏形状得自己挡。
- * ★ 2026-10-11 从 `ui/panels/SendQueuePanel.tsx` **原样迁移**（那里曾让 `ui` 持 `StoragePort`）。
- */
-function readPanelPos(storage: StoragePort): { x: number; y: number } | null {
-  const r = PERSIST[LS_SENDQUEUE_POS].read(storage);
-  // ★ TD-06-1：三态 —— `missing`（没存过）/ `corrupt`（坏了）都当"没有位置"
-  //   （这是**面板位置**，丢了无害；且它不在 `persist` 的写回清单里 ⇒ 无覆盖风险）
-  if (r.kind !== 'ok') return null;
-  // ⚠️ 存进去的是**外部持久化值**（localStorage，可能被改脏）⇒ 走 `asRecord` 收，不自称形状
-  const { x, y } = asRecord(r.value);
-  if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
-    return { x, y };
-  }
-  return null;
-}
-
-function writePanelPos(storage: StoragePort, pos: { x: number; y: number }): void {
-  try {
-    PERSIST[LS_SENDQUEUE_POS].write(storage, pos);
-  } catch {
-    // catch-ok: 存不进去（配额 / 隐私模式）不影响使用，只影响「下次记住位置」。
-    // ★ **TD-07-3 结清（2026-10-11，回源）**：此处**刻意保持静默**（不加日志），三条依据 ——
-    //   ① **逐字对源**：原版 `z3.jsx:153-156` / `:172-175` 就是
-    //      `try { localStorage.setItem(Pp, JSON.stringify(…)) } catch {}`（**空 catch**，源版也不打日志）；
-    //   ② **留痕**：本块带理由（本仓约定：结构性空 catch 必标 `catch-ok:`），不是"忘了处理"；
-    //   ③ **后果无害**：丢的只是"面板位置"（下次开在默认位）⇒ **不值得为它偏离源版**。
-  }
 }
 
 /**
@@ -492,7 +449,5 @@ export function createSendQueueController(
       }
     },
 
-    readPanelPos: () => readPanelPos(ports.storage),
-    writePanelPos: (pos) => writePanelPos(ports.storage, pos),
   };
 }

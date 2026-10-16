@@ -1,14 +1,43 @@
 /*
- * ★ 整个真源住 `@layer base`（级联层）。
+ * ★ 真源住 `@layer base`（级联层），与浏览器归一（`src/styles/reset.css`）**同层**。
  *   组件样式**未分层** ⇒ 按 CSS 规范「未分层 > 分层（同特异性）」⇒ **组件天然压过真源**。
  *   即：本地写 `background: red` 就生效（＝所有人的直觉写法），**不需要任何人记得一条反直觉的规矩**。
- *   口径见 docs/17 §5。
+ *   口径见 docs/CSS规范.md §1.4。
  */
 @layer base {
 /**
  * 共享交互组件的样式（原则 8「三振出局」的落点）
  * ⚠️ 只允许 var(--...) 引用 tokens.css，不得写硬编码色值（原则 5 SSOT）
  */
+
+/* ══════════════════════════════════════════════════════════════
+   图标 —— ★ 唯一图标件 `Icon.tsx` 的皮肤（**形状在那边，这里只给尺寸与描边**）
+   24 格 · 描边 1.7 · `currentColor`（口径：`docs/mockup/README.md`「图标一律内联 SVG」）
+   ⚠️ 尺寸**只在下面两处**：默认一档 + 按钮内一档。组件里别再写第三套 width/height。
+   ══════════════════════════════════════════════════════════════ */
+.icon {
+  width: var(--dim-4);
+  height: var(--dim-4);
+  flex: none;
+  /* 与文字**行内**并排时（提示条前缀那类）不下沉；flex 行里无影响 */
+  vertical-align: -0.125em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* 按钮内的图标矮一档
+   ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css 的 `.btn .mk-icon { width:14px; height:14px }` */
+.btn .icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* 方向 = **旋转同一颗形状**（不为上 / 下 / 左各造一个箭头；`chevron` 默认朝右）*/
+.iconUp { transform: rotate(-90deg); }
+.iconDown { transform: rotate(90deg); }
+.iconLeft { transform: rotate(180deg); }
 
 /* ── Modal ── */
 /* 遮罩（原 `.mask` 改名 —— mockup 定稿「遮罩」就叫 `.overlay`）*/
@@ -128,17 +157,61 @@
 }
 /* ── ContextMenu ── */
 /* 注：`.menu` 已挪到 `.overlay` 之后（同源，见该处） */
+/*
+ * 菜单项 —— 真值 = `docs/mockup/assets/mockup.css` 的 `.mk-menu-item`。设计层补了四件事：
+ *   ① **图标槽**（16px，中性色，悬停跟随文字色）—— 扫读靠形状不靠读字；
+ *   ② **紧凑行高 30 + 12px 字** —— 菜单是"扫一眼就点"，不是"读一段"；
+ *   ③ 分组（`.menuTitle` 小节标题 + `.menuSep` 分隔线）；
+ *   ④ **危险态**（删除类）悬停整行翻红底白字 —— 让"不可逆"在按下前被看见。
+ */
 .menuItem {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  height: 30px;
+  padding: 0 var(--space-2);
   text-align: left;
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  cursor: pointer;
+  /* ★ 补两条（真值 = `mockup.css:1108-1124` 的 `.mk-menu-item`）：
+     ① `color: --color-text-strong`（原来没设色 ⇒ 靠继承，在浅底容器里可能偏弱）
+     ② **`:hover { background: --color-surface-sunken }`** —— 这是**真缺陷**：此前全仓菜单项
+        （右键 / 建节点 / 分组 / 账号移动…）**一条悬停反馈都没有**，设计层明写了它。 */
+  color: var(--color-text-strong);
+}
+.menuItem:hover {
+  background: var(--color-surface-sunken);
 }
 .menuItem:hover,
 .menuItem[data-active='true'] {
   background: var(--color-surface-sunken);
+}
+.menuItem .icon {
+  color: var(--color-text-faint);
+}
+.menuItem:hover .icon,
+.menuItem[data-active='true'] .icon {
+  color: var(--color-text-strong);
+}
+/* ④ 危险项（原设计层 `.mk-menu-item.is-danger`）—— 写成复合类 ⇒ 不依赖定义顺序 */
+.menuItem.isDanger {
+  color: var(--color-danger-text);
+}
+.menuItem.isDanger .icon {
+  color: var(--color-danger-text);
+}
+.menuItem.isDanger:hover,
+.menuItem.isDanger[data-active='true'] {
+  background: var(--color-danger);
+  color: var(--color-text-on-danger);
+}
+.menuItem.isDanger:hover .icon,
+.menuItem.isDanger[data-active='true'] .icon {
+  color: var(--color-text-on-danger);
 }
 .menuItem:disabled {
   color: var(--color-text-faint);
@@ -175,7 +248,10 @@
  */
 .toastWarn {
   background: var(--color-warning);
-  color: var(--color-text-strong);
+  /* ★ **补足修正**（`C35`）：原来字色是 `--color-text-strong`（**近黑**）压在琥珀实底上
+     —— 浅色主题里那是 `--p-amber-700`（深琥珀），近黑字对比只有 ~2:1，**读不清**。
+     同一族的 `.toast` / `.toastError` 都是"深底 + 浅字" ⇒ 这三档才是自洽的一组。 */
+  color: var(--color-surface-raised);
 }
 
 .toastError {
@@ -183,10 +259,11 @@
   color: var(--color-surface-raised);
 }
 
-/* ★ 2026-10-11 补：源 `showToast` 的第 4 档 `'success'`（原 `.app-toast-success`） */
+/* ★ 2026-10-11 补：源 `showToast` 的第 4 档 `'success'`（原 `.app-toast-success`）。
+   ⚠️ 字色同 `.toastWarn`：原来是近黑字**压在实底绿上**（读不清）⇒ 改浅字，四档统一"深底浅字"。 */
 .toastSuccess {
   background: var(--color-success);
-  color: var(--color-text-strong);
+  color: var(--color-surface-raised);
 }
 
 /*
@@ -200,6 +277,9 @@
  */
 .toastMsg {
   flex: 1;
+  /* ★ 补足：带动作钮时消息是 flex 子项 ⇒ 不给 `min-width: 0` 就**不肯收缩**，
+     长消息会把 360 的 `max-width` 撑破（同 `.bannerMsg` 的写法）。 */
+  min-width: 0;
 }
 .toastHasAction {
   display: flex;
@@ -225,6 +305,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 
 /* ── SaveErrorBanner（原 `Z0.jsx` 的 `.save-error-banner`）── */
 /* ⚠️ 顶部居中的全局浮层（与右下角 Toast 分列，避免遮挡） */
@@ -376,8 +457,190 @@
   padding: 0 var(--space-2);
   font-size: var(--font-size-xs);
 }
+
+/**
+ * ★ **中号按钮**（`.btnMd`）—— 真值 = 设计层 `docs/mockup/assets/backend.css` 的「按钮统一」那一组。
+ *
+ * **30 高 · `sm` 字（12px）· `space-3` 横内距 · `space-1` 图标间距。**
+ *
+ * ⚠️ 为什么是**真源新档**而不是各处本地覆盖：设计层原话 ——
+ *    「真机这些按钮一律 `composes: btn btnSm` ⇒ **11px 字 / 25.6px 高**，
+ *      一排按钮又挤又小、读起来像"附带的"，不像工具栏」。
+ *    它是在**推翻**「工具栏按钮就该用 `.btnSm`」这件事，而**消费者有 8 处**
+ *    （`BackendView` 的 headBtn / headBtnPrimary / headToggle / sessionBtn / sessionBtnPrimary
+ *      + `AccountPanel` 的 toolBtn / rowBtn / deselectBtn）⇒ 属于"一类问题一处解"。
+ */
+.btnMd {
+  height: 30px;
+  padding: 0 var(--space-3);
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
 /* 纯图标方块（宽 = 高）*/
 .btnIcon { width: var(--btn-height); padding: 0; flex: none; }
+
+/*
+ * ★ **节点内微型钮**（真值 = `mockup.css` 的 `.mk-chipbtn`）—— 22px，比标准按钮矮一档。
+ * 设计稿里 4 处同一形态：「@ 引用素材」（文本节点）· 「编辑图片」/「分析提示词」（生成/素材节点）·
+ * 「历史 4」（文生图）· 「来自：文生视频」（视频节点）⇒ 收成一份（别让 8 类节点各写一套微型钮）。
+ */
+.chipBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+  flex: none;
+  height: 22px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chipBtn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+/*
+ * ★ **节点内纯图标微型钮**（真值 = `mockup.css` 的 `.mk-iconbtn`）—— 22×22。
+ * 设计稿里它与 `.chipBtn` 是**一对**（文字版 / 图标版，同高同皮）⇒ 真源也成对落，
+ * 免得各处再自造第三个尺寸（真机此前有过 18 / 24 / 32 三档）。
+ * ⚠️ 定义必须在 `.chipBtn` **之后**（同文件 `composes` 单遍扫描）。
+ */
+.iconBtn {
+  composes: chipBtn;
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+}
+
+/**
+ * ★ **开 / 关滑块**（`switch` / `switchOn` / `switchKnob` / `switchKnobOn`）
+ *   —— 真值 = `mockup.css` 的 `.mk-switch`（30×17 轨道 + 13×13 滑块，开态轨道品牌色、滑块右移 13）。
+ *
+ * ⚠️ 为什么现在提真源（`§6 F03`）：同一件东西在真机有**两份值不一样的实现** ——
+ *    · 节点侧 `.autoSend`（`nodes/shared.module.css`，`C16` 落的，按 `.mk-switch`）
+ *    · 账号栏 `.autoStartSwitch`（`panels/AccountPanel.module.css` 自写：高 16 · knob **12** · 无边框 · 关态 `border-strong`）
+ *    设计层的 `backend.css` 还给了**第三份**（高 17 · knob **11** · 有 1px 边 · 关态 `sunken`）。
+ *    ⇒ 取**通用件那一档**（`.mk-switch`）为唯一实现，两处消费者 `composes` 过去。
+ *
+ * ⚠️ 位移写成**独立的一个类**（`.switchKnobOn`）而不是"`.switchOn .switchKnob` 后代选择器"：
+ *    `composes` **只搬运单个类的声明**，后代选择器搬不过去 —— 消费方用的是自己的类名，
+ *    真源那条 `X .Y` 规则**根本不会命中**。动作归属由消费方按状态挂类（与 `.isOn` 同法）。
+ */
+.switch {
+  flex: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 30px;
+  height: 17px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+  cursor: pointer;
+}
+.switchOn {
+  background: var(--color-action-primary);
+}
+.switchKnob {
+  width: 13px;
+  height: 13px;
+  border-radius: var(--radius-full);
+  background: var(--color-switch-knob);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.switchKnobOn {
+  transform: translateX(13px);
+}
+
+/**
+ * ★ **说明行 / 附注**（真值 = `mockup.css` 的 `.mk-cell-hint`）——
+ *   `faint` + **`2xs`** + `snug`。
+ *
+ * 它是"读一眼就够"的旁注（弹窗里的用法说明、项的元信息），不该与正文同档。
+ * ⚠️ 此前全仓有 **~12 处各写一遍**（`.sub` / `.hint` 各成一派，值还不一样）；
+ *    本类是先落真源、由各页**按批次**收口（`C31` 收了三个弹窗，其余见 §3 的队列）。
+ */
+.hint {
+  display: block;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-snug);
+}
+
+/**
+ * ★ **表单行**（标签 + 控件）—— 真值 = `mockup.css` 的 `.mk-form-row` / `.mk-form-label`。
+ *
+ * 一对：`.formRow` 是行（`gap` + **末位子元素吃掉剩余宽**），`.formLabel` 是它左侧的标签
+ * （**固定最小宽 52** ⇒ 多行标签的左边缘能对齐）。
+ * ⚠️ 消费者 2 处（`FaceMaskPanel` 的遮脸参数 · `ImageEditor` 的工具条），此前各写一份
+ *    （`gap` 一个 `space-1` 一个 `space-2`、标签一个 52 宽一个不设）。
+ */
+/**
+ * ★ **品牌标记**（那枚小方块）—— 真值 = `mockup.css` 的 `.mk-brand-mark` / `.mk-brand`。
+ *
+ * ⚠️ 尺寸走 `--brand-mark-size`，**各页不同**（设计稿给的是个体值，见 §7-D14）：
+ *   首页顶栏 22 · 激活页 26 · 启动页 34 —— 各页在**自己的根类**上覆盖该 token，
+ *   **不新开第二个 token**。
+ * ⚠️ 原先它只住在 `AppShell.module.css`（顶栏一处消费者）；启动页 / 激活页是第二、三个
+ *    ⇒ 提到真源（"能一种的别搞两种"）。
+ */
+/**
+ * ★ **缩略图块**（`B04e` 的 ⑦）—— 真值 = 设计层 `mockup.css:1368-1375` 那一组
+ *   （`.mk-hist-thumb` / `.mk-group-child` / `.mk-refbar-thumb` **并在一起写的那三条**：
+ *   `radius-sm` + `1px solid --color-border`，悬停 `--color-border-strong`）。
+ *
+ * ⚠️ 落它的理由：真机有 **3 处**各写一遍同样三条（`C32` 素材选择器的 `.thumb` ·
+ *    `GalleryCard` 的 `.thumbWrap` · `F15` 出新图的 `.thumbBtn`）—— 尺寸/形状各处不同
+ *    （撑宽 / `aspect-ratio: 1` / 固定 64），但**皮是同一张** ⇒ 皮归真源、尺寸留本地。
+ */
+.thumbTile {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+.thumbTile:hover {
+  border-color: var(--color-border-strong);
+}
+
+.brandMark {
+  /* ★ 补足（`§5 E01`）：设计层在**激活页**把标记改成"能装图标"的那一档
+     （`activate.css` 覆写 `.mk-brand-mark` 为 `inline-flex + center` + `color: on-brand`）。
+     这几条对**空标记**（首页顶栏 / 启动页）**零影响** ⇒ 直接吸进真源，
+     本地只留真差异（激活页的圆角是 `radius-md`，另两页是 `radius-sm`）。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--brand-mark-size);
+  height: var(--brand-mark-size);
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-mark);
+  color: var(--color-text-on-brand);
+  box-shadow: inset 0 0 0 1px var(--color-brand-mark-ring);
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.formRow > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+.formLabel {
+  flex: 0 0 auto;
+  min-width: 52px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
 
 /* 弹窗关闭按钮 —— ★ 必须定义在 `.btn*` 之后（同文件 `composes` 约束）。
    mockup 定稿：关闭钮统一 24×24（原 28×28）。危险态走 `.isDanger` 修饰。 */
@@ -391,7 +654,6 @@
 /* 危险态（原 `.saveErrorClose` 并入）：危险色 + 危险悬停底 */
 .panelClose.isDanger {
   color: var(--color-danger-text);
-  font-size: var(--font-size-lg);
 }
 .panelClose.isDanger:hover:not(:disabled) {
   background: var(--color-danger-border);
@@ -433,6 +695,16 @@
   color: var(--color-surface-raised);
 }
 
+/* 横幅里的动作钮（「关闭此提示」/「全部清除」）—— 设计稿给的是真源 `btn btnSm btnGhost`。
+   ⚠️ 与 `.toastAction` 同因，**必须定义在 `.btn*` 之后**（同文件 `composes` 单遍扫描约束）。
+   ⚠️ 字色覆盖成 `inherit`：真源 `.btnGhost` 的 `--btn-ghost-fg` 是浅底上的灰，
+      压在 `--color-danger-bg` 上会看不清。 */
+.bannerAction {
+  composes: btn btnSm btnGhost;
+  flex: none;
+  color: inherit;
+}
+
 /* ── 基础控件：表单（输入框 / 多行框）──
    改造前：`.prompt`（GenPanel）/ `.reviseInput`（AnalyzePrompt）/ `.input`（ActivatePage）
    三处各写一遍，padding 从 space-half space-1 到 space-2、min-height 三样。
@@ -454,6 +726,66 @@
 .field:focus {
   background: var(--field-bg-focus);
   border-color: var(--field-border-focus);
+}
+
+/*
+ * 分段控件（原「标签页」：一键遮脸 / 裁剪 那类）—— 真值 = `docs/mockup/assets/mockup.css` 的
+ * `.mk-tabs` / `.mk-tab`（设计稿把"标签页"与"分段控件"**合成一种形态**）。
+ * ★ 选中态 = 浅底容器里的「白底 + 品牌字」；`chevron` 默认朝右，方向靠旋转（`.iconUp` 那族）。
+ */
+.tabs {
+  display: inline-flex;
+  gap: var(--space-half);
+  padding: var(--space-half);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+.tab {
+  padding: var(--space-half) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab.isOn {
+  background: var(--color-surface-raised);
+  color: var(--color-accent-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/*
+ * 选值控件（原生 `<select>` / 下拉触发器）—— 真值 = `mockup.css` 的 `.mk-select` / `.mk-picker`。
+ * ★ 设计稿原话：「统一成 field 的视觉，**不再拿按钮冒充**」⇒ 它走 `--field-*` 同一套 token。
+ * ⚠️ 它**不是** `.field`：`.field` 是输入框（有 `:focus`），本类多了下拉专属的
+ *    `cursor` / `white-space: nowrap` / `overflow: hidden` + 省略号。
+ */
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--field-height);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  background: var(--field-bg);
+  color: var(--field-fg);
+  font: inherit;
+  font-size: var(--field-font-size);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.select:hover {
+  border-color: var(--field-border-focus);
+}
+
+/* 滑块 —— 真值 = `mockup.css` 的 `.mk-range`：轨道颜色交给浏览器的 `accent-color`（不自定义色值）*/
+.range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-action-primary);
 }
 .field::placeholder { color: var(--field-placeholder); }
 
@@ -482,6 +814,39 @@
 }
 
 /**
+ * ★ **抽屉形态的壳**（真值 = `mockup.css` 的 `.mk-sq`，用在发送队列）——
+ *   它是**贴边满高的一条**，不是浮窗：无圆角、无阴影、只留一条右边框。
+ *
+ * ⚠️ 为什么是真源**变体**而不是本地覆盖：`PanelShell` 的契约写着「`className` 只许**追加**
+ *    真源未设的属性（宽/高/定位），**禁止用本地覆盖表达差异**」，而它无条件渲染 `.panel`
+ *    ⇒ 想换皮只能在真源里给出另一档（同一个东西的两种形态，一处实现）。
+ */
+.panelDrawer {
+  composes: panel;
+  width: var(--sq-panel-w, 320px);
+  height: 100%;
+  max-height: none;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/**
+ * ★ **常驻面板的头**（比弹窗头矮一档）—— 真值 = `mockup.css` 的 `.mk-sq > .panelHead`
+ *   （`padding: var(--space-2) var(--space-3)` + `min-height: 36px`）。
+ *
+ * ⚠️ 为什么是变体：真源 `.panelHead`（12/16 内距 + 14 字）是给**弹窗**的；侧栏 / 抽屉这类
+ *    **常驻**面板的头要压到"一行工具条"。消费者：发送队列抽屉 · 资源库侧栏
+ *    （`C05` 当时只能本地覆盖 padding —— 现在有了正主）。
+ */
+.panelHeadCompact {
+  composes: panelHead;
+  padding: var(--space-2) var(--space-3);
+  min-height: 36px;
+}
+
+/**
  * 右键菜单浮层（`ContextMenu`）—— ★ 与 `.panel` 同源。
  * ⚠️ `composes` 要求目标类在引用点**之前** ⇒ 必须放在 `.panel` 之后。
  */
@@ -489,21 +854,25 @@
   composes: panel;
   position: fixed;
   z-index: var(--z-overlay);
-  min-width: 160px;
+  /* 真值 = `mockup.css` 的 `.mk-menu`：更宽的兜底 + 更重的浮层阴影 + md 圆角 */
+  min-width: 200px;
   padding: var(--space-1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
-/* 右键菜单标题（如「移动到…」）—— 次要小字，带在菜单顶部 */
+/* 菜单分组的小节标题（也用于菜单顶部标题，如「移动到…」）—— 真值 = `.mk-menu-title` */
 .menuTitle {
-  padding: var(--space-half) var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
 }
 
-/* 右键菜单分隔线 */
+/* 菜单分隔线（分组之间）—— 真值 = `.mk-menu-sep`（上下各留 4 的呼吸）*/
 .menuSep {
   height: 1px;
-  margin: var(--space-half) 0;
+  margin: var(--space-1) var(--space-1);
   background: var(--color-border);
 }
 
@@ -596,18 +965,25 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+  gap: var(--space-half);
   padding: 0 var(--badge-padding-x);
   border-radius: var(--badge-radius);
   background: var(--color-surface-sunken);
   color: var(--color-text-muted);
   font-size: var(--badge-font-size);
+  line-height: var(--line-height-tight);
   white-space: nowrap;
 }
-.pillOk { background: var(--color-success); color: var(--color-text-on-brand); }
-/* ⚠️ 当前无消费方（语气三档里只用了 `.pillOk` / `.pillErr`）——
-   保留以维持 `.pill` 语气**成套**，避免下个人用到"警告语气"时又自造一个。 */
-.pillWarn { background: var(--color-warning); color: var(--color-text-on-brand); }
-.pillErr { background: var(--color-danger); color: var(--color-text-on-danger); }
+/* 语气三档 = **软底 + 彩字**（真值 = `mockup.css` 的 `.mk-chip` 族：不刺眼，高频状态用）
+   ⚠️ 设计稿只画了 info / ok / brand 三档；这里的 warn / err 是**同一套规则的自然延伸**
+      （`--color-*-bg` + `--color-*-text`）—— 真机确有这两个状态。 */
+.pillOk { background: var(--color-success-bg); color: var(--color-success-text); }
+.pillWarn { background: var(--color-warning-bg); color: var(--color-warning-text); }
+.pillErr { background: var(--color-danger-bg); color: var(--color-danger-text); }
+
+/* ★ 补第 4 档（`§6 F14`）：设计稿的 **`.mk-chip.is-info`**（`mockup.css:1330`）—— 真源此前
+   只有 ok / err 两档语气，少了"中性提示"这一档（画廊的「⚠ 大图」角标就要它）。 */
+.pillInfo { background: var(--color-info-bg); color: var(--color-info-text); }
 /**
  * ★ 2026-10-11 补（`docs/17` §3.1 + §8.4「成套」）：语气原先只有 Ok/Warn/Err **三档**，
  *   而「出新图」面板的 `NEW` 徽标与 Lovart 来源标签要「品牌语气」⇒ 补上第四档，

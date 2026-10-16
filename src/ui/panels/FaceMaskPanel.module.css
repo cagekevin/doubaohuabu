@@ -1,9 +1,16 @@
 /**
  * 遮脸参数面板样式（原 `.face-mask-panel` / `.fmp-*`）
  *
- * ⚠️ **mockup 未收录这一族**（`mockup.css` 里 `face-mark` 命中 0 处）⇒ 全部为**推断样式**
- *    （只用 token）—— 登记 **`TD-03-19`**。
+ * ★★ **2026-10-16 更正（`C33`）**：本文件原写「**mockup 未收录这一族**（`mockup.css` 里
+ *   `face-mark` 命中 0 处）⇒ 全部为**推断样式**（`TD-03-19`）」—— **两条都不成立**：
+ *   ① 设计稿**收录了这个面板**（`index.html:728-755`），只是它用**通用类名**画
+ *      （`.mk-form-row` / `.mk-form-label` / `.mk-effect` / `.mk-effect-grid` / `.mk-range` /
+ *      `.mk-cell-hint`），**不叫** `.fmp-*` ⇒ 搜 `fmp` 当然 0 命中；
+ *   ② `face-mark` 本身就是**错字**（该搜 `face-mask`）。
+ *   ⇒ 本文件现在是**有真值的对表**，不再是"按源语义推断"。
+ *
  * ⚠️ 定位是**视口坐标**（`left/top` 由组件算好）⇒ 用 `position: fixed`（源亦如此）。
+ * ⚠️ 原则 5：色值只走 token；输入框 / 滑杆 / 按钮一律 `composes` 真源。
  */
 
 .panel {
@@ -15,9 +22,6 @@
   font-size: var(--font-size-xs);
   border-color: var(--color-border-strong);
 }
-
-
-
 
 .body {
   composes: panelBody from '../common/shared.module.css';
@@ -27,54 +31,83 @@
   gap: var(--space-half);
 }
 
-.label {
-  color: var(--color-text-muted);
-}
-
-.effects {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-half);
-}
-
-.effect {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
-}
-
-.effectActive {
-  border-color: var(--color-action-primary);
-  background: var(--color-action-primary);
-  color: var(--color-text-on-brand);
-}
-
-.hint {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-2xs);
-}
-
+/*
+ * 表单行 —— ★ 真值 = `mockup.css` 的 `.mk-form-row`（`flex` + `gap: space-2`，
+ * 末位子元素 `flex: 1`）。
+ * ⚠️ 原写 `justify-content: space-between` —— 那是"标签靠左、控件靠右"的两端对齐，
+ *    滑杆会被挤到右半边；设计稿要的是**滑杆吃掉整行剩余宽度**。
+ */
+/* 表单行 —— ★ 已收口到真源 `.formRow` / `.formLabel`（`C34` 落的；
+   同一个形态在 `ImageEditor` 也有一份，两处共用一处实现） */
 .row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  composes: formRow from '../common/shared.module.css';
 }
 
+/* 标签 */
+.label {
+  composes: formLabel from '../common/shared.module.css';
+}
+
+/* 数值回显 —— **补足**（设计稿那两行只画了滑杆）：光有滑杆，用户读不到当前值 */
 .val {
+  flex: 0 0 auto;
   color: var(--color-text-strong);
   font-family: var(--font-mono);
 }
 
+/* 滑杆 —— 真源 `.range` 已给 `flex: 1` + `min-width: 0` + 品牌色
+   ⚠️ 原还写了 `width: 100%`：它和 `flex: 1` 打架（在 flex 行里 `width` 只是 flex-basis 的替代）⇒ 删。 */
 .range {
-  width: 100%;
+  composes: range from '../common/shared.module.css';
+}
+
+/*
+ * 方式四选一 —— ★ 真值 = `.mk-effect-grid`：**4 列等分网格**。
+ * ⚠️ 原 `flex-wrap` + `gap: space-half`：四颗按钮会按文案长短排成**不等宽**的一堆
+ *    （「马赛克」比「模糊」宽），看着不像一组互斥选项。
+ */
+.effects {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
+}
+
+/*
+ * 单颗方式钮 —— ★ 真值 = `.mk-effect`：**与输入框同一张皮**（`--field-*` 那一套）。
+ * 设计层对"选值控件"的明令：**统一成 field 的视觉，不再拿按钮冒充**。
+ */
+.effect {
+  padding: var(--space-1) 0;
+  border: 1px solid var(--field-border);
+  border-radius: var(--field-radius);
+  background: var(--field-bg);
+  color: var(--field-fg);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.effect:hover {
+  border-color: var(--field-border-focus);
+}
+
+/*
+ * 选中态 —— ★ 真值 = `.mk-effect.is-on`：**品牌描边 + 选中底 + 强调字**（软底彩字）。
+ * ⚠️ 原写"实心品牌底 + 白字"：既与 `B04f` 给 `.pill` 定下的口径相反，
+ *    又在四颗按钮里**过于抢眼**（"选中"不该比"可点"更重）。
+ */
+.effectActive {
+  border-color: var(--color-action-primary);
+  background: var(--color-selection-bg);
+  color: var(--color-accent-text);
+}
+
+/* 说明行 / 底部提示 —— ★ 真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`），不再各写一份 */
+.hint {
+  composes: hint from '../common/shared.module.css';
 }
 
 .foot {
+  composes: hint from '../common/shared.module.css';
   margin-top: var(--space-half);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-2xs);
 }

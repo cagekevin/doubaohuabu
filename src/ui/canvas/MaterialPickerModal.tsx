@@ -74,10 +74,20 @@ export function MaterialPickerModal({ nodeId, onClose }: MaterialPickerModalProp
       title={LIBRARY_TEXT.pickFromLibrary}
       footer={
         <>
-          <button type="button" className={shared.btn} onClick={() => void pickFromFile()} disabled={busy}>
+          {/* ★ 真值 = 设计稿标本的 `panelFoot`：两颗**小号**按钮（`btn btnSm` / `btn btnSm btnGhost`）*/}
+          <button
+            type="button"
+            className={`${shared.btn} ${shared.btnSm}`}
+            onClick={() => void pickFromFile()}
+            disabled={busy}
+          >
             {LIBRARY_TEXT.pickFromFile}
           </button>
-          <button type="button" className={`${shared.btn} ${shared.btnGhost}`} onClick={onClose}>
+          <button
+            type="button"
+            className={`${shared.btn} ${shared.btnSm} ${shared.btnGhost}`}
+            onClick={onClose}
+          >
             {LIBRARY_TEXT.pickerCancel}
           </button>
         </>

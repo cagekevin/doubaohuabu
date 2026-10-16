@@ -23,6 +23,7 @@
 import { useEffect } from 'react';
 import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from 'react';
 import { COMMON_TEXT } from '@/constants/text';
+import { Icon } from './Icon';
 import shared from './shared.module.css';
 
 /*
@@ -49,6 +50,12 @@ export interface PanelShellProps {
   headProps?: HTMLAttributes<HTMLDivElement>;
   /** 根卡片 ref（如「点外部关闭」要判 `contains`） */
   wrapperRef?: Ref<HTMLDivElement>;
+  /**
+   * 壳的**形态**：`float`（默认，浮层卡：圆角 + 描边 + 阴影）·
+   * `drawer`（贴边满高的一条：无圆角/无阴影/只留右边框 —— 真值 = `mockup.css` 的 `.mk-sq`）。
+   * ⚠️ 形态差异走**真源变体**（`.panel` / `.panelDrawer`），不是用 `className` 覆盖（见 `className` 的契约）。
+   */
+  variant?: 'float' | 'drawer';
   /** 根卡片内联样式（定位用；**只许追加真源未设的属性**，与 `className` 同法） */
   style?: CSSProperties;
   /** 头部右侧的浮层操作组（绝对定位，不占头部布局） */
@@ -91,6 +98,7 @@ export function PanelShell({
   closeOnMask = true,
   className,
   bodyClassName,
+  variant = 'float',
   role,
   ariaModal,
   testId,
@@ -122,7 +130,7 @@ export function PanelShell({
   const card = (
     <div
       ref={wrapperRef}
-      className={`${shared.panel}${className ? ` ${className}` : ''}`}
+      className={`${variant === 'drawer' ? shared.panelDrawer : shared.panel}${className ? ` ${className}` : ''}`}
       style={style}
       data-testid={testId}
       role={role}
@@ -142,7 +150,7 @@ export function PanelShell({
               title={closeLabel ?? COMMON_TEXT.closeAria}
               aria-label={closeLabel ?? COMMON_TEXT.closeAria}
             >
-              ✕
+              <Icon name="x" />
             </button>
           )}
           {titleRight}

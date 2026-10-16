@@ -212,24 +212,24 @@ export function AnalyzePrompt({
               </div>
             ) : (
               <>
-                <div className={styles.tabs}>
+                <div className={shared.tabs}>
                   <button
                     type="button"
-                    className={`${styles.tab} ${tab === 'zh' ? styles.on : ''}`}
+                    className={`${shared.tab} ${tab === 'zh' ? shared.isOn : ''}`}
                     onClick={() => setTab('zh')}
                   >
                     {ANALYZE_UI_TEXT.tabZh}
                   </button>
                   <button
                     type="button"
-                    className={`${styles.tab} ${tab === 'en' ? styles.on : ''}`}
+                    className={`${shared.tab} ${tab === 'en' ? shared.isOn : ''}`}
                     onClick={() => setTab('en')}
                   >
                     {ANALYZE_UI_TEXT.tabEn}
                   </button>
                   <button
                     type="button"
-                    className={`${styles.tab} ${tab === 'json' ? styles.on : ''}`}
+                    className={`${shared.tab} ${tab === 'json' ? shared.isOn : ''}`}
                     onClick={() => setTab('json')}
                   >
                     {ANALYZE_UI_TEXT.tabJson}

@@ -27,29 +27,11 @@ body {
 }
 
 /*
- * ★★ **这一行要回套真机**（`start.css` / `activate.css` 同一份修正）
- *
- * 现象：真源 `shared.module.css`（`.btn` / `.btnPrimary` / `.btnGhost` / `.libIcon` …）整个住在
- *       `@layer base`（`ui-real.css:1776`）；而 `reset.css:37-42` 的
- *       `button{ background:none; border:none; padding:0 }` 与 `:29-35` 的 `color: inherit` 是
- *       **未分层** ⇒ 按 CSS 规范「未分层 > 分层」⇒ reset 压过真源 ⇒ **所有真机按钮丢掉底色、边框、内边距**
- *       （实测：同一个 `btn btnPrimary` 挂 `<div>` 是蓝底白字，挂 `<button>` 全透明深字。
- *        本页修前有 **78 / 126** 个按钮是透明底，含顶栏保存路径钮 `AppShell-storageMain`）。
- * 解法：用 CSS 自己的 `revert-layer` 把这几个属性**交还给下一层** ⇒ 正好退回 `@layer base` 的按钮真源。
- *       ⇒ 皮肤仍然只有**真源那一份**，不在设计层抄第二遍（抄一份就必然漂移）。
+ * ★ 按钮皮肤只有**真源那一份**：归一（`reset.css`）与真源（`.btn` / `.btnPrimary` / `.libIcon` …）
+ *   现在**同住 `@layer base`** ⇒ 层内按**特异性**分胜负（`button` 0,0,1 < `.btn` 0,1,0）⇒ 真源赢。
+ *   ⇒ 此处**不需要任何补丁**（`revert-layer` 是"归一跑到真源上面去了"的补丁，层摆对了就没有它）。
+ *   口径：`docs/CSS规范.md` §1.4「层叠阶梯」。
  */
-button {
-  background: revert-layer;
-  border: revert-layer;
-  padding: revert-layer;
-}
-
-button,
-input,
-textarea,
-select {
-  color: revert-layer;
-}
 
 /* ══════════════════════════════════════════════════════════════
    设计层 token（★ 定稿后整块搬进 src/styles/tokens.css）

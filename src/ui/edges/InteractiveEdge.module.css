@@ -9,7 +9,8 @@
 
 .edgeActions {
   position: fixed;
-  transform: translate(-50%, -50%);
+  /* ⚠️ 原来的 `transform: translate(-50%, -50%)`（以指针为中心）随 `B06` 一并删 ——
+     摆位现在归**浮层定位原语**（锚点右下方 + 越界收边/翻转），全库浮层同一种摆法。 */
   display: flex;
   gap: var(--space-1);
   padding: var(--space-half);

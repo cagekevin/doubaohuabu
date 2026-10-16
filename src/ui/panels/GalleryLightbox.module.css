@@ -31,6 +31,11 @@
   composes: btn btnIcon btnGhost from '../common/shared.module.css';
   font-size: var(--font-size-xl);
 }
+/* 箭头**跟随本处字号**（原 `‹` `›` 就是字形，20px）—— 不为它新造第三个尺寸档 */
+.nav svg {
+  width: 1em;
+  height: 1em;
+}
 
 .btn {
   composes: btn btnSm from '../common/shared.module.css';

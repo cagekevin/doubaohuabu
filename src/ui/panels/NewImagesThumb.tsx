@@ -27,6 +27,7 @@ import { formatBytes } from '@/core/rules/downloadNode';
 import { withThumb } from '@/stable/protocols/img';
 import { galleryItemDims, isBigGalleryItem } from '@/core/rules/materialGrid';
 import { hostnameFromUrl, sourceTag, type NewImageItem } from '@/core/rules/newImages';
+import { Icon } from '@/ui/common/Icon';
 import styles from './NewImagesPanel.module.css';
 
 export interface NewImagesThumbProps {
@@ -70,7 +71,11 @@ export function NewImagesThumb({ item, isNew, sent, onSend, onRemove, onPressSta
       >
         {/* ⚠️ 与素材节点同法：`withThumb`（原 `Xt`）只给 **`img://` 引用**挂 `?w=`（本地协议处理器缩放） */}
         <img className={styles.thumbCover} src={withThumb(item.dataUrl, 320)} alt={item.name} loading="lazy" />
-        <span className={styles.caption}>{NEW_IMAGES_TEXT.overlay}</span>
+        <span className={styles.caption}>
+          {/* ★ §7-D11：加号由**图标**承担（原来它是 `NEW_IMAGES_TEXT.overlay` 里的全角字符 `＋`）*/}
+          <Icon name="plus" />
+          {NEW_IMAGES_TEXT.overlay}
+        </span>
         {isNew && !sent && <span className={styles.badgeNew}>{NEW_IMAGES_TEXT.badgeNew}</span>}
         {sent && <span className={styles.badgeSent}>{NEW_IMAGES_TEXT.badgeSent}</span>}
         {big && (
@@ -89,7 +94,7 @@ export function NewImagesThumb({ item, isNew, sent, onSend, onRemove, onPressSta
           onRemove(item);
         }}
       >
-        ✕
+        <Icon name="x" />
       </button>
       <div className={styles.thumbMeta} title={NEW_IMAGES_TEXT.metaTitle(item.name, hostnameFromUrl(item.sourceUrl), from)}>
         {dims || formatBytes(item.sizeBytes)}

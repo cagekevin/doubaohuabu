@@ -5,11 +5,11 @@
  * ⚠️ 输入框 / 按钮走 `ui/common/shared.module.css` **真源**（`composes`），不自造第二份。
  */
 
+/* 说明行 —— ★ 收口到真源 `.hint`（真值 = 设计稿的 `.mk-cell-hint`：`faint` + `2xs`）。
+   本地只留真源未设的一处：与下方输入框的间距（面板身不给行距）。 */
 .sub {
+  composes: hint from '../common/shared.module.css';
   margin-bottom: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
 }
 
 .input {

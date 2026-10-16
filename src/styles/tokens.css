@@ -383,6 +383,19 @@
   --color-scrim:         rgb(var(--p-black-ch) / 0.62);
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   跨主题**恒定**的语义 —— 它们都压在**媒体遮罩 / 品牌渐变**上，随主题反转会读不清
+   （来源：`docs/mockup/assets/mockup.css` 的设计层 token 块）
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+  --color-on-scrim:         var(--p-white);                  /* 压在 `--color-scrim`（图/视频遮罩）上的字 */
+  --color-media-track:      rgb(var(--p-white-ch) / 0.35);   /* 时间线轨道（压在视频画面上）*/
+  --color-brand-mark:       linear-gradient(135deg, var(--brand-500), var(--brand-600)); /* 品牌标记的底 */
+  --color-brand-mark-ring:  rgb(var(--p-white-ch) / 0.25);   /* 品牌标记的内描边（压在渐变上）*/
+  --color-switch-knob:      var(--p-white);                  /* 开关滑块：轨道开态品牌色、关态描边色 ⇒ 两面都要看得见 */
+  --color-brand-bg:         rgb(var(--brand-500-ch) / 0.07); /* 品牌**光晕**的极淡底（全屏页用它把视线压到中间的卡上）*/
+}
+
 /* ── 间距（受密度乘数影响；density=1 时与旧值完全一致）── */
 :root {
   --space-half: calc(var(--dim-half) * var(--density));
@@ -501,9 +514,11 @@
   /* ── 节点卡片 ── */
   --node-bg:           var(--color-surface-raised);
   --node-border:       var(--color-border);
-  --node-radius:       var(--radius-md);
-  --node-shadow:       0 1px 4px var(--color-shadow);
-  --node-shadow-hover: 0 2px 8px var(--color-shadow);
+  /* ★ mockup 为准：`.mk-node-radius` = `--radius-lg`（原 `--radius-md`）—— 节点是"卡片"，
+     圆角跟面板同档；`[data-shape='round']` 那条同名覆写因此**删掉**（同值 = 冗余声明）*/
+  --node-radius:       var(--radius-lg);
+  --node-shadow:       0 1px 2px var(--color-shadow);   /* ★ mockup 为准（原 0 1px 4px）*/
+  --node-shadow-hover: 0 4px 12px var(--color-shadow);  /* ★ mockup 为准（原 0 2px 8px）*/
   --node-selected-ring: var(--color-selected-ring);   /* ★ 独立于按钮色 */
   --node-head-bg:      var(--color-surface-sunken);
   --node-head-height:  calc(var(--dim-6) * var(--density));
@@ -527,7 +542,7 @@
   --edge-stroke-selected: var(--color-action-primary);
   --handle-bg:          var(--color-handle);
   --handle-border:      var(--color-surface-raised);
-  --handle-size:        14px;  /* ★ mockup 为准（原版 .react-flow__handle 14×14，逐字对源）*/
+
 
   /* ── 药丸 / 徽章 ── */
   --chip-bg:     var(--color-surface-sunken);
@@ -539,10 +554,13 @@
 
   --badge-radius:   var(--radius-sm);
   --badge-padding-x: var(--space-1);
-  --badge-font-size: var(--font-size-xs);
+  /* ★ mockup 为准：药丸是「高频状态」（计数 / 时长 / 张数），字号取 2xs 档（原 xs）*/
+  --badge-font-size: var(--font-size-2xs);
 
   /* ── 顶栏 ── */
-  --topbar-height: calc(var(--dim-8) * var(--density));
+  /* ★ mockup 为准：顶栏是**工具条**不是横幅 ⇒ 压到"一行"的高度
+     ssot-space-ok: 逐字对源 —— `docs/mockup/assets/mockup.css` 的 `--topbar-height: 44px`（44 不在尺度上）*/
+  --topbar-height: 44px;
   --topbar-bg:     var(--color-surface-raised);
   --topbar-border: var(--color-border);
   --topbar-padding-x: var(--space-4);
@@ -595,11 +613,36 @@
   /* ── 焦点 / 框选 ── */
   --focus-ring:     var(--color-focus-ring);
   --marquee-border: var(--color-marquee-border);
+
+  /* ── 统一界面带来的新增（2026-10-16）── */
+  --statusbar-height:   var(--dim-6);             /* 状态栏高：32（= --dim-6）*/
+  /* ssot-space-ok: 逐字对源 —— `mockup.css` 的 `--side-width-right: 280px`（280 不在尺度上）*/
+  --side-width-right:   280px;                    /* 右栏（资源库）宽；左栏仍用 `--side-width` */
+  --canvas-dot:         var(--color-canvas-grid); /* 画布底：点阵比线格安静，不跟节点抢 */
+  --canvas-dot-size:    var(--dim-5);             /* 24 */
+  /* ssot-space-ok: 逐字对源 —— `mockup.css` 的 `--canvas-dot-radius: 1px` */
+  --canvas-dot-radius:  1px;
+  --lib-thumb-ratio:    1 / 1;                    /* 资源库缩略图比例 */
+  /* ssot-space-ok: 逐字对源 —— `mockup.css` 的 `--brand-mark-size: 22px`（首页顶栏那一档）
+     ★ 设计稿各页给的是**个体值**（激活页 26 · 启动页 34）⇒ 真源只给首页档，
+       另两页在各自 `*.module.css` 的根类上覆盖这一条（见 plan §7-D14 裁定）*/
+  --brand-mark-size:    22px;
+
+  /* ★ 启动页「历史区」的视觉宽 —— 真值 = 设计层 `docs/mockup/assets/start.css` 的
+     `--mk-history-w: 420px`。按设计层自己的口径「定稿后：设计层 token → `src/styles/tokens.css`」
+     落进真源（去掉设计层的 `mk-` 前缀）。消费者：启动页的 `.history` 与两颗动作钮
+     （设计层要求**同宽对齐成一列**）。 */
+  --history-width:      420px;
+
+  /* ★ 「页面级卡片」的投影 —— 真值 = 设计层 `docs/mockup/assets/activate.css` 的
+     `--mk-card-shadow: 0 8px 28px var(--color-shadow)`（按设计层自己的口径落库，去掉 `mk-`）。
+     消费者：激活页的 `.card`。⚠️ 它与浮层那档（`--overlay-shadow`）**不是同一个东西**：
+     卡片是"落在页面上的一块"，浮层是"飘在内容上的"。 */
+  --card-shadow:        0 8px 28px var(--color-shadow);
 }
 
 /* ── 圆角风格联动：切 data-shape 时组件层自动跟随（无需改 L3）── */
 [data-shape='round'] {
   --btn-radius: var(--radius-lg);
   --field-radius: var(--radius-md);
-  --node-radius: var(--radius-lg);
 }

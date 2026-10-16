@@ -43,6 +43,8 @@ import { NewImagesPanel } from './NewImagesPanel';
 import { WEBVIEW_ALLOW_POPUPS } from './webviewAttrs';
 import { WatermarkPanel } from './WatermarkPanel';
 import { LovartSessionBar } from './LovartSessionBar';
+import { Icon } from '@/ui/common/Icon';
+import shared from '@/ui/common/shared.module.css';
 import styles from './BackendView.module.css';
 
 /**
@@ -425,7 +427,7 @@ export function BackendView({ visible, onClose }: BackendViewProps) {
             aria-expanded={!headCollapsed}
             onClick={() => setHeadCollapsed(!headCollapsed)}
           >
-            {headCollapsed ? '∨' : '∧'}
+            <Icon name="chevron" className={headCollapsed ? shared.iconDown : shared.iconUp} />
           </button>
         </div>
       )}

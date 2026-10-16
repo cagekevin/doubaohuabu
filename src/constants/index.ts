@@ -7,10 +7,11 @@
 
 // ─────────────────────────── 画布 ───────────────────────────
 
-/** 网格大小（原 `Bs`，shared.js:26148） */
+/**
+ * 网格大小（原 `Bs`，shared.js:26148）—— ★ **一个数管两处**：视觉点阵的间距 + `snapGrid`。
+ * ⚠️ 别为视觉再开第二个数：网格与吸附不一致时，节点会落在点与点之间。
+ */
 export const GRID_SIZE = 20;
-/** 网格透明度（原 `uT`，26149） */
-export const GRID_OPACITY = 0.4;
 /** 素材拖拽 MIME（原 `ql`，32373） */
 export const DRAG_MIME_MATERIAL = 'application/x-doubao-mat';
 /** 缩放范围（ReactFlow props） */

@@ -29,11 +29,11 @@ export function ErrorBanner({ errors, onDismiss, onClearAll }: ErrorBannerProps)
         {BACKEND_ERROR_LABEL[first.kind]}：{first.message}
         {errors.length > 1 ? `（共 ${errors.length} 条）` : ''}
       </span>
-      <button type="button" onClick={() => onDismiss(first.id)}>
+      <button type="button" className={styles.bannerAction} onClick={() => onDismiss(first.id)}>
         {BANNER_TEXT.dismiss}
       </button>
       {errors.length > 1 && (
-        <button type="button" onClick={onClearAll}>
+        <button type="button" className={styles.bannerAction} onClick={onClearAll}>
           {BANNER_TEXT.clearAll}
         </button>
       )}

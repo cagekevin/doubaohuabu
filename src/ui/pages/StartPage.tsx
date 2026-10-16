@@ -23,6 +23,7 @@ import { useProjectOps, useStore } from '@/state';
 import { orderProjectsByUpdatedAt } from '@/core/rules/project';
 import { formatRelativeTime } from '@/lib/time';
 import { EmptyState } from '@/ui/common/EmptyState';
+import { Icon } from '@/ui/common/Icon';
 import styles from './StartPage.module.css';
 
 export function StartPage() {
@@ -67,6 +68,9 @@ export function StartPage() {
   return (
     <div className={styles.page}>
       <div className={styles.brand}>
+        {/* 品牌标记 —— ★ 设计层要求「品牌行**加一颗品牌标记**」（真源 `.brandMark`，
+            尺寸在这一屏是 34px，见 `StartPage.module.css` 的 `.page` 上那条 token 覆盖）*/}
+        <span className={styles.brandMark} aria-hidden="true" />
         <h1 className={styles.brandName}>{BRAND.name}</h1>
         <p className={styles.brandTagline}>{BRAND.tagline}</p>
       </div>
@@ -100,9 +104,15 @@ export function StartPage() {
                   onClick={() => openProject(p.id)}
                   onDoubleClick={() => startRename(p.id, p.name)}
                 >
-                  <span>{p.name}</span>
+                  <span className={styles.projectName}>{p.name}</span>
                   <span className={styles.projectMeta}>{formatRelativeTime(p.updatedAt, nowMs)}</span>
                 </button>
+              )}
+              {/* 「打开」提示箭头 —— ★ **补足**：设计层注释要求「悬停 … + 出现一个"打开"箭头」，
+                  而它自己的 CSS/标记都没落地 ⇒ 本仓按同一套语言补（同一颗 `chevron`，
+                  常驻占位只切 `opacity`）。⚠️ 重命名态不显示（那时没有"打开"这一步）。 */}
+              {editingId === p.id ? null : (
+                <Icon name="chevron" className={styles.projectArrow} />
               )}
               {/*
                 「删除项目」（原 `_Component47.jsx:91-98`）—— `✕` 图标钮 + `confirm` + `deleteProject(id)`。
@@ -118,7 +128,7 @@ export function StartPage() {
                   if (window.confirm(PROJECT_TEXT.deleteConfirm(p.name))) deleteProject(p.id);
                 }}
               >
-                ✕
+                <Icon name="trash" />
               </button>
             </div>
           ))}
@@ -139,6 +149,8 @@ export function StartPage() {
       </button>
 
       <button type="button" className={styles.newProject} onClick={onNewProject}>
+        {/* ★ §7-D11：加号由**图标**承担（原来它是文案里的全角字符 `＋`，见 `BRAND.newProject` 的注释）*/}
+        <Icon name="plus" />
         {BRAND.newProject}
       </button>
     </div>

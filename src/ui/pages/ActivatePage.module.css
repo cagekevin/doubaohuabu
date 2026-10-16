@@ -1,6 +1,17 @@
 /**
  * 授权激活页（原 `W3.jsx` 的 `.license-*`）
+ *
  * ⚠️ 原则 5：色值只走 token
+ *
+ * ★ 2026-10-16（§5 `E01`–`E07`）：按**设计层** `docs/mockup/assets/activate.css` 对表。
+ *   真值就在它那份里 —— 它叠在 `spec/ui-real.css`（真机 CSS 的机械导出）之上，
+ *   同特异性靠书写顺序取胜 ⇒ 设计层写的覆盖真机那份。
+ * ⚠️ **三处明写的例外**（本地覆盖真源已设的属性，违反 §6 字面）—— 它们的共同点是
+ *    「设计层给的**形态**与真源默认不同，而这一档只有本页一个消费者（不到三振线）」：
+ *    ① `.card` 的 `border-radius`（真源 `.panel` 给 `--panel-radius`=`radius-md`，设计要 `radius-lg`）
+ *    ② `.card` 的 `box-shadow`（真源给 `--overlay-shadow`，设计要页面级卡片的 `--card-shadow`）
+ *    ③ `.primary` 的 `height` / `font-size`（真源**没有**大号按钮档，设计要 40 高 · `md` 字）
+ *    统一记在 §7/D 系列之外的本行正文里，改动前先看这里。
  */
 
 .screen {
@@ -10,14 +21,28 @@
   min-height: 100vh;
   padding: var(--space-4);
   background: var(--color-surface-base);
+  /* ★ 真值 = 设计层 `ActivatePage-screen`：顶部一层**品牌色氛围**（径向渐变，60% 处化开）
+     —— 这一屏是"落地页"，背景给一点品牌色比纯平底有身份感。 */
+  background-image: radial-gradient(
+    120% 80% at 50% 0%,
+    var(--color-brand-bg),
+    transparent 60%
+  );
+  /* ★ 品牌标记在这一屏是 **26px**（设计稿各页个体值，见 §7-D14：
+     首页顶栏 22 / 激活页 26 / 启动页 34）⇒ 在本页**根类**上覆盖该 token。 */
+  --brand-mark-size: 26px;
 }
 
 .card {
   composes: panel from '../common/shared.module.css';
-  gap: var(--space-3);
+  /* ★ 设计层 `ActivatePage-card`：`gap` 收一档到 `space-4` · 内距放大到 `space-6` */
+  gap: var(--space-4);
   width: 100%;
   max-width: 460px;
-  padding: var(--space-4);
+  padding: var(--space-6);
+  /* ⚠️ 例外 ① / ②（见文件头）：卡片皮与浮层皮不同档 */
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
 }
 
 .top {
@@ -26,26 +51,51 @@
   gap: var(--space-2);
 }
 
-/* 原 `.license-brand` */
-.brand {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
+/* 品牌标记 —— 激活页这一档**里面装一颗盾**（真值 = 设计层标记：`#i-shield`）。
+   ⚠️ 它与首页 / 启动页是**同一颗真源 `.brandMark`**，本地只留一条真差异：圆角。
+   内部图标 15px（设计层 `.mk-brand-mark .mk-icon { width/height: 15px }`）。 */
+.brandMark {
+  composes: brandMark from '../common/shared.module.css';
+  border-radius: var(--radius-md);
+}
+.brandMark > svg {
+  width: 15px;
+  height: 15px;
 }
 
-/* 原 `.license-sub` */
+/* 原 `.license-brand` —— ★ 设计层：`lg` → **`xl`** + 字距（它是这一屏唯一的标题） */
+.brand {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.02em;
+}
+
+/* 原 `.license-sub` —— ★ 设计层：用**负外边距**把它拉近品牌行（它俩是一组） */
 .sub {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+  margin-top: calc(-1 * var(--space-2));
 }
 
-/* 原 `.license-banner`（三态：ok / warn / err） */
+/*
+ * 原 `.license-banner`（三态：ok / warn / err）
+ * ★ 设计层 `ActivatePage-banner`：顶部对齐（图标与首行文字齐）· `gap`/`padding` 各放大一档 ·
+ *   **左侧 3px 粗边**（色 = `currentColor`，即语气**文字**色）· 圆角 `md`。
+ */
 .banner {
   display: flex;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-left: 3px solid currentColor;
+  border-radius: var(--radius-md);
 }
 
+/*
+ * 三档语气 —— 已是**软底彩字**（与设计稿的 `.mk-chip-status` / `B04f` 对 `.pill` 的裁定同一口径）。
+ * ⚠️ 设计稿的 banner 只有 ok / err 两档（它按"四条 banner"画，其中三条同色）；
+ *    真机的 `warn` 是**中间档**（"快过期"），保留 —— 三档语气承载真实语义。
+ */
 .ok {
   color: var(--color-success-text);
   background: var(--color-success-bg);
@@ -65,14 +115,17 @@
   flex: 0 0 auto;
 }
 
+/* ★ 设计层：题补 `sm` 档字号（原来只给字重）*/
 .bTitle {
   font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm);
 }
 
+/* ★ 设计层：描述行高 `snug` → **`relaxed`**（两三行说明，松一点更好读）*/
 .bDesc {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-snug);
+  line-height: var(--line-height-relaxed);
 }
 
 /* 原 `.btn.ghost.block`（重新检测） */
@@ -96,25 +149,40 @@
   font-size: var(--font-size-sm);
 }
 
-/* 原 `.machine-code-box` */
+/*
+ * 原 `.machine-code-box`
+ * ★ 设计层 `ActivatePage-codeBox`：`gap` / `padding` 各放大一档 + **补 1px 描边**
+ *   （原来只有沉底、没有边 ⇒ 与"卡片里的一块"分不出来）。
+ */
 .codeBox {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2);
+  gap: var(--space-2);
+  padding: var(--space-3);
   background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
+/*
+ * ★ 设计层 `ActivatePage-codeText`：`xs` → **`sm`** + 行高放松 + **字距 `.04em`** + **`user-select: all`**
+ *   （机器码是"要选中复制的一串"⇒ 点一下就该全选；字距放大才看得清字符边界）。
+ * ⚠️ `--font-mono` 是**本仓的选择**（设计层没提字族）：机器码等宽更易核对，保留。
+ */
 .codeText {
   word-break: break-all;
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  letter-spacing: 0.04em;
+  user-select: all;
 }
 
+/* ★ 设计层：两颗动作钮**靠右**（原左对齐）*/
 .codeActions {
   display: flex;
   gap: var(--space-1);
+  justify-content: flex-end;
 }
 
 .sm {
@@ -131,24 +199,42 @@
   cursor: not-allowed;
 }
 
-/* 原 `.license-hint` */
+/*
+ * 原 `.license-hint`
+ * ★ 设计层：行高 `snug` → **`relaxed`**。
+ * ⚠️ **有意不并到真源 `.hint`**：真源那档是 `faint` + **`2xs`**，而设计层给激活页的 hint 是
+ *    `faint` + **`xs`** + `relaxed` —— 两处**字号不同**（这正说明"真源 `.hint`"不能无脑套）。
+ */
 .hint {
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-snug);
+  line-height: var(--line-height-relaxed);
 }
 
-/* 原 `.license-input` */
+/*
+ * 原 `.license-input`
+ * ★ 设计层 `ActivatePage-input`：`min-height: 76px` + 行高放松。
+ * ⚠️ 原来自写 `font-size: xs` —— 那是**覆盖真源**（`--field-font-size` 本来就是 `sm`），
+ *    且比设计层小一档 ⇒ **删**，让真源的字号生效。
+ */
 .input {
   composes: field textarea from '../common/shared.module.css';
+  min-height: 76px;
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
 }
 
-/* 原 `.btn.primary.block.lg` */
-/* ★ 查 6：主按钮走共享真源 */
+/*
+ * 原 `.btn.primary.block.lg`
+ * ★ 查 6：主按钮走共享真源；`width: 100%` 走真源 `.btnBlock`（少一条本地覆盖）。
+ * ⚠️ 例外 ③（见文件头）：真源**没有**大号按钮档，而设计层要 `40 高 · md 字 · 字重 bold`。
+ */
 .primary {
-  composes: btn btnPrimary from '../common/shared.module.css';
+  composes: btn btnPrimary btnBlock from '../common/shared.module.css';
+  justify-content: center;
+  height: 40px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
 }
 
 .primary:disabled {
@@ -156,14 +242,37 @@
   cursor: not-allowed;
 }
 
-/* 原 `.license-msg` */
+/*
+ * 原 `.license-msg`（激活结果 / 失败原因）
+ * ★ 设计层 `ActivatePage-msg`：带**左粗边**的一条（`padding: space-2 space-3` · 左 3px ·
+ *   `radius-sm` · 行高 `snug`）。
+ * ⚠️ 语气类（`.ok` / `.warn` / `.err`）与 banner **共用**，而设计层给 msg 的左条色是
+ *    **实心档**（`.is-ok` → `--color-success`、`.is-err` → `--color-danger-border`），
+ *    与 banner 的 `currentColor` **不是同一套** ⇒ 在这里按"`.msg` + 语气类"的组合补。
+ */
 .msg {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
+  line-height: var(--line-height-snug);
+}
+.msg.ok {
+  border-left-color: var(--color-success);
+}
+.msg.err {
+  border-left-color: var(--color-danger-border);
+}
+/* `.warn` 设计层未给 msg 档 ⇒ **补足**：按 `.ok` 用实心档的同一规律取 `--color-warning` */
+.msg.warn {
+  border-left-color: var(--color-warning);
 }
 
-/* 原 `.license-foot` */
+/* 原 `.license-foot` —— ★ 设计层：补上分隔（上边框 + 上内距）*/
 .foot {
   color: var(--color-text-faint);
   font-size: var(--font-size-xs);
   text-align: center;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
 }

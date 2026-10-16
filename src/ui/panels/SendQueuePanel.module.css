@@ -4,18 +4,105 @@
  * ⚠️ 位置由 JS 给（拖拽 + localStorage），这里只兜底"没存过位置时贴左下"
  */
 
+/*
+ * ★ **形态变更：浮窗 → 抽屉**（真值 = `mockup.css:606-693` 的 `.mk-drawer` 一族）
+ *
+ * 设计稿把它改成**贴画布左缘的抽屉**：容器铺满画布左缘（只为定位）、面板满高贴边、
+ * 收起时只剩一个 **32px 圆钮把手**（带待办角标）—— 因此它**不再需要"拖动挪位置"**
+ * （那是浮窗形态的诉求：怕挡住画布；抽屉收起即让位）。
+ * ⚠️ 皮走**真源变体** `.panelDrawer`（`PanelShell` 的 `variant="drawer"`）——
+ *    按 `PanelShell` 的契约，形态差异不许用本地 `className` 覆盖。
+ * ⚠️ 定位也**不在这里**：交给外层 `.drawer`（它是定位上下文）。
+ */
 .panel {
-  composes: panel from '../common/shared.module.css';
-  position: fixed;
-  left: var(--space-2);
-  bottom: var(--space-2);
-  z-index: var(--z-overlay);
-  /* ★ 尺寸唯一真源在 SendQueuePanel.tsx 的 PANEL_W ／ PANEL_H（经这两个变量消费，防"夹取尺寸"漂移） */
-  width: var(--sq-panel-w, 320px);
-  max-height: var(--sq-panel-h, 260px);
+  position: relative;
   overflow: hidden;
   color: var(--color-text-strong);
   font-size: var(--font-size-xs);
+  /* 抽屉开合 = **面板整体滑出**（真值 = `mockup.css:1201-1216` 的
+     `.mk-drawer:not(.is-open) .mk-sq { transform: translateX(-100%) }`）*/
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+/* 收起态：面板左移出屏，**把手留在原处**（所以把手不是面板的子元素）*/
+.drawer:not(.drawerOpen) .panel {
+  transform: translateX(-100%);
+}
+
+/* 抽屉容器（真值 = `.mk-drawer`）—— 铺满画布左缘只为定位；**不吃指针**（否则整条会拦住画布） */
+.drawer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+}
+.panel,
+.drawerHandle {
+  pointer-events: auto;
+}
+
+/* 抽屉开关（真值 = `.mk-drawer-handle`）—— 32px 圆钮，**收起贴左缘、展开跟到面板右缘**，始终垂直居中 */
+.drawerHandle {
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: var(--z-overlay);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+.drawerHandle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+/* 展开时把手跟着走到面板右缘 */
+.drawerOpen .drawerHandle {
+  left: var(--sq-panel-w, 320px);
+}
+
+/* 待办角标（真值 = `.mk-drawer-badge`）—— "还有活没干完"的计数，用户需要看见 */
+.drawerBadge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 2px solid var(--color-surface-raised);
+  box-sizing: content-box;
+  border-radius: var(--radius-full);
+  background: var(--color-action-primary);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-none);
+}
+
+/*
+ * ② 内容折叠（真机原有那一级）—— 只留头部 + 进度条。
+ * ⚠️ 必须 `align-self: flex-start`：父 `.drawer` 是 `align-items: stretch`，
+ *    会把 `height: auto` 的面板**拉回满高** ⇒ 折叠了等于没折叠。
+ */
+.isCollapsed {
+  height: auto;
+  align-self: flex-start;
+}
+.isCollapsed .list,
+.isCollapsed .foot {
+  display: none;
 }
 
 /* 拖拽中关掉文本选中（否则会拖出一片蓝） */
@@ -23,10 +110,10 @@
   user-select: none;
 }
 
-/* 原 `.sq-head` —— 它是**拖动把手**（`cursor: move` 是真源未设的差异）*/
+/* 原 `.sq-head` —— ★ 走真源**常驻面板头**那一档（矮一档）。
+   ⚠️ 原来的 `cursor: move` 随**拖拽**一起删：抽屉钉在左缘满高，头不再是拖动把手。 */
 .head {
-  composes: panelHead from '../common/shared.module.css';
-  cursor: move;
+  composes: panelHeadCompact from '../common/shared.module.css';
 }
 
 
@@ -56,7 +143,14 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: var(--space-1) var(--space-2);
+  /* ★ 抽屉内**左右内距统一 12**（真值 = `mockup.css:620-626`：头 / 进度条 / 列表三处对齐
+     —— 原来各段自给 8，贴在栏里内容顶着边）*/
+  padding: var(--space-2) var(--space-3);
+}
+
+/* 进度条的左右内距（同上）—— 本地只**追加** margin（真源 `.progressTrack` 未设）*/
+.trackInset {
+  margin: 0 var(--space-3);
 }
 
 .item {

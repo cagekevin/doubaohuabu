@@ -59,6 +59,7 @@ import { NodeShell } from './NodeShell';
 import { NodeTitle } from './NodeTitle';
 import { RefAutocomplete, matchRefTrigger } from './RefAutocomplete';
 import type { RFNodeProps } from './types';
+import { Icon } from '@/ui/common/Icon';
 import styles from './shared.module.css';
 
 export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
@@ -481,7 +482,7 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
               clearNodeNotice(id);
             }}
           >
-            ×
+            <Icon name="x" />
           </button>
         </div>
       )}
@@ -535,7 +536,7 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
                     <span className={styles.matThumbPlaceholder}>{MATERIAL_NODE_TEXT.noImage}</span>
                   )}
                   <span className={styles.matThumbGrip} aria-hidden="true">
-                    ⠿
+                    <Icon name="grip" />
                   </span>
                 </div>
               );

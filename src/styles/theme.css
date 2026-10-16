@@ -13,30 +13,40 @@
 .xy-theme {
   /* ── 画布背景与网格 ── */
   --xy-background-color: var(--color-canvas);
-  --xy-background-pattern-color: var(--color-canvas-grid);
+  /* 点阵色 = 设计稿的 L3 旋钮 `--canvas-dot`（= `--color-canvas-grid`）；形状（点阵/线格）在 TSX */
+  --xy-background-pattern-color: var(--canvas-dot);
 
-  /* ── 连线 ── */
-  --xy-edge-stroke: var(--color-edge);
-  --xy-edge-stroke-width: 2;
+  /* ── 连线 ──
+     ★ 真值 = `docs/mockup/assets/mockup.css` 的 `.mk-edge`（走 `--edge-stroke*` 三个 token）：
+       中性灰 · **1px** —— 此前是品牌色 2px（线比节点还抢眼，且选中态与常态分不开）。 */
+  --xy-edge-stroke: var(--edge-stroke);
+  --xy-edge-stroke-width: var(--edge-stroke-width);
   --xy-edge-stroke-selected: var(--edge-stroke-selected);
 
-  /* ── 节点 ── */
-  --xy-node-border-radius: var(--radius-md);
+  /* ── 节点 ──
+     ⚠️ 节点卡片的壳（圆角 / 描边 / 底 / **阴影**）归 `nodes/shared.module.css` 的 `.node`
+        —— 它是 8 类节点共用的那张皮（设计稿 `.mk-node`）。这里把 ReactFlow 自带的
+          hover / selected 阴影**清成 none**：同一个效果只许一处来源，否则两张阴影叠加。 */
+  /* ⚠️ 圆角**必须与卡片同源**：ReactFlow 的包壳（`.react-flow__node`）与卡片同尺寸同底色，
+     它若用另一个圆角（或不写），方角会在卡片的圆角处露出一个小方块。 */
+  --xy-node-border-radius: var(--node-radius);
   --xy-node-background-color: var(--color-surface-raised);
   --xy-node-border: 1px solid var(--color-border);
-  --xy-node-boxshadow-hover: 0 2px 8px var(--color-shadow);
-  --xy-node-boxshadow-selected: 0 0 0 2px var(--node-selected-ring);
+  --xy-node-boxshadow-hover: none;
+  --xy-node-boxshadow-selected: none;
 
   /* ── 连接点 ── */
   --xy-handle-background-color: var(--handle-bg);
   --xy-handle-border-color: var(--color-surface-raised);
 
-  /* ── 控件（缩放/适配按钮）── */
+  /* ── 控件（缩放/适配按钮）—— 真值 = `mockup.css` 的 `.mk-canvas-controls` / `.mk-ctrl` ── */
   --xy-controls-button-background-color: var(--color-surface-raised);
-  --xy-controls-button-background-color-hover: var(--color-surface-sunken);
-  --xy-controls-button-color: var(--color-text-strong);
+  --xy-controls-button-background-color-hover: var(--color-surface-hover);
+  --xy-controls-button-color: var(--color-text-muted);
+  /* 悬停才提到强色（设计稿 `.mk-ctrl:hover`）*/
+  --xy-controls-button-color-hover: var(--color-text-strong);
   --xy-controls-button-border-color: var(--color-border);
-  --xy-controls-box-shadow: 0 1px 4px var(--color-shadow);
+  --xy-controls-box-shadow: var(--shadow-sm);
 
   /* ── MiniMap ── */
   --xy-minimap-background-color: var(--color-surface-raised);

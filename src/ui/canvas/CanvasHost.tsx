@@ -4,7 +4,7 @@
  * 依据：docs/过程.md §1
  *   - `<ReactFlow nodeTypes=dO edgeTypes=fO>` + Background(Lines/20/1) + Controls(showInteractive=false) + MiniMap
  *   - MiniMap 配色：material `#a5b4fc` / account `#34d399` / 其它 `#fcd34d`（走 CSS 变量）
- *   - 网格 `GRID_SIZE=20`、透明度 `GRID_OPACITY=0.4`、拖拽 MIME `DRAG_MIME_MATERIAL`
+ *   - 网格 `GRID_SIZE=20`（**视觉点阵与吸附共用这一个数**）、拖拽 MIME `DRAG_MIME_MATERIAL`
  *
  * 职责边界：
  *   - 本组件**只做 UI 与事件接线**；环检测在 `core/rules/graph`（经 `state.connect` 调用）
@@ -43,7 +43,7 @@ import { dragLeftContainer } from '@/lib/dragHover';
 import { fitMaterialSize } from '@/core/rules/materialGrid';
 import { readImageFile, readTextFile, stripExtension } from '@/lib/readDroppedFile';
 import { formatClockTime } from '@/lib/time';
-import { CONNECTION_RADIUS, DRAG_MIME_MATERIAL, EDGE_CLICK_DEBOUNCE_MS, FITVIEW_DURATION_MS, FITVIEW_FOCUS_DURATION_MS, GRID_OPACITY, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
+import { CONNECTION_RADIUS, DRAG_MIME_MATERIAL, EDGE_CLICK_DEBOUNCE_MS, FITVIEW_DURATION_MS, FITVIEW_FOCUS_DURATION_MS, GRID_SIZE, MAX_ZOOM, MIN_ZOOM } from '@/constants';
 import { CANVAS_TEXT } from '@/constants/text';
 import { CreatePanel, type CreatePanelState } from './CreatePanel';
 import { GroupConnectHandle } from './GroupConnectHandle';
@@ -54,6 +54,7 @@ import { NodePresetModal } from './NodePresetModal';
 import { buildClipboard, type ClipboardPayload } from '@/core/rules/clipboard';
 import { SplitKeywordModal } from '@/ui/nodes/SplitKeywordModal';
 import { SplitPresetPickerModal } from '@/ui/nodes/SplitPresetPickerModal';
+import { StatusBar } from './StatusBar';
 import styles from './CanvasHost.module.css';
 import shared from '@/ui/common/shared.module.css';
 
@@ -945,9 +946,22 @@ function Inner() {
         fitViewOptions={{ padding: 0.25, duration: FITVIEW_DURATION_MS }}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Lines} gap={GRID_SIZE} size={1} style={{ opacity: GRID_OPACITY }} />
+        {/* ★ **点阵**（设计稿 `mockup.css` 的 `.CanvasHost-wrap`：点阵比线格安静，不跟节点抢）。
+            ⚠️ 间距**仍用 `GRID_SIZE`**（= 吸附网格）—— 视觉网格必须与吸附网格同一个数，
+               否则节点会落在点与点之间。设计稿给的 `--canvas-dot-size: 24px` **不采纳**（见 plan §7-D20）。
+            ⚠️ 透明度也不要了：点阵色走 `--xy-background-pattern-color`（`--canvas-dot`）这一处，
+               再叠一层 0.4 会让点几乎看不见（原 `GRID_OPACITY` 是给线格用的）。 */}
+        <Background variant={BackgroundVariant.Dots} gap={GRID_SIZE} size={1} />
         <Controls showInteractive={false} />
-        <MiniMap nodeColor={(n) => MINIMAP_COLOR[n.type ?? ''] ?? 'var(--color-node-other)'} pannable zoomable />
+        {/* ★ 小地图尺寸 = 设计稿 `.mk-minimap`（160×100）—— 走 `style` **prop**（不是覆写第三方类名）。
+            ⚠️ `nodeColor` **保留按类型着色**（不用设计稿那个单一色）：小地图的信息价值就在于
+               "一眼看出哪里是哪类节点" ⇒ 已登记为有意偏离（plan §7-D21）。 */}
+        <MiniMap
+          nodeColor={(n) => MINIMAP_COLOR[n.type ?? ''] ?? 'var(--color-node-other)'}
+          style={{ width: 160, height: 100 }}
+          pannable
+          zoomable
+        />
         {/* ★ 组连线锚点（原 `_Component37`，`_Component42.jsx:1463`）—— 选中 ≥2 个节点才出现 */}
         <GroupConnectHandle onGroupConnectEnd={onGroupConnectEnd} />
       </ReactFlow>
@@ -1063,6 +1077,9 @@ function Inner() {
           />
         </Suspense>
       )}
+
+      {/* ★ 状态栏（设计稿新增的"画布身份条"）—— 它读 `useViewport()` ⇒ 必须住在 provider 内 */}
+      <StatusBar />
     </div>
   );
 }

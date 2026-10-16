@@ -34,7 +34,9 @@
 }
 
 .fuzzyMarkCurrent {
-  outline: 1px solid var(--color-warning);
+  /* ★ 补足：1px 描边走 **`-text` 档**而不是 `--color-warning`（后者是**实心填充色**档，
+     在深色主题里当细线用对比不足）。同 `.panelClose.isDanger` 的口径（描边/文字用 `-text`）。 */
+  outline: 1px solid var(--color-warning-text);
 }
 
 .fuzzyPanel {
@@ -52,6 +54,10 @@
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
+  /* ⚠️ **回退**（`C27` 时发现前提写错了）：这里原写 `--shadow-md`，我一度按
+     「全仓浮层只有一档阴影」改成 `--shadow-lg` —— 那个**前提是错的**：仓里实际**两档**
+     （面板 / 菜单走 `--overlay-shadow`；小浮条走 `--shadow-md`，如选择工具条），
+     而设计稿对阴影**没有表态** ⇒ 未表态的项**不擅改**，回退到 `--shadow-md`。 */
   box-shadow: var(--shadow-md);
   font-size: var(--font-size-xs);
 }
@@ -79,17 +85,10 @@
   flex: none;
 }
 
+/* 上 / 下一处 —— ★ 收口到真源 `.iconBtn`（22×22 图标微型钮，真值 = 设计稿的 `.mk-iconbtn`）。
+   原来是**自写的第三档尺寸** 18×18：比设计那档小 4，且低于 24 的可点尺寸。 */
 .fuzzyNav {
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
+  composes: iconBtn from '../common/shared.module.css';
 }
 
 .fuzzyNav:disabled {
@@ -149,6 +148,11 @@
   color: var(--color-text-faint);
   font-size: var(--font-size-2xs);
 }
+/* 图标按原内联 svg（22×22）**就近取 24 档** —— 它是「无预览」的空态标记，缩到默认 16 会显得轻 */
+.fuzzyThumbPlaceholder svg {
+  width: var(--dim-5);
+  height: var(--dim-5);
+}
 
 .fuzzyCardName {
   min-width: 0;
@@ -180,13 +184,8 @@
   color: var(--color-text-faint);
 }
 
+/* 「忽略」—— ★ 收口到真源 `.chipBtn`：它自写的 padding / 描边 / 圆角 / 字色 / 字号
+   与 `.chipBtn` **逐条同形**（只是没走真源）⇒ 纯 `composes`，本地不留任何覆盖。 */
 .fuzzyIgnore {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--font-size-2xs);
-  cursor: pointer;
+  composes: chipBtn from '../common/shared.module.css';
 }

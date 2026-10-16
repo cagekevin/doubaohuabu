@@ -3,16 +3,24 @@
  * ⚠️ 原则 5：色值只走 token。
  */
 
+/*
+ * ⚠️ `fixed` + **portal 到 `body`**（不是就地渲染）—— 两个理由，都踩过：
+ *   ① 它必须**跟着 `@` 跑**：就地渲染时 `absolute` 贴的是"最近定位祖先"的左下沿，
+ *      与光标无关（写 `left: 0; top: 100%` 只能贴在容器角上）；
+ *   ② 它**不能被裁**：正文容器（`.nodeBody` / 面板身）都有 `overflow: hidden`，
+ *      就地渲染会被整块裁掉。portal 出去后不再受任何祖先裁剪影响。
+ * 坐标由 `caretViewportRect()` 取（视口坐标），收边在组件里用 `useLayoutEffect` 直接改 style。
+ */
 .pop {
-  position: absolute;
-  left: 0;
-  top: 100%;
+  position: fixed;
   z-index: var(--z-overlay);
   /* ★ 查 5：菜单不写死宽度 —— 长素材名不折行，短名字不虚占 */
   width: max-content;
   min-width: 200px;
-  max-width: 360px;
-  max-height: 220px;
+  /* ⚠️ "比视口还宽"由这里兜（`min()`），"越界收回"归定位原语（`useAnchoredLayer` 的 shift）*/
+  max-width: min(360px, calc(100vw - 16px));
+  /* ⚠️ **不写 `max-height`**：高度由定位原语按可用空间算（size 那一步）——
+     两处各写一个数就是同一个值两个来源，而且它按视口动态算，CSS 写不出。 */
   overflow: auto;
   padding: var(--space-1);
   background: var(--color-surface-raised);
@@ -39,8 +47,10 @@
 
 .thumb {
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  /* ★ 设计稿未覆盖本浮层（只有引用条），按**同一套缩略图档**补足：行内小缩略图 = **22**
+     （真值 = `mockup.css` 的 `.mk-refbar-thumb`；原 20 是自定值，与设计那一档差 2）。 */
+  width: 22px;
+  height: 22px;
   object-fit: cover;
   border-radius: var(--radius-sm);
 }

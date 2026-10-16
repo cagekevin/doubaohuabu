@@ -121,6 +121,7 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
   return (
     <NodeShell
       type="download"
+      icon="download"
       title={DOWNLOAD_NODE_TEXT.title}
       meta={targets.length > 0 ? <span className={styles.nodeCount}>{targets.length}</span> : undefined}
       selected={selected}

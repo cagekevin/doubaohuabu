@@ -37,6 +37,7 @@ import { useHostOps, useLicenseOps } from '@/state';
 import type { LicenseStatus } from '@/core/model/license';
 import { formatDateTime, formatLicenseRemaining } from '@/core/rules/license';
 import { LICENSE_TEXT } from '@/constants/text';
+import { Icon } from '@/ui/common/Icon';
 import styles from './ActivatePage.module.css';
 
 export interface ActivatePageProps {
@@ -212,13 +213,20 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
     <div className={styles.screen} data-testid="activate-page">
       <div className={styles.card}>
         <div className={styles.top}>
+          {/* 品牌标记 —— ★ 设计稿的激活页标记**里面装一颗盾**（`#i-shield`；首页 / 启动页是**空方块**），
+              尺寸在这一屏是 26px（见 `ActivatePage.module.css` 的 `.screen` 上那条 token 覆盖，§7-D14）*/}
+          <span className={styles.brandMark} aria-hidden="true">
+            <Icon name="shield" />
+          </span>
           <div className={styles.brand}>{LICENSE_TEXT.brand}</div>
         </div>
         <div className={styles.sub}>{LICENSE_TEXT.sub}</div>
 
         {ok && (
           <div className={`${styles.banner} ${styles.ok}`}>
-            <span className={styles.icon}>✓</span>
+            <span className={styles.icon}>
+              <Icon name="check" />
+            </span>
             <div>
               <div className={styles.bTitle}>{LICENSE_TEXT.bannerOk}</div>
               <div className={styles.bDesc}>
@@ -232,7 +240,9 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
         )}
         {expired && (
           <div className={`${styles.banner} ${styles.warn}`}>
-            <span className={styles.icon}>⏱</span>
+            <span className={styles.icon}>
+              <Icon name="clock" />
+            </span>
             <div>
               <div className={styles.bTitle}>{LICENSE_TEXT.bannerExpired}</div>
               <div className={styles.bDesc}>
@@ -243,7 +253,9 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
         )}
         {invalid && (
           <div className={`${styles.banner} ${styles.err}`}>
-            <span className={styles.icon}>✕</span>
+            <span className={styles.icon}>
+              <Icon name="x" />
+            </span>
             <div>
               <div className={styles.bTitle}>{LICENSE_TEXT.bannerInvalid}</div>
               <div className={styles.bDesc}>{status?.reason || LICENSE_TEXT.bannerInvalidFallback}</div>
@@ -252,7 +264,9 @@ export function ActivatePage({ initialStatus, initialError, onActivated }: Activ
         )}
         {tampered && (
           <div className={`${styles.banner} ${styles.err}`}>
-            <span className={styles.icon}>⚠</span>
+            <span className={styles.icon}>
+              <Icon name="warn" />
+            </span>
             <div>
               <div className={styles.bTitle}>{LICENSE_TEXT.bannerTampered}</div>
               <div className={styles.bDesc}>{LICENSE_TEXT.bannerTamperedDesc}</div>

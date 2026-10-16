@@ -9,7 +9,10 @@
  *   |---|---|---|
  *   | **1 秒 tick** | 58-66 | 只要有 `sending` 或"还在生成中"的项 ⇒ 每秒 bump 一次 state，**让等待时长刷新**（`tc` 只算到调用那一刻） |
  *   | 拖动 | 90-140 | `pointerdown` 记起点 ⇒ `pointermove` 算位移 ⇒ **`clampPanelPosition` 夹进视口** ⇒ `pointerup` 落 `localStorage` |
- *   | 位置持久化 | `U3`/`Pp` | 键是 `LS_SENDQUEUE_POS`（**冻结契约字符串，走 `stable/contracts`**）；读写**经 `SendQueueController`** |
+ *   | ~~位置持久化~~ | ~~`U3`/`Pp`~~ | ⛔ **已随"浮窗 → 抽屉"删除**（`C25`）：抽屉钉在画布左缘、满高，**没有可移动的余地**
+ *     ⇒ `SendQueueController.readPanelPos` / `writePanelPos`、`StoragePort`/`PERSIST` 在本文件的依赖一并删净。
+ *     ⚠️ **契约键 `LS_SENDQUEUE_POS` 与 `persistKeys` 里的条目仍保留** —— 它是 `stable/contracts` 里的
+ *     **冻结字符串**，删它属于动契约（老数据/迁移可能仍要认它），收益不成比例 |
  *   | 折叠 | 196-206 | `.sq-chevron` |
  *   | 进度条 | 209-215 | 完成数 / 总数 |
  *   | 列表 | 216-269 | 序号 + 名称 + 账号（未分配 ⇒ 待分配）+ 第N次 + note + 两个动作 + **成片行** |
@@ -31,10 +34,9 @@
  *   —— 面板位置的读写经控制器，`ports.storage` 不进 `ui`（TD-16-8）。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cssVars } from '@/ui/common/cssVars';
 import { useSendQueue, useStore } from '@/state';
-import { clampPanelPosition } from '@/core/rules/sendQueuePanel';
 import {
   formatElapsed,
   resolveGenProgress,
@@ -45,17 +47,19 @@ import {
 import { queueStats } from '@/core/rules/sendQueueOps';
 import { nextPoolStrategy } from '@/core/rules/accountPick';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
+import { Icon } from '@/ui/common/Icon';
 import styles from './SendQueuePanel.module.css';
 import shared from '@/ui/common/shared.module.css';
 import { PanelShell } from '@/ui/common/PanelShell';
 
 /**
- * 面板尺寸（★ **唯一真源** —— `SendQueuePanel.module.css` 经 `--sq-panel-w` ／ `--sq-panel-h` 消费）
+ * 抽屉宽（★ **唯一真源** —— `SendQueuePanel.module.css` 经 `--sq-panel-w` 消费）
  *
- * 依据：原 `Qd(e, t, n, r)` 的 `n`/`r` —— 用于把坐标夹进视口（`clampPanelPosition`）。
+ * ⚠️ 原还有一个 `PANEL_H`（260）：那是**浮窗**形态的高度上界（配 `clampPanelPosition` 把坐标夹进视口）。
+ *    改成抽屉后它是**满高**的（真值 = `mockup.css` 的 `.mk-sq { height: 100%; max-height: none }`）
+ *    ⇒ `PANEL_H` 与 `--sq-panel-h` 一起**删**。
  */
 const PANEL_W = 320;
-const PANEL_H = 260;
 /** tick 间隔（原 61-65 的 `setTimeout(…, 1000)`） */
 const TICK_MS = 1000;
 
@@ -95,6 +99,14 @@ export function SendQueuePanel() {
   const items = useMemo(() => queue?.items ?? [], [queue]);
   const paused = !!queue?.paused;
 
+  /**
+   * ★ **两级折叠**（真值 = `mockup.css:688-693` 与 `1201-1216`）—— 它们是**两个不同的动作**：
+   *   ① `open` = **整个抽屉**开合：收起时面板 `translateX(-100%)` 滑出、**把手留在左缘**。
+   *      默认 **收起** —— 设计稿原话：「默认收成一条竖钮（贴画布左缘），点开即本面板」
+   *      （标记里那个 `is-open` 只是它要展示面板内容）。
+   *   ② `collapsed` = **内容**折叠：只留头部 + 进度条（列表与脚藏起来）。
+   */
+  const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   /**
    * 当前时刻（ms）—— ★ **必须收进 state**：渲染期直接调 `Date.now()` 是**不纯调用**
@@ -103,23 +115,12 @@ export function SendQueuePanel() {
    *   —— 「已完成」那一档用的是 `resultAt`，不依赖"现在几点"）。
    */
   const [nowMs, setNowMs] = useState(() => Date.now());
-  /**
-   * 面板位置（`null` = 没存过 ⇒ 走 CSS 的左下角兜底）
-   * ★ **初始就夹一次**：不在 `useEffect` 里同步 `setState`（那会触发级联渲染，
-   *   与 `BackendView` 那次被拦下的是同一条规则）—— 读盘时就把它夹进视口。
+  /*
+   * ⚠️ 这里原有一整套**浮窗拖拽**（位置 state + `readPanelPos`/`writePanelPos` 落 localStorage
+   *    + `clampPanelPosition` 夹进视口）—— 随形态变更**整块删**：
+   *    抽屉钉在画布左缘、满高，**没有可移动的余地**（收起即让位，不再需要"拖开"）。
+   *    设计稿头上留着的 `title="拖动可移动面板位置"` 是它照抄真机头的结果，不是抽屉的诉求。
    */
-  const [pos, setPos] = useState(() => {
-    // ★ 位置读写**经控制器**（`ui` 不再持 `StoragePort` —— TD-16-8）
-    const p = q.readPanelPos();
-    if (!p) return null;
-    return clampPanelPosition(p.x, p.y, PANEL_W, PANEL_H, {
-      w: window.innerWidth || 1280,
-      h: window.innerHeight || 800,
-    });
-  });
-  const [dragging, setDragging] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
   const stats = useMemo(() => queueStats(items), [items]);
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
@@ -140,61 +141,6 @@ export function SendQueuePanel() {
     return () => clearTimeout(id);
   }, [busy, collapsed, items, nowMs]);
 
-  /** 开始拖（原 90-100：只认左键 / 主指针） */
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button != null && e.button !== 0) return;
-      const rect = panelRef.current?.getBoundingClientRect();
-      // 第一次拖时面板还没设过坐标 ⇒ 以当前实际位置为起点
-      const orig = pos ?? { x: Math.round(rect?.left ?? 0), y: Math.round(rect?.top ?? 0) };
-      dragRef.current = { startX: e.clientX, startY: e.clientY, origX: orig.x, origY: orig.y };
-      setPos(orig);
-      setDragging(true);
-    },
-    [pos],
-  );
-
-  /**
-   * 拖动（原 101-140）
-   * ⚠️ 与源一致：位移是**相对起点**的（`clientX - startX`），不是"跟随鼠标绝对坐标" ——
-   *   否则一按下去面板会跳一下（起点不在标题栏左上角时）。
-   */
-  useEffect(() => {
-    if (!dragging) return;
-    const move = (e: PointerEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      setPos(
-        clampPanelPosition(
-          d.origX + (e.clientX - d.startX),
-          d.origY + (e.clientY - d.startY),
-          PANEL_W,
-          PANEL_H,
-          { w: window.innerWidth || 1280, h: window.innerHeight || 800 },
-        ),
-      );
-    };
-    const up = () => {
-      setDragging(false);
-      dragRef.current = null;
-      setPos((cur) => {
-        if (cur) q.writePanelPos(cur);
-        return cur;
-      });
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    // 原 137 还监听了 `pointercancel`（触屏被系统打断）
-    window.addEventListener('pointercancel', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-    };
-    // ⚠️ 控制器必须进依赖（`up` 里用它写位置）—— 它来自 context ⇒ 是**稳定引用**，
-    //    加进来**不会**导致重复绑定（这是当初那条 eslint warning 的正确修法：改**代码**，不是放宽门禁）
-  }, [dragging, q]);
-
   /**
    * ★ **队列为空 ⇒ 整个面板不渲染**（原 `z3.jsx:186-188`：`if (!m.length) return null;`）
    *
@@ -205,55 +151,79 @@ export function SendQueuePanel() {
   if (items.length === 0) return null;
 
   const done = stats.success + stats.failed + stats.cancelled;
+  /** 待办（还没结束的）—— 把手上那个角标（真值 = `.mk-drawer-badge`）*/
+  const pending = stats.total - done;
+  /**
+   * 总进度条 —— ★ 提出来是**为了让它不被内容折叠藏掉**：
+   * 设计稿的「内容折叠」= 只留头部 + **进度条**（`mockup.css:688-690` 只 `display:none` 了列表与脚）。
+   */
+  const progressBar = (
+    <div className={`${shared.progressTrack} ${styles.trackInset}`}>
+      <div
+        className={shared.progressFill}
+        style={{ width: `${stats.total ? Math.round((done / stats.total) * 100) : 0}%` }}
+      />
+    </div>
+  );
 
   return (
-    <PanelShell
-      wrapperRef={panelRef}
-      className={`${styles.panel} ${dragging ? styles.dragging : ''}`}
-      // 没拖过时贴左下角（源版默认也是屏幕左下，位置来自 `U3` 的兜底）
-      // ★ 尺寸经 CSS 变量下发（唯一真源 = 上面的 PANEL_W ／ PANEL_H）—— 防"夹取尺寸与实渲染尺寸"漂移
-      style={cssVars({
-        ...(pos ? { left: pos.x, top: pos.y } : {}),
-        '--sq-panel-w': `${PANEL_W}px`,
-        '--sq-panel-h': `${PANEL_H}px`,
-      })}
-      testId="send-queue-panel"
-      title={SEND_QUEUE_TEXT.title}
-      meta={
-        <>
-          <span className={styles.conc} title={SEND_QUEUE_TEXT.concurrencyTitle(concurrency)}>
-            {`×${concurrency}`}
-          </span>
-          <span className={styles.statusline}>
-            {paused ? SEND_QUEUE_TEXT.paused : SEND_QUEUE_TEXT.running(done, stats.total)}
-          </span>
-        </>
-      }
-      actions={
-        <button
-          type="button"
-          className={styles.chevron}
-          onClick={(e) => {
-            e.stopPropagation();
-            setCollapsed((v) => !v);
-          }}
-        >
-          {collapsed ? '▼' : '▲'}
-        </button>
-      }
-      headProps={{ title: SEND_QUEUE_TEXT.dragTitle, onPointerDown }}
+    /* ★ **抽屉**（真值 = `mockup.css:606-693`）：容器铺满画布左缘**只为定位**、且不吃指针；
+       `--sq-panel-w` 下发在**容器**上 —— 把手（展开时要跟到面板右缘）与面板都要读它。 */
+    <div
+      className={`${styles.drawer}${open ? ` ${styles.drawerOpen}` : ''}`}
+      style={cssVars({ '--sq-panel-w': `${PANEL_W}px` })}
+      data-testid="send-queue-drawer"
     >
+      {/* 抽屉开关（设计稿原话：「一个圆钮：图标 + 角标，**不写字**」）*/}
+      <button
+        type="button"
+        className={styles.drawerHandle}
+        title={SEND_QUEUE_TEXT.title}
+        aria-label={SEND_QUEUE_TEXT.title}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="queue" />
+        {pending > 0 && <span className={styles.drawerBadge}>{pending}</span>}
+      </button>
 
-      {!collapsed && (
-        <>
-          <div className={shared.progressTrack}>
-            <div
-              className={shared.progressFill}
-              style={{ width: `${stats.total ? Math.round((done / stats.total) * 100) : 0}%` }}
-            />
-          </div>
+      <PanelShell
+        variant="drawer"
+        className={`${styles.panel}${collapsed ? ` ${styles.isCollapsed}` : ''}`}
+        testId="send-queue-panel"
+        /* ★ 头走**常驻面板头**那一档（真源 `.panelHeadCompact`，矮一档 + 36 高）。
+           ⚠️ 本地 `.head` 此前**是死类** —— `PanelShell` 内部渲染 `shared.panelHead`，
+              从来没被传进去；现在经 `headProps.className` 真接上。 */
+        headProps={{ className: styles.head }}
+        title={SEND_QUEUE_TEXT.title}
+        meta={
+          <>
+            <span className={styles.conc} title={SEND_QUEUE_TEXT.concurrencyTitle(concurrency)}>
+              {`×${concurrency}`}
+            </span>
+            <span className={styles.statusline}>
+              {paused ? SEND_QUEUE_TEXT.paused : SEND_QUEUE_TEXT.running(done, stats.total)}
+            </span>
+          </>
+        }
+        actions={
+          <button
+            type="button"
+            className={styles.chevron}
+            onClick={(e) => {
+              e.stopPropagation();
+              setCollapsed((v) => !v);
+            }}
+          >
+            <Icon name="chevron" className={collapsed ? shared.iconDown : shared.iconUp} />
+          </button>
+        }
+      >
+        {progressBar}
 
-          <div className={styles.list}>
+        {!collapsed && (
+          <>
+            <div className={styles.list}>
             {items.map((it, idx) => {
                 const node = nodeById.get(it.nodeId);
                 // ★ 该节点是否已有出片（原 `ke` = `H.data.resultUrl || H.data.resultPoster`）——
@@ -368,6 +338,7 @@ export function SendQueuePanel() {
           </div>
         </>
       )}
-    </PanelShell>
+      </PanelShell>
+    </div>
   );
 }

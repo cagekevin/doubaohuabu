@@ -29,6 +29,8 @@ import { formatBytes } from '@/core/rules/downloadNode';
 import { galleryItemDims } from '@/core/rules/materialGrid';
 import { formatDateTimeMinute } from '@/lib/time';
 import type { LovartImage } from '@/core/rules/lovartGallery';
+import { Icon } from '@/ui/common/Icon';
+import shared from '@/ui/common/shared.module.css';
 import styles from './GalleryLightbox.module.css';
 
 
@@ -133,11 +135,11 @@ export function GalleryLightbox({
     >
       <div className={styles.stage}>
         <button type="button" className={styles.nav} title={GALLERY_TEXT.prev} onClick={onPrev}>
-          ‹
+          <Icon name="chevron" className={shared.iconLeft} />
         </button>
         <img className={styles.img} src={item.dataUrl} alt={item.name} />
         <button type="button" className={styles.nav} title={GALLERY_TEXT.next} onClick={onNext}>
-          ›
+          <Icon name="chevron" />
         </button>
       </div>
     </Modal>

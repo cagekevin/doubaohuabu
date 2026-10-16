@@ -25,6 +25,7 @@ import { createPortal } from 'react-dom';
 import { BaseEdge, getBezierPath, useReactFlow, type EdgeProps } from '@xyflow/react';
 import { useStore } from '@/state';
 import { EDGE_TEXT } from '@/constants/text';
+import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
 import styles from './InteractiveEdge.module.css';
 
 /** 悬停多久开气泡（原 `B3.jsx:24` 的 `v = 1000`） */
@@ -65,6 +66,17 @@ export function InteractiveEdge({
   const [open, setOpen] = useState(false);
   /** 指针屏幕坐标（原 `p`） */
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  /**
+   * ★ 气泡摆位交给**浮层定位原语**（`B06`）—— 锚点就是**指针位置**。
+   * ⚠️ 一处**可见的行为差异**（记在 `B06` 行）：原来是 `transform: translate(-50%, -50%)`
+   *    **以指针为中心**；原语统一成"锚点右下方 + 越界收边/翻转" ⇒ 气泡会出现在指针**右下**、
+   *    贴边时自动收回视口。这是"全库浮层同一种摆法"的代价，换来的是不再有溢出。
+   */
+  const { ref: bubbleRef, style: bubbleStyle } = useAnchoredLayer({
+    open: open && pointer !== null,
+    anchor: pointer,
+    depsKey: '',
+  });
   const showTimer = useRef<number | null>(null);
   const hideTimer = useRef<number | null>(null);
 
@@ -171,8 +183,9 @@ export function InteractiveEdge({
         pointer &&
         createPortal(
           <div
+            ref={bubbleRef}
             className={`${styles.edgeActions} nodrag nopan`}
-            style={{ left: pointer.x, top: pointer.y }}
+            style={bubbleStyle}
             onMouseEnter={arm}
             onMouseLeave={scheduleHide}
           >

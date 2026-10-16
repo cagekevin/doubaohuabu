@@ -19,10 +19,20 @@
   flex-direction: column;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  /* ★ 真值 = `mockup.css` 的 `.mk-node`：圆角与阴影都走 **L3 旋钮**（`--node-radius` / `--node-shadow`）。
+     ⚠️ 此前写死 `--radius-md`、且**没有阴影** —— 那两个旋钮因此"定义了没人用"（`css -- check vars` 一直报），
+        阴影另由 ReactFlow 包在 `.react-flow__node` 上画（同一个效果两处来源）。现在收进卡片这一处。 */
+  border-radius: var(--node-radius);
+  box-shadow: var(--node-shadow);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
   font-size: var(--font-size-sm);
   /* ⚠️ **本层不得裁溢出**：端口圆心贴在节点边缘上（外移半个自身尺寸）⇒ 一裁就成半圆，
      且「有的节点裁、有的不裁」会让端口**部分正常部分残缺**。裁剪下移到 `.nodeBody`。 */
+}
+/* 悬停抬阴影（设计稿 `.mk-node:hover`）—— ⚠️ 必须写在 `.node.selected` **之前**：
+   两者同为 0,2,0，靠书写顺序分胜负，选中态不能被悬停态盖掉。 */
+.node:hover {
+  box-shadow: var(--node-shadow-hover);
 }
 
 /**
@@ -36,7 +46,9 @@
   overflow: visible;
 }
 
-.selected {
+/* ⚠️ 写成 `.node.selected`（0,2,0）不是 `.selected`（0,1,0）：要与上面的 `.node:hover` **同权重**，
+   才能靠"写在后面"取胜 —— 否则悬停会把选中光环盖掉。 */
+.node.selected {
   border-color: var(--node-selected-border);
   box-shadow: 0 0 0 2px var(--node-selected-ring);
 }
@@ -50,7 +62,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-head`：高度是**定值**（`--node-head-height` = 32）
+     ⇒ 纵向内距改由高度决定（写 `padding: var(--space-1) …` 会让头高随内容浮动，8 类节点不齐） */
+  height: var(--node-head-height);
+  padding: 0 var(--space-2);
   background: var(--color-surface-sunken);
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-muted);
@@ -62,17 +77,18 @@
 
 /* 类型圆点（mockup `.node-dot`）—— 颜色由**根**的 `data-type` 一处决定 */
 .nodeDot {
-  width: 8px;
-  height: 8px;
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-dot`：6×6（原 8×8 —— 圆点越大小图越像"彩色噪点"）*/
+  width: 6px;
+  height: 6px;
   border-radius: var(--radius-full);
   flex: 0 0 auto;
 }
-/* 组的文件夹图标（dot 槽有内容 = 覆盖默认类型圆点）—— 不套 8×8 圆点 */
-.nodeDot:not(:empty) {
-  width: auto;
-  height: auto;
-  border-radius: 0;
-  background: none;
+/* 头部的**类型图标**（真值 = `mockup.css` 的 `.mk-node-icon`：14px，色随头部的 `text-muted`）
+   ssot-space-ok: 逐字对源 —— `mockup.css` 的 `.mk-node-icon { width: 14px; height: 14px }` */
+.nodeIcon {
+  flex: none;
+  width: 14px;
+  height: 14px;
 }
 .node[data-type='text'] .nodeDot     { background: var(--node-dot-text); }
 .node[data-type='material'] .nodeDot { background: var(--node-dot-material); }
@@ -84,12 +100,15 @@
 
 /* 标题（mockup `.node-title`）—— 可收缩出省略号 */
 .nodeTitle {
-  flex: 0 1 auto;
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-title`：标题**吃掉剩余宽度**（`flex: 1`），
+     且**加一档字重**（原 `flex: 0 1 auto` + 常规字重 —— 标题与中槽在视觉上分不开）*/
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-strong);
+  font-weight: var(--font-weight-medium);
 }
 
 /* 生成节点标题后的自定义标签（原 `gv-label`：`label && label !== 默认标题` 时显示）—— 次要小字 */
@@ -106,6 +125,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-mid`：中槽是**次要信息**（默认弱色，具体节点可覆盖）*/
+  color: var(--color-text-faint);
+  white-space: nowrap;
 }
 
 /* 右槽（mockup `.node-head-actions`）—— margin-left:auto 推到最右 */
@@ -113,7 +135,8 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  /* ★ 真值 = `.mk-node-actions`：`--space-half`（原 `--space-1` —— 头里的小钮挨太开）*/
+  gap: var(--space-half);
   margin-left: auto;
 }
 
@@ -135,6 +158,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-body`：正文内件之间留一档间距（原无 gap ⇒ 各节点自己写 margin）*/
+  gap: var(--space-2);
   padding: var(--space-2);
   /* 正文区裁溢出（通栏媒体的圆角靠它）；顶部两角不裁，免得切掉头部的圆角背景 */
   overflow: hidden;
@@ -198,6 +223,10 @@
   flex: 1 1 auto;
   min-height: 140px;
   overflow: hidden;
+  /* ★ 真值 = `mockup.css` 的 `.mk-stage`：舞台自带**圆角 + 沉底**（原缺这两条 ——
+     图像没铺满时底色是"卡片色"，看不出这是个"舞台"）。**三类媒体节点共用它**：素材 / 文生图 / 文生视频。 */
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-sunken);
 }
 
 .gvWaiting {
@@ -274,15 +303,17 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:449 的 `.gv-play { width/height: 26px }` */
-  width: 26px;
-  height: 26px;
+  /* ★ 真值 = `mockup.css` 的 `.mk-stage-play`：**34×34**（原 26 —— 舞台上唯一的主动作，
+     26 在 16:9 的舞台里太小、不好点）· 底走**媒体遮罩** `--color-scrim`、字恒白 `--color-on-scrim`
+     （原来用 `--color-mask-strong` + `--color-text-on-brand`：那是"界面遮罩"的色，
+      压在**图/视频**上会偏黑并随主题反转）*/
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: var(--radius-full);
-  background: var(--color-mask-strong);
-  color: var(--color-text-on-brand);
-  font-size: var(--font-size-xs);
+  background: var(--color-scrim);
+  color: var(--color-on-scrim);
 }
 
 /**
@@ -299,14 +330,18 @@
 }
 
 .gvDurBadge {
+  /* ★ 真值 = `mockup.css` 的 `.mk-stage-badge`：**左上**（原右上 —— 那里是**下载钮**的位置，
+     两件挤在右上角既挤又分不清谁是"时长"谁是"动作"）· 底走**媒体遮罩** `--color-scrim` ·
+     字恒白 `--color-on-scrim` · 字号 2xs（它是一个角标，不是正文） */
   position: absolute;
-  right: var(--space-1);
+  left: var(--space-1);
   top: var(--space-1);
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
-  background: var(--color-mask-strong);
-  color: var(--color-text-on-brand);
-  font-size: var(--font-size-xs);
+  background: var(--color-scrim);
+  color: var(--color-on-scrim);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-tight);
 }
 
 /**
@@ -321,34 +356,46 @@
 /* `gv-dl` 下载（原 `.gv-dl`，`YL.jsx:513`）—— 舞台右下角浮层 */
 .gvDl {
   position: absolute;
+  /* ★ 真值 = `mockup.css` 的 `.mk-stage-dl`：**右上角**（原 `bottom` —— 设计与 `.mk-stage-badge`
+     分工：角标占左上、下载占右上；压在右下会与播放条那一族抢位置）· **28×28**（原 20：它是舞台上的**动作**，
+     20 太小难点）· 底走媒体遮罩 `--color-scrim`、字 `--color-on-scrim`（原用"界面遮罩"色）*/
   right: var(--space-1);
-  bottom: var(--space-1);
-  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:451 的 `.gv-dl { width/height: 20px }` */
-  width: 20px;
-  height: 20px;
+  top: var(--space-1);
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  background: var(--color-mask-strong);
-  color: var(--color-text-on-brand);
+  background: var(--color-scrim);
+  color: var(--color-on-scrim);
   font-size: var(--font-size-xs);
 }
 
+/*
+ * 舞台内的播放进度 —— ★ 真值 = `mockup.css` 的 `.mk-stage-timeline`（**文生视频节点**那一格）：
+ *   **贴舞台底边的细条**（全宽、无圆角、无旋钮），底 `--color-media-track`、填充 `--color-action-primary`。
+ *
+ * ⚠️ 形态纠错（原判它是"舞台**下方**的播放条"）：它一直渲染在**舞台内**
+ *    （`GenVideoNode.tsx` 的 `.gvStage` 里），而"圆角轨道 + 旋钮"是设计稿给**视频（出片）节点**
+ *    的 `.mk-vt` 形态 ⇒ 两者错位。此处按 `.mk-stage-timeline` 改：**去掉圆角与旋钮**。
+ * ⚠️ 但**保留 seek**：拖动/点击定位的处理器挂在 `.gvTl` **本身**（`seekFromPointer`），
+ *    与旋钮无关 ⇒ 去旋钮不丢功能（设计稿的静态细条画不出手柄，不等于要丢）。
+ * ⚠️ 圆角由舞台裁（`.gvStage` 有 `overflow: hidden` + 圆角）⇒ 这里不写圆角，贴边才严丝合缝。
+ */
 .gvTl {
-  display: flex;
-  align-items: center;
-  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:452 的 `.gv-tl { height: 14px }` */
-  height: 14px;
-  padding: 0 var(--space-2);
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--progress-height);
+  /* 它是**可点的定位区**（不是纯指示）⇒ 给出手型；设计稿未覆盖此交互细节 */
+  cursor: pointer;
 }
 
 .gvTlTrack {
-  flex: 1;
-  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:453 的 `.gv-tl-track { height: 3px }` */
-  height: 3px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-sunken);
   position: relative;
+  height: 100%;
+  background: var(--color-media-track);
 }
 
 .gvTlFill {
@@ -356,20 +403,7 @@
   left: 0;
   top: 0;
   height: 100%;
-  border-radius: var(--radius-full);
   background: var(--color-action-primary);
-}
-
-.gvTlKnob {
-  position: absolute;
-  top: 50%;
-  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:455 的 `.gv-tl-knob { width/height: 8px; border: 2px }` */
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-raised);
-  border: 2px solid var(--color-action-primary);
-  transform: translate(-50%, -50%);
 }
 
 /*
@@ -380,9 +414,11 @@
  *   ⇒ 本刀按源改为底部独立行（头部右槽留给源的 `gv-head-grow` / `gv-hist-btn`）。
  */
 .gvMeta {
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--font-size-xs);
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-meta`：`2xs` + `line-height: none`（原 `xs`）
+     ⚠️ 顺带收掉它自带的 `padding`: 内距归 `.nodeBody`（同一段间距不许两个来源）。 */
   color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-none);
 }
 
 .gvDur {
@@ -415,12 +451,15 @@
 
 /* `ig-chip-status`（原 `.ig-chip-status`，`ZL.jsx:218`）—— 样式真源 = mockup.css:466（逐字译） */
 .igChipStatus {
-  flex-shrink: 0;
+  /* ★ 真值 = `mockup.css` 的 `.mk-chip-status`：**软底彩字**（info 那对 token）+ `2xs`。
+     原写 sunken 底 + `xs` + muted ⇒ 它是"进行中"的**状态**，却长得像一段贴了底的普通文字。 */
+  flex: none;
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-sunken);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-tight);
   white-space: nowrap;
 }
 
@@ -429,15 +468,20 @@
  * 样式真源 = `docs/mockup/assets/mockup.css:459`（逐字译）。
  * ⚠️ `.gv-frame-btn` mockup **未定义** ⇒ 走**真源按钮类**（`composes`），不编造配色。
  */
+/* 三帧按钮行（放大镜 / 下载 / 更多 那类小钮）—— ★ 真值 = `mockup.css` 的 `.mk-frame-actions`：
+   居中 + `overflow: hidden`，**不带自带内距**（内距归 `.nodeBody`）*/
 .gvFrameActions {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space-1);
-  padding: 0 var(--space-2) var(--space-2);
+  overflow: hidden;
 }
 
 .gvFrameBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  /* ★ 真值 = `.mk-frame-actions .mk-chipbtn`：它们是**最小的**微型钮（2xs 字 + 3px 横内距）*/
+  composes: chipBtn from '../common/shared.module.css';
+  font-size: var(--font-size-2xs);
+  padding: 0 3px;
 }
 
 /*
@@ -461,7 +505,14 @@
   background: var(--btn-ghost-bg-hover);
 }
 
+/*
+ * 出片历史弹层 —— ★ 真值 = 设计稿 **⑧**（`index.html:861-875`）：`.panel.mk-pop` 的皮
+ *   + `panelHead/panelTitle`（「出片记录（3）」）+ body 里**若干 `.mk-menu-item`**。
+ * ⚠️ 此前这里把**面板皮**（底 / 描边 / 圆角 / 阴影）又自绘了一遍 ⇒ 改走真源 `.panel`。
+ * ⚠️ 定位与尺寸是**真差异**（真源未设）⇒ 留在本地。
+ */
 .gvHistPop {
+  composes: panel from '../common/shared.module.css';
   position: fixed;
   z-index: var(--z-overlay);
   /* ssot-space-ok: 逐字对源 —— `YL.jsx:415` 的 `innerWidth - 264 - 8` 假定弹层宽 264px */
@@ -472,26 +523,17 @@
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-2);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
 }
 
+/* 题 = 设计稿的 `panelTitle`（面板题），不是 `sectionTitleSub`（那是**小节副题**，另一档）*/
 .gvHistTitle {
-  composes: sectionTitleSub from '../common/shared.module.css';
+  composes: panelTitle from '../common/shared.module.css';
 }
 
+/* 项 —— ★ 真值 = 设计稿 ⑧ 的 `.mk-menu-item`（缩略图 + 两行文字块，单行横排）
+   ⇒ 走 `B05` 落的真源 `.menuItem`；本地只留两个**设计未画但真实存在**的状态。 */
 .gvHistItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
+  composes: menuItem from '../common/shared.module.css';
 }
 
 .gvHistItemSel {
@@ -507,9 +549,13 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: var(--space-5);
-  height: var(--space-4);
-  border-radius: var(--radius-xs);
+  /* ★ 真值 = `mockup.css` 的 `.mk-hist-thumb`：**40×28**（原 `space-5`×`space-4` = 32×24）
+     ＋ 与前两类缩略图**同一个壳**（`radius-sm` + 1px 描边，见设计层把
+     `.mk-hist-thumb` / `.mk-group-child` / `.mk-refbar-thumb` 三条并在一起写）。 */
+  width: 40px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
   background: var(--color-surface-sunken);
   object-fit: cover;
   font-size: var(--font-size-xs);
@@ -525,43 +571,34 @@
   min-width: 0;
 }
 
+/* 第一行（`#1 · 10-14 21:30 · 豆包01`）—— ★ 设计稿那行**不给类** ⇒ 继承项的色与字号。
+   ⚠️ 原写 `muted` + `xs`：**比第二行还弱**（第二行是 hint 的 faint/2xs —— 两档都弱，
+      主次分不开）。这里只留"过长要截断"三件。 */
 .gvHistRow {
   overflow: hidden;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+/* 第二行（`16:9 · 5s · 模特手持…`）—— ★ 真值 = 设计稿 ⑧ 的 `.mk-cell-hint` ⇒ 真源 `.hint` */
 .gvHistPrompt {
+  composes: hint from '../common/shared.module.css';
   overflow: hidden;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-faint);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 /* 组节点 */
-.group {
-  width: 100%;
-  height: 100%;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--color-selection-bg);
-}
-/**
- * ⚠️ **未接线**：样式已按原版 `.group-label` 译好，但 TSX 尚未引用
- * （组节点左上角的「组」字，原版 `GL.jsx`）。**保留以便对齐，勿当死代码删**。
+/*
+ * 组的身 —— 真值 = `mockup.css` 的 `.mk-group-body`：**凹进去的一块**（sunken 底 + `radius-sm`）。
+ *   它表达"这里是个容器、子节点装在里头"；只补底与圆角，内距与行距已归 `.nodeBody`（C11）。
+ * ⚠️ 设计稿的 `.mk-group-child`（等分摆放的占位方块）**不落**：那是静态页里**假装**装着子节点用的，
+ *    真机的子节点是 ReactFlow 的 parent/child 子节点（绝对定位在**组卡之上**）—— 布局机制不同，
+ *    照抄那两条只会得到"另外画几个空方块压在真子节点上"。
  */
-.groupLabel {
-  position: absolute;
-  /* ssot-space-ok: 本块**尚未接线**（见上方注释：样式已按原版 `.group-label` 译好、TSX 未引用）
-     —— `-20px` 是那份译法的值；**待组标签接线时**一并按 docs/17 复核（可能改为 token）。
-     依据见 docs/17「间距 / 尺寸的凭证形态」（TD-16-33） */
-  top: -20px;
-  left: 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+.node[data-type='group'] .nodeBody {
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
 }
 
 /** 正文编辑区（包住 textarea + `@` 候选浮层 —— 浮层的定位上下文） */
@@ -576,13 +613,15 @@
 .textToolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  margin-bottom: var(--space-1);
+  /* ★ 真值 = `mockup.css` 的 `.mk-refbar`：`--space-2`（原 `--space-1`）。
+     ⚠️ 原来的 `margin-bottom` 也删了：行距归 `.nodeBody` 的 `gap`（C11 已加），
+        两处都写就是同一段间距两个来源。 */
+  gap: var(--space-2);
 }
 
-/* 「@ 引用素材」—— 走共享真源（`docs/17` 查 6） */
+/* 「@ 引用素材」—— 真值 = `mockup.css` 的 `.mk-chipbtn`（节点内微型钮，真源 `.chipBtn`）*/
 .atRefBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
+  composes: chipBtn from '../common/shared.module.css';
 }
 
 /*
@@ -603,8 +642,10 @@
 
 .matThumb {
   position: relative;
-  width: 28px;
-  height: 28px;
+  /* ★ 真值 = `mockup.css` 的 `.mk-refbar-thumb`：22×22（原 28 —— 引用条是"一行小票"，
+     缩略图不该比 @ 按钮还高）*/
+  width: 22px;
+  height: 22px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -643,13 +684,24 @@
   right: 0;
   bottom: 0;
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  line-height: 1;
+}
+/* 抓手图标按原字形大小（11px）**就近取 12 档** —— 它压在缩略图角上，用默认 16 会盖住图 */
+.matThumbGrip svg {
+  width: var(--dim-3);
+  height: var(--dim-3);
+  display: block;
 }
 
 .matCount {
+  /* ★ 真值 = `mockup.css` 的 `.mk-refbar-count`：**药丸**（原是一段裸文字）。
+     ⚠️ 它表达的是"引了几张"，是个**计数徽标**，不是句子 ⇒ 走底色 + 全圆角。 */
+  flex: none;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-tight);
 }
 
 /**
@@ -695,15 +747,33 @@
   gap: var(--space-2);
 }
 
-/* 原 `.auto-send-toggle`：源版是个滑块，这里用原生 checkbox（观感不同、语义相同） */
+/*
+ * 自动发送开关（原 `.auto-send-toggle`）—— ★ **形态已收口到真源 `.switch`**（`§6 F03` 时做的）：
+ *   同一个"开/关滑块"在账号栏（`.autoStartSwitch`）还有一份**值不一样**的实现
+ *   （高 17 vs 16 · knob 13 vs 12 · 有无边框），设计层的 `backend.css` 又给了第三份
+ *   ⇒ 三份并成 `ui/common/shared.module.css` 的一档（值取通用件 `mockup.css` 的 `.mk-switch`）。
+ * 本文件只留**节点侧的实现细节**：那个视觉隐藏的原生 `<input type="checkbox">`。
+ */
 .autoSend {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
+  composes: switch from '../common/shared.module.css';
 }
-/* ★ 三态扫描补：可点但无 hover 反馈 —— 文字变深（不改布局、不改配色）*/
-.autoSend:hover {
-  color: var(--color-text-strong);
+.autoSendOn {
+  composes: switchOn from '../common/shared.module.css';
+}
+/* 视觉隐藏但仍可聚焦 / 可点（`label` 整块是点击目标）*/
+.autoSendInput {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.autoSendKnob {
+  composes: switchKnob from '../common/shared.module.css';
+}
+/* 滑块右移 —— 独立的状态类（真源 `.switchKnobOn`），不用后代选择器 */
+.autoSendKnobOn {
+  composes: switchKnobOn from '../common/shared.module.css';
 }
 
 /*
@@ -727,10 +797,12 @@
   color: var(--color-danger-text);
 }
 
-/* 原 `.account-summary`（`OL.jsx:521`） */
+/* 原 `.account-summary`（`OL.jsx:521`）—— ★ 真值 = `mockup.css` 的 `.mk-node-meta`：
+   `2xs` + `line-height: none`（原 `xs` —— 它是"一行附注"，不该与正文同档）*/
 .accountSummary {
   color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-none);
 }
 
 /* 发送按钮里的两个字形（原 `.send-spinner` / `.send-icon`） */
@@ -780,7 +852,9 @@
 
 /* 原 `.account-send-btn` —— ★ 查 6：走共享真源 */
 .accountSend {
-  composes: btn btnPrimary from '../common/shared.module.css';
+  /* ★ 真值 = 设计稿 `index.html` 的发送节点：`btn btnSm btnPrimary` —— **小号**主按钮
+     （它与账号下拉**同一行**，标准高 32 会把这一行撑得比下拉高出一截）*/
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
 }
 
 /* 节点特有语义：未接通时用灰底（比通用 disabled 的降透明更明确）*/
@@ -849,48 +923,48 @@
   text-overflow: ellipsis;
 }
 
-/* ── 组节点（原 `GL.jsx`）—— 卡壳/头/选中态已并入统一骨架（`.node` / `.nodeHead` / `.selected`）── */
-/* 组的两个特殊：头 34px 高 + move 光标（拖动把手）—— 用 data-type 选择器，不另起类 */
-.node[data-type='group'] .nodeHead {
-  height: 34px;
-  cursor: move;
-}
+/* ── 组节点（原 `GL.jsx`）—— 卡壳/头/选中态已并入统一骨架（`.node` / `.nodeHead` / `.selected`）──
+   ★ 已删两条**旧做法**（设计稿取代了它们）：
+     · `.group`（虚线框 + `--color-selection-bg`）—— **死类**（统一骨架之后 TSX 不再引用），
+       而设计稿的组卡就是**普通 `.mk-node` 皮**（实线 + `--node-radius`）⇒ 整类删；
+     · `.groupLabel`（组框左上角飘一个「组」字）—— 设计稿的组身份由**头部**给
+       （`#i-group` 图标 + 标题），框外不需要再飘一个字 ⇒ 连那条"未接线、勿删"的注释一起删。
+   ★ 头高不再例外：组头和其余 7 类**同一个 `--node-head-height`**（"8 类共一张皮"）。 */
 
-.groupIcon {
-  display: inline-flex;
-  color: var(--color-text-faint);
-}
+
 
 /* 数量徽章（组 / 下载节点的中槽共用 —— 原 `.groupCount` / `.materialCount` 两份） */
 .nodeCount {
+  /* ★ 真值 = `mockup.css` 的 `.mk-count`：**药丸**（全圆角 + sunken 底 + 2xs + muted）。
+     原写 `radius-sm` + `xs` + `faint` ⇒ 它看着像"一段贴了底的文字"，不像计数徽标。
+     ⚠️ 消费者 2 处（组节点 / 下载节点的中槽）。 */
   flex: 0 0 auto;
   padding: 0 var(--space-1);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-tight);
   background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
 }
 
 /* ★ 查 6 + 三态扫描：原为自造小按钮（有边框、无 hover）⇒ 走共享真源 */
 .groupUngroup {
-  composes: btn btnSm from '../common/shared.module.css';
+  /* ★ 真值 = 设计稿组头的 `.mk-chipbtn`（节点内微型钮）。
+     ⚠️ 去掉了"悬停翻危险色"：设计稿里**取消组不是危险动作** —— 它只是**解散容器、释放子节点**
+        （设计稿自己的 `title` 写着「释放组内节点，仅删除组容器」）⇒ 不销毁内容就不该用危险色；
+        真要危险色的是"删除节点"，那是另一条路径。 */
+  composes: chipBtn from '../common/shared.module.css';
   flex: 0 0 auto;
-}
-
-.groupUngroup:hover {
-  color: var(--color-danger-text);
-  border-color: var(--color-danger-border);
 }
 
 /* ── 素材节点（原 `fL.jsx`）—— 卡壳/头/圆点/标题/改名已并入统一骨架 ── */
 
+/* ★ 素材节点的图**不是通栏**，而是与视频 / 生成节点**同一个「舞台」**（真值 = `.mk-stage`）
+   ⇒ 直接复用 `.gvStage`（同一个东西只许一个类）。
+   ⚠️ 它此前是"通栏 + 自己补下圆角"——那种写法在卡片圆角改成 `--node-radius`（lg）之后**必然露方角**
+      （`C11` 时已踩过一次）。改内衬后，圆角由 `.node` 与舞台各自收，这一套补丁整块不需要了。 */
 .materialImgWrap {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  /* 通栏缩略图自带裁剪与下圆角（`.node` 不裁溢出 ⇒ 圆角必须由本层自己收） */
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  composes: gvStage;
 }
 
 .materialImg {
@@ -911,9 +985,12 @@
    `.floatActions`（源里两颗按钮同住 `.mat-float-actions`，由 `leading` 传前面那颗）。 */
 
 .matFloatBtn {
-  composes: btn btnSm btnGhost from '../common/shared.module.css';
-  padding: 0 var(--space-1);
-  color: var(--color-text-strong);
+  /* ★ 真值 = `mockup.css` 的 `.mk-chipbtn`（压在图上那颗微型钮）—— 原 `btn btnSm btnGhost` 偏大 */
+  composes: chipBtn from '../common/shared.module.css';
+  /* 压在缩略图上 ⇒ 底色走媒体遮罩、字恒白（同 `.mk-stage-dl` 的口径） */
+  background: var(--color-scrim);
+  border-color: transparent;
+  color: var(--color-on-scrim);
 }
 .matFloatBtn:disabled {
   color: var(--color-text-faint);
@@ -922,22 +999,26 @@
 /* ── 下载节点（原 `WL.jsx`）—— 卡壳/头/圆点/标题已并入统一骨架 ── */
 
 .downloadBody {
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-body`：行距 `--space-2`、**内距归 `.nodeBody`**。
+     ⚠️ 原来这里自己又写了一份左右下内距（`padding: 0 var(--space-2) var(--space-2)`）——
+        而它**就在 `.nodeBody` 里** ⇒ **双份内距**（左右各 8+8、底部 8+8）。 */
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: 0 var(--space-2) var(--space-2);
+  gap: var(--space-2);
 }
 
+/* 目录行 —— 三条真值 = `mockup.css` 的 `.mk-dl-row` / `.mk-dl-label` / `.mk-dl-path` */
 .downloadFolderRow {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: var(--font-size-xs);
+  min-width: 0;
 }
 
 .downloadFolderLabel {
   flex: 0 0 auto;
-  color: var(--color-text-faint);
+  /* ★ 设计稿是 `--color-text-muted`（原 faint：标签太淡，与右侧路径分不出主次）*/
+  color: var(--color-text-muted);
 }
 
 .downloadFolderPath {
@@ -946,11 +1027,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-text-muted);
+  /* ★ 设计稿是 `--color-text-strong`（原 muted）：**路径是要读的主信息**，不该比标签还淡 */
+  color: var(--color-text-strong);
 }
 
 .downloadBtn {
-  composes: btn btnSm from '../common/shared.module.css';
+  /* ★ 真值 = 设计稿的 `.mk-chipbtn`（「选择…」是节点内微型钮）*/
+  composes: chipBtn from '../common/shared.module.css';
   flex: 0 0 auto;
 }
 .downloadBtn:disabled {
@@ -969,7 +1052,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: var(--font-size-xs);
+  min-width: 0;
 }
 
 .downloadItemName {
@@ -978,15 +1061,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-text-muted);
+  /* ★ 不加色 = 继承正文色（设计稿 `.mk-dl-name` 不设色；原写死 muted ⇒ 文件名比状态字还淡）*/
 }
 
 .downloadItemStatus {
   flex: 0 0 auto;
+  /* ★ 真值 = `.mk-dl-st`：三态标记统一一档小字（色由下方三档语气给）*/
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
 }
 
+/* 三态语气 —— ★ 真值 = `.mk-dl-st.is-busy` 走 **`--color-info-text`**
+   （原写 faint：下载**进行中**是最该看见的状态，却和"未开始"一个色）*/
 .downloadStatusBusy {
-  color: var(--color-text-faint);
+  color: var(--color-info-text);
 }
 
 .downloadStatusOk {
@@ -1007,12 +1095,39 @@
 .downloadActionRow {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  /* ★ 真值 = `.mk-dl-actions`：`--space-2`（原 `--space-1` —— 主按钮与统计挤在一起）*/
+  gap: var(--space-2);
 }
 
 .downloadTotal {
+  /* ★ 真值 = `.mk-node-meta`：`2xs` + `line-height: none`（同 `.accountSummary` 的裁定）*/
   color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-none);
+}
+
+/* ── 生成类节点身内的**提示词行**（`PromptLine`，设计稿新增件）──
+   真值 = `mockup.css` 的 `.mk-prompt-row`：一行（输入 + 生成），`gap: space-1`。
+   ⚠️ 与浮层 `GenPanel` 分工：这里只有「输入 + 生成」，`@` 补全 / 拖高 / 参数工具条都在面板里。 */
+.promptRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+/* 单行芯片编辑器 —— 皮走真源 `.field`（输入框只有一种皮），本地只补"它是可编辑块"与占位符 */
+.promptField {
+  composes: field from '../common/shared.module.css';
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* 占位符（`contenteditable` 没有 `placeholder` 属性 ⇒ `data-placeholder` + `:empty`）*/
+.promptField:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-faint);
 }
 
 /* ── 视频节点（原 `BL.jsx`）—— 卡壳/头/圆点已并入统一骨架 ── */
@@ -1024,28 +1139,23 @@
   font-size: var(--font-size-xs);
 }
 
-/* 原 `.vn-provenance` */
+/* 原 `.vn-provenance` —— ★ 真值 = `mockup.css` 的 `.mk-chips`：
+   只给 `gap` + **允许换行**（原来没有 `wrap`，三颗 chip 在窄节点里会被压扁/溢出）、
+   不给自己内距（行距归 `.nodeBody` 的 `gap`）。 */
 .videoProvenance {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-1);
-  padding: 0 var(--space-2) var(--space-1);
-  font-size: var(--font-size-xs);
 }
 
-/* 原 `.vn-src-chip` / `.vn-recipe` */
+/* 原 `.vn-src-chip` / `.vn-recipe` —— ★ 真值 = `.mk-chipbtn`（真源 `.chipBtn`，22px 微型钮）。
+   ⚠️ 本地只留**真差异**：来源名可能很长 ⇒ 省略号那一组（§6 铁律：本地只许追加真源未设的属性）。 */
 .videoChip {
-  composes: btn btnSm from '../common/shared.module.css';
+  composes: chipBtn from '../common/shared.module.css';
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--node-chip-fg);
-  background: var(--color-surface-sunken);
-  border: 0;
-}
-
-.videoChip:hover {
-  background: var(--color-border);
 }
 
 /* 原 `.vn-norecipe` */
@@ -1079,8 +1189,11 @@
   display: block;
   width: 100%;
   max-height: 320px;
-  background: var(--color-text-strong);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  /* ★ 真值 = `mockup.css` 的 `.mk-stage`：视频也是**内衬舞台**（不是通栏）⇒ **四角**同一档圆角，
+     底走 `--color-surface-sunken`（原写"只补下两角 + 近黑色底" —— 那是通栏时代的补丁：
+     ① 卡片圆角是 `--node-radius`（lg），它却用 md ⇒ 下方两角**必然露方角**；② 近黑底在浅色卡片里像一块"缺口"）*/
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
 }
 
 /* 原 `.vn-panel`（配方面板） */
