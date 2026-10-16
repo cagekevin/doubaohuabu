@@ -235,7 +235,7 @@ L0 lib/constants/styles · L1 stable · L2 core · L3 adapters · L4 state · L5
 **两条纪律**（都是踩出来的）：
 
 1. **★ 最高判据是正确性；不确定时「能抄就别推」—— 源代码是取证真源**（2026-10-11 用户裁定，照抄**适用于一切"不知道"**）：
-   原版可读源码在 `docs/豆包画布原版参考/expanded_components/`。
+   原版可读源码在 `docs/豆包画布原版参考/inputs/pipeline_step/project/src/expanded_components/`。
    **凡是不确定的**（不只是 UI handler / props / 默认值）—— **行为、节奏、文案、字段、分支、
    该不该有、该放哪、算不算违规** —— **一律先去这里读，再照抄（逐字对源）**；
    **别自己推理，也别先问人**。

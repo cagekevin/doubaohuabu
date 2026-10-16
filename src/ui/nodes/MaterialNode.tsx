@@ -25,6 +25,7 @@ import { useState } from 'react';
 import { useStore } from '@/state';
 import { withThumb } from '@/stable/protocols/img';
 import { MATERIAL_NODE_TEXT } from '@/constants/text';
+import { StageEditImageBtn } from './stageParts';
 import { AnalyzePrompt } from './AnalyzePrompt';
 import { FaceMarksLayer } from './FaceMarksLayer';
 import { NodeShell } from './NodeShell';
@@ -116,23 +117,18 @@ export function MaterialNode({ id, data, selected }: RFNodeProps<'material'>) {
         state={data.analyzePrompt ?? null}
         showButton={!!data.dataUrl}
         leading={
-          <button
-            type="button"
-            className={styles.matFloatBtn}
-            /*
-             * ★ 原 163-178 的 `mat-edit-float`：`onMouseDown` stopPropagation 保选中、
-             *   `onClick` stopPropagation 后 `openImageEditor({nodeId, imgRef, label})`。
-             * ★ **2026-10-12 解禁（`TD-09-4`）**：图片编辑器已落（`ui/panels/ImageEditor.tsx`）。
-             */
-            title={MATERIAL_NODE_TEXT.editImageTitle}
-            onMouseDown={(e) => e.stopPropagation()}
+          /*
+           * ★ 原 163-178 的 `mat-edit-float`：`onMouseDown` stopPropagation 保选中、
+           *   `onClick` stopPropagation 后 `openImageEditor({nodeId, imgRef, label})`。
+           * ★ **2026-10-12 解禁（`TD-09-4`）**：图片编辑器已落（`ui/panels/ImageEditor.tsx`）。
+           * ⚠️ 这颗钮的**外壳**与 `GenImageNode` 那份是同一件 ⇒ 走 `StageEditImageBtn`（只传点击）
+           */
+          <StageEditImageBtn
             onClick={(e) => {
               e.stopPropagation();
               openImageEditor(id, data.dataUrl, label);
             }}
-          >
-            {MATERIAL_NODE_TEXT.editImage}
-          </button>
+          />
         }
       />
     </NodeShell>

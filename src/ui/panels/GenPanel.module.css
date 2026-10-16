@@ -48,11 +48,11 @@
 
 /* 头部右槽的 `.gp-meta`（原 `Z3_1.jsx:965-968`）—— 小字、靠右、可截断 */
 .meta {
-  display: block;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
+  min-width: 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);

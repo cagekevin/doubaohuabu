@@ -170,18 +170,28 @@ const project = [
 
   // ── ⑧ 选择工具条的**视口联动定位**（原 `se`，`_Component42.jsx:131-152`）──
   // ⚠️ 必须用**真实鼠标**（同 verify-del 的坑：合成事件绕过 React / ReactFlow 的指针处理）。
-  // ⚠️ 点**节点头部**（n-text 正文是 `contentEditable`，点中心会把焦点交给编辑器 ⇒ 选不中）。
-  //    第二个用 **Shift** 加选（`multiSelectionKeyCode={['Shift','Meta']}`）。
-  const headClick = async (id, shift) => {
-    const b = await page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox();
-    if (!b) return;
-    if (shift) await page.keyboard.down('Shift');
-    await page.mouse.click(b.x + b.width / 2, b.y + 10);
-    if (shift) await page.keyboard.up('Shift');
-    await new Promise((r) => setTimeout(r, 300));
-  };
-  await headClick('n-text', false);
-  await headClick('n-genvideo', true);
+  // ⚠️ **用 Shift+框选，不要逐点 Shift+click**（2026-10-16 修正）：逐点加选在本机实测**不累加**
+  //    （点节点头部只选中最后一个），于是工具条恒不出现（它要 `nonGroupCount >= 2`，见
+  //    `SelectionToolbar.tsx:52`）⇒ 这条判据**一直是红的**（不是产品坏了，是手法不对）。
+  //    框选走 `selectionOnDrag={false}` + `selectionKeyCode` 默认 `Shift` + `selectionMode=Partial`。
+  {
+    const boxes = [];
+    for (const id of ['n-text', 'n-genvideo']) {
+      const b = await page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox();
+      if (b) boxes.push(b);
+    }
+    const x1 = Math.min(...boxes.map((b) => b.x)) - 30;
+    const y1 = Math.min(...boxes.map((b) => b.y)) - 30;
+    const x2 = Math.max(...boxes.map((b) => b.x + b.width)) + 30;
+    const y2 = Math.max(...boxes.map((b) => b.y + b.height)) + 30;
+    await page.keyboard.down('Shift');
+    await page.mouse.move(x1, y1);
+    await page.mouse.down();
+    await page.mouse.move(x2, y2, { steps: 12 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    await new Promise((r) => setTimeout(r, 400));
+  }
   /** 工具条的内联 style（原 `style={se}`）—— `left/top` 必须是 **px**（视口坐标），不是 CSS 的 `50%` */
   const toolbar = await page.evaluate(() => {
     const el = document.querySelector('[data-testid="selection-toolbar"]');

@@ -100,13 +100,13 @@
 
 /* 标题（mockup `.node-title`）—— 可收缩出省略号 */
 .nodeTitle {
-  /* ★ 真值 = `mockup.css` 的 `.mk-node-title`：标题**吃掉剩余宽度**（`flex: 1`），
-     且**加一档字重**（原 `flex: 0 1 auto` + 常规字重 —— 标题与中槽在视觉上分不开）*/
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* ★ 真值 = `mockup.css` 的 `.mk-node-title`：标题**吃掉剩余宽度**（`flex: 1`），
+  且**加一档字重**（原 `flex: 0 1 auto` + 常规字重 —— 标题与中槽在视觉上分不开）*/
+  flex: 1;
+  min-width: 0;
   color: var(--color-text-strong);
   font-weight: var(--font-weight-medium);
 }
@@ -229,19 +229,40 @@
   background-color: var(--color-surface-sunken);
 }
 
+/**
+ * 生成中浮层（原 `ZL.jsx:227` / `YL.jsx:488` 的 `gv-waiting`）—— **盖住舞台**
+ *
+ * ★ 真值 = 设计稿 `.mk-waiting`（`mockup.css:1178-1192`）：底走**媒体遮罩** `--color-scrim`
+ *   + 字走 `--color-on-scrim`（它里面那颗点也覆写白：见 `.gvWaiting .gvwDots span`）。
+ * ⚠️ 与源版的差异（留痕）：源版是**磨砂面板**（`color-mix(panel 72%, transparent)` + `blur(2px)`）
+ *   + 一道 `gvw-sheen` 扫光；设计稿没画扫光、底色取 scrim ⇒ 按设计稿（本仓口径：**视觉真值归设计稿**）。
+ * ⚠️ 设计稿那格另有 `min-height` / `padding`：那是它把浮层当**独立块**展示时的尺寸
+ *   ⇒ **不搬**（本处是 `inset: 0` 的覆盖层，尺寸由舞台给）。
+ */
 .gvWaiting {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   align-content: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  background: var(--color-scrim);
+  color: var(--color-on-scrim);
+  text-align: center;
+  border-radius: var(--radius-md);
 }
 
+/**
+ * 三点（生成中的跳动）
+ * ★ 真值 = 设计稿 `.mk-dots`（`mockup.css:1167-1176`）：5px 圆点 · `gap: 3px` ·
+ *   `mkDotBounce` **1000ms**（`--duration-bounce`）+ 逐颗错峰 **150ms**（`--duration-bounce-step`）。
+ * ⚠️ 与源版的差异（留痕）：源版是 **9px · `gap: 7px` · `gvw-pulse 1.25s`**（scale + opacity，错峰 .16s）
+ *   ⇒ 尺寸与形态按设计稿（"三点要动"**两层真源一致**，此前这里只有静态样式）。
+ */
 .gvwDots {
   display: flex;
-  /* ssot-space-ok: 逐字对源 —— docs/mockup/assets/mockup.css:463 的 `.gvw-dots { gap: 3px }`；
-     3px 不在 `--space-*` 刻度上（2/4/8/…），snap 成 `--space-1`(4px) 就是**偏离源** ⇒ 保留。
+  /* ssot-space-ok: 真值 = 设计稿 `.mk-dots { gap: 3px }`；
+     3px 不在 `--space-*` 刻度上（2/4/8/…），snap 成 `--space-1`(4px) 就是**改设计稿的值** ⇒ 保留。
      ⚠️ 依据见 docs/17「间距 / 尺寸的凭证形态」（TD-16-33） */
   gap: 3px;
 }
@@ -251,11 +272,42 @@
   height: 5px;
   border-radius: var(--radius-full);
   background: var(--color-action-primary);
+  animation: gvwDotBounce var(--duration-bounce) var(--ease-out) infinite;
+}
+.gvwDots span:nth-child(2) {
+  animation-delay: var(--duration-bounce-step);
+}
+.gvwDots span:nth-child(3) {
+  animation-delay: calc(var(--duration-bounce-step) * 2);
+}
+/* 压在遮罩上的三点 = 白（真值 = `.mk-waiting .mk-dots span`） */
+.gvWaiting .gvwDots span {
+  background: var(--color-on-scrim);
 }
 
+@keyframes gvwDotBounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* 色随浮层（`--color-on-scrim`）—— 真值 = 设计稿那格只给字号 */
 .gvwText {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+}
+
+/* 尊重系统「减少动态效果」（真值 = 设计稿 `mockup.css:1210-1217` 的第 ⑤ 条） */
+@media (prefers-reduced-motion: reduce) {
+  .gvwDots span {
+    animation: none;
+  }
 }
 
 /* ⚠️ mockup 里**没有** `.gv-preview-empty` —— 按源语义（title + sub 两行居中）补，全 token */
@@ -414,8 +466,6 @@
  *   ⇒ 本刀按源改为底部独立行（头部右槽留给源的 `gv-head-grow` / `gv-hist-btn`）。
  */
 .gvMeta {
-  /* ★ 真值 = `mockup.css` 的 `.mk-node-meta`：`2xs` + `line-height: none`（原 `xs`）
-     ⚠️ 顺带收掉它自带的 `padding`: 内距归 `.nodeBody`（同一段间距不许两个来源）。 */
   color: var(--color-text-faint);
   font-size: var(--font-size-2xs);
   line-height: var(--line-height-none);
@@ -576,16 +626,16 @@
       主次分不开）。这里只留"过长要截断"三件。 */
 .gvHistRow {
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 第二行（`16:9 · 5s · 模特手持…`）—— ★ 真值 = 设计稿 ⑧ 的 `.mk-cell-hint` ⇒ 真源 `.hint` */
 .gvHistPrompt {
-  composes: hint from '../common/shared.module.css';
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  composes: hint from '../common/shared.module.css';
 }
 
 /* 组节点 */
@@ -1022,11 +1072,11 @@
 }
 
 .downloadFolderPath {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
   /* ★ 设计稿是 `--color-text-strong`（原 muted）：**路径是要读的主信息**，不该比标签还淡 */
   color: var(--color-text-strong);
 }
@@ -1036,8 +1086,13 @@
   composes: chipBtn from '../common/shared.module.css';
   flex: 0 0 auto;
 }
-.downloadBtn:disabled {
-  color: var(--color-text-faint);
+.downloadAll {
+  /* ★ 真值 = 设计稿 `.mk-dl-actions` 里那颗 **`btn btnSm btnPrimary`** ——
+     它是这一行的主按钮（设计稿**两格都这么画**：画布内 `index.html:335` + 放大 `:921`）。
+     ⚠️ 此前它与「选择…」共用 `.downloadBtn`（微型钮）⇒ 主次不分。
+     禁用态交回真源 `.btn:disabled`（不再自写一条色）。 */
+  composes: btn btnSm btnPrimary from '../common/shared.module.css';
+  flex: 0 0 auto;
 }
 
 .downloadList {
@@ -1056,11 +1111,11 @@
 }
 
 .downloadItemName {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
   /* ★ 不加色 = 继承正文色（设计稿 `.mk-dl-name` 不设色；原写死 muted ⇒ 文件名比状态字还淡）*/
 }
 
@@ -1100,7 +1155,6 @@
 }
 
 .downloadTotal {
-  /* ★ 真值 = `.mk-node-meta`：`2xs` + `line-height: none`（同 `.accountSummary` 的裁定）*/
   color: var(--color-text-faint);
   font-size: var(--font-size-2xs);
   line-height: var(--line-height-none);
@@ -1117,12 +1171,12 @@
 }
 /* 单行芯片编辑器 —— 皮走真源 `.field`（输入框只有一种皮），本地只补"它是可编辑块"与占位符 */
 .promptField {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   composes: field from '../common/shared.module.css';
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 /* 占位符（`contenteditable` 没有 `placeholder` 属性 ⇒ `data-placeholder` + `:empty`）*/
 .promptField:empty::before {
@@ -1150,7 +1204,8 @@
 }
 
 /* 原 `.vn-src-chip` / `.vn-recipe` —— ★ 真值 = `.mk-chipbtn`（真源 `.chipBtn`，22px 微型钮）。
-   ⚠️ 本地只留**真差异**：来源名可能很长 ⇒ 省略号那一组（§6 铁律：本地只许追加真源未设的属性）。 */
+   ⚠️ 本地只留**真差异**：来源名可能很长 ⇒ 省略号那一组（本地覆盖真源已设的属性在本仓合法，见 `docs/CSS规范.md` §1.4；
+      这里只写差异是**收口意图**，不是语法约束）。 */
 .videoChip {
   composes: chipBtn from '../common/shared.module.css';
   max-width: 100%;
@@ -1306,11 +1361,11 @@
 }
 
 .videoAttemptAcc {
-  flex: none;
-  max-width: 42%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: none;
+  max-width: 42%;
 }
 
 .videoAttemptStatus {
@@ -1319,11 +1374,11 @@
 }
 
 .videoAttemptNote {
-  min-width: 0;
   overflow: hidden;
-  color: var(--color-text-faint);
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  color: var(--color-text-faint);
 }
 
 /* 状态着色（推断值：只动**文字**色 —— 故取 `*-text` 那两个对比度调过的 token，不是底色用的 `--color-success`/`--color-danger`） */
@@ -1527,10 +1582,10 @@
  */
 .sendStatus {
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   min-width: 0;
   font-size: var(--font-size-xs);
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .sendStatusSuccess {

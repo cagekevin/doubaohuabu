@@ -60,6 +60,7 @@ import { NodeTitle } from './NodeTitle';
 import { RefAutocomplete, matchRefTrigger } from './RefAutocomplete';
 import type { RFNodeProps } from './types';
 import { Icon } from '@/ui/common/Icon';
+import { bindDragListeners } from '@/ui/common/dragListeners';
 import styles from './shared.module.css';
 
 export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
@@ -298,12 +299,8 @@ export function TextNode({ id, data, selected }: RFNodeProps<'text'>) {
       }
       setDrag(null);
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
+    // ★ 机制走 `ui/common/dragListeners`（同一套机制此前 4 份手写；本处是 `mouse` 族，逐字保留）
+    return bindDragListeners({ events: 'mouse', onMove, onEnd: onUp });
   }, [drag, linked, id, patchNodeData]);
 
   /** 开始拖拽（原 `ee`）—— 只认左键；`preventDefault`/`stopPropagation` 免得拖成整个节点 */

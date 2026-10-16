@@ -18,6 +18,7 @@
  */
 
 import { useState } from 'react';
+import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import { BRAND, PROJECT_TEXT } from '@/constants/text';
 import { useProjectOps, useStore } from '@/state';
 import { orderProjectsByUpdatedAt } from '@/core/rules/project';
@@ -65,6 +66,13 @@ export function StartPage() {
     setEditingId(null);
   };
 
+  /**
+   * 重命名态按 `Esc` ⇒ **只退出编辑、不提交**（原 `:85-87`）。
+   * ⚠️ 走 `ui/common/useEscapeKey`（元素级）：**Escape 处理只许住 `ui/common/`**
+   *   —— 此前这里是就地手写的一份 `else if (e.key === 'Escape')`。
+   */
+  const onEscapeRename = useEscapeKey(editingId !== null, () => setEditingId(null));
+
   return (
     <div className={styles.page}>
       <div className={styles.brand}>
@@ -92,8 +100,10 @@ export function StartPage() {
                   onChange={(e) => setDraft(e.target.value)}
                   onBlur={commitRename}
                   onKeyDown={(e) => {
+                    // `Esc` 归 `ui/common/useEscapeKey`（Escape 处理只许住 `ui/common/`），
+                    // 这里只留源自己的另一个键语义：`Enter` ⇒ 提交
                     if (e.key === 'Enter') commitRename();
-                    else if (e.key === 'Escape') setEditingId(null);
+                    else onEscapeRename(e);
                   }}
                 />
               ) : (

@@ -56,7 +56,7 @@ import { SplitKeywordModal } from '@/ui/nodes/SplitKeywordModal';
 import { SplitPresetPickerModal } from '@/ui/nodes/SplitPresetPickerModal';
 import { StatusBar } from './StatusBar';
 import styles from './CanvasHost.module.css';
-import shared from '@/ui/common/shared.module.css';
+import { EmptyState } from '@/ui/common/EmptyState';
 
 const edgeTypes = { interactive: InteractiveEdge };
 
@@ -976,10 +976,11 @@ function Inner() {
       <BatchSendPanel />
 
       {empty && (
-        <div className={styles.emptyHint}>
-          <div className={shared.emptyTitle}>{CANVAS_TEXT.emptyTitle}</div>
-          <div>{CANVAS_TEXT.emptyHint}</div>
-        </div>
+        <EmptyState
+          className={styles.emptyWrap}
+          title={CANVAS_TEXT.emptyTitle}
+          hint={CANVAS_TEXT.emptyHint}
+        />
       )}
 
       {/* ★ 选择工具条（原 `.sel-toolbar`）—— 成组的入口（`groupSelected` 此前没有调用方） */}

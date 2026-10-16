@@ -932,6 +932,12 @@ export const SEND_QUEUE_TEXT = {
   /** 清掉已结束的项（原 `A3`；按钮文案源版在 `.sq-foot`，本工程给文字） */
   clearDone: '清除已完成',
   /**
+   * 列表**分组标题**（真值 = 设计稿 `index.html:462` / `499` 的 `.mk-sq-group`）
+   * ⚠️ 原版没有分组（一条平铺列表）；分组的判据 = 真源 `core/rules/sendQueueOps.isActiveQueueStatus`。
+   */
+  groupActive: '进行中',
+  groupDone: '已完成',
+  /**
    * ★ **选号策略按钮**（原 `z3.jsx:271-276` 的 `.sq-foot` **第一颗**）—— 点一下在两种策略间切换。
    */
   pickAccountPrefix: '选号：',
@@ -943,14 +949,13 @@ export const SEND_QUEUE_TEXT = {
   paused: '已暂停',
   /** 状态行：进行中（源版用 `.sq-statusline` 表达，本工程给文字） */
   running: (done: number, total: number) => `${done}/${total}`,
-  /** 每项的取消 / 重试（原 248-258 的两个按钮，源版是图标 + `title`） */
-  cancel: '取消',
+  /**
+   * 每项的取消 / 重试 / 查看 —— 设计稿把这三颗收成**图标钮**（`index.html:470` / `488` / `508`）
+   * ⇒ 用户可见字面量只剩 `title`（它们必须常驻真源；按钮内不再有文字）。
+   */
   cancelTitle: '取消这一条（不打断其它）',
-  retry: '重试',
   retryTitle: '重新排到队尾（会自动占用空闲账号）',
-  /** ★ 「查看」（原 `z3.jsx` 的 `sq-btn ok`）—— 该条已有出片 ⇒ 点它把画布**定位过去** */
-  view: '查看',
-  /** 「查看」的 `title`（原逐字：`定位到画布上的出片结果`） */
+  /** 「查看」（原 `z3.jsx` 的 `sq-btn ok`）—— 该条已有出片 ⇒ 点它把画布**定位过去** */
   viewTitle: '定位到画布上的出片结果',
   /** 拖动 `title`（原 196，逐字） */
 
@@ -958,19 +963,14 @@ export const SEND_QUEUE_TEXT = {
   accountPending: '待分配',
   /** 第 N 次重试（原 236：`· 第{N}次`） */
   attempt: (n: number) => `· 第${n}次`,
-  /** 成片行的标签（原 261，逐字） */
-  genLabel: '成片',
   /**
    * ★★ **成片状态四组九态**（原 `B0` 42493-42567 的 `text`/`note`）
    * ⚠️ `cls` 是样式类名（`idle`/`na`/`unknown`/`failed`/`done`/`queued`/`generating`），
    *   也一并放这里 —— 文案与样式成对出现，分开会漂。
    */
   /*
-   * ⚠️ **2026-10-11（`TD-16-103`）删除 `gen: {…}` 一整段** —— 它与 `GEN_PROGRESS_TEXT`
-   *   （`constants/text.ts`）**逐字重复**（同 13 个键、同 13 句文案，只是键名不同）：
-   *   `gen.unknownNote` ≡ `noProgress`、`gen.queuedNote` ≡ `waitingStart`、`gen.idleNote` ≡ `noRecord`。
-   *   成片文案的**唯一真源 = `GEN_PROGRESS_TEXT`**（由 `core/rules/genProgress.ts` 消费）。
-   *   本段原先的唯一消费者是 `core/rules/sendQueuePanel.ts` 里那份 `deriveGenView` 抄本 —— 同批已删。
+   * ⚠️ 成片文案**不在这里** —— 唯一真源 = `GEN_PROGRESS_TEXT`（`constants/text.ts`，
+   *  由 `core/rules/genProgress.ts` 消费）：四组九态的文案与 `cls` 成对，别在此另立一份。
    */
   /**
    * 调度泵在"拿不到账号"时写进队列项的等待原因（原 `TS` 42134-42167 的四句）

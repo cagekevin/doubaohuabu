@@ -113,11 +113,11 @@
 }
 
 .historyMeta {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
   color: var(--color-text-muted);
 }
 

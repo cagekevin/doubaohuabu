@@ -71,7 +71,7 @@ export function pad2(n: number): string {
  * 时长 `Xs` / `Xm YYs`（原 `tc` shared.js:42481）
  *
  * `< 60`（含负数，调用方一般已 `Math.max(0, …)`）⇒ `'{n}s'`；否则 `'{m}m{ss}s'`（秒**补零 2 位**）。
- * ⚠️ 收口 `core/rules` 的 `sendQueuePanel.formatElapsed` 与 `genProgress.formatElapsed` 两处**逐字相同**的尾段。
+ * ⚠️ **唯一实现**：时长格式化的尾段只许写在这里（`core/rules/genProgress` 的「已等待」等都用它）。
  */
 export function formatDuration(sec: number): string {
   if (sec < 60) return `${sec}s`;

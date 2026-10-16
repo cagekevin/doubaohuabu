@@ -57,6 +57,19 @@ video {
   max-width: 100%;
 }
 
+/*
+ * 列表归零（`ul`）—— ★ **元素归零只许住 base**（同上面的 `button` / `img,video`）。
+ * ⚠️ 收口前这条被**5 个面板各抄一遍**（`.list` 里逐字同写 `margin:0;padding:0;list-style:none`：
+ *   `AccountPanel` · `GroupManagerModal` · `ProxyPoolPanel` · `ExportAccountsModal` · `RefAutocomplete`）
+ *   ⇒ 归零是**元素**的事，不是各组件的差异 ⇒ 一处声明（`css -- check near` 的那个"3 类同形"簇即此）。
+ * ⚠️ 只写 `ul`：本仓没有 `ol` 消费者（判据 B5：不留没有消费者的东西）。
+ */
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 :focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;

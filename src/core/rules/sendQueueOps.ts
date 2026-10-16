@@ -94,6 +94,17 @@ export function planRetry(item: QueueItem, now: number): QueueOpPlan | null {
 }
 
 /**
+ * 这一项是否**还在跑**（`waiting` / `sending`）
+ *
+ * ★ **唯一真源**：判"在跑"只此一处 —— 清空已完成（`clearFinishedQueue`）与
+ *   队列面板的「进行中 / 已完成」分组都调它（别各自再写一遍 `=== 'waiting' || === 'sending'`）。
+ * ⚠️ 判据出处：源版两处各写一遍字面量（`A3` 42011-42015 与 `z3.jsx:222` 的 `U`），语义相同。
+ */
+export function isActiveQueueStatus(status: string): boolean {
+  return status === 'waiting' || status === 'sending';
+}
+
+/**
  * 清掉"已经结束"的项（原 `A3` 42011-42015）
  *
  * ⚠️ **函数名不叫"清空"**：源版 `A3` 看着像清空，实际是
@@ -102,7 +113,7 @@ export function planRetry(item: QueueItem, now: number): QueueOpPlan | null {
  *   而**注释里记下源版的名字**以免下次对不上。）
  */
 export function clearFinishedQueue(items: readonly QueueItem[]): QueueItem[] {
-  return items.filter((e) => e.status === 'waiting' || e.status === 'sending');
+  return items.filter((e) => isActiveQueueStatus(e.status));
 }
 
 /** 队列统计（原 `I3` 42016-42032） */

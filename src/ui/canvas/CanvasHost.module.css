@@ -9,16 +9,24 @@
   background: var(--color-canvas);
 }
 
-.emptyHint {
-  composes: empty from '../common/shared.module.css';
+/**
+ * 画布空态 —— **用真源 `EmptyState` 组件**（空态只有一种写法），这里只给"覆盖整块画布"的定位。
+ * ⚠️ 不吃指针事件：画布空着时它铺满整屏，否则会把 `onDrop` 挡住。
+ * 真值 = 设计稿 `index.html:977-980`（`.empty` > `.emptyTitle` + `.emptyHint` —— 就是该组件渲染的两行）。
+ */
+.emptyWrap {
   position: absolute;
   inset: 0;
+  display: flex;
   pointer-events: none;
 }
 
 
 /* `.drop-hint`（原 `_Component42.jsx:1466`）—— 拖**文件**进画布时的提示层
-   ★ **推断样式**：原版 CSS 未入库、mockup 也未收录 ⇒ 按语义补，全 token（待原版 CSS 校 —— TD-16-87）
+   ★ **推断样式**：原版 CSS 未入库；设计稿只在**画廊**里收录了它（`index.html:981` 给了真机类名
+     `CanvasHost-dropHint` + 那句原文），而它给的那张皮是**展示用**的 `.mk-pop` 托底
+     （`mockup.css:1421` 的 `.mk-cell-body .mk-pop` 把浮层拉回文档流）⇒ **不是产品样式**
+     ⇒ 真机仍按语义补，全 token（待原版 CSS 校 —— TD-16-87）。`border` 用**虚线**：拖放落点的惯用暗示。
    语义：拖拽悬停时在画布中央提示「松开即加入」，且**不吃指针事件**（否则会挡住 drop）。 */
 .dropHint {
   position: absolute;

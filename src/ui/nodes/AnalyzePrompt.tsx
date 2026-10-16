@@ -22,9 +22,10 @@
  * ⚠️ 与源版一致：面板**只在已有 `analyzePrompt` 且已展开时**才渲染。
  */
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
 // ★ 浮层壳走**共享件**（头三槽 / ✕ / 正文只有一种）—— 不带 `overlay`：它是**节点锚定浮层**
 import { PanelShell } from '@/ui/common/PanelShell';
+import { useOutsideClose } from '@/ui/common/useOutsideClose';
 import { useAnalyze, useHostOps, useStore } from '@/state';
 import type { AnalyzePromptState } from '@/stable/model/node';
 // ⚠️ 纯函数放 `core/rules`（判据 E1：`ui/` 下不得有测试 ⇒ 留在组件里就永远没有单测）
@@ -94,16 +95,9 @@ export function AnalyzePrompt({
    * ⚠️ 用**捕获**阶段（源第三参 `true`）—— 否则面板内部的 `stopPropagation` 会让它收不到。
    * ⚠️ **一处简化（留痕）**：源同时排除「节点根」（`H`），本组件拿不到那个 ref ⇒ 只排除面板本身
    *    （点节点会收起面板；源不会）。
+   * ★ 机制走 `ui/common/useOutsideClose`（`capture: true`）—— 同一件事此前有 7 份手写实现。
    */
-  useEffect(() => {
-    if (!open || !state) return;
-    const onDown = (e: MouseEvent): void => {
-      if (popRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown, true);
-    return () => document.removeEventListener('mousedown', onDown, true);
-  }, [open, state]);
+  useOutsideClose(open && !!state, [popRef], () => setOpen(false), { capture: true });
 
   /** 原 `se()` 168-180 */
   const onAnalyze = (): void => {
@@ -207,7 +201,10 @@ export function AnalyzePrompt({
               <div className={styles.wait}>
                 <div className={styles.waitRow}>
                   <span className={shared.spinnerRing} aria-hidden="true" />
-                  <span>{state.phase || ANALYZE_UI_TEXT.waitDefault}</span>
+                  {/* ★ 真值 = 设计稿 `index.html:963-964`（圆环 + `.spinnerText` 两个**真源类**配对） */}
+                  <span className={shared.spinnerText}>
+                    {state.phase || ANALYZE_UI_TEXT.waitDefault}
+                  </span>
                 </div>
               </div>
             ) : (

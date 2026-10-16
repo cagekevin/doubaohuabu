@@ -20,10 +20,10 @@
  *   —— 本组件**不处理键盘**，也不声明 dialog 语义（它同时服务非模态的停靠面板）。
  */
 
-import { useEffect } from 'react';
 import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from 'react';
 import { COMMON_TEXT } from '@/constants/text';
 import { Icon } from './Icon';
+import { useEscapeKey } from './useEscapeKey';
 import shared from './shared.module.css';
 
 /*
@@ -108,7 +108,8 @@ export function PanelShell({
   const hasHead = title != null || meta != null || actions != null;
 
   /**
-   * ★ **`Esc` 关闭 —— 全应用唯一的落点**（`ui/common/` 是 `Escape` 语义唯一允许住的地方）。
+   * ★ **`Esc` 关闭**（口径：**有 `overlay` 就有 `Esc`**）—— 机制在 `ui/common/useEscapeKey`
+   *   的 `scope='window'`（**全应用唯一的窗口级 Esc 实现**），本组件不再自己挂监听。
    *
    * ⚠️ **2026-10-12 上收**：这条监听原先只住在 `Modal` 里 ⇒ **所有直接用
    *   `PanelShell overlay` 的面板**（指纹体检 / 无水印资源 / 遮脸参数 / 素材选择 / 批量发送）
@@ -117,15 +118,7 @@ export function PanelShell({
    * ⚠️ 与点遮罩**同一条守卫**（`closeOnMask === false` ⇒ 两者都不关）——
    *   免得出现"点外面关不掉、按 Esc 却关掉了"的不一致。
    */
-  useEffect(() => {
-    if (!overlay || !onClose || !closeOnMask) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
-      onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [overlay, onClose, closeOnMask]);
+  useEscapeKey(overlay && !!onClose && closeOnMask, () => onClose?.(), 'window');
 
   const card = (
     <div

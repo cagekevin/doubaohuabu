@@ -131,7 +131,6 @@
   /* ★ 2026-10-12：后台视图是**铺满本区**的绝对定位层（`BackendView.module.css` 的 `.view`），
      故这里必须成为它的定位祖先（源 `_Component43` 是整页级容器，同理需要一个定位上下文）。 */
   position: relative;
-  position: relative;
 }
 
 /** ⚠️ **未接线**：画布空态占位，样式已备好但 TSX 尚未引用（保留以便对齐）。 */
@@ -254,10 +253,10 @@
 }
 
 .storageLabel {
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 /* ★ 未设置保存路径 ⇒ 告警色（原 `.topbar-project-storage:not(.configured) .topbar-storage-label`） */

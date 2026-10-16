@@ -36,10 +36,8 @@
   cursor: pointer;
 }
 
-.edgeAct svg {
-  width: 18px;
-  height: 18px;
-}
+/* ⚠️ 气泡里的两颗图标走**真源尺寸**（`Icon` 自带 `.icon` = `--dim-4` 16）⇒ 这里**不设尺寸**：
+   全仓图标只有 `.icon`(16) / `.btn .icon`(14) 两档，别在这两处之外新开档（§8-G12）。 */
 
 .edgeAct:hover {
   background: var(--color-surface-hover);

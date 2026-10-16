@@ -114,10 +114,10 @@
       这里改成**明确的类** —— 靠 DOM 顺序的选择器一改结构就**静默失效**。 */
 .projectName {
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text-strong);
   font-weight: var(--font-weight-bold);
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .projectMeta {

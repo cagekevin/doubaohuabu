@@ -87,7 +87,8 @@ export function RefAutocomplete({ query, library, anchor, onPick, onClose }: Ref
       {items.length === 0 ? (
         <div className={styles.empty}>{REF_TEXT.noMatch}</div>
       ) : (
-        <ul className={styles.list}>
+        <ul>
+          {/* ⚠️ 这个 `<ul>` 不带类名：`ul` 的归零归 base（`styles/reset.css`）—— 本处没有特有样式 */}
           {items.map((it, i) => (
             <li key={it.id}>
               <button

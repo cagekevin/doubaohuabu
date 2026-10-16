@@ -51,6 +51,7 @@ import {
 } from '@/core/rules/newImages';
 import type { ScanPhaseEvent } from '@/core/ports/site.port';
 import styles from './NewImagesPanel.module.css';
+import { bindDragListeners } from '@/ui/common/dragListeners';
 import shared from '@/ui/common/shared.module.css';
 
 export interface NewImagesPanelProps {
@@ -154,12 +155,8 @@ export function NewImagesPanel({ onDropActiveChange }: NewImagesPanelProps = {})
     };
     // ⚠️ 与源的一处**有意差异**（写明）：源版**常挂** window 监听（effect 空依赖、内部判 `O.current`）；
     //    本实现**只在按下期间挂**（等价、更省）。二者语义相同：都由 `mouseup` 收尾。
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
+    // ★ 机制走 `ui/common/dragListeners`（同一套机制此前 4 份手写；本处是 `mouse` 族，逐字保留）
+    return bindDragListeners({ events: 'mouse', onMove, onEnd: onUp });
   }, [pressing, hostOps, pushToast]);
 
   /**

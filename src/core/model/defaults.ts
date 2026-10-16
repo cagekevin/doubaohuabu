@@ -81,10 +81,29 @@ export const NODE_DEFAULTS = {
   },
 } as const satisfies Record<NodeType, unknown>;
 
-/** 取某类节点的默认 data（返回浅拷贝，避免共享引用） */
+/**
+ * 取某类节点的默认 data（**返回深拷贝**，避免共享引用）
+ *
+ * ⚠️ **必须是深拷贝**：默认值里有嵌套数组（`styleIds` / `linkOrder` / `results`）——
+ *   浅拷贝会让所有新节点**共享同一个数组**，一次 `push` 就污染全部。
+ * ★ 机制收口（2026-10-16）：此前这里是 `JSON.parse(JSON.stringify(d))`，与另两处深拷贝
+ *   （`core/rules/clipboard` 的复制载荷 · `state/slices/canvas` 的快照，均照源 `Td`）**不是同一个写法**。
+ *   本函数的定义域是**纯 JSON 数据**（见 `NODE_DEFAULTS`：只有字面量与数组，无 `undefined` / `Date` / `Map`）
+ *   ⇒ 两种写法**输出完全相同**，故统一到 `structuredClone`：**全库深拷贝只此一种机制**。
+ *   ⚠️ 别整体替换到"含 `undefined` 键"的数据上：JSON 轮会**丢键**、`structuredClone` 会**保留**。
+ */
 export function defaultNodeData<T extends NodeType>(type: T): NodeDataOf<T> {
-  const d = NODE_DEFAULTS[type];
-  return JSON.parse(JSON.stringify(d)) as NodeDataOf<T>;
+  /** ⚠️ 用**宽类型**读入：直接取 `NODE_DEFAULTS[type]` 时 TS 认为恒有值（守卫后收窄成 `never`），
+   *  而运行期 `type` 可能来自导入的工程 JSON ⇒ 必须留一条真实可达的检查路径。 */
+  const d = (NODE_DEFAULTS as Record<string, unknown>)[type];
+  /**
+   * ⚠️ **守卫要显式**：`type` 在**编译期**是联合类型，但运行期可能来自**导入的工程 JSON**
+   *   （`importProject` 吃任意 `type` 字符串）。旧写法 `JSON.parse(JSON.stringify(undefined))`
+   *   会抛 `SyntaxError`（丑但**响亮**）；`structuredClone(undefined)` 则是**静默返回 undefined**
+   *   —— 那会让"未知类型节点"悄悄建出一个没有 data 的节点 ⇒ 本仓口径：**宁丑勿哑**。
+   */
+  if (d === undefined) throw new Error(`defaultNodeData: 未知节点类型「${String(type)}」`);
+  return structuredClone(d) as NodeDataOf<T>;
 }
 
 /**

@@ -51,8 +51,9 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useGen, useHostOps, useStore } from '@/state';
+import { HistPop } from './HistPop';
+import { StageDownloadBtn, StageEmpty, StageHistBtn, StageWaiting } from './stageParts';
 import { COMMON_TEXT, GEN_VIDEO_TEXT, MEDIA_PLAYER_TEXT, PROJECT_TEXT } from '@/constants/text';
 import { GEN_PANEL_TEXT } from '@/constants/sendPanelText';
 import { DEFAULT_VIDEO_DURATION } from '@/constants/models';
@@ -88,8 +89,8 @@ import { generateVideoPoster } from '@/ui/lib/videoPoster';
 import { withThumb } from '@/stable/protocols/img';
 import { NodeShell } from './NodeShell';
 import type { RFNodeProps } from './types';
-import { Icon } from '@/ui/common/Icon';
 import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
+import { useOutsideClose } from '@/ui/common/useOutsideClose';
 import { parseRefChips } from '@/core/rules/refs';
 import { stripHtml } from '@/lib/text';
 import { PromptLine, usePromptLookup } from './PromptLine';
@@ -223,18 +224,9 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
     setHistOpen((v) => !v);
   };
 
-  /** 弹层开着时：点外面关掉（原 `YL.jsx:423-438`） */
-  useEffect(() => {
-    if (!histOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const inBtn = histBtnRef.current?.contains(e.target as Node);
-      const inPop = histPopRef.current?.contains(e.target as Node);
-      if (!inBtn && !inPop) setHistOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-    // ⚠️ `histPopRef` 进依赖：它现在由**原语**提供（仍来自 `useRef` ⇒ 稳定引用）
-  }, [histOpen, histPopRef]);
+  /** 弹层开着时：点外面关掉（原 `YL.jsx:423-438`；机制走 `ui/common/useOutsideClose`）
+   *  ⚠️ "算里面"有**两个**：触发钮 + 弹层本身（源同判据）；`GenImageNode` 那份与这里此前**逐字相同** */
+  useOutsideClose(histOpen, [histBtnRef, histPopRef], () => setHistOpen(false));
 
   /** 弹层开着时：给「有 `url` 但没海报」的尝试**懒生成**海报（原 `YL.jsx:439-459`） */
   useEffect(() => {
@@ -482,16 +474,13 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
       // `gv-hist-btn`（原 479-483）：有历史才显示，位于头部**最右**（右槽 actions）
       actions={
         attempts.length > 0 ? (
-          <button
-            ref={histBtnRef}
-            type="button"
-            className={`${styles.gvHistBtn} nodrag${histOpen ? ` ${styles.gvHistBtnOpen}` : ''}`}
+          <StageHistBtn
+            btnRef={histBtnRef}
+            open={histOpen}
+            label={GEN_VIDEO_TEXT.histBtn(attempts.length)}
             title={GEN_VIDEO_TEXT.histBtnTitle}
-            onPointerDown={(e) => e.stopPropagation()}
             onClick={toggleHistory}
-          >
-            {GEN_VIDEO_TEXT.histBtn(attempts.length)}
-          </button>
+          />
         ) : undefined
       }
       cardTitle={GEN_VIDEO_TEXT.cardTitle}
@@ -511,18 +500,9 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
       */}
       <div className={styles.gvStage} style={{ aspectRatio: stageRatio(data.aspectRatio) }}>
         {waiting && (
-          <div
-            className={styles.gvWaiting}
-            aria-label={genVideoWaitingAria(notice)}
-            title={notice?.text || undefined}
-          >
-            <div className={styles.gvwDots}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={styles.gvwText}>{genVideoWaitingText(notice, produced)}</div>
-          </div>
+          <StageWaiting ariaLabel={genVideoWaitingAria(notice)} title={notice?.text || undefined}>
+            {genVideoWaitingText(notice, produced)}
+          </StageWaiting>
         )}
         {produced ? (
           data.resultUrl ? (
@@ -556,10 +536,7 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
             <div className={styles.gvMediaFallback}>{GEN_VIDEO_TEXT.mediaFallback}</div>
           )
         ) : (
-          <div className={styles.gvPreviewEmpty}>
-            <div className={styles.gvPreviewTitle}>{GEN_VIDEO_TEXT.stageEmptyTitle}</div>
-            <div className={styles.gvPreviewSub}>{GEN_VIDEO_TEXT.stageEmptySub}</div>
-          </div>
+          <StageEmpty title={GEN_VIDEO_TEXT.stageEmptyTitle} sub={GEN_VIDEO_TEXT.stageEmptySub} />
         )}
         {/* `gv-play`（原 502-509）：正中播放 / 暂停（键盘 Enter / Space 同效） */}
         {produced && data.resultUrl ? (
@@ -590,19 +567,11 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         ) : null}
         {/* `gv-dl`（原 513-524）：下载结果（有结果即可，不要求 `resultUrl` —— 图片结果也能下） */}
         {produced ? (
-          <button
-            type="button"
-            className={`${styles.gvDl} nodrag`}
+          <StageDownloadBtn
             title={GEN_VIDEO_TEXT.download}
-            aria-label={GEN_VIDEO_TEXT.download}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              void download();
-            }}
-          >
-            <Icon name="download" />
-          </button>
+            ariaLabel={GEN_VIDEO_TEXT.download}
+            onClick={() => void download()}
+          />
         ) : null}
         {/* `gv-tl`（原 525-555）：舞台内的播放进度 —— ★ 形态 = 设计稿的 `.mk-stage-timeline`
             （**贴舞台底边的细条**，无圆角、无旋钮）；拖动 / 点击定位仍挂在本元素上（`seekFromPointer`）。 */}
@@ -686,18 +655,14 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         generateLabel={produced ? PROJECT_TEXT.regenerating : PROJECT_TEXT.generate}
       />
       </NodeShell>
-      {/* `gv-hist-pop`（原 585-620）：历史版本弹层（portal 到 body，按按钮位置定位） */}
-      {histOpen && attempts.length > 0
-        ? createPortal(
-            <div
-              ref={histPopRef}
-              className={styles.gvHistPop}
-              style={histStyle}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className={styles.gvHistTitle}>{GEN_VIDEO_TEXT.histTitle(attempts.length)}</div>
-              {attempts.map((item, i) => {
+      {/* `gv-hist-pop`（原 585-620）：历史版本弹层 —— ★ **外壳**走 `HistPop`（与 `GenImageNode` 同一份） */}
+      <HistPop
+        open={histOpen && attempts.length > 0}
+        title={GEN_VIDEO_TEXT.histTitle(attempts.length)}
+        popRef={histPopRef}
+        style={histStyle}
+      >
+        {attempts.map((item, i) => {
                 const a = asRecord(item);
                 const view = versionItemView(item);
                 const at = typeof a.at === 'number' ? a.at : undefined;
@@ -738,10 +703,7 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
                   </button>
                 );
               })}
-            </div>,
-            document.body,
-          )
-        : null}
+      </HistPop>
     </>
   );
 }

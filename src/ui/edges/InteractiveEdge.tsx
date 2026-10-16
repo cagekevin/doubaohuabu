@@ -26,6 +26,7 @@ import { BaseEdge, getBezierPath, useReactFlow, type EdgeProps } from '@xyflow/r
 import { useStore } from '@/state';
 import { EDGE_TEXT } from '@/constants/text';
 import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
+import { Icon } from '@/ui/common/Icon';
 import styles from './InteractiveEdge.module.css';
 
 /** 悬停多久开气泡（原 `B3.jsx:24` 的 `v = 1000`） */
@@ -195,17 +196,8 @@ export function InteractiveEdge({
               title={EDGE_TEXT.insertNode}
               onClick={onInsert}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 8v8M8 12h8" />
-              </svg>
+              {/* ★ 图标归 `Icon.tsx`（两颗都不是"连线几何"）：插入 = `plus` · 断开 = `x` */}
+              <Icon name="plus" />
             </button>
             <button
               type="button"
@@ -213,17 +205,7 @@ export function InteractiveEdge({
               title={EDGE_TEXT.disconnect}
               onClick={onDisconnect}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M15 9l-6 6M9 9l6 6" />
-              </svg>
+              <Icon name="x" />
             </button>
           </div>,
           document.body,

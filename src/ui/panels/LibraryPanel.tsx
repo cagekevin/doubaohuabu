@@ -26,6 +26,7 @@ import { useMemo, useState, type DragEvent } from 'react';
 import { useHostOps, useStore } from '@/state';
 import { Thumb } from '@/ui/common/Thumb';
 import { ContextMenu, type MenuItem } from '@/ui/common/ContextMenu';
+import { useEscapeKey } from '@/ui/common/useEscapeKey';
 import { LIBRARY_TEXT } from '@/constants/text';
 import { DRAG_MIME_MATERIAL } from '@/constants';
 import { makeLibraryId } from '@/core/rules/project';
@@ -161,6 +162,13 @@ export function LibraryPanel() {
     setRenamingId(null);
   };
 
+  /**
+   * 就地改名的 `Esc` ⇒ 只退出编辑态、不落值。
+   * ⚠️ 走 `ui/common/useEscapeKey`（元素级）：**Escape 处理只许住 `ui/common/`**
+   *   —— 此前这里是就地手写的一份 `else if (e.key === 'Escape')`。
+   */
+  const onEscapeRename = useEscapeKey(renamingId !== null, () => setRenamingId(null));
+
   // ── 右键菜单（原 `RT.jsx:292-298` + `:336-353`）─────────────────────────
   // ★ 开合走**共享件** `ui/common/ContextMenu`（点外部 + Esc + 键盘导航它都有，
   //   原版 `RT.jsx:158-180` 那组 window 监听正是它要收的口 —— 不另写第三份）
@@ -169,6 +177,9 @@ export function LibraryPanel() {
         {
           key: 'replace',
           label: LIBRARY_TEXT.libReplace,
+          /* ★ 真值 = 设计稿 `index.html:934`（`#i-swap` + 「替换素材」）—— 与 `B05` 的
+             「菜单三处 DOM 同构」同一口径：菜单项必挂图标槽。 */
+          icon: 'swap',
           onSelect: () => void replaceItemImage(menu.id),
         },
       ]
@@ -226,11 +237,11 @@ export function LibraryPanel() {
         }}
         onDrop={(e) => void onDropFiles(e)}
       >
+        {/* 空态 —— 真值 = 设计稿 `.empty.isInline`（横排一行；次句是旁注档 `.mk-cell-hint`） */}
         {ordered.length === 0 && (
           <div className={styles.dropHint}>
-            {LIBRARY_TEXT.dropHint}
-            <br />
-            {LIBRARY_TEXT.dropHintSub}
+            <span>{LIBRARY_TEXT.dropHint}</span>
+            <span className={styles.dropHintSub}>{LIBRARY_TEXT.dropHintSub}</span>
           </div>
         )}
 
@@ -274,8 +285,9 @@ export function LibraryPanel() {
                   onBlur={commitRename}
                   onMouseDown={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
+                    // `Esc` 归 `ui/common/useEscapeKey`（Escape 处理只许住 `ui/common/`）
                     if (e.key === 'Enter') commitRename();
-                    else if (e.key === 'Escape') setRenamingId(null);
+                    else onEscapeRename(e);
                   }}
                 />
               ) : (

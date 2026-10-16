@@ -57,15 +57,21 @@
   background: var(--color-surface-sunken);
 }
 
-/* 空态（原 `.library-empty`，逐字两行）—— 在网格里要**跨满整行** */
+/**
+ * 空态 —— 真值 = 设计稿的 `.empty.isInline`（`index.html:945`：**横排一行** + 次句走 `.mk-cell-hint`）。
+ * ⚠️ 设计层**没有**为 `.empty` / `.isInline` 写任何规则 ⇒ 它们就是真机真源类
+ *    （`ui/common/shared.module.css` 的 `.empty` + 横排变体 `.isInline`）⇒ 按真源消费，别另写一份皮。
+ * 本地只留**环境差异**：它渲染在 `.list` 这个 **grid** 里 ⇒ 要跨满整行、并靠 `margin: auto` 居中。
+ */
 .dropHint {
+  composes: empty isInline from '../common/shared.module.css';
   grid-column: 1 / -1;
   margin: auto;
-  padding: var(--space-5) var(--space-2);
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
-  text-align: center;
-  line-height: var(--line-height-relaxed);
+}
+
+.dropHintSub {
+  /* 真值 = `.mk-cell-hint`（次句是旁注档，不与主行同档） */
+  composes: hint from '../common/shared.module.css';
 }
 
 /* 卡片（原 `.lib-row`）—— 真值 = `mockup.css` 的 `.mk-lib-card`：竖排（图 + 一行脚），
@@ -111,13 +117,13 @@
 
 /* 条目名（原 `.lib-name`，`title` = 双击重命名） */
 .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   flex: 1;
   min-width: 0;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* 改名输入框（原 `.lib-name-input`）—— 占满名字那一格 */

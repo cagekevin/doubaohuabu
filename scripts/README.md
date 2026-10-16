@@ -58,6 +58,7 @@
 | `verify-canvas.cjs` | W13 画布完整性 | 8 类节点全部渲染 / 边渲染 / 撤销快捷键可用 |
 | `verify-del.cjs` | 删除链路 | 删除生效 / **不留悬空边** / 撤销可回 |
 | `verify-e2e.cjs` | W15 端到端（真实用户路径） | 新建工程 → 拖素材 → 建文本 → 连线 → 触发（mock 通道）→ 刷新还原 |
+| `verify-queue.cjs` | 发送队列**抽屉**（外壳常驻 + 任务卡，设计稿 `index.html:461-517`） | ① **入队之前**：量"空队列时抽屉/把手仍在、角标不显示"（`C42` 的行为判据）② 造工程 → **Shift 框选** → 「加入队列」→ 开抽屉：量**计算样式**（卡片化 / 8px 状态点及其 `border-strong` 灰 / 次行 `2xs`+`muted` / 图标钮 22×22 + 图标 14 / 底栏 24 高 / 分组标题文案），并用探针验 `st_running` 的呼吸动画（**含 `prefers-reduced-motion` 下必须停**）；截图落 `.shots/` 留人看 |
 | `verify-config-store.cjs` | TD-13-5（配置损坏的处置） | 三态必须区分：损坏 ⇒ **备份 ＋ 报错**，**不静默重置** |
 | `extract-real-sample.cjs` | 取证工具（非断言） | 从旧版 leveldb 提取 localStorage **真值**（老数据形状的唯一真身；别拿推理当事实） |
 

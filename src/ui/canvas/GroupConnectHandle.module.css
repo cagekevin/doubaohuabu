@@ -24,9 +24,8 @@
   z-index: var(--z-overlay);
 }
 
+/* 锚点里的图标走**真源尺寸**（`Icon` 自带 `.icon` = `--dim-4` 16）⇒ 此处只留拖拽语义 */
 .handle > svg {
-  width: 16px;
-  height: 16px;
   pointer-events: none;
 }
 

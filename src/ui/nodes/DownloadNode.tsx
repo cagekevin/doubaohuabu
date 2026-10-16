@@ -192,7 +192,7 @@ export function DownloadNode({ id, data, selected }: RFNodeProps<'download'>) {
         <div className={styles.downloadActionRow}>
           <button
             type="button"
-            className={styles.downloadBtn}
+            className={styles.downloadAll}
             disabled={busy || !folder || targets.length === 0}
             onClick={() => void downloadAll()}
           >

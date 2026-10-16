@@ -24,6 +24,13 @@
   transition: transform var(--duration-fast) var(--ease-out);
 }
 
+/* 尊重系统「减少动态效果」（真值 = 设计稿 `mockup.css:1210-1217` 的第 ⑤ 条里的 `.mk-sq`） */
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none;
+  }
+}
+
 /* 收起态：面板左移出屏，**把手留在原处**（所以把手不是面板的子元素）*/
 .drawer:not(.drawerOpen) .panel {
   transform: translateX(-100%);
@@ -139,7 +146,8 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  /* 卡片之间 8（真值 = `mockup.css:707` 的 `.mk-sq .SendQueuePanel-list { gap: var(--space-2) }`） */
+  gap: var(--space-2);
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -153,39 +161,102 @@
   margin: 0 var(--space-3);
 }
 
+/*
+ * ★★ **任务卡**（真值 = `mockup.css:696-762` 的 `.mk-sq .SendQueuePanel-item` + `.mk-task-*`）
+ *
+ * 设计层把列表项从"表格里的行"重做成**一条任务 = 一张卡**（`mockup.css:695-706` 写了四条理由）：
+ *   ① **卡片化**：内嵌底 + 圆角、**去掉分隔下边框**（原来靠 `border-bottom` 分行，看着像表格）
+ *   ② **状态点在左槽**（四态一色：品牌=进行中并呼吸 / 灰=排队 / 绿=完成 / 红=失败）—— 不读字也能扫出状态
+ *   ③ **主次分层**：名称是主（默认字色），账号 · 状态 · 耗时是次（`muted` · `2xs` · 单行截断）
+ *   ④ 操作改**图标钮靠右**（原来每条占一整行文字按钮，队列一长全是按钮）
+ */
 .item {
   display: flex;
   flex-direction: column;
-  gap: var(--space-half);
-  padding-bottom: var(--space-1);
-  /* 分隔「上一条队列项 / 下一条」—— 原用 --color-surface-sunken（背景色当边框色），改回描边语义 */
-  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
 }
 
 .itemTop {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.idx {
-  flex: 0 0 auto;
-  min-width: 14px;
-  color: var(--color-text-faint);
-  text-align: right;
+/*
+ * 状态点（真值 = `.mk-task-state`：8px 圆点 · 四态一色）—— 形状走真源 `.dot` + `.dotLg`
+ *
+ * ⚠️ 四态是**设计层**定的：原版只靠文字色表达状态（`.sq-status.sending/.success/.failed/.cancelled`），
+ *   其中「进行中」由原版的**信息蓝**改走**品牌色**（设计层 `.mk-task-state.is-running`）。
+ * ⚠️ `cancelled` 归**灰**：源里 `.sq-status.cancelled` 就是 `panel-3` / `text-faint`（不是红）。
+ * ⚠️ 档位只此四档：表外状态（`string` 类型兜不住）走 `.st_queued`，**不新造第五色**。
+ */
+.stateDot {
+  composes: dot dotLg from '../common/shared.module.css';
+}
+.st_running {
+  background: var(--color-action-primary);
+  animation: sqPulse var(--duration-bounce) var(--ease-out) infinite;
+}
+/*
+ * ⚠️ 「减少动态效果」这条**必须**写在本文件的 `.st_running` **之后**：两者同为单类、同特异性
+ *   ⇒ 靠**源序**取胜，写在前面的会被后面的 `animation` **静默盖掉**（`css -- check order` 正是查这个）。
+ *   真值 = 设计稿「动画」段第 ⑤ 条里的 `.mk-task-state`。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .st_running {
+    animation: none;
+  }
+}
+.st_queued {
+  background: var(--color-border-strong);
+}
+.st_done {
+  background: var(--color-success);
+}
+.st_failed {
+  background: var(--color-danger);
+}
+/* 呼吸（真值 = 设计层 `@keyframes mkPulse`：只动 `opacity` —— `0/100%` 1 · `50%` .35） */
+@keyframes sqPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .name {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 次行：账号 · 状态 · 耗时（真值 = `.mk-task-meta`）—— 单行截断，不抢名称的主位 */
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-2xs);
+}
+
+/* 分隔点（真值 = `.mk-task-sep`） */
+.sep {
+  color: var(--color-text-faint);
 }
 
 .acc {
   flex: 0 0 auto;
-  color: var(--color-text-muted);
 }
 
 /* 原 `.sq-acc.pending` —— 还没分配账号 */
@@ -198,39 +269,56 @@
   color: var(--color-warning-text);
 }
 
+/* 分组标题：进行中 / 已完成（真值 = `.mk-sq-group`） */
+.group {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
+  /* ssot-space-ok: 逐字对源 —— `mockup.css:759` 的 `.mk-sq-group { letter-spacing: 0.5px }` */
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* 说明行（排队原因 / 成片备注）—— 最次一级：`faint` · `2xs` · 单行截断（真值 = `.mk-task-note`） */
 .note {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-faint);
+  font-size: var(--font-size-2xs);
 }
 
+/* 操作：图标钮**靠右**（真值 = `.mk-task-actions`：`margin-left: auto` + `gap: 2px` = `--space-half`） */
 .acts {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-half);
+  margin-left: auto;
+  flex: none;
 }
 
-/* ★ 查 6：小按钮走共享真源 */
+/* ★ 查 6：小按钮走共享真源；★★ **底栏**再矮一档（真值 = `mockup.css:769-774` 的
+   `.mk-sq .SendQueuePanel-foot .btn`：`24` 高 · `2xs` 字 · 左右 `space-1` —— 三个标准按钮
+   在 320 宽的抽屉里挤不下，`flex: none` 防被压缩） */
 .btn {
   composes: btn btnSm from '../common/shared.module.css';
-}
-
-/* 原 `.sq-genrow` —— 成片状态行 */
-.genRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.genLabel {
-  color: var(--color-text-faint);
-}
-
-.gen {
+  flex: none;
+  /* ssot-space-ok: 逐字对源 —— `mockup.css:771` 的 `.mk-sq .SendQueuePanel-foot .btn { height: 24px }`
+     （24 不在 `--space-*` / `--dim-*` 刻度上，且是**控件高度**不是间距 ⇒ 保留字面量） */
+  height: 24px;
   padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
+  font-size: var(--font-size-2xs);
 }
 
+/* 任务卡上的图标钮（真值 = 设计层 `.mk-iconbtn`：**幽灵**方钮 + 14px 图标）。
+   ⚠️ 尺寸写在这里（本地），**不为它新增真源类**（口径：禁新增概念、名字要语义化 —— 见 `CSS规范` §5） */
+.iconBtn {
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  /* ssot-space-ok: 逐字对源 —— `mockup.css:322-331` 的 `.mk-iconbtn { width/height: 22px }` */
+  width: 22px;
+  height: 22px;
+}
+
+/* 成片状态（**只有颜色** —— 设计层的任务卡把原版那颗药丸去掉了：状态在 meta 行里只是染色文字）
+   ⚠️ 状态语义由 `GEN_CLS` 表给出，这里只认类名（`core` 不认识 CSS，判据 A1）。 */
 .gen_idle,
 .gen_na {
   color: var(--color-text-faint);
@@ -253,17 +341,10 @@
   color: var(--color-danger-text);
 }
 
+/* 已耗时（原 `.sq-gen-wait`）—— ★ `tabular-nums` 是源里的（逐字）：秒数每秒跳，等宽数字才不会左右抖 */
 .genWait {
-  color: var(--color-text-muted);
-}
-
-.genNote {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-faint);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .foot {
@@ -275,10 +356,10 @@
 }
 
 .footHint {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
   color: var(--color-text-faint);
   text-align: right;
 }

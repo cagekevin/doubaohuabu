@@ -29,11 +29,8 @@
   box-shadow: var(--shadow-lg);
 }
 
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
+/* 原 `.list` 已删 —— 它只有 `ul` 的归零三条，而那三条**归 base**（`styles/reset.css` 的 `ul{}`）。
+   ⚠️ TSX 里那个 `<ul>` 现在不带类名。 */
 
 .item {
   composes: listItem listItemClickable from '../common/shared.module.css';
@@ -56,11 +53,11 @@
 }
 
 .name {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .empty {

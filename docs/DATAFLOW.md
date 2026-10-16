@@ -436,7 +436,7 @@ ui/panels/BatchSendPanel「加入队列」→ state/sendQueue.enqueue
        → core/rules/sendQueueDispatch  【分发决策：按账号并发 / notBefore / 池分配】
        → core/rules/sendQueueSettle    【结算：成功记指纹 / 失败分类退避重试 / 换号排除表】
        → createSendPipeline（state/batchSend 抽出）  【与批量发送共用 prepare / transport】
-  → ui/panels/SendQueuePanel.tsx   【面板：deriveGenView ← core/rules/sendQueuePanel】
+  → ui/panels/SendQueuePanel.tsx   【面板：状态推导 ← core/rules/genProgress】
 ```
 
 **关键边**：批量入口 = `core/usecases/sendQueue.runBatchSend`；批量与队列共用 `createSendPipeline`（`prepare` = `resolveSendAccountForChain` + `buildVideoPayload`；`transport` = `SitePort.send`），否则是两份 `prepare`；占用释放经 store 的 `holdAccount` / `releaseAccount`（`itemId` 校验）。

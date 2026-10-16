@@ -216,10 +216,10 @@
 
 .thumbMeta {
   overflow: hidden;
-  color: var(--color-text-faint);
-  font-size: var(--font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
 }
 
 .right {

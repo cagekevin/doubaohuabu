@@ -8,6 +8,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 import { useAnchoredLayer } from './useAnchoredLayer';
+import { useOutsideClose } from './useOutsideClose';
 import styles from './shared.module.css';
 
 /** 可点项 */
@@ -61,15 +62,8 @@ export function ContextMenu({ x, y, items, title, onClose }: ContextMenuProps) {
   const firstSelectable = items.findIndex((it) => !isMenuSeparator(it));
   const [active, setActive] = useState(firstSelectable < 0 ? 0 : firstSelectable);
 
-  // 点击外部关闭（全应用唯一实现）
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-    // ⚠️ `ref` 进依赖：它现在是**原语返回的 ref**（仍来自 `useRef` ⇒ 稳定引用，加上不会重复绑定）。
-  }, [onClose, ref]);
+  // 点击外部关闭（★ 机制走 `ui/common/useOutsideClose`；菜单只在打开时挂载 ⇒ `enabled` 恒 `true`）
+  useOutsideClose(true, [ref], onClose);
 
   // 键盘导航 + ESC 关闭（★ 跳过分隔线）
   useEffect(() => {

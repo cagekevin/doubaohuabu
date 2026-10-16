@@ -8,11 +8,10 @@
  *   | 件 | 源 | 说明 |
  *   |---|---|---|
  *   | **1 秒 tick** | 58-66 | 只要有 `sending` 或"还在生成中"的项 ⇒ 每秒 bump 一次 state，**让等待时长刷新**（`tc` 只算到调用那一刻） |
- *   | 拖动 | 90-140 | `pointerdown` 记起点 ⇒ `pointermove` 算位移 ⇒ **`clampPanelPosition` 夹进视口** ⇒ `pointerup` 落 `localStorage` |
- *   | ~~位置持久化~~ | ~~`U3`/`Pp`~~ | ⛔ **已随"浮窗 → 抽屉"删除**（`C25`）：抽屉钉在画布左缘、满高，**没有可移动的余地**
- *     ⇒ `SendQueueController.readPanelPos` / `writePanelPos`、`StoragePort`/`PERSIST` 在本文件的依赖一并删净。
- *     ⚠️ **契约键 `LS_SENDQUEUE_POS` 与 `persistKeys` 里的条目仍保留** —— 它是 `stable/contracts` 里的
- *     **冻结字符串**，删它属于动契约（老数据/迁移可能仍要认它），收益不成比例 |
+ *   | 拖动 | 90-140 | `pointerdown` 记起点 ⇒ `pointermove` 算位移 ⇒ 夹进视口 ⇒ `pointerup` 落 `localStorage` |
+ *   | ~~位置持久化~~ | ~~`U3`/`Pp`~~ | ⛔ **不做**：抽屉钉在画布左缘、满高，**没有可移动的余地**（`C25`）⇒ 拖拽与落盘都无消费者。
+ *     ⚠️ **契约键 `LS_SENDQUEUE_POS` 与 `persistKeys` 里的条目保留** —— 它是 `stable/contracts` 里的
+ *     **冻结字符串**（老数据 / 迁移可能仍要认它），删它属动契约、收益不成比例 |
  *   | 折叠 | 196-206 | `.sq-chevron` |
  *   | 进度条 | 209-215 | 完成数 / 总数 |
  *   | 列表 | 216-269 | 序号 + 名称 + 账号（未分配 ⇒ 待分配）+ 第N次 + note + 两个动作 + **成片行** |
@@ -44,7 +43,8 @@ import {
   type GenProgressState,
   type GenReplyLite,
 } from '@/core/rules/genProgress';
-import { queueStats } from '@/core/rules/sendQueueOps';
+import { isActiveQueueStatus, queueStats } from '@/core/rules/sendQueueOps';
+import type { QueueItem } from '@/core/rules/sendQueuePlan';
 import { nextPoolStrategy } from '@/core/rules/accountPick';
 import { SEND_QUEUE_TEXT } from '@/constants/text';
 import { Icon } from '@/ui/common/Icon';
@@ -78,6 +78,22 @@ const GEN_CLS: Record<GenProgressState, string> = {
   done: 'done',
   queued: 'queued',
   generating: 'generating',
+};
+
+/**
+ * 队列项 `status` → 任务卡**状态点**档（真值 = 设计层 `.mk-task-state` 的四态；`mockup.css:743-754`）
+ *
+ * ⚠️ 五态的字面值 = 源版 `O3`（42459）的键：`waiting` / `sending` / `success` / `failed` / `cancelled`。
+ * ⚠️ `cancelled` 归**灰**：源里 `.sq-status.cancelled` 就是 `panel-3` / `text-faint`（不是红）。
+ * ⚠️ `QueueItem.status` 是 `string`（照源版字面形状 `$S` 41903，**故意不用联合类型**）⇒
+ *   表外状态（将来新增 / 脏数据）统一落 `.st_queued` —— **不猜、也不新造第五色**。
+ */
+const QUEUE_DOT_CLS: Record<string, string> = {
+  sending: 'running',
+  waiting: 'queued',
+  success: 'done',
+  failed: 'failed',
+  cancelled: 'queued',
 };
 
 export function SendQueuePanel() {
@@ -116,10 +132,8 @@ export function SendQueuePanel() {
    */
   const [nowMs, setNowMs] = useState(() => Date.now());
   /*
-   * ⚠️ 这里原有一整套**浮窗拖拽**（位置 state + `readPanelPos`/`writePanelPos` 落 localStorage
-   *    + `clampPanelPosition` 夹进视口）—— 随形态变更**整块删**：
-   *    抽屉钉在画布左缘、满高，**没有可移动的余地**（收起即让位，不再需要"拖开"）。
-   *    设计稿头上留着的 `title="拖动可移动面板位置"` 是它照抄真机头的结果，不是抽屉的诉求。
+   * ⚠️ 抽屉钉在画布左缘、满高 ⇒ **没有可移动的余地**：不做拖拽、不存位置。
+   *   设计稿头上那句 `title="拖动可移动面板位置"` 是它照抄**原版浮窗**头的结果，不是抽屉的诉求 ⇒ 不实现。
    */
 
   const stats = useMemo(() => queueStats(items), [items]);
@@ -142,13 +156,18 @@ export function SendQueuePanel() {
   }, [busy, collapsed, items, nowMs]);
 
   /**
-   * ★ **队列为空 ⇒ 整个面板不渲染**（原 `z3.jsx:186-188`：`if (!m.length) return null;`）
+   * ★★ **左抽屉常驻**（★ **有意偏离源版**，用户裁定 2026-10-16）
    *
-   * ⚠️ 此前写的是 `items.length === 0 && collapsed` ⇒ 空队列且**未折叠**时照样渲染一个
-   *    空浮窗，常驻左下角**压住画布的缩放控件**（`+ / − / ⛶`）。
-   *    源里根本没有"空态面板"这一形态 —— 有队列才出现。
+   * 设计层把 `.mk-drawer-handle` 当**外壳元素**：`mockup.css:91` 的壳元素组里就有它，
+   * 且明写「默认收成一条竖钮（贴画布左缘），点开即本面板」——**它属于外壳，不随队列有无出现/消失**。
+   * 源版相反：`z3.jsx:186-188` 是 `if (!m.length) return null;`（空队列**整块不出现**）。
+   * 裁定：**按设计稿** —— 左侧栏是外壳的一部分，**"空队列时这条侧栏整个消失"比"开着是空的"更糟**
+   * （用户实机观感即此，见 `daily/架构日志/16-跨区-…-2026-10-16.md`）。
+   *
+   * ⚠️ **空队列不新造空态**：设计稿没画「队列空态」那一格 ⇒ 面板就是**同一副壳、列表为空**
+   *   （分组标题也随之为空 —— 见 `renderItem` 上方的分组注释），不写「暂无任务」这类自造文案。
+   * ⚠️ 角标只在**有待办**时出现（设计稿给的是 `pending` 数；0 条时画个 `0` 是噪声）。
    */
-  if (items.length === 0) return null;
 
   const done = stats.success + stats.failed + stats.cancelled;
   /** 待办（还没结束的）—— 把手上那个角标（真值 = `.mk-drawer-badge`）*/
@@ -165,6 +184,126 @@ export function SendQueuePanel() {
       />
     </div>
   );
+
+  /**
+   * 一张**任务卡**（原 `z3.jsx:227-268` 的 `.sq-item`）
+   *
+   * ★ **真值 = 设计层 `index.html:464-517`**（`.mk-task` 一族）：状态点在左槽 · 名称是主 ·
+   *   账号 / 状态 / 耗时在次行（`·` 分隔）· 说明行单行截断 · 操作是**靠右的图标钮**。
+   * ⚠️ 与设计稿的一处**有意差异**：它 ② 那格把状态写作「排队中」，而本工程按源版 `B0` 推导 ——
+   *   队列项还在 `waiting` 时**这个节点一次都没成功过** ⇒ 源给的是「生成未开始」
+   *   （`GEN_PROGRESS_TEXT.notStarted`）。「排队」这件事由**状态点**（灰）表达 —— 正是设计稿 ② 的原话
+   *   「不读字也能扫出状态」。
+   */
+  const renderItem = (it: QueueItem) => {
+    const node = nodeById.get(it.nodeId);
+    // ★ 该节点是否已有出片（原 `ke` = `H.data.resultUrl || H.data.resultPoster`）——
+    //   决定「查看」渲不渲染（源同判据）
+    const hasResult = !!(node?.data?.resultUrl || node?.data?.resultPoster);
+    // ★ 后台进度（源 `A.queueProgress[item.id]`）—— 由 `state/sendQueue` 的 `runQueuePing` 写（`TD-16-103`）
+    const progress: GenReplyLite | null = queueProgress[it.id] ?? null;
+    const g = resolveGenProgress(
+      {
+        status: it.status,
+        startedAt: it.startedAt ?? null,
+        finishedAt: it.finishedAt ?? null,
+        accountId: it.accountId ?? null,
+      },
+      node ? { data: node.data as GenNodeLite['data'] } : null,
+      progress,
+      nowMs,
+    );
+    // 字段改名只在这一处（`state`→`cls`、`elapsed`→`wait`）—— 视图要的四个名字就齐了
+    const gen = { text: g.text, cls: GEN_CLS[g.state], wait: g.elapsed, note: g.note };
+    /** 还在跑？（原 `z3.jsx:222` 的 `U`）—— 判据走真源 `isActiveQueueStatus`，别在这里重写字面量 */
+    const active = isActiveQueueStatus(it.status);
+    /** 成片状态那一格显不显示（源：`na` = 连生成记录都没有 ⇒ 次行只留账号） */
+    const showGen = gen.cls !== 'na' || !!gen.wait;
+
+    return (
+      <div className={styles.item} key={it.id}>
+        <div className={styles.itemTop}>
+          {/* 状态点（装饰性：状态语义由次行的成片文案 + 规则里的状态推导承载，故对读屏隐藏） */}
+          <span
+            className={`${styles.stateDot} ${styles[`st_${QUEUE_DOT_CLS[it.status] ?? 'queued'}`]}`}
+            aria-hidden="true"
+          />
+          <span className={styles.name} title={it.name || it.nodeId}>
+            {it.name || it.nodeId}
+          </span>
+          <span className={styles.acts}>
+            {/* ★ 「查看」（原 `z3.jsx` 的 `sq-btn ok`）—— 有出片才渲染；点了把画布定位过去 */}
+            {hasResult ? (
+              <button
+                type="button"
+                className={styles.iconBtn}
+                title={SEND_QUEUE_TEXT.viewTitle}
+                onClick={() => requestFocusNodes([it.nodeId])}
+              >
+                <Icon name="eye" />
+              </button>
+            ) : null}
+            {active ? (
+              <button
+                type="button"
+                className={styles.iconBtn}
+                title={SEND_QUEUE_TEXT.cancelTitle}
+                onClick={() => q.cancel(it.id)}
+              >
+                <Icon name="x" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.iconBtn}
+                title={SEND_QUEUE_TEXT.retryTitle}
+                onClick={() => q.retry(it.id)}
+              >
+                <Icon name="refresh" />
+              </button>
+            )}
+          </span>
+        </div>
+
+        {/* 次行：账号 · 成片状态 · 已耗时 · 第N次（真值 = 设计层 `.mk-task-meta`） */}
+        <div className={styles.meta}>
+          {it.accountName ? (
+            <span className={styles.acc}>{it.accountName}</span>
+          ) : (
+            <span className={`${styles.acc} ${styles.accPending}`}>
+              {SEND_QUEUE_TEXT.accountPending}
+            </span>
+          )}
+          {showGen && (
+            <>
+              <span className={styles.sep}>·</span>
+              <span className={styles[`gen_${gen.cls}`] ?? ''}>{gen.text}</span>
+              {gen.wait && <span className={styles.genWait}>{gen.wait}</span>}
+            </>
+          )}
+          {(it.attempt || 0) > 1 && (
+            <span className={styles.attempt}>{SEND_QUEUE_TEXT.attempt(it.attempt)}</span>
+          )}
+        </div>
+
+        {/* 说明行（原 `.sq-note` 与 `.sq-gen-note` 两处）—— 都收进同一行的样式里，单行截断 */}
+        {it.note && (
+          <div className={styles.note} title={it.note}>
+            {it.note}
+          </div>
+        )}
+        {gen.note && (
+          <div className={styles.note} title={gen.note}>
+            {gen.note}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /** 分组（真值 = 设计层 `index.html:462` / `499` 的 `.mk-sq-group`）—— 在跑的在前、已结束的在后 */
+  const activeItems = items.filter((it) => isActiveQueueStatus(it.status));
+  const doneItems = items.filter((it) => !isActiveQueueStatus(it.status));
 
   return (
     /* ★ **抽屉**（真值 = `mockup.css:606-693`）：容器铺满画布左缘**只为定位**、且不吃指针；
@@ -224,98 +363,19 @@ export function SendQueuePanel() {
         {!collapsed && (
           <>
             <div className={styles.list}>
-            {items.map((it, idx) => {
-                const node = nodeById.get(it.nodeId);
-                // ★ 该节点是否已有出片（原 `ke` = `H.data.resultUrl || H.data.resultPoster`）——
-                //   决定「查看」渲不渲染（源同判据）
-                const hasResult = !!(node?.data?.resultUrl || node?.data?.resultPoster);
-                // ★ 后台进度（源 `A.queueProgress[item.id]`）—— 由 `state/sendQueue` 的 `runQueuePing` 写（`TD-16-103`）
-                const progress: GenReplyLite | null = queueProgress[it.id] ?? null;
-                const g = resolveGenProgress(
-                  {
-                    status: it.status,
-                    startedAt: it.startedAt ?? null,
-                    finishedAt: it.finishedAt ?? null,
-                    accountId: it.accountId ?? null,
-                  },
-                  node ? { data: node.data as GenNodeLite['data'] } : null,
-                  progress,
-                  nowMs,
-                );
-                // 字段改名只在这一处（`state`→`cls`、`elapsed`→`wait`）—— 视图要的四个名字就齐了
-                const gen = { text: g.text, cls: GEN_CLS[g.state], wait: g.elapsed, note: g.note };
-                return (
-                  <div className={styles.item} key={it.id}>
-                    <div className={styles.itemTop}>
-                      <span className={styles.idx}>{idx + 1}</span>
-                      <span className={styles.name} title={it.name || it.nodeId}>
-                        {it.name || it.nodeId}
-                      </span>
-                      {it.accountName ? (
-                        <span className={styles.acc}>{it.accountName}</span>
-                      ) : (
-                        <span className={`${styles.acc} ${styles.accPending}`}>
-                          {SEND_QUEUE_TEXT.accountPending}
-                        </span>
-                      )}
-                      {(it.attempt || 0) > 1 && (
-                        <span className={styles.attempt}>{SEND_QUEUE_TEXT.attempt(it.attempt)}</span>
-                      )}
-                    </div>
-                    {it.note && (
-                      <div className={styles.note} title={it.note}>
-                        {it.note}
-                      </div>
-                    )}
-                    <div className={styles.acts}>
-                      {/* ★ 「查看」（原 `z3.jsx` 的 `sq-btn ok`）—— 有出片才渲染；点了把画布定位过去 */}
-                      {hasResult ? (
-                        <button
-                          type="button"
-                          className={styles.btn}
-                          title={SEND_QUEUE_TEXT.viewTitle}
-                          onClick={() => requestFocusNodes([it.nodeId])}
-                        >
-                          {SEND_QUEUE_TEXT.view}
-                        </button>
-                      ) : null}
-                      {it.status === 'waiting' || it.status === 'sending' ? (
-                        <button
-                          type="button"
-                          className={styles.btn}
-                          title={SEND_QUEUE_TEXT.cancelTitle}
-                          onClick={() => q.cancel(it.id)}
-                        >
-                          {SEND_QUEUE_TEXT.cancel}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className={styles.btn}
-                          title={SEND_QUEUE_TEXT.retryTitle}
-                          onClick={() => q.retry(it.id)}
-                        >
-                          {SEND_QUEUE_TEXT.retry}
-                        </button>
-                      )}
-                    </div>
-                    {/* 成片行（原 260-267）—— 只在有内容时显示 */}
-                    {(gen.wait || gen.note || gen.cls !== 'na') && (
-                      <div className={styles.genRow}>
-                        <span className={styles.genLabel}>{SEND_QUEUE_TEXT.genLabel}</span>
-                        <span className={`${styles.gen} ${styles[`gen_${gen.cls}`] ?? ''}`}>{gen.text}</span>
-                        {gen.wait && <span className={styles.genWait}>{gen.wait}</span>}
-                        {gen.note && (
-                          <span className={styles.genNote} title={gen.note}>
-                            {gen.note}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
+              {activeItems.length > 0 && (
+                <>
+                  <div className={styles.group}>{SEND_QUEUE_TEXT.groupActive}</div>
+                  {activeItems.map(renderItem)}
+                </>
+              )}
+              {doneItems.length > 0 && (
+                <>
+                  <div className={styles.group}>{SEND_QUEUE_TEXT.groupDone}</div>
+                  {doneItems.map(renderItem)}
+                </>
+              )}
+            </div>
 
           <div className={styles.foot}>
             {/* ★ **选号策略**（原 `z3.jsx:271-276`）—— foot 最左一颗；点一下在两种策略间切换 */}
@@ -331,7 +391,14 @@ export function SendQueuePanel() {
             <button type="button" className={styles.btn} onClick={() => (paused ? q.resume() : q.pause())}>
               {paused ? SEND_QUEUE_TEXT.resume : SEND_QUEUE_TEXT.pause}
             </button>
-            <button type="button" className={styles.btn} onClick={() => q.clearFinished()}>
+            {/* ⚠️ 源版这颗是**有门控**的（`z3.jsx:280` 的 `disabled={!D}`，`D` = 已结束计数）——
+                `C42` 把面板改成"空队列也常驻"之后，没有门控就会出现"点了没反应"的死按钮 */}
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={done === 0}
+              onClick={() => q.clearFinished()}
+            >
               {SEND_QUEUE_TEXT.clearDone}
             </button>
             <span className={styles.footHint}>{formatElapsed(items[0]?.startedAt ?? null, null, nowMs)}</span>

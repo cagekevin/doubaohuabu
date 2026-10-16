@@ -14,12 +14,13 @@
  *   ② 参数**不再手写 localStorage**（源 `L$`）：落盘由 `pick()` 自动覆盖（见 `state/persist.ts` 第 ⑦ 段）。
  */
 
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { useStore } from '@/state';
 import { FACE_MASK_EFFECTS, FACE_MASK_EFFECT_LABEL } from '@/constants/facemask';
 import { toPercent } from '@/lib/math';
 import { FACEMASK_TEXT } from '@/constants/text';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
+import { useOutsideClose } from '@/ui/common/useOutsideClose';
 import styles from './FaceMaskPanel.module.css';
 import { PanelShell } from '@/ui/common/PanelShell';
 
@@ -47,15 +48,8 @@ export function FaceMaskPanel({ nodeId, x, y, onClose }: FaceMaskPanelProps) {
   // 关闭一（原 36-40）：`Escape` —— 走共享 hook（差异 ①）
   useEscapeKey(true, onClose);
 
-  // 关闭二（原 31-35）：**外部** mousedown（捕获阶段）
-  useEffect(() => {
-    const onDown = (e: MouseEvent): void => {
-      const el = panelRef.current;
-      if (el && !el.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', onDown, true);
-    return () => document.removeEventListener('mousedown', onDown, true);
-  }, [onClose]);
+  // 关闭二（原 31-35）：**外部** mousedown（捕获阶段）—— 机制走 `ui/common/useOutsideClose`
+  useOutsideClose(true, [panelRef], onClose, { capture: true });
 
   const left = Math.max(VIEWPORT_MARGIN, Math.min(x, (window.innerWidth || 1200) - PANEL_W - VIEWPORT_MARGIN));
   const top = Math.max(VIEWPORT_MARGIN, Math.min(y, (window.innerHeight || 800) - PANEL_H - VIEWPORT_MARGIN));

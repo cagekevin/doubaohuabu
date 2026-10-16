@@ -85,10 +85,16 @@
   flex: none;
 }
 
-/* 上 / 下一处 —— ★ 收口到真源 `.iconBtn`（22×22 图标微型钮，真值 = 设计稿的 `.mk-iconbtn`）。
+/* 上 / 下一处 —— ★ 走真源 **`.btnIconSm`**（22×22 图标钮，真值 = 设计稿 `.mk-iconbtn`：**幽灵** —— 无描边无底、
+   `faint` 色、悬停才给 `surface-hover` 底）。
+   ⚠️ 本面板**不在设计稿里**（`C24` 已核：`fuzzy`/`疑似` 零命中）⇒ 这一档按设计层的**图标钮范式**取，
+      不是抄 `.mk-chipbtn`（那是**带描边 + raised 底**的"文字版"微型钮，两者**不同皮**）。
    原来是**自写的第三档尺寸** 18×18：比设计那档小 4，且低于 24 的可点尺寸。 */
 .fuzzyNav {
-  composes: iconBtn from '../common/shared.module.css';
+  composes: btn btnIcon btnGhost from '../common/shared.module.css';
+  /* ssot-space-ok: 逐字对源 —— `mockup.css:322-331` 的 `.mk-iconbtn { width/height: 22px }` */
+  width: 22px;
+  height: 22px;
 }
 
 .fuzzyNav:disabled {
@@ -155,11 +161,11 @@
 }
 
 .fuzzyCardName {
-  min-width: 0;
   overflow: hidden;
-  color: var(--color-text-strong);
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  color: var(--color-text-strong);
 }
 
 .fuzzyKw {

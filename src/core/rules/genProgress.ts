@@ -18,6 +18,7 @@
 import { GEN_ATTEMPT_WINDOW_MS } from '@/constants';
 import { GEN_PROGRESS_TEXT } from '@/constants/text';
 import { formatDuration } from '@/lib/time';
+import { isActiveQueueStatus } from './sendQueueOps';
 
 /** 进度状态（对应原 `cls`，一一映射；`ui` 负责转类名） */
 export const GEN_PROGRESS_STATES = [
@@ -95,7 +96,14 @@ export function resolveGenProgress(
   reply: GenReplyLite | null | undefined,
   now: number,
 ): GenProgress {
-  const running = entry.status === 'waiting' || entry.status === 'sending';
+  /**
+   * ★ 判「还在跑」走**唯一真源** `sendQueueOps.isActiveQueueStatus` ——
+   *   此前这里又写了一遍 `=== 'waiting' || === 'sending'`（**同一个谓词的第二处**），
+   *   而那份真源的注释正好写着「别各自再写一遍」。
+   * ⚠️ 源版这件事确实散在**三处**（`A3` 42011-42015 清空已完成 · `z3.jsx:222` 面板分组 ·
+   *   `B0` 42493 本函数）⇒ 本仓收成一处、三处都调它。
+   */
+  const running = isActiveQueueStatus(entry.status);
 
   // ① 还没成功过：waiting/sending → 「生成未开始」，其余 → 「—」
   if (entry.status !== 'success') {

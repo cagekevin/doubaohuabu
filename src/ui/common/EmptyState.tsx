@@ -13,11 +13,13 @@ export interface EmptyStateProps {
   hint?: string;
   /** 可选操作区（如「＋ 新建项目」） */
   action?: ReactNode;
+  /** 可选外壳类 —— 给"覆盖整块区域"这类**定位**用（空的形态仍归真源 `.empty`） */
+  className?: string;
 }
 
-export function EmptyState({ title, hint, action }: EmptyStateProps) {
+export function EmptyState({ title, hint, action, className }: EmptyStateProps) {
   return (
-    <div className={styles.empty}>
+    <div className={className ? `${styles.empty} ${className}` : styles.empty}>
       <div className={styles.emptyTitle}>{title}</div>
       {hint !== undefined && <div className={styles.emptyHint}>{hint}</div>}
       {action}

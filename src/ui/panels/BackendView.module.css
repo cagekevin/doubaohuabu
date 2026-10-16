@@ -210,10 +210,15 @@
   visibility: hidden;
   pointer-events: none;
 }
-/* 当前账号：可见 + 可交互（原 `.dv-wv-active`） */
+/* 当前账号：可见 + 可交互（原 `.dv-wv-active`）
+   ssot-layer-ok: 逐字对源 —— 原版 `.doubao-view-webview.dv-wv-active{…;z-index:2}`。
+   ⚠️ 这个 `2` **不进 `--z-*` 刻度**：那套（canvas/panel/overlay/modal/toast）是**页面级**层序，
+     而这里只是**同一个 `.webviews` 容器内**"当前账号压住隐藏的那些"（兄弟间的局部层叠）——
+     换成页面级 token 会把语义写错。同理 `.sessionClip` 的 `7`（原 `.lsb-clip`）。 */
 .webviewActive {
   visibility: visible;
   pointer-events: auto;
+  /* ssot-layer-ok: 逐字对源（见上） */
   z-index: 2;
 }
 
@@ -246,15 +251,15 @@
 
 /* 视图题（原 `.dv-title`，真值 = `mockup.css:1828`）—— 居中 · 次级色 */
 .headTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   flex: 1;
   min-width: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-muted);
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 

@@ -53,6 +53,7 @@ import { imageChannelLabel } from '@/core/rules/genImage';
 import { nodeAccountLabel } from '@/core/rules/genVideo';
 import { normalizeModelLabel } from '@/core/rules/prompt';
 import { AccountPicker } from '@/ui/common/AccountPicker';
+import { bindDragListeners } from '@/ui/common/dragListeners';
 import { RefAutocomplete, matchRefTrigger } from '@/ui/nodes/RefAutocomplete';
 import { Icon } from '@/ui/common/Icon';
 import shared from '@/ui/common/shared.module.css';
@@ -182,19 +183,11 @@ export function GenPanel() {
   /** 最新一次渲染的 `close`（Esc 用 —— 见下，避免每敲一个字重挂监听） */
   const closeRef = useRef<() => void>(() => {});
 
-  // ★ Esc 关闭（原 `422-434`）：面板开着时 `window` 上的 `Escape` ⇒ 提交提示词并关闭。
-  //   ⚠️ 不用 `useEscapeKey`：那是**元素级** `onKeyDown`（焦点必须在面板里）；源这里是
-  //   **全局** `window` 监听 —— 焦点在画布/别处时按 Esc 也要能关（逐字保留）。
-  useEffect(() => {
-    if (!genNode) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      closeRef.current();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [genNode]);
+  // ★ Esc 关闭（原 `422-434`）：面板开着时 ⇒ 提交提示词并关闭。
+  //   ⚠️ 走 `useEscapeKey(…, 'window')` —— **窗口级**（焦点在画布/别处时按 Esc 也要能关，逐字保留源语义）；
+  //   与 `PanelShell` 的是**同一份实现**（此前这里另手写了一份监听，见该 hook 头注的两种作用域）。
+  //   ⚠️ 回调进 hook 的 ref ⇒ 不必再为"每敲一个字重挂监听"自备 `closeRef`。
+  useEscapeKey(!!genNode, () => closeRef.current(), 'window');
 
   // ★ 锚定定位（原 `60-90`）：跟随节点屏幕矩形、下方放不下**翻到上方**、三重边距夹取。
   //   ⚠️ 数学在纯层 `planGenPanelAnchor`（可单测）；这里只把结果写到 DOM（源也是直写
@@ -227,14 +220,8 @@ export function GenPanel() {
       setResizing(false);
       resizeRef.current = null;
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-    };
+    // ★ 机制走 `ui/common/dragListeners`（同一套机制此前 4 份手写；`pointercancel` 是它本来就有的那半）
+    return bindDragListeners({ onMove: move, onEnd: up });
   }, [resizing]);
 
   const nodeId = genNode?.id ?? '';

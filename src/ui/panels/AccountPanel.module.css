@@ -71,12 +71,12 @@
  * ⚠️ 它**不在**「按钮统一」那一组里 ⇒ 档位仍是 `btnSm`（这是有据的不动，不是漏改）。
  */
 .fpHealth {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   composes: btn btnSm btnBlock from '../common/shared.module.css';
   justify-content: flex-start;
   font-size: var(--font-size-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .fpHealthCrit {
@@ -104,9 +104,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  /* `ul` 的归零（`margin`/`padding`/`list-style`）**归 base**（`styles/reset.css`）—— 别在这里再抄一遍 */
 }
 
 /*
@@ -194,20 +192,20 @@
 
 /* ★ 设计层 `AccountPanel-name`：`sm` 字 + 强色（原来色靠继承、字号也靠继承）*/
 .name {
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
   font-size: var(--font-size-sm);
   color: var(--color-text-strong);
 }
 
 /* ★ 设计层 `AccountPanel-meta`：字号 `xs` → **`2xs`**（它是名字下面的一行附注）*/
 .meta {
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
   color: var(--color-text-faint);
   font-size: var(--font-size-2xs);
 }

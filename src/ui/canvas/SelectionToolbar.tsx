@@ -14,7 +14,7 @@
  * ⚠️ `Escape` 处理走 `ui/common/useEscapeKey`（`原则8/rule-of-three` 只允许它在 `ui/common/`）。
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
 import { useStore } from '@/state';
 import { SELECT_TOOLBAR_TEXT } from '@/constants/text';
@@ -28,6 +28,7 @@ import {
   type SelectionAnchor,
 } from '@/core/rules/panelAnchor';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
+import { useOutsideClose } from '@/ui/common/useOutsideClose';
 import { log } from '@/lib/log';
 import styles from './SelectionToolbar.module.css';
 
@@ -78,14 +79,8 @@ export function SelectionToolbar() {
   const closeMenu = () => setMenuOpen(false);
 
   // 点空白处关闭（原 169-177 的 `mousedown`；`Escape` 那半走 `useEscapeKey`）
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [menuOpen]);
+  // ★ 机制走 `ui/common/useOutsideClose`（同一件事此前有 7 份手写实现，已收成一份）
+  useOutsideClose(menuOpen, [wrapRef], closeMenu);
 
   const onKeyDown = useEscapeKey(menuOpen, closeMenu);
 

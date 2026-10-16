@@ -20,12 +20,14 @@
  * 外壳统一走 `NodeShell`（判据 C1）
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useHostOps, useStore } from '@/state';
+import { HistPop } from './HistPop';
+import { StageDownloadBtn, StageEditImageBtn, StageEmpty, StageHistBtn, StageWaiting } from './stageParts';
 import { Thumb } from '@/ui/common/Thumb';
 import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
-import { COMMON_TEXT, GEN_IMAGE_TEXT, MATERIAL_NODE_TEXT } from '@/constants/text';
+import { useOutsideClose } from '@/ui/common/useOutsideClose';
+import { COMMON_TEXT, GEN_IMAGE_TEXT } from '@/constants/text';
 import { isCardClick } from '@/core/rules/cardClick';
 import { genImageCurrentUrl, imageApiChipLabel, imageChannelLabel, imageVersionView } from '@/core/rules/genImage';
 // ⚠️ 舞台的 `aspectRatio` 与文生视频**同一条纯规则**（判据 C1）—— 不各写一份
@@ -41,7 +43,6 @@ import { PROJECT_TEXT } from '@/constants/text';
 import { GEN_PANEL_TEXT } from '@/constants/sendPanelText';
 import { parseRefChips } from '@/core/rules/refs';
 import { stripHtml } from '@/lib/text';
-import { Icon } from '@/ui/common/Icon';
 import { PromptLine, usePromptLookup } from './PromptLine';
 import styles from './shared.module.css';
 
@@ -101,18 +102,9 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
     setHistOpen((v) => !v);
   };
 
-  /** 弹层开着时：点外面关掉（与 `YL.jsx:423-438` 同法） */
-  useEffect(() => {
-    if (!histOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const inBtn = histBtnRef.current?.contains(e.target as Node);
-      const inPop = histPopRef.current?.contains(e.target as Node);
-      if (!inBtn && !inPop) setHistOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-    // ⚠️ `histPopRef` 进依赖：它现在由**原语**提供（仍来自 `useRef` ⇒ 稳定引用）
-  }, [histOpen, histPopRef]);
+  /** 弹层开着时：点外面关掉（与 `YL.jsx:423-438` 同法；机制走 `ui/common/useOutsideClose`）
+   *  ⚠️ "算里面"有**两个**：触发钮 + 弹层本身（源同判据） */
+  useOutsideClose(histOpen, [histBtnRef, histPopRef], () => setHistOpen(false));
 
   /**
    * 切换到某一张（原 `E`，`ZL.jsx:100-107`）
@@ -175,16 +167,13 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
         meta={chipText !== null ? <span className={styles.igChipStatus}>{chipText}</span> : undefined}
         actions={
           versions.length > 0 ? (
-            <button
-              ref={histBtnRef}
-              type="button"
-              className={`${styles.gvHistBtn} nodrag${histOpen ? ` ${styles.gvHistBtnOpen}` : ''}`}
+            <StageHistBtn
+              btnRef={histBtnRef}
+              open={histOpen}
+              label={GEN_IMAGE_TEXT.histBtn(versions.length)}
               title={GEN_IMAGE_TEXT.histBtnTitle}
-              onPointerDown={(e) => e.stopPropagation()}
               onClick={toggleHistory}
-            >
-              {GEN_IMAGE_TEXT.histBtn(versions.length)}
-            </button>
+            />
           ) : undefined
         }
         cardTitle={GEN_IMAGE_TEXT.cardTitle}
@@ -205,42 +194,24 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
         */}
         <div className={styles.gvStage} style={{ aspectRatio: stageRatio(data.aspectRatio) }}>
           {data.generating && (
-            <div className={styles.gvWaiting} aria-label={GEN_IMAGE_TEXT.waitingAria}>
-              <div className={styles.gvwDots}>
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className={styles.gvwText}>
-                {current ? GEN_IMAGE_TEXT.waitingRegenerate : GEN_IMAGE_TEXT.waitingFirst}
-              </div>
-            </div>
+            <StageWaiting ariaLabel={GEN_IMAGE_TEXT.waitingAria}>
+              {current ? GEN_IMAGE_TEXT.waitingRegenerate : GEN_IMAGE_TEXT.waitingFirst}
+            </StageWaiting>
           )}
           {current ? (
             // 原 240：`Xt(d, 720)` —— 缩略图宽 **720**
             <Thumb src={current} width={720} className={styles.thumb} />
           ) : (
-            <div className={styles.gvPreviewEmpty}>
-              <div className={styles.gvPreviewTitle}>{GEN_IMAGE_TEXT.stageEmptyTitle}</div>
-              <div className={styles.gvPreviewSub}>{GEN_IMAGE_TEXT.stageEmptySub}</div>
-            </div>
+            <StageEmpty title={GEN_IMAGE_TEXT.stageEmptyTitle} sub={GEN_IMAGE_TEXT.stageEmptySub} />
           )}
           {/* `gv-dl`（原 244-255）：下载这张图（条件 = 有当前图 `u`，与是否在生成无关） */}
           {current ? (
-          <button
-            type="button"
-            className={`${styles.gvDl} nodrag`}
-            title={GEN_IMAGE_TEXT.download}
-            aria-label={GEN_IMAGE_TEXT.downloadAria}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              void download();
-            }}
-          >
-            <Icon name="download" />
-          </button>
-        ) : null}
+            <StageDownloadBtn
+              title={GEN_IMAGE_TEXT.download}
+              ariaLabel={GEN_IMAGE_TEXT.downloadAria}
+              onClick={() => void download()}
+            />
+          ) : null}
           {/*
             ★ 提示词分析（原 `ZL.jsx:256/273-286` 的浮动按钮 + `321` 的浮层）
             ⚠️ **落点在 `gv-stage` 内**（源 256 的 `.mat-float-actions` 就在 `.gv-stage` 里）——
@@ -256,19 +227,14 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
             state={data.analyzePrompt ?? null}
             showButton={!!current && !data.generating}
             leading={
-              <button
-                type="button"
-                className={styles.matFloatBtn}
-                title={MATERIAL_NODE_TEXT.editImageTitle}
-                onMouseDown={(e) => e.stopPropagation()}
+              /* ⚠️ 这颗钮的**外壳**与 `MaterialNode` 那份是同一件 ⇒ 走 `StageEditImageBtn`；
+                 `leading` 是"先构造、后由 `showButton` 决定渲不渲染" ⇒ 收窄留在下面 */
+              <StageEditImageBtn
                 onClick={(e) => {
                   e.stopPropagation();
-                  // ⚠️ `leading` 是**先构造、后由 `showButton` 决定渲不渲染** ⇒ 这里要自己收窄
                   if (current) openImageEditor(id, current, data.label || GEN_IMAGE_TEXT.title);
                 }}
-              >
-                {MATERIAL_NODE_TEXT.editImage}
-              </button>
+              />
             }
           />
         </div>
@@ -300,18 +266,14 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           }
         />
       </NodeShell>
-      {/* `gv-hist-pop`（原 288-314）：历史版本弹层（portal 到 body，按按钮位置定位） */}
-      {histOpen && versions.length > 0
-        ? createPortal(
-            <div
-              ref={histPopRef}
-              className={styles.gvHistPop}
-              style={histStyle}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className={styles.gvHistTitle}>{GEN_IMAGE_TEXT.histTitle(versions.length)}</div>
-              {versions.map((item, i) => {
+      {/* `gv-hist-pop`（原 288-314）：历史版本弹层 —— ★ **外壳**走 `HistPop`（与 `GenVideoNode` 同一份） */}
+      <HistPop
+        open={histOpen && versions.length > 0}
+        title={GEN_IMAGE_TEXT.histTitle(versions.length)}
+        popRef={histPopRef}
+        style={histStyle}
+      >
+        {versions.map((item, i) => {
                 const view = imageVersionView(item, current ?? null);
                 return (
                   <button
@@ -342,10 +304,7 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
                   </button>
                 );
               })}
-            </div>,
-            document.body,
-          )
-        : null}
+      </HistPop>
     </>
   );
 }

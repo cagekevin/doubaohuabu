@@ -22,6 +22,7 @@ import { getBezierPath, Position, useReactFlow, ViewportPortal } from '@xyflow/r
 import { useStore } from '@/state';
 import { CANVAS_TEXT } from '@/constants/text';
 import { Icon } from '@/ui/common/Icon';
+import { bindDragListeners } from '@/ui/common/dragListeners';
 import styles from './GroupConnectHandle.module.css';
 
 /** 选中节点外接框 + 锚点几何（原 `:21-48` 的 `o`） */
@@ -117,6 +118,13 @@ export function GroupConnectHandle({ onGroupConnectEnd }: GroupConnectHandleProp
       hintedRef.current = null;
       setLine({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
 
+      /**
+       * 解绑函数（`onUp` 里调；先给个空实现免"未赋值"路径）。
+       * ★ 监听由 `ui/common/dragListeners` 挂 —— 同一套机制此前有 **4 份手写**（见该文件头注），
+       *   它额外覆盖 **`pointercancel`**（此前只有 `GenPanel` 处理了它）。
+       */
+      let unbind: () => void = () => {};
+
       const onMove = (ev: PointerEvent): void => {
         const p = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
         setLine((cur) => (cur ? { ...cur, x2: p.x, y2: p.y } : cur));
@@ -136,8 +144,7 @@ export function GroupConnectHandle({ onGroupConnectEnd }: GroupConnectHandleProp
       };
 
       const onUp = (ev: PointerEvent): void => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
+        unbind();
         const under = document.elementFromPoint(ev.clientX, ev.clientY);
         const el = under?.closest('.react-flow__node') as HTMLElement | null;
         const targetId = el?.getAttribute('data-id') ?? null;
@@ -158,8 +165,7 @@ export function GroupConnectHandle({ onGroupConnectEnd }: GroupConnectHandleProp
         }
       };
 
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+      unbind = bindDragListeners({ onMove, onEnd: onUp });
     },
     [bounds, clearHint, connectManyToTarget, onGroupConnectEnd, screenToFlowPosition, selected],
   );

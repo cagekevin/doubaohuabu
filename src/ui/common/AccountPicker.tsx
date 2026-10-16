@@ -27,7 +27,7 @@
  * ⚠️ `Escape` 关闭走 `ui/common/useEscapeKey`（`原则8/rule-of-three` 要求处理只住 `ui/common/`）
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 // ★ 站点能力表（"某站点提交到哪个通道"的唯一真源）—— 本文件不再写站点名
 import { capsOf } from '@/core/rules/siteCaps';
 // ★ 默认通道的唯一真源（数据层）
@@ -45,6 +45,7 @@ import {
 } from '@/core/rules/accountPick';
 import { ACCOUNT_NODE_TEXT, ACCOUNT_PICKER_TEXT } from '@/constants/text';
 import { useEscapeKey } from './useEscapeKey';
+import { useOutsideClose } from './useOutsideClose';
 import { Icon } from './Icon';
 import shared from './shared.module.css';
 import styles from './AccountPicker.module.css';
@@ -118,18 +119,10 @@ export function AccountPicker({
     setPos({ left: r.left, bottom: window.innerHeight - r.top + 4 });
   }, [open]);
 
-  // 点别处关闭（`mousedown` 而非 `click`：避免与菜单项的点击竞争）
-  useEffect(() => {
-    if (!open) return;
-    const onDocMouseDown = (e: MouseEvent): void => {
-      const t = e.target as Node | null;
-      if (triggerRef.current?.contains(t)) return;
-      if ((t as HTMLElement | null)?.closest?.('[data-account-picker-menu]')) return;
-      close();
-    };
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [open, close]);
+  // 点别处关闭（机制走 `ui/common/useOutsideClose`；面板走 portal ⇒ 用 `[data-…]` 选择器算"里面"）
+  useOutsideClose(open, [triggerRef], close, {
+    ignore: (t) => !!(t as HTMLElement | null)?.closest?.('[data-account-picker-menu]'),
+  });
 
   /** 落值（原 `Y`）：`channel` 与当前相同 ⇒ **不带它** */
   const commit = (sendAccount: string, nextChannel?: string): void => {

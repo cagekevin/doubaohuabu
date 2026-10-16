@@ -1,8 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { defaultNodeData, inheritGenNodeData } from '../defaults';
+import type { NodeType } from '@/stable/model/node';
+import { NODE_DEFAULTS, defaultNodeData, inheritGenNodeData } from '../defaults';
 
 /** 造一个节点（只给 `inheritGenNodeData` 用到的两字段） */
 const node = (type: string, data: Record<string, unknown>) => ({ type, data });
+
+/**
+ * `defaultNodeData` —— ★ 它必须是**深拷贝**（8 类默认值里有嵌套数组），
+ * 且机制已统一到 `structuredClone`（与 `core/rules/clipboard` / `state/slices/canvas` 同一写法）。
+ * ⚠️ 这两条一起才有意义：只测"不共享引用"会漏掉"嵌套数组共享"这种最阴的写法（浅拷贝）。
+ */
+describe('defaultNodeData（8 类默认 data 的深拷贝）', () => {
+  it('★ 两次调用**不共享**任何嵌套数组（改一份不污染另一份，也不污染常量）', () => {
+    const a = defaultNodeData('imggen');
+    const b = defaultNodeData('imggen');
+    expect(a.styleIds).not.toBe(b.styleIds);
+    expect(a.results).not.toBe(b.results);
+    a.styleIds.push('x');
+    a.results.push({ url: 'u' } as never);
+    expect(b.styleIds).toEqual([]);
+    expect(defaultNodeData('imggen').results).toEqual([]);
+  });
+
+  it('★ 输出与"JSON 轮"**逐字等价**（这就是当时敢换机制的前提：定义域只有纯 JSON 值）', () => {
+    // ⚠️ 类型集合**从真源取**（别像第一版那样手写 8 个字符串 —— 手写错一个就会静默拿到 undefined）
+    for (const t of Object.keys(NODE_DEFAULTS) as NodeType[]) {
+      expect(defaultNodeData(t)).toEqual(JSON.parse(JSON.stringify(defaultNodeData(t))));
+    }
+  });
+
+  it('★ 未知类型**响亮报错**（不许静默返回 undefined）', () => {
+    expect(() => defaultNodeData('not-a-type' as NodeType)).toThrow(/未知节点类型/);
+  });
+});
 
 describe('inheritGenNodeData（原 `addGenVideo` 29496 / `addGenImage` 29536）', () => {
   it('★ 无同类节点 ⇒ 空 patch（**不编造**）', () => {

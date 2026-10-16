@@ -39,6 +39,8 @@
 .iconDown { transform: rotate(90deg); }
 .iconLeft { transform: rotate(180deg); }
 
+
+
 /* ── Modal ── */
 /* 遮罩（原 `.mask` 改名 —— mockup 定稿「遮罩」就叫 `.overlay`）*/
 /* ★ **遮罩只有一种**（2026-10-12 用户裁定）：全屏 + 居中 + 暗底。
@@ -108,14 +110,14 @@
  *   ⇒ 文本槽放的是**任意长度**的用户文本（账号名 / 计数 / 副标题）⇒ 必须**可收缩**。
  */
 .panelTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   flex: 0 1 auto;
   min-width: 0;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /*
  * 头部中槽（计数 / 账号 / 时长）—— 与 `panelHeadActions` 的区别：**不靠右**（紧跟在标题之后）。
@@ -124,11 +126,11 @@
  *    或溢出（而它是"头里的一行"，不该改变头高）。
  */
 .panelHeadMid {
-  flex: 0 1 auto;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
@@ -299,11 +301,11 @@
   font-size: var(--font-size-md);
 }
 .bannerMsg {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 
@@ -328,10 +330,10 @@
   font-size: var(--font-size-md);
 }
 .saveErrorText {
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 /* ── EmptyState ── */
 /* ── EmptyState 的整块空态 ──
@@ -479,6 +481,8 @@
 /* 纯图标方块（宽 = 高）*/
 .btnIcon { width: var(--btn-height); padding: 0; flex: none; }
 
+
+
 /*
  * ★ **节点内微型钮**（真值 = `mockup.css` 的 `.mk-chipbtn`）—— 22px，比标准按钮矮一档。
  * 设计稿里 4 处同一形态：「@ 引用素材」（文本节点）· 「编辑图片」/「分析提示词」（生成/素材节点）·
@@ -503,19 +507,6 @@
 .chipBtn:hover {
   background: var(--color-surface-hover);
   color: var(--color-text-strong);
-}
-
-/*
- * ★ **节点内纯图标微型钮**（真值 = `mockup.css` 的 `.mk-iconbtn`）—— 22×22。
- * 设计稿里它与 `.chipBtn` 是**一对**（文字版 / 图标版，同高同皮）⇒ 真源也成对落，
- * 免得各处再自造第三个尺寸（真机此前有过 18 / 24 / 32 三档）。
- * ⚠️ 定义必须在 `.chipBtn` **之后**（同文件 `composes` 单遍扫描）。
- */
-.iconBtn {
-  composes: chipBtn;
-  width: 22px;
-  padding: 0;
-  justify-content: center;
 }
 
 /**
@@ -572,6 +563,8 @@
   font-size: var(--font-size-2xs);
   line-height: var(--line-height-snug);
 }
+
+
 
 /**
  * ★ **表单行**（标签 + 控件）—— 真值 = `mockup.css` 的 `.mk-form-row` / `.mk-form-label`。
@@ -761,6 +754,9 @@
  *    `cursor` / `white-space: nowrap` / `overflow: hidden` + 省略号。
  */
 .select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -773,9 +769,6 @@
   font: inherit;
   font-size: var(--field-font-size);
   cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .select:hover {
   border-color: var(--field-border-focus);
@@ -958,6 +951,12 @@
 }
 @keyframes spinnerSpin {
   to { transform: rotate(360deg); }
+}
+/* 尊重系统「减少动态效果」（真值 = 设计稿 `mockup.css:1210-1217` 的第 ⑤ 条） */
+@media (prefers-reduced-motion: reduce) {
+  .spinnerRing {
+    animation: none;
+  }
 }
 
 /* ── 基础控件：徽章 / 药丸（★ 两种规格，改造前散在 BatchSendPanel / AnalyzePrompt）── */

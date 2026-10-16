@@ -70,9 +70,10 @@ export function NodePresetModal({ payload, onClose }: NodePresetModalProps) {
         autoFocus
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
-          // 原 1756-1762：`Enter` ⇒ 保存；`Escape` ⇒ 取消（`Modal` 也吃 `Escape`，这里保留源的两个键语义）
+          // 原 1756-1762：`Enter` ⇒ 保存。
+          // ⚠️ `Escape` **不在这里** —— `Modal` → `PanelShell` 已按「有 overlay 就有 Esc」处理
+          //   （此前两边各处理一次 ⇒ 同一个 `onClose` 被触发两遍；`Esc` 的唯一落点是 `ui/common`）。
           if (e.key === 'Enter') save();
-          if (e.key === 'Escape') onClose();
         }}
       />
     </Modal>
