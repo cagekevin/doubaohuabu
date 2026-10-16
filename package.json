@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "vite",
     "build:watch": "vite build --watch",
-    "build:watch:electron": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
     "build": "npm run check && npm run build:electron && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -22,6 +21,7 @@
     "lint:dead-code": "node scripts/check-dead-code.mjs",
     "lint:gates": "node scripts/check-gate-vitals.mjs",
     "test": "vitest run",
+    "test:affected": "node scripts/test-affected.mjs",
     "check": "node scripts/gates-run.mjs check",
     "check:health": "node scripts/gates-run.mjs health",
     "check:list": "node scripts/gates-run.mjs list",
