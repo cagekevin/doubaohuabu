@@ -158,16 +158,21 @@ const SEED = [
   const n1 = await countNodes();
   step('③ 拖入素材 → 素材节点 +1', dropped && n1 === n0 + 1, `${n0} → ${n1}`);
 
-  // ── ④ 双击空白 → 建文本节点（用**真实鼠标事件**，比合成事件更接近用户）──
+  // ── ④ 右键空白 → 建节点浮层 → 「文本」⇒ 文本节点 +1 ──
+  //    ⚠️ **2026-10-16 改**：这一步原先靠「**双击**空白建文本节点」造节点 —— 用户裁定把那个入口**删掉**
+  //       （`CanvasHost` 的 `onDoubleClickCapture` 一并撤掉，空态文案同步改）⇒ 冒烟改走**剩下的真实入口**：
+  //       **右键空白 → `.create-panel` → 点「文本」**。⚠️ 不改成"合成事件"（那会绕开 React 的处理）。
   const paneBox = await page.evaluate(() => {
     const r = document.querySelector('.react-flow__pane')?.getBoundingClientRect();
     return r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
   });
-  let dbl = false;
-  let dblAt = '';
+  let made = false;
+  let madeAt = '';
+  /** ★ `Esc` 关建节点浮层（2026-10-16 新增的关闭语义） */
+  let escOk = false;
   if (paneBox) {
     // ⚠️ 必须避开：① 已有节点 ② **浮层**（MiniMap / Controls / 生成面板）
-    //    —— 实测踩过：双击落在 MiniMap 上，节点不会创建（假失败）
+    //    —— 实测踩过：点/双击落在 MiniMap 上，节点不会创建（假失败）
     const boxes = await page.evaluate(() => {
       const sel = '.react-flow__node, .react-flow__minimap, .react-flow__controls, [data-testid="gen-panel"]';
       return [...document.querySelectorAll(sel)].map((el) => {
@@ -177,9 +182,7 @@ const SEED = [
     });
     const hits = (c) => boxes.some((o) => c.x >= o.x - 24 && c.x <= o.x + o.w + 24 && c.y >= o.y - 24 && c.y <= o.y + o.h + 24);
 
-    // 在画布区域**网格扫描**找一个真正空白的点
-    // ⚠️ 扫描必须**覆盖到画布边缘的空白带**：节点可能很大（实测拖入的素材节点 604×720，
-    //    把 gx≥0.15 的整片区域占满）⇒ 起步 0.02、步长 0.05（20×20 个候选）
+    // 在画布区域**网格扫描**找一个真正空白的点（同原判据：节点可能很大，起步 0.02、步长 0.05）
     let free = null;
     for (let gy = 0.05; gy <= 0.95 && !free; gy += 0.05) {
       for (let gx = 0.02; gx <= 0.98 && !free; gx += 0.05) {
@@ -188,9 +191,24 @@ const SEED = [
       }
     }
     if (free) {
-      await page.mouse.dblclick(free.x, free.y);
-      dbl = true;
-      dblAt = `${Math.round(free.x)},${Math.round(free.y)}`;
+      const panel = page.locator('[data-testid="create-panel"]');
+      // ★ **先验 `Esc` 关得掉**（2026-10-16 补的关闭语义：本浮层此前只有"点空白"那条，
+      //   与 `PanelShell`/`GenPanel` 的"有整屏层就有 Esc"口径不一致；改前这条**必红**）
+      await page.mouse.click(free.x, free.y, { button: 'right' });
+      await panel.first().waitFor({ state: 'visible', timeout: 3000 });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      escOk = (await panel.count()) === 0;
+
+      // 再重新打开，真正建一个文本节点
+      await page.mouse.click(free.x, free.y, { button: 'right' });
+      // 浮层三个选项：`imggen` / `genvideo` / **`text`（第 3 颗）**
+      // ⚠️ 用**序号**选而不是文案选：文案可能随设计稿改，序号跟着 `CreatePanel` 的结构（comment 里标了）
+      const opt = panel.locator('button').nth(2);
+      await opt.waitFor({ state: 'visible', timeout: 3000 });
+      await opt.click();
+      made = true;
+      madeAt = `${Math.round(free.x)},${Math.round(free.y)}`;
     } else {
       // 诊断（**不改断言**）：找不空白点时把障碍物几何打出来，免得只能猜
       console.log('空白点自检：画布', JSON.stringify(paneBox), '\n  障碍物', JSON.stringify(boxes));
@@ -198,7 +216,8 @@ const SEED = [
   }
   await page.waitForTimeout(500);
   const n2 = await countNodes();
-  step('④ 双击空白 → 文本节点 +1', dbl && n2 === n1 + 1, `${n1} → ${n2}${dblAt ? ` @${dblAt}` : '（未找到空白点）'}`);
+  step('④ 右键空白 → 建节点浮层「文本」⇒ 文本节点 +1', made && n2 === n1 + 1, `${n1} → ${n2}${madeAt ? ` @${madeAt}` : '（未找到空白点）'}`);
+  step('④b ★ 建节点浮层按 `Esc` 关得掉', escOk, escOk ? 'Esc 后浮层已消失' : 'Esc 后浮层仍在');
 
   // ── ⑤ 选中 imggen 节点 → 生成面板出现 ──
   /**
@@ -274,6 +293,30 @@ const SEED = [
   const afterReload = await countNodes();
   // 判据 = 「刷新后与刷新前一致」（**不**耦合其它步骤的节点数 —— 那会让失败相互掩盖）
   step('⑧ 刷新后状态还原', afterReload === beforeReload && afterReload > 0, `落盘 ${beforeReload} / 渲染 ${afterReload}`);
+
+  // ── ⑩ ★ 双击图片位：**占位不响应**（大图预览的接线边界）──
+  //    ⚠️ **这条 harness 验不了"真图双击开大图"**：e2e 跑在**浏览器**里（非 Electron），库里的内联图
+  //       在加载时被规范化成 `img://` 引用，而**`img://` 协议只有 Electron 主进程提供** ⇒ 这里所有缩略图
+  //       都渲染成**占位**（`_thumbPlaceholder_` + 调用方的 `_thumbImg_` 两个类）。
+  //    ⇒ 能在这里锁住的是**设计边界**：`Thumb` 只在**成功渲染出 `<img>`** 时透传双击
+  //       （占位 = 不是图片 ⇒ 点了不该弹大图）。真图那条路径**需 Electron 或人工手点**（已在交付里写明）。
+  const libThumb = page.locator('[class*="_thumbImg_"]').first();
+  const thumbCount = await libThumb.count();
+  let placeholderNoop = null;
+  if (thumbCount && (await libThumb.isVisible().catch(() => false))) {
+    const cls = await libThumb.evaluate((el) => String(el.className));
+    const isPlaceholder = cls.includes('_thumbPlaceholder_');
+    await libThumb.dblclick();
+    await page.waitForTimeout(300);
+    const dialogs = await page.evaluate(() => document.querySelectorAll('[role="dialog"]').length);
+    placeholderNoop = { isPlaceholder, dialogs };
+    if (dialogs > 0) await page.keyboard.press('Escape');
+  }
+  step(
+    '⑩ ★ 双击「占位」不开大图（占位不是图片）',
+    !!placeholderNoop && placeholderNoop.isPlaceholder && placeholderNoop.dialogs === 0,
+    `${JSON.stringify(placeholderNoop)}（真图路径需 Electron/人工）`,
+  );
 
   // ── 输出 ──
   console.log('\n════════ W15 端到端判据 ════════');

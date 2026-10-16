@@ -9,7 +9,7 @@
  *    它是冻结协议，不该住 UI 层（否则非 UI 消费者要反向依赖 ui）。本文件**只转发**。
  */
 
-import { useState } from 'react';
+import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 // ★ 协议规则的**真源**（冻结契约）—— 消费者一律直接引它；本文件也只自用，**不再转出去**
 import { withThumb } from '@/stable/protocols/img';
 import { COMMON_TEXT, MATERIAL_NODE_TEXT } from '@/constants/text';
@@ -23,9 +23,15 @@ export interface ThumbProps {
   className?: string;
   /** 覆盖默认宽度 */
   width?: number;
+  /**
+   * 透传的点击 / 双击（★ 2026-10-16 新增，为"双击看大图"用）。
+   * ⚠️ 只在**成功渲染出 `<img>`** 时透传：占位（无图 / 加载失败）不是图片，别让它也能点开大图。
+   */
+  onClick?: (e: ReactMouseEvent<HTMLImageElement>) => void;
+  onDoubleClick?: (e: ReactMouseEvent<HTMLImageElement>) => void;
 }
 
-export function Thumb({ src, alt = '', className, width }: ThumbProps) {
+export function Thumb({ src, alt = '', className, width, onClick, onDoubleClick }: ThumbProps) {
   const [failed, setFailed] = useState(false);
 
   // ★ **2026-10-12（`TD-09-1`）**：占位文案改委托 SSOT —— 原硬编码 `无图`，
@@ -55,6 +61,8 @@ export function Thumb({ src, alt = '', className, width }: ThumbProps) {
       alt={alt}
       loading="lazy"
       decoding="async"
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onError={() => setFailed(true)}
     />
   );

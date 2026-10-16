@@ -25,6 +25,75 @@ const DEFAULT_SEEK_SEC = 1;
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_W = 480;
 
+/**
+ * ★ **取帧的共用内核**（2026-10-16 提出来）—— 「把 `video` **此刻**的画面导成 dataURL」。
+ *
+ * ★ **为什么提出来**：本仓有两处要"抓视频的一帧"，**机器完全不同目的**：
+ *   | 用它的 | 输入 | 输出 | 失败口径 |
+ *   |---|---|---|---|
+ *   | `generateVideoPoster`（海报缩略图） | **离屏** `<video>`（从 `url` 加载、seek 到 `seekSec`） | `image/jpeg` **0.8** · 宽 ≤480 | **任何失败 ⇒ `null`**（源 `s(null)`，从不 reject） |
+ *   | 大图预览的「截当前帧 / 尾帧」（`ImageLightbox`） | **页面上正在播的那个** `<video>`（已 seek 好） | `image/png`（要能再进剪贴板） | **返回 `null` 由调用方去报错**（原则 6：别静默） |
+ *   ⇒ 共用的只有"**画到 canvas 再导出**"这一段（含 `videoWidth/Height` 守卫 + 缩放 + 跨域污染会抛）
+ *     —— 这才是"同一件东西"；两边的**质量/尺寸/报错口径是真差异**，各留在自己的包装里。
+ *
+ * @param maxW 宽度上限；**不给 = 按原始尺寸**（剪贴板要原图；海报那侧自己传 480）
+ * @returns `null` = 这个元素现在拿不到帧（未加载 / 尺寸为 0 / canvas 被跨域污染）
+ */
+export function drawVideoFrameToDataUrl(
+  video: HTMLVideoElement,
+  options: { mime?: string; quality?: number; maxW?: number } = {},
+): string | null {
+  const mime = options.mime ?? 'image/jpeg';
+  const quality = options.quality ?? 0.8;
+  try {
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) return null;
+    const scale = options.maxW ? Math.min(1, options.maxW / w) : 1;
+    const canvas = createCanvas(Math.max(2, Math.round(w * scale)), Math.max(2, Math.round(h * scale)));
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL(mime, quality);
+  } catch {
+    // catch-ok: 跨域污染 / 尺寸异常 —— 交回调用方按各自口径处置（真值就是"这一帧取不到"）
+    return null;
+  }
+}
+
+/**
+ * 把这个 `<video>` **定位到某一秒并等它 seek 完**（★ 与海报那条同一类等待，别再各写一份）。
+ *
+ * ⚠️ 已在该位置（差 <0.05s）⇒ **立刻返回 `true`**，不白等一次 `seeked`。
+ * @returns `false` = 超时 / 出错 / 该位置不可达（调用方据此报错或回落）
+ */
+export function seekVideoTo(video: HTMLVideoElement, sec: number, timeoutMs = 5000): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    if (Math.abs(video.currentTime - sec) < 0.05) {
+      resolve(true);
+      return;
+    }
+    let done = false;
+    const finish = (ok: boolean): void => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+      resolve(ok);
+    };
+    const onSeeked = (): void => finish(true);
+    const onError = (): void => finish(false);
+    const timer = window.setTimeout(() => finish(false), timeoutMs);
+    video.addEventListener('seeked', onSeeked);
+    video.addEventListener('error', onError);
+    try {
+      video.currentTime = sec;
+    } catch {
+      // catch-ok: 位置不可达（元数据未就绪等）⇒ 如实告诉调用方
+      finish(false);
+    }
+  });
+}
+
 export async function generateVideoPoster(
   url: string,
   options: { seekSec?: number; timeoutMs?: number; maxW?: number } = {},
@@ -78,20 +147,8 @@ export async function generateVideoPoster(
       });
 
       el.addEventListener('seeked', () => {
-        try {
-          const w = el.videoWidth;
-          const h = el.videoHeight;
-          if (!w || !h) {
-            finish(null);
-            return;
-          }
-          const scale = Math.min(1, maxW / w);
-          const canvas = createCanvas(Math.max(2, Math.round(w * scale)), Math.max(2, Math.round(h * scale)));
-          canvas.getContext('2d')?.drawImage(el, 0, 0, canvas.width, canvas.height);
-          finish(canvas.toDataURL('image/jpeg', 0.8));
-        } catch {
-          finish(null);
-        }
+        // ★ 画帧那一段走**共用内核**（与「截当前帧/尾帧」同一份实现，别在这里再写一遍 canvas）
+        finish(drawVideoFrameToDataUrl(el, { mime: 'image/jpeg', quality: 0.8, maxW }));
       });
 
       el.addEventListener('error', () => finish(null));

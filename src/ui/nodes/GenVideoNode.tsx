@@ -51,9 +51,9 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
 } from 'react';
-import { useGen, useHostOps, useStore } from '@/state';
+import { useGen, useStore } from '@/state';
 import { HistPop } from './HistPop';
-import { StageDownloadBtn, StageEmpty, StageHistBtn, StageWaiting } from './stageParts';
+import { StageEmpty, StageHistBtn, StageWaiting } from './stageParts';
 import { COMMON_TEXT, GEN_VIDEO_TEXT, MEDIA_PLAYER_TEXT, PROJECT_TEXT } from '@/constants/text';
 import { GEN_PANEL_TEXT } from '@/constants/sendPanelText';
 import { DEFAULT_VIDEO_DURATION } from '@/constants/models';
@@ -86,6 +86,13 @@ import { formatMonthDayMinute } from '@/lib/time';
 import { createCanvas } from '@/lib/image';
 import { clamp } from '@/lib/math';
 import { generateVideoPoster } from '@/ui/lib/videoPoster';
+import { useImagePreview, type LightboxItem } from '@/ui/common/ImageLightbox';
+
+/** 「另存为」过滤器（源 `ke` 的视频支：`'视频文件'`；这一批条目**全是视频** ⇒ 单档即可） */
+const VIDEO_DOWNLOAD_FILTER: { name: string; extensions: string[] } = {
+  name: GEN_VIDEO_TEXT.videoFilter,
+  extensions: ['mp4'],
+};
 import { withThumb } from '@/stable/protocols/img';
 import { NodeShell } from './NodeShell';
 import type { RFNodeProps } from './types';
@@ -113,8 +120,6 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
   const openGeneratePanel = useStore((s) => s.openGeneratePanel);
   const addNode = useStore((s) => s.addNode);
   const connect = useStore((s) => s.connect);
-  // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
-  const hostOps = useHostOps();
   /** 卡片按下起点（原 `b`，`YL.jsx:112-118`）—— 供「点击 vs 拖动」判定 */
   const pressRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -198,6 +203,41 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
   const setGenvideoVersionPoster = useStore((s) => s.setGenvideoVersionPoster);
   /** ⚠️ `useMemo`：`?? []` 会在 `genHistory` 缺失时**每次渲染造新数组** ⇒ effect 依赖会抖 */
   const attempts = useMemo(() => data.genHistory?.attempts ?? [], [data.genHistory]);
+  /**
+   * ★ **双击舞台上的视频 ⇒ 大图预览（视频档）**（照 maomao 的 `ImageZoomDialog kind='video'` 复刻）。
+   *
+   * · 列表 = **历次出片里有视频直链的那些**（`a.url`；`!url` 的条目与弹层的 `view.disabled` 同判据）
+   * · 同一件通用件带 `kind`（**不是第二个灯箱**）：视频档 = 原生 `<video controls>` + 底栏
+   *   「下载 / 截当前帧 / 截尾帧」，**不做缩放平移**（免得抢播放器）
+   * · 下载名沿用本节点原来的命名（`genVideoDownloadName` = `<名>_<ts>.mp4`，`YL.jsx:357`）
+   * ⚠️ 视频元素自身要**停传播**：卡片单击 = 打开生成面板，而双击会先发两次 click
+   */
+  const previewItems: LightboxItem[] = useMemo(
+    () =>
+      attempts.flatMap((item) => {
+        const a = asRecord(item);
+        const url = typeof a.url === 'string' ? a.url : '';
+        if (!url) return [];
+        const at = typeof a.at === 'number' ? a.at : 0;
+        return [
+          {
+            src: url,
+            kind: 'video' as const,
+            title: versionItemView(item).prompt,
+            downloadName: genVideoDownloadName(data.label, 'mp4', at),
+            // 另存为过滤器：**这一批条目全是视频**（只收 `a.url` 有直链的）⇒ 恒为「视频文件」
+            downloadFilter: VIDEO_DOWNLOAD_FILTER,
+          },
+        ];
+      }),
+    [attempts, data.label],
+  );
+  const preview = useImagePreview(previewItems);
+  /** 当前播放的那条在列表里的序号（按 url 匹配；匹配不上退到第 1 条） */
+  const previewIndex = Math.max(
+    0,
+    previewItems.findIndex((it) => it.src === data.resultUrl),
+  );
   /** 当前版本下标（原 `pe`） */
   const curVer = currentVersionIndex(asRecord(data));
   const [histOpen, setHistOpen] = useState(false);
@@ -327,45 +367,6 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
     },
     [realDuration],
   );
-
-  /**
-   * 下载结果（原 `ke`，`YL.jsx:349-400`）
-   *
-   * 源的三段回落（`downloadFileAs` → `downloadFile` → `<a download>`）在本工程**塌成一段**：
-   *   `window.api` 的存在性判断在源里是因为**老后端可能没有该方法**，而本仓走 `FilePort`
-   *   —— 端口**恒存在**（实现里再做宿主缺失判定）⇒ 后两段**结构上不可达**，不落（不写死代码）。
-   * ⚠️ 源的 `try/catch` 兜的是「`window.api` 调用抛异常」；本仓端口**恒返回 `Result`、不抛**
-   *   ⇒ 无 `catch` 可写（失败走 `!r.ok` 分支，原文透传，原则 6）。
-   */
-  const download = useCallback(async () => {
-    const isVideo = !!data.resultUrl;
-    const url = data.resultUrl || data.resultPoster;
-    if (!url) return;
-    const ext = isVideo ? 'mp4' : 'png';
-    const name = genVideoDownloadName(data.label, ext, Date.now());
-    const filters = [
-      {
-        name: isVideo ? GEN_VIDEO_TEXT.videoFilter : COMMON_TEXT.imageFilter,
-        extensions: [ext],
-      },
-    ];
-    const r = await hostOps.downloadFileAs(url, name, filters);
-    if (!r.ok) {
-      // 原 370/377/398：`'下载失败：' + (error || '未知错误')` —— 空原因回落 `未知错误`
-      pushToast(COMMON_TEXT.downloadFailed(r.message || COMMON_TEXT.unknownReason), 5000, 'warn');
-      return;
-    }
-    // 用户主动取消 ⇒ 静默返回（原 366：`if (Je && Je.canceled) return;`）
-    if (r.value.canceled) return;
-    const path = r.value.path || '';
-    pushToast(
-      COMMON_TEXT.downloadedTo(path || name),
-      9000,
-      'success',
-      // 原 391-396：有落盘路径才给「在文件夹中显示」（`Qe && ze.revealPath`）
-      path ? { label: COMMON_TEXT.revealInFolder, onClick: () => void hostOps.revealPath(path) } : undefined,
-    );
-  }, [data.resultUrl, data.resultPoster, data.label, hostOps, pushToast]);
 
   /**
    * 取三帧之一 → 画布参考图（原 `se`，`YL.jsx:206-348`）
@@ -515,6 +516,8 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
               preload="metadata"
               crossOrigin="anonymous"
               draggable={false}
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={() => preview.open(previewIndex)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onLoadedMetadata={onLoadedMetadata}
@@ -565,14 +568,9 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
             {durationLabel}s
           </span>
         ) : null}
-        {/* `gv-dl`（原 513-524）：下载结果（有结果即可，不要求 `resultUrl` —— 图片结果也能下） */}
-        {produced ? (
-          <StageDownloadBtn
-            title={GEN_VIDEO_TEXT.download}
-            ariaLabel={GEN_VIDEO_TEXT.download}
-            onClick={() => void download()}
-          />
-        ) : null}
+        {/* ⚠️ **原 `gv-dl` 舞台角上的下载钮已删**（2026-10-16 与图片侧同款：下载搬进大图预览）——
+            视频侧现在也只在**双击打开的视频预览**里下（底栏「下载」），管线/文案同一份。
+            详见 `ImageLightbox.download` 与本节点上方 `previewItems` 的 `downloadName/downloadFilter`。 */}
         {/* `gv-tl`（原 525-555）：舞台内的播放进度 —— ★ 形态 = 设计稿的 `.mk-stage-timeline`
             （**贴舞台底边的细条**，无圆角、无旋钮）；拖动 / 点击定位仍挂在本元素上（`seekFromPointer`）。 */}
         {produced && data.resultUrl ? (
@@ -655,6 +653,8 @@ export function GenVideoNode({ id, data, selected }: RFNodeProps<'genvideo'>) {
         generateLabel={produced ? PROJECT_TEXT.regenerating : PROJECT_TEXT.generate}
       />
       </NodeShell>
+      {/* ★ 双击舞台视频 ⇒ 视频预览（通用件；`Modal` 自己 portal 到 body） */}
+      {preview.node}
       {/* `gv-hist-pop`（原 585-620）：历史版本弹层 —— ★ **外壳**走 `HistPop`（与 `GenImageNode` 同一份） */}
       <HistPop
         open={histOpen && attempts.length > 0}

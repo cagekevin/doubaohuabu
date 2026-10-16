@@ -989,4 +989,37 @@
  *   避免那两处各自 `composes: pill` 后再手写同一对 `background`/`color`（= 制造第二份真源）。
  */
 .pillBrand { background: var(--color-action-primary); color: var(--color-text-on-brand); }
+
+/*
+ * ── 大图预览（`ImageLightbox`）—— **通用那一件的皮** ──
+ * ★ 原先住 `panels/GalleryLightbox.module.css`（画廊专属）；`ImageLightbox` 成为**所有图片位**共用的一件之后，
+ *   皮随件走 ⇒ 提到真源，那个面板级 CSS 文件**整份删掉**（口径同 `HistPop`：外壳一件、皮一份）。
+ * ⚠️ `.lightboxNav svg` 是 `§8-G12` 允许的**四处**尺寸覆盖之一 —— 箭头**跟随本处字号**
+ *   （原 `‹` / `›` 就是字形，20px）⇒ 不为它新造第三个图标尺寸档。
+ */
+.lightboxStage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.lightboxImg {
+  max-width: 70vw;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+.lightboxNav {
+  composes: btn btnIcon btnGhost;
+  font-size: var(--font-size-xl);
+}
+.lightboxNav svg {
+  width: 1em;
+  height: 1em;
+}
+.lightboxMeta {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  font-weight: normal;
+}
 }

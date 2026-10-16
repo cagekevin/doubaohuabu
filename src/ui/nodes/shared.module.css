@@ -406,22 +406,13 @@
 }
 
 /* `gv-dl` 下载（原 `.gv-dl`，`YL.jsx:513`）—— 舞台右下角浮层 */
-.gvDl {
-  position: absolute;
-  /* ★ 真值 = `mockup.css` 的 `.mk-stage-dl`：**右上角**（原 `bottom` —— 设计与 `.mk-stage-badge`
-     分工：角标占左上、下载占右上；压在右下会与播放条那一族抢位置）· **28×28**（原 20：它是舞台上的**动作**，
-     20 太小难点）· 底走媒体遮罩 `--color-scrim`、字 `--color-on-scrim`（原用"界面遮罩"色）*/
-  right: var(--space-1);
-  top: var(--space-1);
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--color-scrim);
-  color: var(--color-on-scrim);
-  font-size: var(--font-size-xs);
-}
+/*
+ * ⚠️ **`.gvDl`（舞台右上角的下载钮皮，真值 `.mk-stage-dl`）已删**（2026-10-16）：
+ *   用户裁定"下载搬进大图预览"（图片侧与视频侧同款）⇒ 两个节点都不再渲染那颗钮
+ *   ⇒ 本类**零消费者**，留着就是死件（`css -- check dead` 会报）。
+ *   ⚠️ 若将来要把下载钮**放回舞台**：真值仍是 `mockup.css` 的 `.mk-stage-dl`
+ *   （右上角 · 28×28 · 底 `--color-scrim` · 字 `--color-on-scrim`）—— 别按印象重画。
+ */
 
 /*
  * 舞台内的播放进度 —— ★ 真值 = `mockup.css` 的 `.mk-stage-timeline`（**文生视频节点**那一格）：

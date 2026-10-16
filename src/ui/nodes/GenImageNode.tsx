@@ -20,13 +20,20 @@
  * 外壳统一走 `NodeShell`（判据 C1）
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { useHostOps, useStore } from '@/state';
+import { useMemo, useRef, useState } from 'react';
+import { useStore } from '@/state';
 import { HistPop } from './HistPop';
-import { StageDownloadBtn, StageEditImageBtn, StageEmpty, StageHistBtn, StageWaiting } from './stageParts';
+import { StageEditImageBtn, StageEmpty, StageHistBtn, StageWaiting } from './stageParts';
 import { Thumb } from '@/ui/common/Thumb';
 import { useAnchoredLayer } from '@/ui/common/useAnchoredLayer';
 import { useOutsideClose } from '@/ui/common/useOutsideClose';
+import { useImagePreview, type LightboxItem } from '@/ui/common/ImageLightbox';
+
+/** 「另存为」的过滤器（原 `P` 的第三参逐字：`{ name: '图片文件', extensions: ['png'] }` —— 源写死 `png`） */
+const DOWNLOAD_FILTER: { name: string; extensions: string[] } = {
+  name: COMMON_TEXT.imageFilter,
+  extensions: ['png'],
+};
 import { COMMON_TEXT, GEN_IMAGE_TEXT } from '@/constants/text';
 import { isCardClick } from '@/core/rules/cardClick';
 import { genImageCurrentUrl, imageApiChipLabel, imageChannelLabel, imageVersionView } from '@/core/rules/genImage';
@@ -49,7 +56,6 @@ import styles from './shared.module.css';
 export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
-  const pushToast = useStore((s) => s.pushToast);
   const openImageGenPanel = useStore((s) => s.openImageGenPanel);
   const patchNodeData = useStore((s) => s.patchNodeData);
   /**
@@ -62,8 +68,6 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   const promptSeed = parseRefChips(stripHtml(data.text ?? ''));
   const promptLookup = usePromptLookup(promptSeed.refs);
   const openImageEditor = useStore((s) => s.openImageEditor);
-  // ★ 宿主能力走控制器（`ui` 不持 `Ports` —— TD-16-8）
-  const hostOps = useHostOps();
   /** 卡片按下起点（原 `ZL.jsx` 的 pointer-down ref）—— 供「点击 vs 拖动」判定 */
   const pressRef = useRef<{ x: number; y: number } | null>(null);
   /** 当前展示的图（原 `d`）—— 与 `gv-dl` 下载、历史版本高亮都是**同一个值** */
@@ -74,6 +78,35 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   const inputCount = useMemo(() => countInputs(nodes, edges, id), [nodes, edges, id]);
   /** `ig-chip-status` 文案（原 218-220）—— `null` = 不渲染 */
   const chipText = imageApiChipLabel(data.apiJob);
+  /**
+   * ★ **双击舞台上的图看大图**（用户裁定 2026-10-16：全库图片位都要）。
+   *   列表 = **历史版本**（源里"选中版本"本来就在这一族里）⇒ `‹ ›` 能在版本间翻。
+   *   ⚠️ 图片自身要**停传播**：卡片单击 = 打开生成面板，而浏览器双击**先发两次 click**
+   *   ⇒ 不停的话"双击看大图"会顺带把面板弹开（一次可见的连带副作用）。
+   *   ⚠️ 这是**有意偏离**：图片那一块不再触发"整卡点击开面板"（面板仍可从标题 / 其余区域开）。
+   */
+  const previewItems: LightboxItem[] = useMemo(
+    () =>
+      versions.map((v, i) => {
+        const view = imageVersionView(v, current ?? null);
+        return {
+          src: view.dataUrl,
+          title: view.prompt || GEN_IMAGE_TEXT.histItemTitle(i + 1),
+          // 下载名沿用本节点原来的命名（`文生图_<ts>.png`，原 `ZL.jsx:114` 逐字）——
+          // 用**该版本的 `ts`**（不在渲染期取时钟）；版本无 `ts` ⇒ 留空，由通用件兜底
+          downloadName: view.ts != null ? GEN_IMAGE_TEXT.downloadName(view.ts) : undefined,
+          // 过滤器**逐条**给（同一批同值 ⇒ 同一个常量对象，引用相同、零成本）
+          downloadFilter: DOWNLOAD_FILTER,
+        };
+      }),
+    [versions, current],
+  );
+  const preview = useImagePreview(previewItems);
+  /** 当前展示的那张在版本列表里的序号（找不到就退到第 1 张） */
+  const previewIndex = Math.max(
+    0,
+    versions.findIndex((v) => imageVersionView(v, current ?? null).selected),
+  );
   const [histOpen, setHistOpen] = useState(false);
   const histBtnRef = useRef<HTMLButtonElement>(null);
   /**
@@ -118,34 +151,11 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
   };
 
   /**
-   * 下载这张图（原 `P`，`ZL.jsx:108-157`）
-   *
-   * ⚠️ 与 `GenVideoNode.download` 同法：源的「`window.api` 有没有该方法」三段回落在本仓
-   *   **塌成一段**（`FilePort` 恒存在）· 源的 `try/catch` 兜的是调用抛异常，端口恒返 `Result`
-   *   ⇒ 无 `catch`（失败走 `!r.ok`，原文透传，原则 6）。
+   * ⚠️ **本节点原来的 `download`（原 `P`，`ZL.jsx:108-157`）已删**（用户裁定 2026-10-16）：
+   *   下载**搬进大图预览的底栏**（双击舞台图打开）⇒ 那套管线（`downloadFileAs` + 取消静默 +
+   *   原文透传 + 「已下载到：」+「在文件夹中显示」）**逐条搬到了 `ImageLightbox.download`**
+   *   （本处只把**命名**与**过滤器**交上去 —— 两者都在上面的 `previewItems` 里逐条给出）。
    */
-  const download = useCallback(async () => {
-    const url = genImageCurrentUrl(data);
-    if (!url) return;
-    const name = GEN_IMAGE_TEXT.downloadName(Date.now());
-    const r = await hostOps.downloadFileAs(url, name, [
-      { name: COMMON_TEXT.imageFilter, extensions: ['png'] },
-    ]);
-    if (!r.ok) {
-      pushToast(COMMON_TEXT.downloadFailed(r.message || COMMON_TEXT.unknownReason), 5000, 'warn');
-      return;
-    }
-    // 用户主动取消 ⇒ 静默返回（原 123：`if (oe && oe.canceled) return;`）
-    if (r.value.canceled) return;
-    const path = r.value.path || '';
-    pushToast(
-      COMMON_TEXT.downloadedTo(path || name),
-      9000,
-      'success',
-      // 原 148-153：有落盘路径才给「在文件夹中显示」
-      path ? { label: COMMON_TEXT.revealInFolder, onClick: () => void hostOps.revealPath(path) } : undefined,
-    );
-  }, [data, hostOps, pushToast]);
 
   return (
     // ⚠️ 用 Fragment 包住：历史弹层走 `createPortal` 到 `document.body`（源 `ZL.jsx:288` 同法）
@@ -200,18 +210,18 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           )}
           {current ? (
             // 原 240：`Xt(d, 720)` —— 缩略图宽 **720**
-            <Thumb src={current} width={720} className={styles.thumb} />
+            <Thumb
+              src={current}
+              width={720}
+              className={styles.thumb}
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={() => preview.open(previewIndex)}
+            />
           ) : (
             <StageEmpty title={GEN_IMAGE_TEXT.stageEmptyTitle} sub={GEN_IMAGE_TEXT.stageEmptySub} />
           )}
-          {/* `gv-dl`（原 244-255）：下载这张图（条件 = 有当前图 `u`，与是否在生成无关） */}
-          {current ? (
-            <StageDownloadBtn
-              title={GEN_IMAGE_TEXT.download}
-              ariaLabel={GEN_IMAGE_TEXT.downloadAria}
-              onClick={() => void download()}
-            />
-          ) : null}
+          {/* ⚠️ **原 `gv-dl` 舞台角上的下载钮已删**（用户裁定 2026-10-16）：下载**搬进大图预览**
+             （双击图打开 ⇒ 底栏「下载」）。管线与文案未变，只是入口位置变了 —— 见 `ImageLightbox` 的 `download`。 */}
           {/*
             ★ 提示词分析（原 `ZL.jsx:256/273-286` 的浮动按钮 + `321` 的浮层）
             ⚠️ **落点在 `gv-stage` 内**（源 256 的 `.mat-float-actions` 就在 `.gv-stage` 里）——
@@ -266,6 +276,8 @@ export function GenImageNode({ id, data, selected }: RFNodeProps<'imggen'>) {
           }
         />
       </NodeShell>
+      {/* ★ 双击舞台图 ⇒ 大图预览（通用件；`Modal` 自己 portal 到 body，挂哪儿都行） */}
+      {preview.node}
       {/* `gv-hist-pop`（原 288-314）：历史版本弹层 —— ★ **外壳**走 `HistPop`（与 `GenVideoNode` 同一份） */}
       <HistPop
         open={histOpen && versions.length > 0}

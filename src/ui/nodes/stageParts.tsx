@@ -3,15 +3,15 @@
  *
  * ★ **为什么住在这儿**：两个生成节点（`GenImageNode` 文字→图 · `GenVideoNode` 文字→视频）
  *   各自把舞台上这几件**同皮同构**的东西各写了一遍（`nodes/shared.module.css` 里那批
- *   `.gvWaiting` / `.gvwDots` / `.gvwText` / `.gvPreviewEmpty` / `.gvDl` / `.gvHistBtn` 类，
+ *   `.gvWaiting` / `.gvwDots` / `.gvwText` / `.gvPreviewEmpty` / `.gvHistBtn` 类，
  *   **本来就同时服务这两个节点** —— 皮早就合了，**结构却各写一遍**）：
  *
  *   | 件 | 结构 | 两处的差异 |
  *   |---|---|---|
  *   | `StageWaiting` | `.gvWaiting` > `.gvwDots`(三点) + `.gvwText` | 文案不同；视频多一个 `title`（悬停看排队原因） |
  *   | `StageEmpty` | `.gvPreviewEmpty` > `.gvPreviewTitle` + `.gvPreviewSub` | **只有文案不同**（逐字同形） |
- *   | `StageDownloadBtn` | `.gvDl nodrag` + `Icon download` + 停指针传播 | 只有 `title`/`aria-label` 的来源不同 |
  *   | `StageHistBtn` | `.gvHistBtn nodrag`（+ 开态修饰符） | 只有计数字面量来源不同 |
+ *   | ~~`StageDownloadBtn`~~ | （**已删** 2026-10-16：下载搬进大图预览 ⇒ 零消费者） | — |
  *
  *   ⚠️ **源版重复不是设计意图**：原版是**编译产物**（`ZL.jsx:227-255` 与 `YL.jsx:485-524`
  *   是同一份源码被拆成的两处）—— 本仓按**同一真相**收口（与 `HistPop` 同一条判据）。
@@ -25,7 +25,6 @@
 
 import type { MouseEventHandler, ReactNode, RefObject } from 'react';
 import { MATERIAL_NODE_TEXT } from '@/constants/text';
-import { Icon } from '@/ui/common/Icon';
 import styles from './shared.module.css';
 
 /** 等待浮层（原 `.gv-waiting`）：三点跳动 + 一句文案，压在舞台上 */
@@ -88,32 +87,11 @@ export function StageEditImageBtn({
   );
 }
 
-/** 舞台上的下载钮（原 `.gv-dl`）：浮动、`nodrag`、不吃指针传播 */
-export function StageDownloadBtn({
-  title,
-  ariaLabel,
-  onClick,
-}: {
-  title: string;
-  ariaLabel: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`${styles.gvDl} nodrag`}
-      title={title}
-      aria-label={ariaLabel}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-    >
-      <Icon name="download" />
-    </button>
-  );
-}
+/*
+ * ⚠️ **`StageDownloadBtn`（原 `gv-dl` 舞台下载钮）已删**（2026-10-16，用户裁定）：
+ *   下载**搬进大图预览的底栏**（图片侧与视频侧同款）⇒ 它零消费者，留着就是死件。
+ *   管线与文案没丢：`ImageLightbox.download` + `COMMON_TEXT.download/…`。
+ */
 
 /** 历史版本入口钮（原 `.gv-hist-btn`）：开态带修饰符，点了开浮层（浮层见 `HistPop`） */
 export function StageHistBtn({

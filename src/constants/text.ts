@@ -77,6 +77,29 @@ export const COMMON_TEXT = {
   /** 「另存为」过滤器名（两处源均：`'图片文件'`，逐字） */
   imageFilter: '图片文件',
   /**
+   * 「下载」按钮（★ **本工程新增**：通用大图预览 `ui/common/ImageLightbox` 的底栏）。
+   * ⚠️ 与 `GEN_VIDEO_TEXT.download` / `WATERMARK_PANEL_TEXT.download` **同值但不同槽** ——
+   *   那两处各自逐字对源（`YL.jsx:513` / `SD.jsx`），而通用件不属于任何单一功能域 ⇒ 只能挂这里。
+   */
+  download: '下载',
+  /**
+   * 落盘默认文件名（★ **本工程新增**）—— 调用方没给 `LightboxItem.downloadName` 时的兜底。
+   * ⚠️ `now` 由**点击时**传入（渲染期禁取时钟，`docs/11` §9.1）。
+   */
+  downloadImageName: (now: number) => `图片_${now}.png`,
+  /** 同上，**视频档**的兜底名（★ 本工程新增）—— 后缀/量词与图片档不同，别共用一句 */
+  downloadVideoName: (now: number) => `视频_${now}.mp4`,
+  /**
+   * 视频预览里「截当前帧 / 截尾帧 → 复制到剪贴板」（★ **本工程新增**，措辞对齐 maomao 的
+   * `ImageZoomDialog`：`截屏当前帧` / `截屏尾帧` + 悬停说明）。
+   * ⚠️ 源版（`YL.jsx` / `BL.jsx`）**没有**这个能力 —— 它的"取帧"是**生成三张素材节点**，
+   *   不是"写进剪贴板" ⇒ 这是照 maomao 复刻的新能力。
+   */
+  captureFrame: '截取当前帧',
+  captureFrameTitle: '截取当前画面并复制到剪贴板',
+  captureLastFrame: '截取尾帧',
+  captureLastFrameTitle: '跳到视频结尾截取最后一帧并复制到剪贴板',
+  /**
    * ★ **2026-10-11 收口（判据 C1）**：**历史版本**弹层里这 3 个「缺省值」在
    *   文生视频（`YL.jsx:595,596,609,615`）与文生图（`ZL.jsx:305,307,309`）**逐字相同**
    *   ⇒ 收到 `COMMON_TEXT`。各节点独有的（`历史 N` / 标题 / 条目 title）仍在各自域。
@@ -328,7 +351,14 @@ export const ATTACH_PRECHECK_TEXT = {
 /** 画布空态 / 提示 */
 export const CANVAS_TEXT = {
   emptyTitle: '画布为空',
-  emptyHint: '双击画布创建文本框，或从右侧资源库拖入素材',
+  /**
+   * ⚠️ **有意偏离设计稿**（用户裁定 2026-10-16）：设计稿原句是
+   *   「双击画布创建文本框，或从右侧资源库拖入素材」（`index.html:979`）。
+   *   而「双击空白建文本节点」这条**行为已删**（`CanvasHost` 的 `onDoubleClickCapture` 一并撤掉）
+   *   ⇒ 若照抄原句，这句话就在**撒谎**（判据：文案与行为必须一致）。
+   *   现句只留**真实存在**的两条入口：拖入素材 / **右键画布 → 建节点浮层**（`onPaneContextMenu`）。
+   */
+  emptyHint: '从右侧资源库拖入素材，或右键画布新建节点',
   dropHint: '松开鼠标，将图片 / Markdown 文件添加到画布',
   /**
    * 拖入的素材**画布上本来就有**（原 `_Component42.jsx:1355`，逐字）

@@ -89,7 +89,6 @@ function Inner() {
   const pushToast = useStore((s) => s.pushToast);
   const pushBackendError = useStore((s) => s.pushBackendError);
   const library = useStore((s) => s.library);
-  const addTextNode = useStore((s) => s.addTextNode);
   /** ★ 拖入素材 ⇒ 保证画布上有它的节点（原 `ensureMaterialNode`，`shared.js:29055-29083`） */
   const ensureMaterialNode = useStore((s) => s.ensureMaterialNode);
   /** ★ 建节点浮层（原 `Ae`）—— `null` = 不显示 */
@@ -641,16 +640,14 @@ function Inner() {
     lastVideoCount.current = count;
   }, [nodes, soundEnabled]);
 
-  /** ★ 双击空白 → 建文本节点（原「双击画布创建文本框」） */
-  const onDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
-      // 只在**空白处**双击才建（点在节点/边上不建）
-      const target = e.target as HTMLElement;
-      if (target.closest('.react-flow__node') || target.closest('.react-flow__edge')) return;
-      addTextNode(screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-    },
-    [addTextNode, screenToFlowPosition],
-  );
+  /**
+   * ⚠️ **原「双击空白建文本节点」已删（用户裁定 2026-10-16）** ——
+   *   这是一处**有意偏离源与设计稿**：源里空白双击建文本框、设计稿的空态文案也写着它
+   *   （`index.html:979`，逐字进了 `CANVAS_TEXT.emptyHint`）。
+   *   用户判定「双击空白的入口没用」⇒ **行为删掉**，**同批改掉会撒谎的空态文案**（见该文案注释）。
+   *   其余建节点的入口不动：**右键空白 → 建节点浮层**（`onPaneContextMenu`）· **拖入素材/图片**
+   *   · **连线落到空白**（`onConnectEnd`）。
+   */
 
   /**
    * ★ **拖放入口**：资源库素材 / 图片文件 / `.md` 文件（原 `pa`，`_Component42.jsx:1337-1422`）
@@ -874,11 +871,9 @@ function Inner() {
 
   return (
     // ⚠️ 这些事件挂**外层容器**（原实现是 `div.canvas-wrap`）—— ReactFlow 自身不透传。
-    //    `onDoubleClick` 用**捕获阶段**：ReactFlow 的 pane 会拦截冒泡（W15 实测抓到）
     <div
       ref={wrapRef}
       className={styles.wrap}
-      onDoubleClickCapture={onDoubleClick}
       onContextMenu={onPaneContextMenu}
       onDrop={onDrop}
       onDragOver={onDragOver}

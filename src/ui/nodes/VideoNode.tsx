@@ -48,6 +48,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCapture, useHostOps, usePullResult, useStore } from '@/state';
 import { useCaptureElement } from '@/ui/common/useCaptureElement';
+import { useImagePreview } from '@/ui/common/ImageLightbox';
 import { log } from '@/lib/log';
 import { asRecord } from '@/lib/object';
 import { useReactFlow } from '@xyflow/react';
@@ -115,6 +116,13 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
    */
   const videoRef = useRef<HTMLVideoElement>(null);
   useCaptureElement(id, videoRef);
+  /**
+   * ★ **双击视频 ⇒ 视频预览（通用件视频档）**（照 maomao `ImageZoomDialog kind='video'` 复刻）。
+   * ⚠️ **列表只有本节点这一条**（`data.url`）—— 历次版本要不要也进 `‹ ›`，与生成节点对齐，待裁定。
+   */
+  const preview = useImagePreview([
+    { src: data.url ?? '', kind: 'video', title: data.label || '' },
+  ]);
   const [capturing, setCapturing] = useState(false);
 
   /**
@@ -391,6 +399,9 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
             onEnded={() => setPlaying(false)}
             // 原 `p(true)`：加载失败 ⇒ 换成兜底（并把播放条一起收掉）
             onError={() => setLoadFailed(true)}
+            // ★ 双击看视频（视频元素自身停传播：卡片单击是选中/拖动，别让双击顺带触发）
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={() => preview.open(0)}
           />
         ) : data.url && panelOpen ? (
           /* 原 403-442：配方面板（占住视频区） */
@@ -581,6 +592,10 @@ export function VideoNode({ id, data, selected }: RFNodeProps<'video'>) {
 
       {/* 节点内一次性反馈行（原 `BL.jsx:466` 的 `.vn-flash`，2.2s 自动消失） */}
       {flash && <div className={styles.videoFlash}>{flash}</div>}
+
+      {/* ★ 双击视频 ⇒ 视频预览。挂在**壳内**无妨：`Modal` 自己 portal 到 `document.body`，
+          关着时它是 `null` ⇒ 对卡片布局零影响（`GenImageNode` 那侧同理） */}
+      {preview.node}
     </NodeShell>
   );
 }

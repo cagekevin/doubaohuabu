@@ -24,6 +24,7 @@ import { useStore } from '@/state';
 import type { NodeType } from '@/stable/model/node';
 import { CREATE_PANEL_TEXT } from '@/constants/text';
 import { Icon } from '@/ui/common/Icon';
+import { useEscapeKey } from '@/ui/common/useEscapeKey';
 // ⚠️ 尺寸表**只有一处真源**（原则 5）：`core/model/defaults.ts` 的 `NODE_CREATE_SIZES`。
 //    这里**只读**它（`ui` 读 `core/model` 的数据是允许的方向；不得反向）。
 import { nodeCreateSize } from '@/core/model/defaults';
@@ -108,6 +109,17 @@ export function CreatePanel({ state, onClose }: CreatePanelProps) {
   const openGeneratePanel = useStore((s) => s.openGeneratePanel);
   const openImageGenPanel = useStore((s) => s.openImageGenPanel);
   const selectOnly = useStore((s) => s.selectOnly);
+
+  /**
+   * ★ **`Esc` 关闭**（口径：**有整屏层就有 `Esc`**，与 `PanelShell` 同一条）。
+   *
+   * ⚠️ 这一条此前**缺**：本浮层只有 `.backdrop` 的 `onMouseDown`（点空白关），按 `Esc` 没反应
+   *   —— 而同类浮层（`PanelShell overlay` / `GenPanel`）都能关 ⇒ 口径不一致。
+   * ⚠️ 机制走 `ui/common/useEscapeKey` 的 `scope='window'`（**Escape 处理只许住 `ui/common/`**；
+   *   这里焦点常在画布或面板里，命令是"关掉这一层"，不是"退出某个输入框"）。
+   * ⚠️ 本组件只在浮层打开时挂载（`{createPanel && <CreatePanel …/>}`）⇒ `enabled` 恒 `true`。
+   */
+  useEscapeKey(true, onClose, 'window');
 
   /**
    * 建节点（原 `ye` → `be` / `ie` / `$`）

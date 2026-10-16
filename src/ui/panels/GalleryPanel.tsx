@@ -195,11 +195,6 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
     }
   };
 
-  /** 大图预览翻页（原 `U` 90-98：**环形**取模） */
-  const stepPreview = (delta: number): void => {
-    setPreview((i) => (i === null || items.length === 0 ? i : (i + delta + items.length) % items.length));
-  };
-
   /**
    * 大图确认（原 `De` 362-371）—— **命中任一张大图就逐个问**；任一取消 ⇒ **中止整批**
    * ⚠️ 与源一致：提示里的 meta 是 `大小 · 尺寸`（`[vl, ja].filter(Boolean).join(' · ')`）
@@ -415,8 +410,9 @@ export function GalleryPanel({ accountId, onClose }: GalleryPanelProps) {
           index={preview}
           checked={items[preview] ? selected.has(items[preview].id) : false}
           onToggle={toggle}
-          onPrev={() => stepPreview(-1)}
-          onNext={() => stepPreview(1)}
+          /* ⚠️ 通用件已把 `‹ ›` 的**环形取模**算好、给的是**绝对索引** ⇒ 这里直接落 state
+             （原 `stepPreview(delta)` 那份取模已随之删掉 —— 同一件事不再两处算） */
+          onIndex={(i) => setPreview(i)}
           onClose={() => setPreview(null)}
           onRemove={(id) => {
             removeLovartImages(accountId, [id]);

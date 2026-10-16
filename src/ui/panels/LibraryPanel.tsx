@@ -27,6 +27,7 @@ import { useHostOps, useStore } from '@/state';
 import { Thumb } from '@/ui/common/Thumb';
 import { ContextMenu, type MenuItem } from '@/ui/common/ContextMenu';
 import { useEscapeKey } from '@/ui/common/useEscapeKey';
+import { useImagePreview } from '@/ui/common/ImageLightbox';
 import { LIBRARY_TEXT } from '@/constants/text';
 import { DRAG_MIME_MATERIAL } from '@/constants';
 import { makeLibraryId } from '@/core/rules/project';
@@ -66,6 +67,10 @@ export function LibraryPanel() {
 
   /** 展示顺序：**收藏在前**（原 `c`，`RT.jsx:29-37`） */
   const ordered = useMemo(() => sortLibrary(library), [library]);
+  /** ★ 大图预览（双击缩略图）：列表 = **当前显示顺序**（与 `i` 一致）；下载默认名 = 素材名 */
+  const preview = useImagePreview(
+    ordered.map((it) => ({ src: it.dataUrl, title: it.name, downloadName: it.name })),
+  );
 
   /** 从文件添加（原 `R`，`RT.jsx:256` 的「＋ 添加」） */
   const addFromFile = async (): Promise<void> => {
@@ -245,7 +250,7 @@ export function LibraryPanel() {
           </div>
         )}
 
-        {ordered.map((it) => (
+        {ordered.map((it, i) => (
           <div
             key={it.id}
             className={styles.card}
@@ -263,7 +268,13 @@ export function LibraryPanel() {
           >
             {/* 缩略图壳 —— 设计稿：收藏钮**压在图上**（悬停或已收藏才显形）*/}
             <div className={styles.thumb}>
-              <Thumb src={it.dataUrl} alt={it.name} width={240} className={styles.thumbImg} />
+              <Thumb
+                src={it.dataUrl}
+                alt={it.name}
+                width={240}
+                className={styles.thumbImg}
+                onDoubleClick={() => preview.open(i)}
+              />
               <button
                 type="button"
                 className={`${styles.fav}${it.favorite ? ` ${styles.favOn}` : ''}`}
@@ -315,6 +326,9 @@ export function LibraryPanel() {
       {/* ★ 右键菜单（原 `RT.jsx:336-353` 的 `node-ctx-menu`）—— 只有一项「替换素材」。
           开合（点外部 / Esc / 键盘导航）全部走共享件 `ui/common/ContextMenu`。 */}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+
+      {/* ★ 双击缩略图 ⇒ 大图预览（通用件；用户裁定：全库图片位都要） */}
+      {preview.node}
     </div>
   );
 }
