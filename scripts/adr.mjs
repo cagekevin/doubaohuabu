@@ -1004,7 +1004,11 @@ function retiredNos() {
   const out = new Set();
   for (const root of REFS_ROOTS) {
     for (const abs of walkRefs(join(ROOT, root))) {
-      for (const line of readFileSync(abs, 'utf8').split('\n')) {
+      for (const raw of readFileSync(abs, 'utf8').split('\n')) {
+        // ⚠️ 先剥掉**仓外**引用（`母仓 ADR-NNNN`）：那是别仓的号，不是本仓已删号。
+        //    不剥 ⇒ 取号的高水位被别仓高号抬起（实证 2026-10-16：本仓正文引用 `母仓 ADR-0063`
+        //    ⇒ 下一个号被发成 0064，把"本仓自 0001 起"的编号直接冲掉）。
+        const line = raw.replace(/母仓\s*ADR-\d{4}/g, '');
         if (!RETIRED_HINT.test(line)) continue;
         for (const id of line.match(RE_ADR) || []) out.add(Number(id.slice(4)));
       }
